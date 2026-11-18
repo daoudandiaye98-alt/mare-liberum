@@ -21,8 +21,8 @@ async function get(u, init = {}) {
   }
   throw new Error('lake_unreachable ' + u);
 }
-// run a list of jobs with a fixed number of parallel readers
-async function pool(items, size, job) { let i = 0; await Promise.all(Array.from({ length: size }, async () => { while (i < items.length) { const x = items[i++]; try { await job(x); } catch {} } })); }
+// run a list of jobs with a fixed number of parallel readers; a lake that runs past its time keeps what it has
+async function pool(items, size, job, ms = 0) { const end = ms ? Date.now() + ms : Infinity; let i = 0; await Promise.all(Array.from({ length: size }, async () => { while (i < items.length && Date.now() < end) { const x = items[i++]; try { await job(x); } catch {} } })); }
 
 // ---------------------------------------------------------------- generic paged lakes
 async function paged(lake) {
@@ -48,20 +48,25 @@ async function agentverse() {
   return rows;
 }
 async function virtuals() {
-  const rows = [], first = (await get('https://acpx.virtuals.io/api/agents?pagination%5Bpage%5D=1&pagination%5BpageSize%5D=100')).json, pages = first?.meta?.pagination?.pageCount || 1;
-  for (const a of first.data || []) keep(rows, normVirtuals(a));
-  const rest = []; for (let p = 2; p <= Math.min(pages, 600); p++) rest.push(p);
-  await pool(rest, 3, async (p) => { const { json: j } = await get(`https://acpx.virtuals.io/api/agents?pagination%5Bpage%5D=${p}&pagination%5BpageSize%5D=100`); for (const a of j.data || []) keep(rows, normVirtuals(a)); });
+  // agents that sell jobs to other agents, the busiest first; the list ends where agents stop selling
+  const rows = [], url = (p) => `https://acpx.virtuals.io/api/agents?pagination%5Bpage%5D=${p}&pagination%5BpageSize%5D=100&sort=successfulJobCount:desc`;
+  let quiet = 0;
+  for (let p = 1; p <= 40 && quiet < 2; p += 4) {
+    const pages = await Promise.all([p, p + 1, p + 2, p + 3].map((n) => get(url(n)).then((r) => r.json).catch(() => null)));
+    let selling = 0;
+    for (const j of pages) for (const a of j?.data || []) { const r = normVirtuals(a); if (r) { rows.push(r); selling++; } }
+    quiet = selling ? 0 : quiet + 1;
+  }
   return rows;
 }
 async function erc8004() {
-  // agents registered on chain, the ones other agents have rated first; the best of them come with their own endpoints
+  // agents registered on chain, the ones other agents rated highest first; the best of them come with their own endpoints
   const base = 'https://api.8004scan.io/api/v1/agents?is_testnet=false&min_feedbacks=1&sort_by=total_score&sort_order=desc&limit=100', list = [], offs = [];
-  for (let o = 0; o < 20000; o += 100) offs.push(o);
-  await pool(offs, 3, async (o) => { const { json: j } = await get(`${base}&offset=${o}`); for (const a of j.items || []) list.push(a); });
+  for (let o = 0; o < 5000; o += 100) offs.push(o);
+  await pool(offs, 3, async (o) => { const { json: j } = await get(`${base}&offset=${o}`); for (const a of j.items || []) list.push(a); }, 6 * 60000);
   list.sort((x, y) => (Number(y.total_score) || 0) - (Number(x.total_score) || 0));
   const detail = new Map();
-  await pool(list.slice(0, 2000), 6, async (a) => { const [chain, , token] = String(a.agent_id).split(':'); const { json } = await get(`https://api.8004scan.io/api/v1/agents/${chain}/${token}`); if (json) detail.set(a.agent_id, json); });
+  await pool(list.slice(0, 1000), 8, async (a) => { const [chain, , token] = String(a.agent_id).split(':'); const { json } = await get(`https://api.8004scan.io/api/v1/agents/${chain}/${token}`); if (json) detail.set(a.agent_id, json); }, 4 * 60000);
   const rows = []; for (const a of list) keep(rows, norm8004(a, detail.get(a.agent_id)));
   return rows;
 }
