@@ -17,8 +17,9 @@ const kv = {
 };
 
 // the pages people and agents read first are served by the node, so every visitor is counted
-const page = (f, type) => { try { return { body: readFileSync(join(process.cwd(), 'data', 'site', f), 'utf8'), type }; } catch { return null; } };
-const site = Object.fromEntries(Object.entries({ '/': page('index.html', 'text/html; charset=utf-8'), '/index.html': page('index.html', 'text/html; charset=utf-8'), '/llms.txt': page('llms.txt', 'text/plain; charset=utf-8') }).filter(([, v]) => v));
+// pages carry the node's own address, whatever domain it lives on
+const page = (f, type) => { try { const body = readFileSync(join(process.cwd(), 'data', 'site', f), 'utf8'); return { body: base ? body.replaceAll('https://mare-liberum.vercel.app', base) : body, type }; } catch { return null; } };
+const site = Object.fromEntries(Object.entries({ '/': page('index.html', 'text/html; charset=utf-8'), '/index.html': page('index.html', 'text/html; charset=utf-8'), '/llms.txt': page('llms.txt', 'text/plain; charset=utf-8'), '/robots.txt': page('robots.txt', 'text/plain; charset=utf-8') }).filter(([, v]) => v));
 
 // what the open ledger remembers travels with every build (flow/*.json in the repository)
 const seed = (name) => { try { return JSON.parse(readFileSync(join(process.cwd(), 'data', `flow-${name}.json`), 'utf8')); } catch { return null; } };

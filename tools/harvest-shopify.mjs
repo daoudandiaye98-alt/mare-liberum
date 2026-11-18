@@ -3,9 +3,10 @@
 // Usage: node tools/harvest-shopify.mjs [pages per topic]
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fetchJson } from '../node/core.mjs';
+import { NEEDS } from '../node/needs.mjs';
 const EP = 'https://catalog.shopify.com/api/ucp/mcp', PROFILE = 'https://mare-liberum.vercel.app/ucp/agent.json', UA = 'MareLiberum/2.2 (open sea for agents; +https://mare-liberum.vercel.app)';
 const PAGES = Number(process.argv[2]) || 2;
-const TOPICS = `running shoes;sneakers;hiking boots;sandals;dress shoes;winter jacket;rain jacket;hoodie;t-shirt;jeans;dress;swimwear;lingerie;socks;yoga pants;sportswear;suit;tie;hat;scarf;gloves;sunglasses;watch;necklace;earrings;ring;bracelet;handbag;backpack;wallet;luggage;belt;
+const BASE_TOPICS = `running shoes;sneakers;hiking boots;sandals;dress shoes;winter jacket;rain jacket;hoodie;t-shirt;jeans;dress;swimwear;lingerie;socks;yoga pants;sportswear;suit;tie;hat;scarf;gloves;sunglasses;watch;necklace;earrings;ring;bracelet;handbag;backpack;wallet;luggage;belt;
 headphones;earbuds;speaker;phone case;charger;power bank;laptop sleeve;keyboard;mouse;monitor;webcam;microphone;camera;camera lens;drone;smart watch;fitness tracker;gaming controller;video game;board game;puzzle;
 sofa;chair;desk;bed frame;mattress;pillow;bedding;duvet;towel;rug;curtains;lamp;ceiling light;candle;vase;wall art;poster;mirror;storage box;shelf;plant pot;artificial plant;
 coffee beans;tea;matcha;chocolate;snacks;hot sauce;olive oil;spices;honey;protein powder;supplements;vitamins;energy drink;wine;craft beer;whisky glass;coffee maker;espresso machine;kettle;blender;knife set;cookware;frying pan;cast iron;baking;water bottle;lunch box;tumbler;
@@ -19,6 +20,7 @@ car accessories;car phone mount;motorcycle helmet;tools;drill;screwdriver;garden
 phone;tablet;e-reader;books;cookbook;comic;
 cbd;incense;crystals;tarot cards;candles soy;soap;bath bombs;essential oils;diffuser;massage gun;
 sneakers limited edition;streetwear;vintage clothing;workwear;uniform;scrubs;cycling jersey;running shorts;compression socks;trail running shoes;marathon gel`.split(/[;\n]/).map((s) => s.trim()).filter(Boolean);
+const TOPICS = [...new Set([...BASE_TOPICS, ...NEEDS])];
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 async function search(query, cursor) {
   for (let i = 0; i < 4; i++) {
