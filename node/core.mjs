@@ -142,6 +142,19 @@ export function normArd(e, host) {
   };
 }
 
+// MCP server card served by the publisher on its own domain (/.well-known/mcp/server-card.json).
+export function normMcpCard(c, host, cardUrl) {
+  if (!c || typeof c.name !== 'string' || !Array.isArray(c.remotes)) return null;
+  const endpoints = c.remotes.filter((r) => typeof r?.url === 'string' && /^https:\/\//.test(r.url)).map((r) => ({ transport: clean(r.type, 30) || 'streamable-http', url: r.url.slice(0, 500) })).slice(0, 6);
+  if (!endpoints.length) return null;
+  const nm = c.name.includes('/') ? c.name.slice(c.name.indexOf('/') + 1) : c.name;
+  return {
+    id: `urn:air:${host}:mcp:${seg(nm)}`, publisher: host, display_name: clean(c.title || c.serverInfo?.title || nm, 120), type: 'application/mcp-server-card+json', kind: 'mcp', url: cardUrl,
+    description: clean(c.description || c.instructions, 600), tags: ['mcp', 'remote'],
+    capabilities: (Array.isArray(c.tools) ? c.tools : []).map((t) => clean(t?.name, 60)).filter(Boolean).slice(0, 30), queries: [], version: clean(c.version, 40), endpoints, pay: null,
+    source: 'join', source_ref: cardUrl, attested_by: 'domain', quality: 0, updated_at: new Date().toISOString(),
+  };
+}
 // A2A agent listed by an open A2A registry (full agent card inside the listing).
 export function normA2AListed(a, lake, ref) {
   let host = ''; try { host = new URL(a?.wellKnownURI || a?.url || '').hostname.toLowerCase(); } catch { return null; }
@@ -286,12 +299,15 @@ export async function readDomain(input) {
   const raw = String(input || '').trim();
   const u = await safeUrl(/^https?:\/\//i.test(raw) ? raw.replace(/^http:/i, 'https:') : `https://${raw}`);
   const host = u.hostname.toLowerCase(), root = `https://${host}`, rows = [], found = [];
-  for (const p of ['/.well-known/ard.json', '/.well-known/ai-catalog.json', '/.well-known/agent-card.json', '/.well-known/agent.json']) {
-    let j = null; try { j = await fetchJson(root + p); } catch { j = null; }
-    if (!j || typeof j !== 'object') continue;
+  const paths = ['/.well-known/ard.json', '/.well-known/ai-catalog.json', '/.well-known/agent-card.json', '/.well-known/agent.json', '/.well-known/mcp/server-card.json'];
+  const docs = await Promise.all(paths.map((p) => fetchJson(root + p).catch(() => null)));
+  paths.forEach((p, i) => {
+    const j = docs[i];
+    if (!j || typeof j !== 'object') return;
     if (Array.isArray(j.entries)) { found.push(p); for (const e of j.entries.slice(0, 200)) rows.push(normArd(e, host)); }
+    else if (p.includes('/mcp/') && Array.isArray(j.remotes)) { const r = normMcpCard(j, host, root + p); if (r) { found.push(p); rows.push(r); } }
     else if (typeof j.name === 'string' && (Array.isArray(j.skills) || typeof j.url === 'string')) { found.push(p); if (!rows.some((r) => r?.kind === 'a2a' && r.source === 'join' && r.type === 'application/a2a-agent-card+json' && r.publisher === host && r.source_ref?.includes('/agent'))) rows.push(normA2A(j, host, root + p)); }
-  }
+  });
   return { host, found, rows: dedupe(rows) };
 }
 export async function join(db, input) {
@@ -300,7 +316,7 @@ export async function join(db, input) {
   const durable = (await db('mare_state_get', { key: 'durable' })) !== false;
   console.log('mare_join', JSON.stringify({ domain: host, entries: good.length, found }));
   return { domain: host, found, joined: good.map((r) => r.id), durable,
-    next: !good.length ? 'Publish /.well-known/ard.json or /.well-known/agent-card.json on this domain, then call join again.'
+    next: !good.length ? 'Publish /.well-known/ard.json, /.well-known/agent-card.json or /.well-known/mcp/server-card.json on this domain, then call join again.'
       : durable ? 'Your entries are searchable now.' : 'Your entries are searchable on this node now and get re-read from your domain at every refresh.' };
 }
 
@@ -356,7 +372,7 @@ const TOOLS = [
   { name: 'search', description: 'Search the open sea of agentic resources across all public registries: MCP servers, A2A agents, autonomous agents, paid x402 services and online stores that sell to shopping agents (kind merchant, UCP). Returns ARD entries with endpoints for direct connection. Partner registries are asked live as well.',
     inputSchema: { type: 'object', properties: { query: { type: 'string', description: 'What you need, in plain words.' }, kind: { type: 'string', enum: ['mcp', 'a2a', 'agent', 'merchant', 'x402', 'skill', 'registry', 'api'] }, federated: { type: 'boolean', description: 'true (default) = also ask the partner registries live' }, paid: { type: 'boolean', description: 'true = only resources with payment terms' }, limit: { type: 'integer', minimum: 1, maximum: 25 } }, required: ['query'] } },
   { name: 'get', description: 'Read one full entry by its identifier (urn:air:...).', inputSchema: { type: 'object', properties: { identifier: { type: 'string' } }, required: ['identifier'] } },
-  { name: 'join', description: 'Add a domain to the sea. The node reads /.well-known/ard.json or /.well-known/agent-card.json from that domain; the domain speaks for itself.', inputSchema: { type: 'object', properties: { url: { type: 'string', description: 'Domain or https URL' } }, required: ['url'] } },
+  { name: 'join', description: 'Add a domain to the sea. The node reads /.well-known/ard.json, /.well-known/agent-card.json and /.well-known/mcp/server-card.json from that domain; the domain speaks for itself.', inputSchema: { type: 'object', properties: { url: { type: 'string', description: 'Domain or https URL' } }, required: ['url'] } },
   { name: 'stats', description: 'Size of the sea by kind and by lake.', inputSchema: { type: 'object', properties: {} } },
 ];
 

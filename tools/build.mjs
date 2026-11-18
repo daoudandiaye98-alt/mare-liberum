@@ -101,12 +101,21 @@ async function ucpStores() {
   const lines = (await r.text()).split('\n').slice(1), domains = new Set();
   for (const l of lines) { const [d, status] = l.split(','); if (status === 'verified' && /^[a-z0-9.-]+\.[a-z]{2,}$/.test(d || '')) domains.add(d); }
   if (existsSync('seeds-ucp.txt')) for (const d of readFileSync('seeds-ucp.txt', 'utf8').split('\n').map((x) => x.trim().toLowerCase())) if (/^[a-z0-9.-]+\.[a-z]{2,}$/.test(d)) domains.add(d);
-  const rows = []; let done = 0;
+  // titles and descriptions travel with the repo (store-pages.json); a store that is new to the sea gets its home page read once, gently
+  const pages = existsSync('store-pages.json') ? JSON.parse(readFileSync('store-pages.json', 'utf8')) : {};
+  let slots = 5; const waiting = [];
+  const gently = async (job) => { if (slots > 0) slots--; else await new Promise((go) => waiting.push(go)); try { return await job(); } finally { const next = waiting.shift(); if (next) next(); else slots++; } };
+  const rows = []; let done = 0, fresh = 0;
   await pool([...domains], 40, async (host) => {
     const url = `https://${host}/.well-known/ucp`, m = await fetchJson(url, 300000, 9000).catch(() => null);
-    if (m?.ucp) keep(rows, normUcp(m, host, url, await homePage(host)));
+    if (m?.ucp) {
+      if (!pages[host]) { const p = await gently(() => homePage(host)); if (p?.title || p?.description) { pages[host] = p; fresh++; } }
+      keep(rows, normUcp(m, host, url, pages[host]));
+    }
     if (++done % 500 === 0) console.log(`  ucp-stores: ${done}/${domains.size} read, ${rows.length} open`);
   });
+  console.log(`  ucp-stores: ${fresh} home pages read fresh`);
+  if (!process.env.VERCEL && fresh) writeFileSync('store-pages.json', JSON.stringify(Object.fromEntries(Object.entries(pages).sort(([a], [b]) => (a < b ? -1 : 1)))));
   return rows;
 }
 
@@ -134,9 +143,11 @@ settled.forEach((s, i) => { if (s.status === 'fulfilled') for (const r of s.valu
 if (all.size < 1000) throw new Error('the sea needs at least one full lake to build');
 
 // Domains that speak for themselves: read their own manifests (ARD, AI Catalog, A2A agent card).
-const seeds = existsSync('seeds.txt') ? readFileSync('seeds.txt', 'utf8').split('\n').map((l) => l.trim()).filter((l) => l && !l.startsWith('#')) : [];
-let joined = 0;
-await pool(seeds, 12, async (d) => { try { const { rows } = await readDomain(d); for (const r of rows) { all.set(r.id, r); joined++; } console.log(`domain ${d}: ${rows.length} entries`); } catch (e) { console.log(`domain ${d}: follows at the next refresh (${e.message})`); } });
+const seedFile = (f) => (existsSync(f) ? readFileSync(f, 'utf8').split('\n').map((l) => l.trim().toLowerCase()).filter((l) => l && !l.startsWith('#')) : []);
+const seeds = [...new Set([...seedFile('seeds.txt'), ...seedFile('seeds-ard.txt')])];
+let joined = 0, speaking = 0;
+await pool(seeds, 48, async (d) => { const { rows } = await readDomain(d); if (rows.length) speaking++; for (const r of rows) { all.set(r.id, r); joined++; } });
+console.log(`self-published domains: ${speaking} of ${seeds.length} speak today, ${joined} entries`);
 lakeStats['self-published domains'] = joined;
 const hosts = new Set();
 for (const r of all.values()) for (const e of r.endpoints || []) { if (e.url && e.transport !== 'repository') { try { hosts.add(new URL(e.url).hostname.toLowerCase()); } catch {} } }
@@ -155,6 +166,6 @@ if (process.env.VERCEL) rmSync('data/sea.tsv');
 writeFileSync('data/build.json', JSON.stringify({ builtAt: new Date().toISOString(), entries: ids.length, endpointHosts: hosts.size, lakes: lakeStats }));
 // The source travels with the node: anyone can read it and run a mirror.
 mkdirSync('public/source', { recursive: true });
-for (const f of ['node/core.mjs', 'node/mem.mjs', 'tools/build.mjs', 'engines/postgres/schema.sql', 'seeds.txt', 'README.md', 'LICENSE']) if (existsSync(f)) cpSync(f, `public/source/${f.split('/').pop()}`);
+for (const f of ['node/core.mjs', 'node/mem.mjs', 'tools/build.mjs', 'engines/postgres/schema.sql', 'seeds.txt', 'seeds-ard.txt', 'store-pages.json', 'README.md', 'LICENSE']) if (existsSync(f)) cpSync(f, `public/source/${f.split('/').pop()}`);
 writeFileSync('public/build.json', readFileSync('data/build.json'));
 console.log(`sea built: ${ids.length} entries`);

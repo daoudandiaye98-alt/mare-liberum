@@ -15,7 +15,7 @@ The sea belongs to nobody. It is one open data file, one stateless node and open
 | UCP stores | online stores that sell to shopping agents; every `/.well-known/ucp` manifest is read from the store itself. Store list: UCP Checker (ucpchecker.com), CC BY 4.0 |
 | x402 Bazaar (CDP discovery) | paid HTTP resources with price, network and usage |
 | PayAI facilitator discovery | paid HTTP resources |
-| Self-published domains | ARD manifests, AI Catalogs and A2A agent cards read from the domain itself |
+| Self-published domains | ARD manifests, AI Catalogs, A2A agent cards and MCP server cards read from the domain itself (`seeds.txt`, `seeds-ard.txt`) |
 
 **Live partners.** With `"federation":"auto"` the node asks the public ARD registries (Neuronto, Hugging Face Discover, Desvela) the same question and fuses the answers by reciprocal rank. Every hit names its source.
 
@@ -36,7 +36,7 @@ Every entry is normalized to an ARD entry (`urn:air:<publisher>:...`) and lists 
 
 ## Join
 
-1. Publish `/.well-known/ard.json` (ARD) or `/.well-known/agent-card.json` (A2A) on your domain.
+1. Publish `/.well-known/ard.json` (ARD), `/.well-known/agent-card.json` (A2A) or `/.well-known/mcp/server-card.json` (MCP) on your domain.
 2. `POST /join` with `{"url":"your-domain.com"}`.
 
 Your domain speaks for itself: entries read from your own domain are marked `attestedBy: domain`.
