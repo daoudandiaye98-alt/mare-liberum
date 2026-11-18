@@ -190,8 +190,10 @@ await new Promise((res) => out.end(res));
 await pipeline(createReadStream('data/sea.tsv'), createGzip({ level: 6 }), createWriteStream('data/sea.tsv.gz'));
 if (process.env.VERCEL) rmSync('data/sea.tsv');
 writeFileSync('data/build.json', JSON.stringify({ builtAt: new Date().toISOString(), entries: ids.length, endpointHosts: hosts.size, lakes: lakeStats }));
+// the open ledger of the living sea (traces, latest events) travels with the build, so the sea remembers across restarts
+for (const [from, to] of [['flow/traces.json', 'data/flow-traces.json'], ['flow/head.json', 'data/flow-head.json']]) if (existsSync(from)) cpSync(from, to);
 // The source travels with the node: anyone can read it and run a mirror.
 mkdirSync('public/source', { recursive: true });
-for (const f of ['node/core.mjs', 'node/mem.mjs', 'tools/build.mjs', 'engines/postgres/schema.sql', 'seeds.txt', 'seeds-ard.txt', 'store-pages.json', 'README.md', 'LICENSE']) if (existsSync(f)) cpSync(f, `public/source/${f.split('/').pop()}`);
+for (const f of ['node/core.mjs', 'node/mem.mjs', 'node/flow.mjs', 'tools/build.mjs', 'tools/archive.mjs', 'engines/postgres/schema.sql', 'seeds.txt', 'seeds-ard.txt', 'store-pages.json', 'README.md', 'LICENSE']) if (existsSync(f)) cpSync(f, `public/source/${f.split('/').pop()}`);
 writeFileSync('public/build.json', readFileSync('data/build.json'));
 console.log(`sea built: ${ids.length} entries`);

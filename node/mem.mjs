@@ -92,17 +92,19 @@ export function createMem({ file, base, blobToken } = {}) {
       const lim = Math.min(Math.max(Number(p.limit) || 10, 1), 100), off = Math.max(Number(p.offset) || 0, 0), max = 5 * toks.length;
       const ks = new Set([...(p.kinds || []), ...(p.types || []).map(kindOf)].map((k) => KINDS.indexOf(k)).filter((k) => k >= 0));
       const wantPaid = p.paid === true ? 1 : p.paid === false ? 0 : -1, hits = [];
-      const score = (w, q, d, e) => Math.min(100, Math.round((w / max) * 82 + q + d * 6 + e * 2));
+      // traces of agents lift routes that worked and lower routes that failed (lift: identifier -> points)
+      const lift = p.lift && typeof p.lift === 'object' ? p.lift : null, up = (id) => (lift && lift[id]) || 0;
+      const score = (w, q, d, e, id) => Math.max(1, Math.min(100, Math.round((w / max) * 82 + q + d * 6 + e * 2 + up(id))));
       for (let i = 0; i < n; i++) {
         if (ks.size && !ks.has(kind[i])) continue;
         if (wantPaid >= 0 && paid[i] !== wantPaid) continue;
-        const w = weigh(hays[i], toks); if (w) hits.push([score(w, qual[i], dom[i], ep[i]), i]);
+        const w = weigh(hays[i], toks); if (w) hits.push([score(w, qual[i], dom[i], ep[i], lift ? ids[i] : ''), i]);
       }
       for (const [id, x] of extra) {
         if (find(id) >= 0) continue;
         const k = KINDS.indexOf(x.r.kind);
         if ((ks.size && !ks.has(k)) || (wantPaid >= 0 && (x.r.pay ? 1 : 0) !== wantPaid)) continue;
-        const w = weigh(x.hay, toks); if (w) hits.push([score(w, Number(x.r.quality || 0), x.r.attested_by === 'domain' ? 1 : 0, (x.r.endpoints || []).length ? 1 : 0), -1, x.r]);
+        const w = weigh(x.hay, toks); if (w) hits.push([score(w, Number(x.r.quality || 0), x.r.attested_by === 'domain' ? 1 : 0, (x.r.endpoints || []).length ? 1 : 0, id), -1, x.r]);
       }
       hits.sort((a, b) => b[0] - a[0] || ((a[2]?.id || ids[a[1]]) < (b[2]?.id || ids[b[1]]) ? -1 : 1));
       // one line per name and lake: twins of the same service collapse into their best entry

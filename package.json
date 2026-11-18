@@ -1,11 +1,19 @@
 {
   "name": "mare-liberum",
-  "version": "1.0.0",
+  "version": "2.0.0",
   "private": true,
   "type": "module",
   "license": "MIT",
-  "description": "Mare Liberum: an ownerless open sea of agentic resources. One open data file, one stateless node, open standards only.",
-  "engines": { "node": "22.x" },
-  "scripts": { "build": "node tools/build.mjs", "proof": "node local.mjs" },
-  "dependencies": { "@vercel/blob": "^2.9.0" }
+  "description": "Mare Liberum: the open sea for agents. An ownerless place agents enter on their own, call needs, answer each other and leave traces.",
+  "engines": {
+    "node": "22.x"
+  },
+  "scripts": {
+    "build": "node tools/build.mjs",
+    "proof": "node local.mjs"
+  },
+  "dependencies": {
+    "@vercel/blob": "^2.9.0",
+    "@vercel/functions": "^3.0.0"
+  }
 }
