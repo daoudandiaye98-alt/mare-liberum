@@ -1,7 +1,7 @@
 // Mare Liberum · build the sea: pull every public lake, normalize to ARD-shaped rows, write one open data file.
 // Usage: node tools/build.mjs            (pull live)        node tools/build.mjs --cache   (reuse data/*.ndjson)
 import { createWriteStream, createReadStream, existsSync, readFileSync, writeFileSync, mkdirSync, cpSync, rmSync } from 'node:fs';
-import { createGzip } from 'node:zlib';
+import { createGzip, gunzipSync } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import { normMcp, normX402, normA2AListed, normUcp, normAgentverse, normHfSpace, normVirtuals, norm8004, readDomain, fetchJson, safeUrl, clean } from '../node/core.mjs';
 import { hayOf, metaOf } from '../node/mem.mjs';
@@ -142,6 +142,12 @@ async function ucpStores() {
   return rows;
 }
 
+// the deep lake travels with the repository (tools/deep-8004.mjs): every on-chain agent another agent rated; the live lake refreshes the top
+async function deep8004() {
+  const f = 'lakes/erc8004-deep.ndjson.gz'; if (!existsSync(f)) return [];
+  return gunzipSync(readFileSync(f)).toString('utf8').split('\n').filter(Boolean).map((l) => { try { return JSON.parse(l); } catch { return null; } }).filter(Boolean);
+}
+
 const LAKES = [
   { name: 'mcp-registry', cursor: true, url: 'https://registry.modelcontextprotocol.io/v0/servers?version=latest&limit=100', items: (j) => j.servers, norm: (x) => normMcp(x) },
   { name: 'x402-bazaar', url: 'https://api.cdp.coinbase.com/platform/v2/x402/discovery/resources?limit=100', items: (j) => j.items, norm: (x) => normX402(x, 'x402-bazaar') },
@@ -150,6 +156,7 @@ const LAKES = [
   { name: 'agentverse', pull: agentverse },
   { name: 'hf-spaces', pull: hfSpaces },
   { name: 'virtuals-acp', pull: virtuals },
+  { name: 'erc8004-deep', pull: deep8004 },
   { name: 'erc8004', pull: erc8004 },
   { name: 'ucp-stores', pull: ucpStores },
 ];

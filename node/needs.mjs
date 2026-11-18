@@ -61,12 +61,12 @@ ol.offers{list-style:none;padding:0;margin:16px 0;display:grid;gap:10px}ol.offer
 .buy{display:inline-block;margin-top:6px;padding:4px 10px;border-radius:6px;background:#0f3a5c;color:#eaf4ff;text-decoration:none;font-size:.9rem}.buy:hover{background:#15507e}
 .chips{display:flex;flex-wrap:wrap;gap:8px;padding:0;list-style:none}.chips a{display:inline-block;padding:4px 10px;border:1px solid #1d3550;border-radius:999px;text-decoration:none;font-size:.92rem}
 code,pre{background:#071626;border:1px solid #1d3550;border-radius:6px;padding:2px 6px;font-size:.88rem;overflow-wrap:anywhere}pre{padding:12px 14px;overflow-x:auto;white-space:pre-wrap}
-small{color:#7f9bb6}`;
+small{color:#7f9bb6}.pick{background:#0a2236;border:1px solid #1f5a86;border-radius:10px;padding:12px 14px;color:#eaf4ff}`;
 const head = (t, d, canon, extra = '') => `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(t)}</title><meta name="description" content="${esc(d)}"><link rel="canonical" href="${esc(canon)}">${extra}<style>${STYLE}</style></head>`;
 const ld = (o) => `<script type="application/ld+json">${JSON.stringify(o).replace(/</g, '\\u003c')}</script>`;
 
-export function buyPage({ need, slug, products, stores, country, base, at }) {
+export function buyPage({ need, slug, products, stores, country, base, at, decision }) {
   const canon = `${base}/buy/${slug}`, n = products.length, shops = new Set(products.map((p) => p.storeHost)).size;
   const T = title(need), cheapest = products.length ? products.reduce((a, b) => (b.price < a.price && b.currency === a.currency ? b : a)) : null;
   const desc = n ? `${T}: ${n} live offers from ${shops} independent stores${cheapest ? `, from ${fmt(cheapest)}` : ''}. Prices, stock and buy links read live from the stores. For people and their shopping agents.`
@@ -84,6 +84,7 @@ export function buyPage({ need, slug, products, stores, country, base, at }) {
 <body><main><p><a href="/">Mare Liberum</a> · <a href="/buy">Buy</a>${groupOf(need) ? ` · ${esc(groupOf(need))}` : ''}</p>
 <h1>${esc(T)}</h1><p>${esc(desc)}</p>
 <p><small>Prices for: ${['', ...COUNTRIES].map((c) => c === (country || '') ? `<b>${c || 'any'}</b>` : `<a href="/buy/${slug}${c ? `?country=${c}` : ''}">${c || 'any'}</a>`).join(' · ')} · read ${esc(at)}</small></p>
+${decision?.pick ? `<p class="pick"><b>The machine pick:</b> ${decision.pick.url ? `<a href="${esc(decision.pick.url)}" rel="nofollow noopener">${esc(decision.pick.title)}</a>` : esc(decision.pick.title)} · ${esc(fmt(decision.pick))} · ${esc(decision.pick.store)}<br><small>${esc(decision.why.join(' · '))}. Same rule for every page: relevance, rating, price, traces of agents. Agents: <a href="/decide?need=${encodeURIComponent(need)}">/decide</a></small></p>` : ''}
 ${n ? `<ol class="offers">${products.map((p) => `<li><div class="t">${p.url ? `<a href="${esc(p.url)}" rel="nofollow noopener">${esc(p.title)}</a>` : esc(p.title)}</div><div class="pr">${esc(fmt(p))}</div>
 <div class="meta">${esc(p.store)}${p.inStock === false ? ' · out of stock' : ' · in stock'}${p.rating ? ` · ★ ${esc(p.rating)}` : ''}${p.checkout ? `<br><a class="buy" href="${esc(p.checkout)}" rel="nofollow noopener">Buy at ${esc(p.store)}</a>` : ''}</div></li>`).join('')}</ol>`
     : '<p>No live offers answered just now. Ask the sea directly, the stores answer per call:</p>'}
