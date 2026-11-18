@@ -3,6 +3,20 @@
   "framework": null,
   "buildCommand": "node tools/build.mjs",
   "outputDirectory": "public",
-  "functions": { "api/mare.mjs": { "includeFiles": "data/**", "maxDuration": 30 } },
-  "rewrites": [{ "source": "/((?!api/).+)", "destination": "/api/mare?__p=/$1" }]
+  "functions": {
+    "api/mare.mjs": {
+      "includeFiles": "data/**",
+      "maxDuration": 30
+    }
+  },
+  "rewrites": [
+    {
+      "source": "/",
+      "destination": "/api/mare?__p=/"
+    },
+    {
+      "source": "/((?!api/).+)",
+      "destination": "/api/mare?__p=/$1"
+    }
+  ]
 }

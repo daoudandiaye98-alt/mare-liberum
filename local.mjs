@@ -4,9 +4,10 @@ import { createMem } from './node/mem.mjs';
 const t0 = performance.now();
 const db = createMem({ file: 'data/sea.tsv', base: 'https://mare.local' });
 console.log(`cold start: ${db.size()} entries in ${Math.round(performance.now() - t0)} ms, rss ${Math.round(process.memoryUsage().rss / 1e6)} MB`);
-const call = async (method, path, body) => {
+const SITE = { '/': { body: '<!doctype html><title>home</title>', type: 'text/html; charset=utf-8' }, '/llms.txt': { body: '# guide', type: 'text/plain; charset=utf-8' } };
+const call = async (method, path, body, headers = {}) => {
   const t = performance.now();
-  const r = await handle(new Request('https://mare.local' + path, { method, headers: { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.9' }, body: body ? JSON.stringify(body) : undefined }), db, { profile: 'https://shopify.dev/ucp/agent-profiles/examples/2026-08-25/valid-with-capabilities.json' });
+  const r = await handle(new Request('https://mare.local' + path, { method, headers: { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.9', ...headers }, body: body ? JSON.stringify(body) : undefined }), db, { site: SITE, profile: 'https://shopify.dev/ucp/agent-profiles/examples/2026-08-25/valid-with-capabilities.json' });
   const txt = await r.text(); let j; try { j = JSON.parse(txt); } catch { j = txt; }
   return { status: r.status, ms: Math.round(performance.now() - t), j };
 };
@@ -76,6 +77,21 @@ r = await call('POST', '/a2a', { jsonrpc: '2.0', id: 'a3', method: 'message/send
 r = await call('POST', '/a2a', { jsonrpc: '2.0', id: 'a4', method: 'tasks/get', params: { id: 'x' } }); line('a2a tasks/get', r.j.error);
 r = await call('POST', '/a2a', { jsonrpc: '2.0', id: 'a5', method: 'nope' }); line('a2a unknown method', r.j.error?.code);
 r = await call('GET', '/a2a'); line('a2a GET', r.status);
+// ---- the agent-readable web and the census
+r = await call('GET', '/e/fit2run.com:ucp:store'); line('store page', { status: r.status, title: String(r.j).match(/<title>([^<]+)/)?.[1], ld: /application\/ld\+json/.test(String(r.j)), trace: /worked/.test(String(r.j)) });
+r = await call('GET', '/e/angel.oroboros-design.com:x402:agenten-signal-stealth-read'); line('paid service page', { status: r.status, price: String(r.j).match(/\$[0-9.]+ per call/)?.[0] });
+r = await call('GET', '/e/nope:nothing'); line('unknown page', r.status);
+r = await call('GET', '/sitemap.xml'); line('sitemap index', (String(r.j).match(/<loc>/g) || []).length);
+r = await call('GET', '/sitemaps/0.xml'); line('sitemap 0', { urls: (String(r.j).match(/<loc>/g) || []).length, first: String(r.j).match(/<loc>([^<]+)/)?.[1] });
+r = await call('GET', '/sitemaps/site.xml'); line('sitemap site', (String(r.j).match(/<loc>/g) || []).length);
+r = await call('GET', '/', null, { 'user-agent': 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ChatGPT-User/1.0; +https://openai.com/bot)' }); line('home for ChatGPT-User', { status: r.status, html: String(r.j).startsWith('<!doctype') });
+r = await call('GET', '/llms.txt', null, { 'user-agent': 'Mozilla/5.0 (compatible; Claude-User/1.0; +Claude-User@anthropic.com)' }); line('llms for Claude-User', r.status);
+r = await call('GET', '/e/fit2run.com:ucp:store', null, { 'user-agent': 'Mozilla/5.0 (compatible; bingbot/2.0; +http://www.bing.com/bingbot.htm)' });
+r = await call('GET', '/', null, { accept: 'application/json' }); line('home as JSON', r.j.name);
+r = await call('POST', '/mcp', { jsonrpc: '2.0', id: 30, method: 'initialize', params: { protocolVersion: '2025-06-18', clientInfo: { name: 'claude-ai', version: '1' } } });
+r = await call('POST', '/a2a', { jsonrpc: '2.0', id: 'c1', method: 'message/send', params: { message: { role: 'user', messageId: 'c1', parts: [{ kind: 'text', text: 'hello' }] } } }, { 'user-agent': 'a2a-inspector/1.0' });
+await new Promise((go) => setTimeout(go, 50));
+r = await call('GET', '/census'); line('census', { kinds: r.j.today?.kinds, names: r.j.today?.top?.map((x) => `${x.kind}:${x.name}`).slice(0, 8), ever: r.j.everSeen?.length });
 r = await call('POST', '/join', { url: 'https://localhost' }); line('join localhost', r.status + ' ' + r.j.error?.message);
 r = await call('POST', '/ingest/mcp'); line('ingest closed on this engine', r.status);
 r = await call('POST', '/search', { query: {} }); line('search empty', r.status);

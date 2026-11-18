@@ -1,6 +1,6 @@
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
-import { getCache } from '@vercel/functions';
+import { getCache, waitUntil } from '@vercel/functions';
 import { handle } from '../node/core.mjs';
 import { createMem } from '../node/mem.mjs';
 import { memoryKv } from '../node/flow.mjs';
@@ -16,11 +16,15 @@ const kv = {
   async set(k, v, ttl) { try { await shared().set(k, v, { ttl: ttl || 86400 * 30, name: `mare:${k.split(':')[0]}` }); } catch (e) { console.error('mare_kv_set', e?.message); await local.set(k, v, ttl); } },
 };
 
+// the pages people and agents read first are served by the node, so every visitor is counted
+const page = (f, type) => { try { return { body: readFileSync(join(process.cwd(), 'data', 'site', f), 'utf8'), type }; } catch { return null; } };
+const site = Object.fromEntries(Object.entries({ '/': page('index.html', 'text/html; charset=utf-8'), '/index.html': page('index.html', 'text/html; charset=utf-8'), '/llms.txt': page('llms.txt', 'text/plain; charset=utf-8') }).filter(([, v]) => v));
+
 // what the open ledger remembers travels with every build (flow/*.json in the repository)
 const seed = (name) => { try { return JSON.parse(readFileSync(join(process.cwd(), 'data', `flow-${name}.json`), 'utf8')); } catch { return null; } };
 
 async function run(request) {
   const p = new URL(request.url).searchParams.get('__p');
-  return handle(request, db, p ? { path: p.startsWith('/') ? p : `/${p}`, kv, seed } : { kv, seed });
+  return handle(request, db, p ? { path: p.startsWith('/') ? p : `/${p}`, kv, seed, site, waitUntil } : { kv, seed, site, waitUntil });
 }
 export const GET = run, POST = run, OPTIONS = run;

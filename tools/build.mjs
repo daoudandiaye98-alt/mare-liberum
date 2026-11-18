@@ -192,6 +192,8 @@ if (process.env.VERCEL) rmSync('data/sea.tsv');
 writeFileSync('data/build.json', JSON.stringify({ builtAt: new Date().toISOString(), entries: ids.length, endpointHosts: hosts.size, lakes: lakeStats }));
 // the open ledger of the living sea (traces, latest events) travels with the build, so the sea remembers across restarts
 for (const [from, to] of [['flow/traces.json', 'data/flow-traces.json'], ['flow/head.json', 'data/flow-head.json']]) if (existsSync(from)) cpSync(from, to);
+// the first pages people and agents read are served by the node
+mkdirSync('data/site', { recursive: true }); for (const f of ['index.html', 'llms.txt']) if (existsSync(`site/${f}`)) cpSync(`site/${f}`, `data/site/${f}`);
 // The source travels with the node: anyone can read it and run a mirror.
 mkdirSync('public/source', { recursive: true });
 for (const f of ['node/core.mjs', 'node/mem.mjs', 'node/flow.mjs', 'tools/build.mjs', 'tools/archive.mjs', 'engines/postgres/schema.sql', 'seeds.txt', 'seeds-ard.txt', 'store-pages.json', 'README.md', 'LICENSE']) if (existsSync(f)) cpSync(f, `public/source/${f.split('/').pop()}`);

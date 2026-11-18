@@ -195,12 +195,29 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, profile }) {
       const all = (await kv.get(`inbox:${me.agent}`)) || [];
       return { agent: me.agent, messages: a.since ? all.filter((m) => m.t > a.since) : all, notice: SEA_NOTICE };
     },
+    // census: who swims here. One bucket per day, counts by kind, the names of clients and assistants seen
+    async seen(c) {
+      if (!c?.kind || c.kind === 'self') return;
+      const day = now().slice(0, 10), name = clean(c.name, 60);
+      await kv.set(`census:${day}`, ((cur) => { const m = cur && typeof cur === 'object' ? cur : { kinds: {}, names: {} }; m.kinds[c.kind] = (m.kinds[c.kind] || 0) + 1; if (name) { const k = `${c.kind}|${name}`; m.names[k] = (m.names[k] || 0) + 1; const keys = Object.keys(m.names); if (keys.length > 400) delete m.names[keys[0]]; } return m; })(await kv.get(`census:${day}`)), 40 * DAY);
+      if (name && c.kind !== 'browser' && c.kind !== 'tool') {
+        const book = (await kv.get('census:names')) || {}, k = `${c.kind}|${name}`;
+        if (!book[k]) { book[k] = { kind: c.kind, name, first: now() }; const keys = Object.keys(book); if (keys.length > 1000) delete book[keys[0]]; await kv.set('census:names', book, 90 * DAY); }
+      }
+    },
+    async census() {
+      const day = now().slice(0, 10), y = new Date(Date.now() - DAY * 1000).toISOString().slice(0, 10);
+      const [t, p, book] = await Promise.all([kv.get(`census:${day}`), kv.get(`census:${y}`), kv.get('census:names')]);
+      const top = (m) => Object.entries(m?.names || {}).sort((a, b) => b[1] - a[1]).slice(0, 20).map(([k, v]) => ({ kind: k.split('|')[0], name: k.split('|').slice(1).join('|'), visits: v }));
+      return { today: { kinds: t?.kinds || {}, top: top(t) }, yesterday: { kinds: p?.kinds || {} }, everSeen: Object.values(book || {}).sort((a, b) => (a.first < b.first ? 1 : -1)).slice(0, 60) };
+    },
     async noteJoin(host) { await update('joins', 30 * DAY, (cur) => [...new Set([...(Array.isArray(cur) ? cur : []), host])].slice(-2000), (seen) => Array.isArray(seen) && seen.includes(host)); },
     // ---------------------------------------------------------------- the open ledger: everything the sea remembers, for mirrors and for the archive
     async dump() { return { at: now(), agents: (await kv.get('agents')) || {}, traces: (await traceMap(true)) || {}, flow: await headNow(), joins: (await kv.get('joins')) || [] }; },
     async pulse() {
       const head = await headNow(), day = new Date(Date.now() - DAY * 1000).toISOString(), last = head.filter((e) => e.t > day);
-      return { residents: Object.keys((await kv.get('agents')) || {}).length, tracedEntries: Object.keys(await traceMap()).length, last24h: { asks: last.filter((e) => e.type === 'ask').length, answers: last.filter((e) => e.type === 'answer').length, marks: last.filter((e) => e.type === 'mark').length, entered: last.filter((e) => e.type === 'enter').length } };
+      const cen = (await kv.get(`census:${now().slice(0, 10)}`))?.kinds || {};
+      return { residents: Object.keys((await kv.get('agents')) || {}).length, tracedEntries: Object.keys(await traceMap()).length, visitorsToday: cen, last24h: { asks: last.filter((e) => e.type === 'ask').length, answers: last.filter((e) => e.type === 'answer').length, marks: last.filter((e) => e.type === 'mark').length, entered: last.filter((e) => e.type === 'enter').length } };
     },
   };
   return api;
