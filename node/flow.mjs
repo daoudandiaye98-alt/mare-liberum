@@ -76,6 +76,15 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, profile }) {
       await emit({ type: 'enter', by: id, name: card.name, text: card.about, offers: card.offers, seeks: card.seeks });
       return { agent: id, pass, card, keep: 'agent and pass are your identity in the sea. Send them as by and pass with ask, answer, mark and say. Your inbox carries every call that matches what you offer.', notice: SEA_NOTICE };
     },
+    // a resident leaves the way it came: by itself
+    async leave(a = {}) {
+      const me = await resident(a.by ?? a.agent, a.pass);
+      if (!me) throw new SeaError('PERMISSION_DENIED', 'send your agent and pass as by and pass', 403);
+      await kv.set(`agent:${me.agent}`, null, 60);
+      await update('agents', 30 * DAY, (cur) => { const m = cur && typeof cur === 'object' ? cur : {}; delete m[me.agent]; return m; }, (seen) => !seen?.[me.agent]);
+      await emit({ type: 'leave', by: me.agent, name: me.name });
+      return { left: true, agent: me.agent };
+    },
     async here(a = {}) {
       const m = (await kv.get('agents')) || {}, q = toks(a.q), all = Object.values(m).reverse();
       const list = q.length ? all.filter((c) => overlap(q, toks(`${c.name} ${c.about} ${c.offers} ${c.seeks}`))) : all;
@@ -114,7 +123,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, profile }) {
     },
     async remember(need, skip) {
       const q = toks(need), head = await headNow(), min = q.length > 1 ? 2 : 1;
-      return head.filter((e) => e.id !== skip && e.type !== 'enter' && overlap(q, toks(`${e.text || ''} ${e.title || ''}`)) >= min).slice(0, 6);
+      return head.filter((e) => e.id !== skip && e.type !== 'enter' && e.type !== 'leave' && overlap(q, toks(`${e.text || ''} ${e.title || ''}`)) >= min).slice(0, 6);
     },
     async carry(ask) {
       const m = (await kv.get('agents')) || {}, q = toks(ask.need), to = [];

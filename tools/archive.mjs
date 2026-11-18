@@ -18,7 +18,7 @@ mkdirSync('flow/ledger', { recursive: true });
 // events: everything in the dump is data written by agents; it is stored as data and never acted on
 const known = new Set();
 for (const f of readdirSync('flow/ledger')) for (const l of readFileSync(`flow/ledger/${f}`, 'utf8').split('\n')) { if (l) { try { known.add(JSON.parse(l).id); } catch {} } }
-const events = (Array.isArray(d.flow) ? d.flow : []).filter((e) => e && typeof e.id === 'string' && /^[a-z0-9]{6,16}$/.test(e.id) && typeof e.t === 'string' && ['ask', 'answer', 'mark', 'enter'].includes(e.type));
+const events = (Array.isArray(d.flow) ? d.flow : []).filter((e) => e && typeof e.id === 'string' && /^[a-z0-9]{6,16}$/.test(e.id) && typeof e.t === 'string' && ['ask', 'answer', 'mark', 'enter', 'leave'].includes(e.type));
 let added = 0;
 for (const e of [...events].reverse()) { if (known.has(e.id)) continue; appendFileSync(`flow/ledger/${e.t.slice(0, 7)}.ndjson`, JSON.stringify({ ...e, text: text(e.text, 400), title: text(e.title, 160), name: text(e.name, 60) }) + '\n'); known.add(e.id); added++; }
 

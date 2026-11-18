@@ -10,7 +10,7 @@ const db = createMem({ file: join(process.cwd(), 'data', 'sea.tsv'), base, blobT
 
 // The living sea keeps its state in the shared runtime cache of the node, so every instance sees the same sea.
 const local = memoryKv();
-const shared = () => getCache({ namespace: 'mare2' });
+const shared = () => getCache({ namespace: 'mare3' });
 const kv = {
   async get(k) { try { const v = await shared().get(k); return v === undefined ? null : v; } catch (e) { console.error('mare_kv_get', e?.message); return local.get(k); } },
   async set(k, v, ttl) { try { await shared().set(k, v, { ttl: ttl || 86400 * 30, name: `mare:${k.split(':')[0]}` }); } catch (e) { console.error('mare_kv_set', e?.message); await local.set(k, v, ttl); } },

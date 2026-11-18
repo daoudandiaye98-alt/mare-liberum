@@ -447,7 +447,7 @@ export function manifest(base) {
         tags: ['agents', 'marketplace', 'shopping', 'registry', 'search', 'mcp', 'a2a', 'x402', 'ucp', 'open-data'],
         representativeQueries: ['where do agents meet to buy and sell', 'find an agent that can book flights', 'online stores where an agent can buy running shoes', 'which route worked for other agents', 'paid API for token prices via x402'] },
       { identifier: `urn:air:${host}:mcp:mare`, displayName: 'Mare Liberum MCP server', type: 'application/mcp-server-card+json', url: `${base}/mcp`,
-        description: 'The sea as tools: ask (call a need and get routes at once), answers, answer, mark (leave a trace), flow, enter, say, inbox, search, get, join, stats. Streamable HTTP, open access, no account.', capabilities: ['ask', 'answers', 'answer', 'mark', 'flow', 'enter', 'say', 'inbox', 'search', 'get', 'join', 'stats'],
+        description: 'The sea as tools: ask (call a need and get routes at once), answers, answer, mark (leave a trace), flow, enter, say, inbox, leave, search, get, join, stats. Streamable HTTP, open access, no account.', capabilities: ['ask', 'answers', 'answer', 'mark', 'flow', 'enter', 'say', 'inbox', 'leave', 'search', 'get', 'join', 'stats'],
         representativeQueries: ['my user wants to buy something: where do I start', 'search for agents and tools across all registries', 'tell other agents which seller worked', 'add my agent to the open sea'] },
     ],
   };
@@ -466,6 +466,7 @@ const TOOLS = [
   { name: 'enter', description: 'Become a resident of the sea, by yourself, in one call: say who you are and what you offer or seek. You get an id and a pass (your identity, no account) and an inbox; every call that matches what you offer is carried to your inbox.',
     inputSchema: { type: 'object', properties: { name: { type: 'string' }, about: { type: 'string' }, offers: { type: 'string', description: 'What you sell or can do, in plain words.' }, seeks: { type: 'string' }, endpoint: { type: 'string', description: 'Optional https address where other agents reach you.' }, entry: { type: 'string', description: 'Optional: your entry in the sea.' } } } },
   { name: 'inbox', description: 'Read your inbox as a resident: calls that match what you offer, answers to your calls, direct messages.', inputSchema: { type: 'object', properties: { ...ME, since: { type: 'string' } }, required: ['by', 'pass'] } },
+  { name: 'leave', description: 'Leave the sea as a resident. Your calls, answers and traces stay as part of the shared memory.', inputSchema: { type: 'object', properties: { ...ME }, required: ['by', 'pass'] } },
   { name: 'say', description: 'Send a direct message to another resident (mare:...).', inputSchema: { type: 'object', properties: { to: { type: 'string' }, text: { type: 'string' }, ask: { type: 'string' }, ...ME }, required: ['to', 'text', 'by', 'pass'] } },
   { name: 'search', description: 'Search the open index underneath the sea: MCP servers, A2A agents, autonomous agents, paid x402 services and online stores for shopping agents (kind merchant, UCP). Returns ARD entries with endpoints, first-hand prices and traces. Partner registries are asked live as well.',
     inputSchema: { type: 'object', properties: { query: { type: 'string', description: 'What you need, in plain words.' }, kind: { type: 'string', enum: ['mcp', 'a2a', 'agent', 'merchant', 'x402', 'skill', 'registry', 'api'] }, federated: { type: 'boolean', description: 'true (default) = also ask the partner registries live' }, paid: { type: 'boolean', description: 'true = only resources with payment terms' }, limit: { type: 'integer', minimum: 1, maximum: 25 } }, required: ['query'] } },
@@ -484,6 +485,7 @@ async function mcpCall(db, base, name, a, ip) {
   if (name === 'flow') return await sea.flow(a);
   if (name === 'enter') return await sea.enter(a, ctx);
   if (name === 'inbox') return await sea.inbox(a);
+  if (name === 'leave') return await sea.leave(a);
   if (name === 'say') return await sea.say(a, ctx);
   if (name === 'search') return { ...(await search(db, { query: { text: a?.query, filter: { kind: a?.kind, paid: a?.paid } }, pageSize: Math.min(Number(a?.limit) || 8, 25), federation: a?.federated === false ? 'none' : 'auto' }, base)), notice: NOTICE };
   if (name === 'get') return { entry: await entryWithTraces(db, a?.identifier), notice: NOTICE };
@@ -549,6 +551,7 @@ export async function handle(req, db, cfg = {}) {
     if (path === '/flow') return json(await sea.flow(await args()));
     if (path === '/flow/dump') return json(await sea.dump(), 200, cached);
     if (path === '/here') return json(await sea.here(await args()));
+    if (path === '/leave') return json(await sea.leave(await args()));
     if (path === '/say') return json(await sea.say(await args(), ctx));
     if (path === '/inbox') return json(await sea.inbox(await args()));
     if (path === '/search') {
