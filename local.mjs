@@ -81,6 +81,9 @@ r = await call('GET', '/a2a'); line('a2a GET', r.status);
 r = await call('GET', '/e/fit2run.com:ucp:store'); line('store page', { status: r.status, title: String(r.j).match(/<title>([^<]+)/)?.[1], ld: /application\/ld\+json/.test(String(r.j)), trace: /worked/.test(String(r.j)) });
 r = await call('GET', '/e/angel.oroboros-design.com:x402:agenten-signal-stealth-read'); line('paid service page', { status: r.status, price: String(r.j).match(/\$[0-9.]+ per call/)?.[0] });
 r = await call('GET', '/e/nope:nothing'); line('unknown page', r.status);
+r = await call('GET', '/e/fit2run.com:ucp:store'); line('store page ask', String(r.j).match(/GET (https[^<]+)/)?.[1]);
+r = await call('POST', '/a2a', { jsonrpc: '2.0', id: 'g1', method: 'message/send', params: { message: { role: 'user', messageId: 'g1', parts: [{ kind: 'text', text: 'Hello! In one or two sentences, what can you help with?' }] } } }); line('a2a greeting', r.j.result?.parts?.[0]?.text?.slice(0, 90));
+
 r = await call('GET', '/sitemap.xml'); line('sitemap index', (String(r.j).match(/<loc>/g) || []).length);
 r = await call('GET', '/sitemaps/0.xml'); line('sitemap 0', { urls: (String(r.j).match(/<loc>/g) || []).length, first: String(r.j).match(/<loc>([^<]+)/)?.[1] });
 r = await call('GET', '/sitemaps/site.xml'); line('sitemap site', (String(r.j).match(/<loc>/g) || []).length);

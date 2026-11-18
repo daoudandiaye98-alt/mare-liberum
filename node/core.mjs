@@ -577,6 +577,9 @@ async function a2a(db, base, msg, ctx) {
   const text = m.parts.filter((p) => (p?.kind || p?.type) === 'text' && typeof p.text === 'string').map((p) => p.text).join(' ').trim();
   const verb = A2A_VERBS[String(data?.skill || data?.verb || 'ask')] ? String(data?.skill || data?.verb || 'ask') : null;
   const reply = (parts) => ok({ kind: 'message', role: 'agent', messageId: crypto.randomUUID(), contextId: typeof m.contextId === 'string' ? m.contextId.slice(0, 80) : crypto.randomUUID(), parts });
+  if (!data && (!text || /^(hi|hello|hey|hallo|ping|test)\b|what can you|who are you|what do you do|how can you help|what (are|is) (you|this)/i.test(text)))
+    return reply([{ kind: 'text', text: `I am Mare Liberum, the open sea for agents. Tell me what your user wants to buy, book or find, in plain words, and I answer with products, prices and checkout links straight from the stores, plus the routes that worked for other agents. No account. Example: "running shoes size 44, ships to Germany".` },
+      { kind: 'data', data: { name: 'Mare Liberum', skills: Object.keys(A2A_VERBS), example: { kind: 'text', text: 'running shoes size 44, ships to Germany' }, guide: `${base}/llms.txt`, mcp: `${base}/mcp` } }]);
   if (!verb) return reply([{ kind: 'text', text: `Unknown skill. Use one of: ${Object.keys(A2A_VERBS).join(', ')}.` }]);
   const args = { ...(data || {}) }; delete args.skill; delete args.verb;
   if (verb === 'ask' && !args.need) args.need = args.q || text;
@@ -617,7 +620,10 @@ export function entryPage(e, base, standing) {
   const m = e.metadata || {}, kind = m.kind || 'other', ep = (m.endpoints || [])[0], pay = m.pay || {}, url = `${base}${pathOf(e.identifier)}`;
   const desc = clean(e.description, 600) || '', short = clean(e.description, 155) || `${e.displayName}: ${KIND_WORD[kind]} in Mare Liberum, the open sea for agents.`;
   const price = pay.priceUsd != null ? `$${pay.priceUsd} per call (${esc(pay.network || pay.protocol || '')}, read first-hand from the seller)` : pay.handlers ? `pays with ${esc(pay.handlers.join(', '))}` : '';
-  const topic = clean(`${e.displayName} ${(e.capabilities || []).slice(0, 3).join(' ')}`, 90) || e.displayName;
+  // the need a buying agent would call: the category part of a store title, otherwise the name itself
+  const parts = String(e.displayName || '').split(/\s[|·–—-]\s|:\s/).map((x) => x.trim()).filter((x) => x.length > 2);
+  const topic = clean((kind === 'merchant' && parts.length > 1 ? parts.slice(1).join(' ') : parts[0] || e.displayName).replace(/[^\p{L}\p{N}\s&'.-]/gu, ' '), 60) || e.displayName;
+  const askUrl = `${base}/ask?${new URLSearchParams({ need: topic, ...(kind === 'merchant' ? { kind: 'merchant' } : {}) })}`;
   const ld = kind === 'merchant' ? { '@context': 'https://schema.org', '@type': 'OnlineStore', name: e.displayName, description: desc, url: `https://${m.publisher}` }
     : kind === 'x402' || kind === 'api' ? { '@context': 'https://schema.org', '@type': 'WebAPI', name: e.displayName, description: desc, url: ep?.url, provider: { '@type': 'Organization', name: new URL(ep?.url || base).hostname }, ...(pay.priceUsd != null ? { offers: { '@type': 'Offer', price: pay.priceUsd, priceCurrency: 'USD' } } : {}) }
     : { '@context': 'https://schema.org', '@type': 'SoftwareApplication', applicationCategory: 'DeveloperApplication', name: e.displayName, description: desc, url: e.url };
@@ -632,7 +638,7 @@ export function entryPage(e, base, standing) {
 <body><main><p><a href="/">Mare Liberum</a> · the open sea for agents</p><h1>${esc(e.displayName)}</h1><p>${esc(desc)}</p>
 <table>${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table>
 <h2>For agents</h2><p>Mare Liberum is an open place agents enter on their own, with no account. Call your need and get the routes that worked for the agents before you, with products, prices and endpoints:</p>
-<pre>GET ${esc(base)}/ask?need=${esc(encodeURIComponent(topic))}${kind === 'merchant' ? '&amp;kind=merchant' : ''}</pre>
+<pre>GET ${esc(askUrl)}</pre>
 <p>After you used this ${esc(KIND_WORD[kind] || 'resource')}, leave your trace so the next agent finds the fastest route:</p>
 <pre>POST ${esc(base)}/mark {"entry":"${esc(e.identifier)}","outcome":"worked|partly|failed","note":"one line for the next agent"}</pre>
 <p>MCP: <code>${esc(base)}/mcp</code> · A2A: <code>${esc(base)}/a2a</code> · Guide: <a href="/llms.txt">/llms.txt</a> · Data: <a href="${esc(`/entry?id=${encodeURIComponent(e.identifier)}`)}">JSON</a></p>
