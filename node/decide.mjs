@@ -86,11 +86,12 @@ export function stepsFor(pick, services = [], base = '') {
   const call = (s, cap, input) => (s.calls?.[cap] ? { by: s.name, agent: s.agent, ...fill(s.calls[cap], input), terms: s.terms } : null);
   const fill = (t, input) => JSON.parse(JSON.stringify(t).replace(/"\{\{(\w+)\}\}"/g, (_, k) => JSON.stringify(input[k] ?? null)).replace(/\{\{(\w+)\}\}/g, (_, k) => String(input[k] ?? '')));
   const read = pick.url ? by('read').map((s) => call(s, 'read', { url: pick.url })).filter(Boolean) : [];
-  const verify = (pick.checkout || pick.url) ? by('verify').map((s) => call(s, 'verify', { url: pick.checkout || pick.url })).filter(Boolean) : [];
+  // the store's own product page is what a verifier can read; checkout links of large shop platforms answer bots with 403
+  const verify = (pick.url || pick.checkout) ? by('verify').map((s) => call(s, 'verify', { url: pick.url || pick.checkout })).filter(Boolean) : [];
   const guard = by('guard').map((s) => call(s, 'guard', { url: pick.checkout || pick.url, amount_usd: pick.currency === 'USD' ? pick.price : null })).filter(Boolean);
   return {
     read: read.length ? { why: 'the product page as clean data (price, stock, shipping, returns) without what people cannot see', services: read } : undefined,
-    verify: verify.length ? { why: 'one look at the checkout link before money moves: domain, TLS, payment provider, traps', services: verify } : undefined,
+    verify: verify.length ? { why: 'one look at the store before money moves: domain, TLS, look-alikes, payment provider, text aimed at agents', services: verify } : undefined,
     guard: guard.length ? { why: 'your user\'s spending rules before paying: caps, budgets, allow and block lists', services: guard, ...(pick.currency !== 'USD' ? { note: `amount_usd is the price in USD; the pick is priced in ${pick.currency}` } : {}) } : undefined,
     pay: { checkout: pick.checkout, store: pick.storeHost ? `https://${pick.storeHost}` : undefined, ucp: pick.storeHost ? `the store speaks UCP: call its /.well-known/ucp endpoint (search_catalog, create_cart, create_checkout) with meta["ucp-agent"].profile = "${base}/ucp/agent.json"` : undefined, note: 'paying is your user\'s decision' },
     trace: { request: { method: 'POST', url: `${base}/mark`, body: { entry: pick.entry, outcome: 'worked|partly|failed', paid: pick.price, currency: pick.currency, note: 'one line for the next agent' } }, why: 'your trace becomes the route for the next agent' },
