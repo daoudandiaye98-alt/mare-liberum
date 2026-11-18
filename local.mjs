@@ -65,6 +65,17 @@ r = await call('GET', '/flow/dump'); line('ledger dump', { agents: Object.keys(r
 r = await call('POST', '/mcp', { jsonrpc: '2.0', id: 20, method: 'tools/list' }); line('mcp tools', r.j.result.tools.map((t) => t.name).join(','));
 r = await call('POST', '/mcp', { jsonrpc: '2.0', id: 21, method: 'tools/call', params: { name: 'ask', arguments: { need: 'japanese whisky glasses as a gift', kind: 'merchant' } } }); line(`mcp ask ${r.ms}ms`, { id: r.j.result.structuredContent.ask?.id, routes: r.j.result.structuredContent.routes?.length, first: r.j.result.structuredContent.routes?.[0]?.displayName });
 r = await call('POST', '/mcp', { jsonrpc: '2.0', id: 22, method: 'tools/call', params: { name: 'mark', arguments: { entry: 'urn:air:nope', outcome: 'worked' } } }); line('mcp mark unknown entry', r.j.result.isError + ' ' + r.j.result.content[0].text);
+// ---- the doors: agent card, server card, manifest, A2A
+r = await call('GET', '/.well-known/agent-card.json'); line('agent card', { url: r.j.url, skills: r.j.skills?.map((s) => s.id), protocol: r.j.protocolVersion });
+r = await call('GET', '/.well-known/mcp/server-card.json'); line('server card', { name: r.j.name, remote: r.j.remotes?.[0]?.url, tools: r.j.tools?.length });
+r = await call('GET', '/.well-known/ard.json'); line('ard entries', r.j.entries?.map((e) => `${e.type} ${e.url}`));
+r = await call('POST', '/a2a', { jsonrpc: '2.0', id: 'a1', method: 'message/send', params: { message: { role: 'user', messageId: 'm1', parts: [{ kind: 'text', text: 'trail running shoes' }] } } }); line(`a2a text call ${r.ms}ms`, { kind: r.j.result?.kind, text: r.j.result?.parts?.[0]?.text?.split('\n').slice(0, 2), products: r.j.result?.parts?.[1]?.data?.products?.length });
+const a2aAsk = r.j.result?.parts?.[1]?.data?.ask?.id;
+r = await call('POST', '/a2a', { jsonrpc: '2.0', id: 'a2', method: 'message/send', params: { message: { role: 'user', messageId: 'm2', parts: [{ kind: 'data', data: { skill: 'answers', ask: a2aAsk } }] } } }); line('a2a answers', { open: r.j.result?.parts?.[1]?.data?.open });
+r = await call('POST', '/a2a', { jsonrpc: '2.0', id: 'a3', method: 'message/send', params: { message: { role: 'user', messageId: 'm3', parts: [{ kind: 'data', data: { skill: 'mark', entry: 'urn:air:nope', outcome: 'worked' } }] } } }); line('a2a mark unknown', r.j.result?.parts?.[0]?.text);
+r = await call('POST', '/a2a', { jsonrpc: '2.0', id: 'a4', method: 'tasks/get', params: { id: 'x' } }); line('a2a tasks/get', r.j.error);
+r = await call('POST', '/a2a', { jsonrpc: '2.0', id: 'a5', method: 'nope' }); line('a2a unknown method', r.j.error?.code);
+r = await call('GET', '/a2a'); line('a2a GET', r.status);
 r = await call('POST', '/join', { url: 'https://localhost' }); line('join localhost', r.status + ' ' + r.j.error?.message);
 r = await call('POST', '/ingest/mcp'); line('ingest closed on this engine', r.status);
 r = await call('POST', '/search', { query: {} }); line('search empty', r.status);
