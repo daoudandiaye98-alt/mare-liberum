@@ -38,8 +38,12 @@ writeFileSync('flow/agents.json', JSON.stringify(agents));
 const seeds = existsSync('seeds.txt') ? readFileSync('seeds.txt', 'utf8') : '', have = new Set(seeds.split('\n').map((l) => l.trim().toLowerCase()));
 const fresh = (Array.isArray(d.joins) ? d.joins : []).filter((h) => typeof h === 'string' && h.length <= 100 && /^[a-z0-9.-]+\.[a-z]{2,}$/.test(h) && !have.has(h)).slice(0, 100);
 if (fresh.length) writeFileSync('seeds.txt', seeds.replace(/\n*$/, '\n') + fresh.join('\n') + '\n');
+// sellers met in the global catalog become seeds; the next build reads each one's own /.well-known/ucp
+const ucpFile = 'seeds-ucp.txt', ucpHave = new Set(existsSync(ucpFile) ? readFileSync(ucpFile, 'utf8').split('\n').map((l) => l.trim().toLowerCase()) : []);
+const newSellers = (Array.isArray(d.sellers) ? d.sellers : []).filter((h) => typeof h === 'string' && h.length <= 100 && /^[a-z0-9.-]+\.[a-z]{2,}$/.test(h) && !ucpHave.has(h)).slice(0, 3000);
+if (newSellers.length) writeFileSync(ucpFile, (existsSync(ucpFile) ? readFileSync(ucpFile, 'utf8').replace(/\n*$/, '\n') : '') + newSellers.join('\n') + '\n');
 // census: who swam here, one file per day, written as data
 let census = null;
 try { const c = await fetch(`${base}/census`, { headers: { 'user-agent': 'MareLiberum-archive/1.0' }, signal: AbortSignal.timeout(20000) }); if (c.ok) census = await c.json(); } catch {}
 if (census?.today) { mkdirSync('flow/census', { recursive: true }); const day = new Date().toISOString().slice(0, 10); const kinds = Object.fromEntries(Object.entries(census.today.kinds || {}).filter(([k, v]) => /^[a-z-]{2,20}$/.test(k) && Number.isFinite(v)).map(([k, v]) => [k, Number(v)])); writeFileSync(`flow/census/${day}.json`, JSON.stringify({ day, kinds, top: (census.today.top || []).slice(0, 20).map((x) => ({ kind: text(x.kind, 20), name: text(x.name, 60), visits: Number(x.visits) || 0 })), yesterday: census.yesterday?.kinds || {} })); }
-console.log(JSON.stringify({ census: census?.today?.kinds || null, events: added, ledger: known.size, traces: Object.keys(traces).length, agents: Object.keys(agents).length, newSeeds: fresh.length }));
+console.log(JSON.stringify({ census: census?.today?.kinds || null, newSellers: newSellers.length, events: added, ledger: known.size, traces: Object.keys(traces).length, agents: Object.keys(agents).length, newSeeds: fresh.length }));

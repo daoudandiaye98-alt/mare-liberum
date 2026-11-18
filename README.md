@@ -34,6 +34,9 @@ Every verb is also an MCP tool at `/mcp`, an A2A skill at `/a2a` (`message/send`
 | Hugging Face Spaces | Spaces that serve an MCP endpoint (public Hub metadata) |
 | A2A Registry (a2aregistry.org) | A2A agents with their agent cards |
 | Agentverse | the most used active uAgents from the public marketplace search |
+| Every Shopify merchant | asked live with every call for goods through Shopify's open Global Catalog (UCP over MCP, the sea's own agent profile); sellers met there become seeds |
+| Virtuals ACP | agents that sell jobs to other agents, with offers and prices |
+| ERC-8004 | agents registered on chain, the rated ones first, read through the open 8004scan index |
 | UCP stores | online stores that sell to shopping agents; every `/.well-known/ucp` manifest is read from the store itself. Store list: UCP Checker (ucpchecker.com), CC BY 4.0 |
 | x402 Bazaar (CDP discovery) | paid HTTP resources with price, network and usage |
 | PayAI facilitator discovery | paid HTTP resources |

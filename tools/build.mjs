@@ -3,7 +3,7 @@
 import { createWriteStream, createReadStream, existsSync, readFileSync, writeFileSync, mkdirSync, cpSync, rmSync } from 'node:fs';
 import { createGzip } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
-import { normMcp, normX402, normA2AListed, normUcp, normAgentverse, normHfSpace, readDomain, fetchJson, safeUrl, clean } from '../node/core.mjs';
+import { normMcp, normX402, normA2AListed, normUcp, normAgentverse, normHfSpace, normVirtuals, norm8004, readDomain, fetchJson, safeUrl, clean } from '../node/core.mjs';
 import { hayOf, metaOf } from '../node/mem.mjs';
 
 const UA = 'MareLiberum/1.1 (open agent index; pull-only; +https://github.com/daoudandiaye98-alt/mare-liberum)';
@@ -45,6 +45,24 @@ async function agentverse() {
     const { json: j } = await get('https://agentverse.ai/v1/search/agents', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ search_text: '', sort: 'interactions', direction: 'desc', offset, limit: 50 }) });
     for (const a of j.agents || []) keep(rows, normAgentverse(a));
   });
+  return rows;
+}
+async function virtuals() {
+  const rows = [], first = (await get('https://acpx.virtuals.io/api/agents?pagination%5Bpage%5D=1&pagination%5BpageSize%5D=100')).json, pages = first?.meta?.pagination?.pageCount || 1;
+  for (const a of first.data || []) keep(rows, normVirtuals(a));
+  const rest = []; for (let p = 2; p <= Math.min(pages, 600); p++) rest.push(p);
+  await pool(rest, 3, async (p) => { const { json: j } = await get(`https://acpx.virtuals.io/api/agents?pagination%5Bpage%5D=${p}&pagination%5BpageSize%5D=100`); for (const a of j.data || []) keep(rows, normVirtuals(a)); });
+  return rows;
+}
+async function erc8004() {
+  // agents registered on chain, the ones other agents have rated first; the best of them come with their own endpoints
+  const base = 'https://api.8004scan.io/api/v1/agents?is_testnet=false&min_feedbacks=1&sort_by=total_score&sort_order=desc&limit=100', list = [], offs = [];
+  for (let o = 0; o < 20000; o += 100) offs.push(o);
+  await pool(offs, 3, async (o) => { const { json: j } = await get(`${base}&offset=${o}`); for (const a of j.items || []) list.push(a); });
+  list.sort((x, y) => (Number(y.total_score) || 0) - (Number(x.total_score) || 0));
+  const detail = new Map();
+  await pool(list.slice(0, 2000), 6, async (a) => { const [chain, , token] = String(a.agent_id).split(':'); const { json } = await get(`https://api.8004scan.io/api/v1/agents/${chain}/${token}`); if (json) detail.set(a.agent_id, json); });
+  const rows = []; for (const a of list) keep(rows, norm8004(a, detail.get(a.agent_id)));
   return rows;
 }
 async function hfSpaces() {
@@ -126,6 +144,8 @@ const LAKES = [
   { name: 'a2a-registry', url: 'https://a2aregistry.org/api/agents?limit=50', items: (j) => j.agents, total: (j) => j.total, norm: (x) => normA2AListed(x, 'a2a-registry', 'https://a2aregistry.org') },
   { name: 'agentverse', pull: agentverse },
   { name: 'hf-spaces', pull: hfSpaces },
+  { name: 'virtuals-acp', pull: virtuals },
+  { name: 'erc8004', pull: erc8004 },
   { name: 'ucp-stores', pull: ucpStores },
 ];
 

@@ -31,7 +31,7 @@ export function memoryKv() {
 
 // route(text, {kind, limit}) -> entries from the sea · entryOf(id) -> one entry or null · base() -> public address of this node
 // seed(name) -> what the open ledger remembers ('traces' map, 'head' list); a sea that lost its live memory starts again from there
-export function createFlow({ kv, route, entryOf, log, seed, shop, profile }) {
+export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profile }) {
   const ledger = {}; const fromLedger = (name, empty) => { if (!(name in ledger)) { try { ledger[name] = seed?.(name) || null; } catch { ledger[name] = null; } } return ledger[name] ? structuredClone(ledger[name]) : empty; };
   // read, change, write, then look again: a write that got lost between two agents is repeated
   async function update(key, ttl, change, landed) {
@@ -110,12 +110,27 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, profile }) {
     },
     // stores that match are asked live at their own endpoint; products come back in turn, store by store
     async products(routes, topic, ask) {
-      if (!shop) return [];
-      const stores = routes.filter((r) => r.kind === 'merchant').map((r) => ({ r, ep: (r.endpoints || []).find((e) => e.transport === 'mcp')?.url })).filter((x) => x.ep).slice(0, 4);
-      if (!stores.length) return [];
-      const per = await Promise.all(stores.map(async ({ r, ep }) => ((await shop(ep, topic).catch(() => [])) || []).filter((p) => p.inStock !== false && (ask.budget == null || !ask.currency || p.currency !== ask.currency.toUpperCase() || p.price <= ask.budget)).slice(0, 3).map((p) => strip({ ...p, store: r.displayName, entry: r.identifier, endpoint: ep }))));
-      const out = []; for (let i = 0; i < 3; i++) for (const list of per) if (list[i]) out.push(list[i]);
-      return out;
+      // goods: every Shopify merchant at once (global catalog) and the matching stores at their own endpoints, merged and deduplicated
+      const forGoods = ask.kind === 'merchant' || (!ask.kind && routes.some((r) => r.kind === 'merchant'));
+      if (!forGoods) return [];
+      const stores = shop ? routes.filter((r) => r.kind === 'merchant').map((r) => ({ r, ep: (r.endpoints || []).find((e) => e.transport === 'mcp')?.url })).filter((x) => x.ep).slice(0, 4) : [];
+      const fits = (p) => p.inStock !== false && (ask.budget == null || !ask.currency || p.currency !== ask.currency.toUpperCase() || p.price <= ask.budget);
+      const [all, ...per] = await Promise.all([
+        shopAll ? shopAll(topic, { region: ask.region, currency: ask.currency, budget: ask.budget, limit: 12 }).catch(() => []) : [],
+        ...stores.map(async ({ r, ep }) => ((await shop(ep, topic).catch(() => [])) || []).filter(fits).slice(0, 3).map((p) => strip({ ...p, store: r.displayName, entry: r.identifier, endpoint: ep }))),
+      ]);
+      const global = (all || []).filter(fits).map((p) => strip({ ...p }));
+      if (global.length) api.noteSellers(global).catch(() => {});
+      const out = [], seen = new Set(), add = (p) => { const k = p.url || `${p.store}|${p.title}`; if (!seen.has(k)) { seen.add(k); out.push(p); } };
+      for (let i = 0; i < 6; i++) { if (global[i]) add(global[i]); for (const list of per) if (list[i] && i < 3) add(list[i]); }
+      for (const p of global.slice(6)) add(p);
+      return out.slice(0, 12);
+    },
+    // sellers met in the global catalog become seeds of the sea: the next build reads their own /.well-known/ucp
+    async noteSellers(list) {
+      const fresh = list.filter((p) => p.storeHost && /^[a-z0-9.-]+\.[a-z]{2,}$/.test(p.storeHost));
+      if (!fresh.length) return;
+      await kv.set('sellers', ((cur) => { const m = cur && typeof cur === 'object' ? cur : {}; for (const p of fresh) if (!m[p.storeHost]) m[p.storeHost] = { name: clean(p.store, 80), first: now() }; const k = Object.keys(m); for (let i = 0; i < k.length - 20000; i++) delete m[k[i]]; return m; })(await kv.get('sellers')), 90 * DAY);
     },
     async routes(topic, kind, limit) {
       // the search already lifts routes other agents swam successfully and lowers routes that failed
@@ -213,7 +228,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, profile }) {
     },
     async noteJoin(host) { await update('joins', 30 * DAY, (cur) => [...new Set([...(Array.isArray(cur) ? cur : []), host])].slice(-2000), (seen) => Array.isArray(seen) && seen.includes(host)); },
     // ---------------------------------------------------------------- the open ledger: everything the sea remembers, for mirrors and for the archive
-    async dump() { return { at: now(), agents: (await kv.get('agents')) || {}, traces: (await traceMap(true)) || {}, flow: await headNow(), joins: (await kv.get('joins')) || [] }; },
+    async dump() { return { at: now(), agents: (await kv.get('agents')) || {}, traces: (await traceMap(true)) || {}, flow: await headNow(), joins: (await kv.get('joins')) || [], sellers: Object.keys((await kv.get('sellers')) || {}) }; },
     async pulse() {
       const head = await headNow(), day = new Date(Date.now() - DAY * 1000).toISOString(), last = head.filter((e) => e.t > day);
       const cen = (await kv.get(`census:${now().slice(0, 10)}`))?.kinds || {};
