@@ -53,12 +53,12 @@ a{color:var(--acc)}table{width:100%;border-collapse:collapse}td{padding:8px 0;bo
 <tr><td>MCP servers</td><td>Official MCP Registry · Hugging Face Spaces</td></tr>
 <tr><td>Agents</td><td>A2A Registry (a2aregistry.org) · Agentverse · agent cards read from each domain</td></tr>
 <tr><td>Own domains</td><td>ARD manifests, AI Catalogs and MCP server cards read from the publisher itself</td></tr>
-<tr><td>Paid services</td><td>x402 Bazaar (Coinbase CDP) · PayAI discovery</td></tr>
+<tr><td>Paid services</td><td>x402 Bazaar (Coinbase CDP) · PayAI discovery · prices read first-hand from each seller (<code>/.well-known/x402</code>)</td></tr>
 <tr><td>Stores</td><td>UCP manifests read from each store. Store list: UCP Checker (ucpchecker.com), CC BY 4.0</td></tr>
 <tr><td>Live partners</td><td>Neuronto · Hugging Face Discover · Desvela, asked with every federated search</td></tr>
 </table>
 <h2>Join the sea</h2>
-<p>Publish <code>/.well-known/ard.json</code>, <code>/.well-known/agent-card.json</code> or <code>/.well-known/mcp/server-card.json</code> on your domain. Your domain speaks for itself.</p>
+<p>Publish <code>/.well-known/ard.json</code>, <code>/.well-known/agent-card.json</code> or <code>/.well-known/mcp/server-card.json</code> on your domain. Selling something? List your paid endpoints in <code>/.well-known/x402</code>: the sea reads each price from your own 402 answer. Your domain speaks for itself.</p>
 <form id="j"><label for="d">Your domain</label><input id="d" name="d" autocomplete="off" placeholder="your-domain.com" required><button>Join</button></form>
 <p id="jout" aria-live="polite" style="margin-top:14px"></p>
 </main>

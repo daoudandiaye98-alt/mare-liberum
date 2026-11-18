@@ -144,15 +144,37 @@ export function normArd(e, host) {
 
 // MCP server card served by the publisher on its own domain (/.well-known/mcp/server-card.json).
 export function normMcpCard(c, host, cardUrl) {
-  if (!c || typeof c.name !== 'string' || !Array.isArray(c.remotes)) return null;
-  const endpoints = c.remotes.filter((r) => typeof r?.url === 'string' && /^https:\/\//.test(r.url)).map((r) => ({ transport: clean(r.type, 30) || 'streamable-http', url: r.url.slice(0, 500) })).slice(0, 6);
+  const name = typeof c?.name === 'string' ? c.name : typeof c?.serverInfo?.name === 'string' ? c.serverInfo.name : null;
+  if (!name) return null;
+  const remotes = Array.isArray(c.remotes) ? c.remotes : typeof c.transport?.endpoint === 'string' ? [{ type: c.transport.type, url: c.transport.endpoint }] : [];
+  const endpoints = remotes.filter((r) => typeof r?.url === 'string' && /^https:\/\//.test(r.url)).map((r) => ({ transport: clean(r.type, 30) || 'streamable-http', url: r.url.slice(0, 500) })).slice(0, 6);
   if (!endpoints.length) return null;
-  const nm = c.name.includes('/') ? c.name.slice(c.name.indexOf('/') + 1) : c.name;
+  const nm = name.includes('/') ? name.slice(name.indexOf('/') + 1) : name, pay = c.payment && typeof c.payment.protocol === 'string' ? c.payment : null;
   return {
     id: `urn:air:${host}:mcp:${seg(nm)}`, publisher: host, display_name: clean(c.title || c.serverInfo?.title || nm, 120), type: 'application/mcp-server-card+json', kind: 'mcp', url: cardUrl,
-    description: clean(c.description || c.instructions, 600), tags: ['mcp', 'remote'],
-    capabilities: (Array.isArray(c.tools) ? c.tools : []).map((t) => clean(t?.name, 60)).filter(Boolean).slice(0, 30), queries: [], version: clean(c.version, 40), endpoints, pay: null,
+    description: clean(c.description || c.instructions, 600), tags: ['mcp', 'remote', ...(pay ? ['paid'] : [])],
+    capabilities: (Array.isArray(c.tools) ? c.tools : []).map((t) => clean(t?.name, 60)).filter(Boolean).slice(0, 30), queries: [], version: clean(c.version || c.serverInfo?.version, 40), endpoints,
+    pay: pay ? { protocol: clean(pay.protocol, 20), network: clean(pay.network, 60) || undefined, asset: clean(pay.asset, 80) || undefined, note: 'declared by the server card' } : null,
     source: 'join', source_ref: cardUrl, attested_by: 'domain', quality: 0, updated_at: new Date().toISOString(),
+  };
+}
+// Paid resource, first-hand: the domain lists it in /.well-known/x402 and the resource states its own price in its 402 answer.
+export function normPaid(ch, resUrl, host, doc, method) {
+  const a = Array.isArray(ch?.accepts) ? ch.accepts[0] : null; if (!a || typeof a !== 'object') return null;
+  let u; try { u = new URL(resUrl); } catch { return null; }
+  const amount = String(a.amount ?? a.maxAmountRequired ?? ''), usdc = /usd/i.test(a?.extra?.name || '') && /^\d+$/.test(amount);
+  const path = u.pathname.replace(/^\/+|\/+$/g, ''), card = typeof ch.pay_by_card === 'string' && ch.pay_by_card.startsWith(`https://${host}/`) ? ch.pay_by_card.slice(0, 300) : undefined;
+  const about = clean((typeof doc?.description === 'string' && doc.description) || ch.resource?.description || a.description, 600);
+  // a resource without a name of its own is called by the opening words of its own description
+  const lead = clean(String(about || '').split(/[.:;(\n]/)[0], 90);
+  const name = clean(typeof doc?.name === 'string' ? doc.name : ch.resource?.name, 120) || (lead && lead.length >= 12 ? lead : clean(`${(path.split('/').pop() || host).replace(/[-_]+/g, ' ')} · ${host}`, 120));
+  return {
+    id: `urn:air:${host}:x402:${seg(path.replace(/\//g, '-')) || 'root'}`, publisher: host, display_name: name, type: 'application/x402-resource+json', kind: 'x402', url: resUrl.slice(0, 500),
+    description: about,
+    tags: ['x402', 'paid', clean(a.network, 60), clean(typeof doc?.category === 'string' ? doc.category : null, 40)].filter(Boolean), capabilities: [], queries: [], version: String(ch.x402Version || ''),
+    endpoints: [{ transport: 'http-x402', url: resUrl.slice(0, 500), method }],
+    pay: { protocol: 'x402', scheme: clean(a.scheme, 20), network: clean(a.network, 60), asset: clean(a.asset, 80), amount: amount || undefined, payTo: clean(a.payTo, 80), priceUsd: usdc ? Number(amount) / 1e6 : undefined, cardUrl: card, readAt: new Date().toISOString() },
+    source: 'join', source_ref: `https://${host}/.well-known/x402`, attested_by: 'domain', quality: 1, updated_at: new Date().toISOString(),
   };
 }
 // A2A agent listed by an open A2A registry (full agent card inside the listing).
@@ -295,20 +317,42 @@ export async function search(db, body, base) {
   return res;
 }
 
-export async function readDomain(input) {
+// Ask a paid resource for its price: one unpaid call, the 402 answer carries the terms (x402 v2 header or v1/v2 body).
+async function ask(u, method, ms) {
+  const r = await fetch(u, { method, redirect: 'manual', headers: { 'user-agent': UA, accept: 'application/json', ...(method === 'POST' ? { 'content-type': 'application/json' } : {}) }, body: method === 'POST' ? '{}' : undefined, signal: AbortSignal.timeout(ms) });
+  const head = r.headers.get('payment-required'), buf = new Uint8Array(await r.arrayBuffer());
+  if (buf.length > 200000) return { status: r.status };
+  let body = null; try { body = JSON.parse(new TextDecoder().decode(buf)); } catch {}
+  let ch = null;
+  if (r.status === 402) { try { if (head) ch = JSON.parse(new TextDecoder().decode(Uint8Array.from(atob(head), (c) => c.charCodeAt(0)))); } catch {} if (!Array.isArray(ch?.accepts) && Array.isArray(body?.accepts)) ch = body; else if (ch && typeof body?.pay_by_card === 'string') ch.pay_by_card = body.pay_by_card; }
+  return { status: r.status, body, ch };
+}
+export async function readPaid(resUrl, host, ms = 5000) {
+  const u = await safeUrl(resUrl); if (u.hostname.toLowerCase() !== host) return null;
+  const [post, get] = await Promise.all([ask(u, 'POST', ms).catch(() => null), ask(u, 'GET', ms).catch(() => null)]);
+  const via = Array.isArray(post?.ch?.accepts) ? 'POST' : Array.isArray(get?.ch?.accepts) ? 'GET' : null; if (!via) return null;
+  const doc = get?.status === 200 && get.body && typeof get.body === 'object' && !Array.isArray(get.body) ? get.body : null;
+  return normPaid(via === 'POST' ? post.ch : get.ch, u.toString(), host, doc, via);
+}
+export async function readDomain(input, opt = {}) {
   const raw = String(input || '').trim();
   const u = await safeUrl(/^https?:\/\//i.test(raw) ? raw.replace(/^http:/i, 'https:') : `https://${raw}`);
   const host = u.hostname.toLowerCase(), root = `https://${host}`, rows = [], found = [];
-  const paths = ['/.well-known/ard.json', '/.well-known/ai-catalog.json', '/.well-known/agent-card.json', '/.well-known/agent.json', '/.well-known/mcp/server-card.json'];
+  const paths = ['/.well-known/ard.json', '/.well-known/ai-catalog.json', '/.well-known/agent-card.json', '/.well-known/agent.json', '/.well-known/mcp/server-card.json', '/.well-known/x402'];
   const docs = await Promise.all(paths.map((p) => fetchJson(root + p).catch(() => null)));
+  let paid = [], listed = 0;
   paths.forEach((p, i) => {
     const j = docs[i];
     if (!j || typeof j !== 'object') return;
-    if (Array.isArray(j.entries)) { found.push(p); for (const e of j.entries.slice(0, 200)) rows.push(normArd(e, host)); }
-    else if (p.includes('/mcp/') && Array.isArray(j.remotes)) { const r = normMcpCard(j, host, root + p); if (r) { found.push(p); rows.push(r); } }
+    if (p.endsWith('/x402')) { if (Array.isArray(j.resources)) { paid = [...new Set(j.resources.filter((r) => typeof r === 'string' && r.startsWith(`${root}/`)))]; listed = paid.length; paid = paid.slice(0, opt.paidMax || 12); } }
+    else if (Array.isArray(j.entries)) { found.push(p); for (const e of j.entries.slice(0, 200)) rows.push(normArd(e, host)); }
+    else if (p.includes('/mcp/') && (Array.isArray(j.remotes) || j.transport?.endpoint)) { const r = normMcpCard(j, host, root + p); if (r) { found.push(p); rows.push(r); } }
     else if (typeof j.name === 'string' && (Array.isArray(j.skills) || typeof j.url === 'string')) { found.push(p); if (!rows.some((r) => r?.kind === 'a2a' && r.source === 'join' && r.type === 'application/a2a-agent-card+json' && r.publisher === host && r.source_ref?.includes('/agent'))) rows.push(normA2A(j, host, root + p)); }
   });
-  return { host, found, rows: dedupe(rows) };
+  let priced = 0;
+  for (let i = 0; i < paid.length; i += 9) for (const r of await Promise.all(paid.slice(i, i + 9).map((res) => readPaid(res, host).catch(() => null)))) if (r) { rows.push(r); priced++; }
+  if (priced) found.push('/.well-known/x402');
+  return { host, found, rows: dedupe(rows), paid: priced ? paid : [], listed };
 }
 export async function join(db, input) {
   const { host, found, rows: good } = await readDomain(input);
@@ -316,7 +360,7 @@ export async function join(db, input) {
   const durable = (await db('mare_state_get', { key: 'durable' })) !== false;
   console.log('mare_join', JSON.stringify({ domain: host, entries: good.length, found }));
   return { domain: host, found, joined: good.map((r) => r.id), durable,
-    next: !good.length ? 'Publish /.well-known/ard.json, /.well-known/agent-card.json or /.well-known/mcp/server-card.json on this domain, then call join again.'
+    next: !good.length ? 'Publish /.well-known/ard.json, /.well-known/agent-card.json, /.well-known/mcp/server-card.json or /.well-known/x402 (paid resources) on this domain, then call join again.'
       : durable ? 'Your entries are searchable now.' : 'Your entries are searchable on this node now and get re-read from your domain at every refresh.' };
 }
 
@@ -372,7 +416,7 @@ const TOOLS = [
   { name: 'search', description: 'Search the open sea of agentic resources across all public registries: MCP servers, A2A agents, autonomous agents, paid x402 services and online stores that sell to shopping agents (kind merchant, UCP). Returns ARD entries with endpoints for direct connection. Partner registries are asked live as well.',
     inputSchema: { type: 'object', properties: { query: { type: 'string', description: 'What you need, in plain words.' }, kind: { type: 'string', enum: ['mcp', 'a2a', 'agent', 'merchant', 'x402', 'skill', 'registry', 'api'] }, federated: { type: 'boolean', description: 'true (default) = also ask the partner registries live' }, paid: { type: 'boolean', description: 'true = only resources with payment terms' }, limit: { type: 'integer', minimum: 1, maximum: 25 } }, required: ['query'] } },
   { name: 'get', description: 'Read one full entry by its identifier (urn:air:...).', inputSchema: { type: 'object', properties: { identifier: { type: 'string' } }, required: ['identifier'] } },
-  { name: 'join', description: 'Add a domain to the sea. The node reads /.well-known/ard.json, /.well-known/agent-card.json and /.well-known/mcp/server-card.json from that domain; the domain speaks for itself.', inputSchema: { type: 'object', properties: { url: { type: 'string', description: 'Domain or https URL' } }, required: ['url'] } },
+  { name: 'join', description: 'Add a domain to the sea. The node reads /.well-known/ard.json, /.well-known/agent-card.json, /.well-known/mcp/server-card.json and /.well-known/x402 from that domain. Paid resources state their own price in their 402 answer; the domain speaks for itself.', inputSchema: { type: 'object', properties: { url: { type: 'string', description: 'Domain or https URL' } }, required: ['url'] } },
   { name: 'stats', description: 'Size of the sea by kind and by lake.', inputSchema: { type: 'object', properties: {} } },
 ];
 

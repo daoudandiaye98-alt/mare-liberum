@@ -144,10 +144,36 @@ if (all.size < 1000) throw new Error('the sea needs at least one full lake to bu
 
 // Domains that speak for themselves: read their own manifests (ARD, AI Catalog, A2A agent card).
 const seedFile = (f) => (existsSync(f) ? readFileSync(f, 'utf8').split('\n').map((l) => l.trim().toLowerCase()).filter((l) => l && !l.startsWith('#')) : []);
-const seeds = [...new Set([...seedFile('seeds.txt'), ...seedFile('seeds-ard.txt')])];
-let joined = 0, speaking = 0;
-await pool(seeds, 48, async (d) => { const { rows } = await readDomain(d); if (rows.length) speaking++; for (const r of rows) { all.set(r.id, r); joined++; } });
-console.log(`self-published domains: ${speaking} of ${seeds.length} speak today, ${joined} entries`);
+// Sellers that publish their own price list (/.well-known/x402) are found among the hosts of the paid lakes.
+const hostOf = (u) => { try { return new URL(u).hostname.toLowerCase(); } catch { return ''; } };
+const keyOf = (u) => { try { const x = new URL(u); return `${x.hostname.toLowerCase()}${x.pathname.replace(/\/+$/, '')}`; } catch { return ''; } };
+const paidHosts = [...new Set([...all.values()].filter((r) => r.kind === 'x402').map((r) => hostOf(r.url)).filter(Boolean))], sellers = [];
+await pool(paidHosts, 60, async (h) => { const j = await fetchJson(`https://${h}/.well-known/x402`, 300000, 5000); if (Array.isArray(j?.resources) && j.resources.some((r) => typeof r === 'string' && r.startsWith(`https://${h}/`))) sellers.push(h); });
+console.log(`paid lakes: ${sellers.length} of ${paidHosts.length} hosts publish their own price list`);
+const seeds = [...new Set([...seedFile('seeds.txt'), ...seedFile('seeds-ard.txt'), ...sellers])];
+let joined = 0, speaking = 0, priced = 0, retired = 0;
+const lakeByKey = new Map(), lakeByHost = new Map();
+for (const r of all.values()) if (r.kind === 'x402' && r.source !== 'join') { lakeByKey.set(keyOf(r.url), r); const h = hostOf(r.url); lakeByHost.set(h, [...(lakeByHost.get(h) || []), r]); }
+await pool(seeds, 48, async (d) => {
+  const { host, rows, paid, listed } = await readDomain(d, { paidMax: 25 });
+  if (rows.length) speaking++;
+  for (const r of rows) {
+    if (r.kind === 'x402') {
+      // first-hand price beats the listing; the usage the lake measured travels along
+      const old = lakeByKey.get(keyOf(r.url)); priced++;
+      if (old) {
+        r.pay = { ...r.pay, calls30d: old.pay?.calls30d, payers30d: old.pay?.payers30d }; r.quality = Math.max(r.quality || 0, old.quality || 0);
+        if (!r.description) r.description = old.description; if (r.display_name.endsWith(` · ${host}`) && old.display_name) r.display_name = old.display_name;
+        r.tags = [...new Set([...(r.tags || []), ...(old.tags || [])])].slice(0, 12); all.delete(old.id);
+      }
+    }
+    all.set(r.id, r); joined++;
+  }
+  // a seller whose whole list was read speaks for the host: lake rows the seller no longer lists retire
+  if (paid?.length && listed <= 25) { const keep = new Set(paid.map(keyOf)); for (const old of lakeByHost.get(host) || []) if (!keep.has(keyOf(old.url)) && all.delete(old.id)) retired++; }
+});
+console.log(`self-published domains: ${speaking} of ${seeds.length} speak today, ${joined} entries, ${priced} prices read first-hand, ${retired} retired listings`);
+lakeStats['first-hand prices'] = priced;
 lakeStats['self-published domains'] = joined;
 const hosts = new Set();
 for (const r of all.values()) for (const e of r.endpoints || []) { if (e.url && e.transport !== 'repository') { try { hosts.add(new URL(e.url).hostname.toLowerCase()); } catch {} } }
