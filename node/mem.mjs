@@ -3,9 +3,10 @@
 // Postgres engine, so a node needs no database: copy the file, start the node, you run a mirror.
 // Line format: id \t kind|paid|domain|quality|lake|hasEndpoint \t haystack \t json-row
 import { readFileSync, existsSync } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
 import { kindOf } from './core.mjs';
 
-const KINDS = ['mcp', 'a2a', 'x402', 'skill', 'registry', 'catalog', 'api', 'other'];
+const KINDS = ['mcp', 'a2a', 'x402', 'skill', 'registry', 'catalog', 'api', 'other', 'merchant', 'agent'];
 const low = (s) => String(s || '').toLowerCase();
 export function hayOf(r) {
   return [low(r.display_name), low([...(r.capabilities || []), ...(r.tags || [])].join(' ')),
@@ -22,9 +23,9 @@ export function pub(r, full) {
 const alnum = (c) => (c >= 48 && c <= 57) || (c >= 97 && c <= 122) || c > 127;
 function wordIdx(hay, tok) { let i = hay.indexOf(tok); while (i > 0 && alnum(hay.charCodeAt(i - 1))) i = hay.indexOf(tok, i + 1); return i; }
 function weigh(hay, toks) {
-  let w = 0, b1 = -2, b2 = -2;
-  for (const t of toks) { const i = wordIdx(hay, t); if (i < 0) continue; if (b1 === -2) { b1 = hay.indexOf('\u0001'); b2 = hay.indexOf('\u0001', b1 + 1); } w += i < b1 ? 5 : i < b2 ? 3 : 1; }
-  return w;
+  let w = 0, hit = 0, b1 = -2, b2 = -2;
+  for (const t of toks) { const i = wordIdx(hay, t); if (i < 0) continue; hit++; if (b1 === -2) { b1 = hay.indexOf('\u0001'); b2 = hay.indexOf('\u0001', b1 + 1); } w += i < b1 ? 5 : i < b2 ? 3 : 1; }
+  return w * (hit / toks.length); // entries that answer the whole question rise above entries that share one word
 }
 
 export function createMem({ file, base, blobToken } = {}) {
@@ -33,8 +34,9 @@ export function createMem({ file, base, blobToken } = {}) {
   const ids = [], hays = [], lakes = [], lakeIdx = new Map();
   let kind, paid, dom, qual, ep, lake, jOff, jLen;
   const counts = { byKind: {}, byLake: {}, paid: 0, dom: 0, pubs: new Set() };
-  if (file && existsSync(file)) {
-    buf = readFileSync(file);
+  const gz = file ? `${file}.gz` : '';
+  if (file && (existsSync(file) || existsSync(gz))) {
+    buf = existsSync(file) ? readFileSync(file) : gunzipSync(readFileSync(gz));
     let lines = 0; for (let p = buf.indexOf(10); p !== -1; p = buf.indexOf(10, p + 1)) lines++;
     kind = new Uint8Array(lines); paid = new Uint8Array(lines); dom = new Uint8Array(lines); ep = new Uint8Array(lines); lake = new Uint8Array(lines);
     qual = new Float32Array(lines); jOff = new Uint32Array(lines); jLen = new Uint32Array(lines);
@@ -103,7 +105,13 @@ export function createMem({ file, base, blobToken } = {}) {
         const w = weigh(x.hay, toks); if (w) hits.push([score(w, Number(x.r.quality || 0), x.r.attested_by === 'domain' ? 1 : 0, (x.r.endpoints || []).length ? 1 : 0), -1, x.r]);
       }
       hits.sort((a, b) => b[0] - a[0] || ((a[2]?.id || ids[a[1]]) < (b[2]?.id || ids[b[1]]) ? -1 : 1));
-      return { results: hits.slice(off, off + lim).map((h) => ({ ...pub(h[2] || row(h[1]), false), score: h[0] })) };
+      // one line per name and lake: twins of the same service collapse into their best entry
+      const seen = new Set(), top = [];
+      for (const h of hits) {
+        const hay = h[2] ? hayOf(h[2]) : hays[h[1]], key = `${h[2] ? h[2].source : lake[h[1]]}|${hay.slice(0, hay.indexOf('\u0001'))}`;
+        if (seen.has(key)) continue; seen.add(key); top.push(h); if (top.length >= off + lim) break;
+      }
+      return { results: top.slice(off, off + lim).map((h) => ({ ...pub(h[2] || row(h[1]), false), score: h[0] })) };
     },
     async mare_get(p) { await syncExtra(); const x = extra.get(p?.id); if (x) return pub(x.r, true); const i = find(String(p?.id || '')); return i < 0 ? null : pub(row(i), true); },
     async mare_list(p) {

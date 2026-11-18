@@ -19,6 +19,11 @@ r = await call('POST', '/search', { query: { text: 'find me a flight booking age
 r = await call('GET', '/search?q=postgres%20database&kind=mcp&pageSize=4'); line(`search mcp postgres ${r.ms}ms`, brief(r));
 r = await call('GET', '/search?q=token%20price&paid=true&pageSize=3'); line(`search paid token price ${r.ms}ms`, r.j.results?.map((x) => `${x.score} ${x.displayName} $${x.metadata.pay?.priceUsd}`));
 r = await call('POST', '/search', { query: { text: 'Übersetzung Deutsch Englisch' }, pageSize: 3 }); line(`search german ${r.ms}ms`, brief(r));
+r = await call('GET', '/search?q=running%20shoes&kind=merchant&pageSize=4'); line(`search stores ${r.ms}ms`, r.j.results?.map((x) => `${x.score} ${x.displayName} [${x.metadata.endpoints?.[0]?.transport}]`));
+r = await call('GET', '/search?q=flight%20booking&kind=agent&pageSize=3'); line(`search agents ${r.ms}ms`, brief(r));
+r = await call('GET', '/search?q=image%20generation%20space&kind=mcp&pageSize=3'); line(`search hf spaces ${r.ms}ms`, r.j.results?.map((x) => `${x.score} ${x.metadata.lake} ${x.displayName}`));
+r = await call('POST', '/search', { query: { text: 'book a flight' }, pageSize: 6, federation: 'auto' }); line(`federated ${r.ms}ms`, { asked: r.j.federation?.asked, top: r.j.results?.map((x) => `${x.score} ${x.metadata?.via || 'sea'} ${x.displayName}`) });
+r = await call('POST', '/mcp', { jsonrpc: '2.0', id: 9, method: 'tools/call', params: { name: 'search', arguments: { query: 'japanese whisky glasses', kind: 'merchant', limit: 2 } } }); line(`mcp store search ${r.ms}ms`, r.j.result.structuredContent.results?.map((x) => `${x.displayName} ${x.metadata.endpoints?.[0]?.url}`));
 r = await call('POST', '/search', { query: { text: 'angel guard prompt injection' }, pageSize: 3 }); line(`search angel before join ${r.ms}ms`, brief(r));
 r = await call('POST', '/join', { url: 'angel.oroboros-design.com' }); line(`join angel ${r.ms}ms`, r.j);
 r = await call('POST', '/search', { query: { text: 'angel guard prompt injection' }, pageSize: 3 }); line(`search angel after join ${r.ms}ms`, r.j.results?.map((x) => `${x.score} ${x.metadata.attestedBy} ${x.identifier}`));
