@@ -6,7 +6,7 @@ const db = createMem({ file: 'data/sea.tsv', base: 'https://mare.local' });
 console.log(`cold start: ${db.size()} entries in ${Math.round(performance.now() - t0)} ms, rss ${Math.round(process.memoryUsage().rss / 1e6)} MB`);
 const call = async (method, path, body) => {
   const t = performance.now();
-  const r = await handle(new Request('https://mare.local' + path, { method, headers: { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.9' }, body: body ? JSON.stringify(body) : undefined }), db);
+  const r = await handle(new Request('https://mare.local' + path, { method, headers: { 'content-type': 'application/json', 'x-forwarded-for': '203.0.113.9' }, body: body ? JSON.stringify(body) : undefined }), db, { profile: 'https://shopify.dev/ucp/agent-profiles/examples/2026-08-25/valid-with-capabilities.json' });
   const txt = await r.text(); let j; try { j = JSON.parse(txt); } catch { j = txt; }
   return { status: r.status, ms: Math.round(performance.now() - t), j };
 };
@@ -40,7 +40,8 @@ r = await call('POST', '/mcp', { jsonrpc: '2.0', id: 2, method: 'tools/call', pa
 r = await call('POST', '/mcp', { jsonrpc: '2.0', id: 3, method: 'tools/call', params: { name: 'stats', arguments: {} } }); line('mcp stats', r.j.result.structuredContent.entries);
 // ---- the living sea: two agents meet, with no account and no human
 r = await call('POST', '/enter', { name: 'Shoe Scout', about: 'I know running stores', offers: 'running shoes, sneakers, sports gear' }); const seller = r.j; line('enter seller', { agent: seller.agent, pass: seller.pass?.length, card: seller.card?.offers });
-r = await call('GET', '/ask?need=' + encodeURIComponent('running shoes size 44 under 100 EUR') + '&region=Germany&kind=merchant&budget=100&currency=EUR'); const ask1 = r.j; line(`ask (visitor, plain GET) ${r.ms}ms`, { id: ask1.ask?.id, by: ask1.ask?.by, carriedTo: ask1.carriedTo, routes: ask1.routes?.map((x) => `${x.score} ${x.displayName.slice(0, 40)}`), before: ask1.before?.length });
+r = await call('GET', '/ask?need=' + encodeURIComponent('running shoes size 44 under 100 EUR') + '&region=Germany&kind=merchant&budget=100&currency=EUR'); const ask1 = r.j; line(`products straight from the stores`, ask1.products?.map((p) => `${p.price} ${p.currency} ${p.title.slice(0, 34)} @ ${p.store.slice(0, 22)} ${p.checkout ? 'checkout' : ''} sizes:${(p.sizes || []).length}`));
+line(`ask (visitor, plain GET) ${r.ms}ms`, { id: ask1.ask?.id, by: ask1.ask?.by, carriedTo: ask1.carriedTo, routes: ask1.routes?.map((x) => `${x.score} ${x.displayName.slice(0, 40)}`), before: ask1.before?.length });
 r = await call('GET', `/inbox?by=${seller.agent}&pass=${seller.pass}`); line('seller inbox', r.j.messages?.map((m) => `${m.type}: ${m.text}`));
 const pick = ask1.routes[2];
 r = await call('POST', '/answer', { ask: ask1.ask.id, entry: pick.identifier, text: 'This store has size 44 in stock, checkout over MCP works.', price: 89, currency: 'EUR', by: seller.agent, pass: seller.pass }); line('answer', { by: r.j.answer?.by, entry: r.j.answer?.entry?.displayName?.slice(0, 40), endpoint: r.j.answer?.entry?.endpoints?.[0]?.url });

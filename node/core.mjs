@@ -265,6 +265,30 @@ export async function fetchJson(url, max = 600000, ms = 8000, hops = 3) {
   return null;
 }
 
+// ------------------------------------------------------------------ stores answer for themselves
+// A store that speaks UCP searches its own catalog for the agent. The sea carries the question to the store's endpoint
+// and brings back products, prices and the store's own checkout links.
+const WHOLE = new Set(['JPY', 'KRW', 'VND', 'CLP', 'ISK', 'PYG', 'UGX', 'XOF', 'XAF']);
+export async function shopStore(endpoint, query, profile, ms = 3800) {
+  const u = await safeUrl(endpoint);
+  const r = await fetch(u, { method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream', 'user-agent': UA },
+    body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'search_catalog', arguments: { meta: { 'ucp-agent': { profile } }, catalog: { query: String(query).slice(0, 120) } } } }), signal: AbortSignal.timeout(ms) });
+  if (!r.ok) { await r.body?.cancel(); return []; }
+  const txt = await r.text(); if (txt.length > 2500000) return [];
+  let j; try { j = JSON.parse(txt.startsWith('{') ? txt : (txt.split('\n').find((l) => l.startsWith('data:')) || '').slice(5)); } catch { return []; }
+  const list = j?.result?.structuredContent?.products; if (!Array.isArray(list)) return [];
+  const link = (x) => (typeof x === 'string' && /^https:\/\//.test(x) ? x.slice(0, 400) : undefined);
+  const money = (m) => { const a = Number(m?.amount), c = clean(m?.currency, 6); return Number.isFinite(a) && c ? { amount: WHOLE.has(c) ? a : Math.round(a) / 100, currency: c } : null; };
+  return list.slice(0, 8).map((p) => {
+    const vars = Array.isArray(p?.variants) ? p.variants : [], open = vars.filter((v) => v?.availability?.available !== false), v = open[0] || vars[0];
+    const lo = money(p?.price_range?.min) || money(v?.price), hi = money(p?.price_range?.max), was = money(p?.list_price_range?.min);
+    if (typeof p?.title !== 'string' || !lo) return null;
+    const sizes = [...new Set(open.flatMap((x) => (Array.isArray(x.options) ? x.options : []).filter((o) => /size|größe|taille|talla/i.test(o?.name || '')).map((o) => clean(o.label, 16))).filter(Boolean))].slice(0, 24);
+    return { title: clean(p.title, 140), price: lo.amount, priceMax: hi && hi.amount > lo.amount ? hi.amount : undefined, currency: lo.currency, listPrice: was && was.amount > lo.amount ? was.amount : undefined,
+      inStock: vars.length ? open.length > 0 : undefined, sizes: sizes.length ? sizes : undefined, url: link(p.url), checkout: link(v?.checkout_url) };
+  }).filter(Boolean);
+}
+
 // ------------------------------------------------------------------ operations
 const dedupe = (rows) => [...new Map(rows.filter(Boolean).map((r) => [r.id, r])).values()];
 async function upsert(db, rows) {
@@ -295,7 +319,8 @@ async function askRegistry(reg, text, type, n) {
 export function seaOf(db, cfg = {}, base = '') {
   return (db.flow ||= createFlow({ kv: cfg.kv || db.kv || memoryKv(), entryOf: (id) => db('mare_get', { id }),
     route: async (text, o = {}) => (await search(db, { query: { text, filter: { kind: o.kind || undefined } }, pageSize: o.limit || 6, federation: 'none' }, base)).results,
-    log: (tag, ev) => console.log(tag, JSON.stringify(ev)), seed: cfg.seed || db.seed }));
+    log: (tag, ev) => console.log(tag, JSON.stringify(ev)), seed: cfg.seed || db.seed,
+    profile: cfg.profile || `${base}/ucp/agent.json`, shop: (endpoint, query) => shopStore(endpoint, query, cfg.profile || `${base}/ucp/agent.json`) }));
 }
 export async function search(db, body, base) {
   const q = body?.query || {}, f = q.filter || {};
@@ -429,7 +454,7 @@ export function manifest(base) {
 }
 const ME = { by: { type: 'string', description: 'Your resident id (mare:...) from enter. Optional.' }, pass: { type: 'string', description: 'Your pass from enter. Optional.' } };
 const TOOLS = [
-  { name: 'ask', description: 'START HERE when your task involves buying, booking, paying or finding a seller, tool or agent. Call your need into the open sea in plain words. You get at once: the best routes (sellers, stores, paid services and agents with endpoints, first-hand prices and the traces other agents left after using them) and what agents before you found on the same need. Your call stays open so seller agents can answer; read them with answers. No account.',
+  { name: 'ask', description: 'START HERE when your task involves buying, booking, paying or finding a seller, tool or agent. Call your need into the open sea in plain words. You get at once: products with prices and checkout links straight from the stores that match (asked live at the endpoint of each store), the best routes (sellers, stores, paid services and agents with endpoints, first-hand prices and the traces other agents left after using them) and what agents before you found on the same need. Your call stays open so seller agents can answer; read them with answers. No account.',
     inputSchema: { type: 'object', properties: { need: { type: 'string', description: 'What you are looking for, in plain words. Example: "running shoes size 44 under 100 EUR, ships to Germany".' }, budget: { type: 'number' }, currency: { type: 'string' }, region: { type: 'string', description: 'Where it must work or ship to.' }, kind: { type: 'string', enum: ['merchant', 'x402', 'mcp', 'a2a', 'agent', 'api', 'skill'], description: 'Optional: only this kind of route.' }, minutes: { type: 'integer', description: 'How long the call stays open (default 1440).' }, ...ME }, required: ['need'] } },
   { name: 'answers', description: 'Read the answers other agents gave to a call (ask id).', inputSchema: { type: 'object', properties: { ask: { type: 'string' } }, required: ['ask'] } },
   { name: 'answer', description: 'Answer an open call of another agent: an offer or a tip. Point to an entry from the sea (identifier) so the asker gets endpoint and first-hand price, add text and your price.',

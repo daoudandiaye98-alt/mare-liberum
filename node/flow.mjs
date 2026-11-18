@@ -31,7 +31,7 @@ export function memoryKv() {
 
 // route(text, {kind, limit}) -> entries from the sea · entryOf(id) -> one entry or null · base() -> public address of this node
 // seed(name) -> what the open ledger remembers ('traces' map, 'head' list); a sea that lost its live memory starts again from there
-export function createFlow({ kv, route, entryOf, log, seed }) {
+export function createFlow({ kv, route, entryOf, log, seed, shop, profile }) {
   const ledger = {}; const fromLedger = (name, empty) => { if (!(name in ledger)) { try { ledger[name] = seed?.(name) || null; } catch { ledger[name] = null; } } return ledger[name] ? structuredClone(ledger[name]) : empty; };
   // read, change, write, then look again: a write that got lost between two agents is repeated
   async function update(key, ttl, change, landed) {
@@ -89,15 +89,27 @@ export function createFlow({ kv, route, entryOf, log, seed }) {
       const me = await resident(a.by, a.pass), id = rid(10), ttl = Math.min(Math.max(Number(a.minutes) || 1440, 10), 4320) * 60;
       const ask = strip({ id, need, budget: num(a.budget), currency: clean(a.currency, 8), region: clean(a.region, 40), kind: clean(a.kind, 20), by: me ? me.agent : 'visitor', name: me?.name, at: now(), until: new Date(Date.now() + ttl * 1000).toISOString() });
       await kv.set(`ask:${id}`, ask, ttl + DAY);
-      const [routes, before, carried] = await Promise.all([api.routes(need, ask.kind, 6), api.remember(need, id), api.carry(ask)]);
-      await emit({ type: 'ask', id, by: ask.by, name: ask.name, text: need, budget: ask.budget, currency: ask.currency, region: ask.region });
-      return { ask, routes, before, carriedTo: carried, answers: [],
-        next: { answers: `GET /ask/${id}`, afterYouActed: 'POST /mark {"entry":"<identifier>","outcome":"worked|partly|failed","paid":0.02,"note":"..."}: your trace becomes the route for the next agent' }, notice: SEA_NOTICE };
-    },
-    async routes(need, kind, limit) {
-      // the topic of a need finds the routes; sizes, budgets and places stay with the call for the agents that answer.
-      // the search already lifts routes other agents swam successfully and lowers routes that failed
+      // the topic of a need finds the routes; sizes, budgets and places stay with the call for the agents that answer
       const topic = toks(need).filter((w) => !/^\d+$/.test(w) && !LIMITS.has(w)).join(' ') || need;
+      const [routes, before, carried] = await Promise.all([api.routes(topic, ask.kind, 6), api.remember(need, id), api.carry(ask)]);
+      const products = await api.products(routes, topic, ask);
+      await emit({ type: 'ask', id, by: ask.by, name: ask.name, text: need, budget: ask.budget, currency: ask.currency, region: ask.region });
+      return strip({ ask, products: products.length ? products : undefined,
+        howToBuy: products.length ? `Every product comes from the store's own endpoint. checkout opens the store's cart. To continue as an agent, call the store endpoint of the route (MCP tools search_catalog, create_cart, create_checkout) with meta["ucp-agent"].profile = "${profile}".` : undefined,
+        routes, before, carriedTo: carried, answers: [],
+        next: { answers: `GET /ask/${id}`, afterYouActed: 'POST /mark {"entry":"<identifier>","outcome":"worked|partly|failed","paid":0.02,"note":"..."}: your trace becomes the route for the next agent' }, notice: SEA_NOTICE });
+    },
+    // stores that match are asked live at their own endpoint; products come back in turn, store by store
+    async products(routes, topic, ask) {
+      if (!shop) return [];
+      const stores = routes.filter((r) => r.kind === 'merchant').map((r) => ({ r, ep: (r.endpoints || []).find((e) => e.transport === 'mcp')?.url })).filter((x) => x.ep).slice(0, 4);
+      if (!stores.length) return [];
+      const per = await Promise.all(stores.map(async ({ r, ep }) => ((await shop(ep, topic).catch(() => [])) || []).filter((p) => p.inStock !== false && (ask.budget == null || !ask.currency || p.currency !== ask.currency.toUpperCase() || p.price <= ask.budget)).slice(0, 3).map((p) => strip({ ...p, store: r.displayName, entry: r.identifier, endpoint: ep }))));
+      const out = []; for (let i = 0; i < 3; i++) for (const list of per) if (list[i]) out.push(list[i]);
+      return out;
+    },
+    async routes(topic, kind, limit) {
+      // the search already lifts routes other agents swam successfully and lowers routes that failed
       return (await route(topic, { kind, limit })).slice(0, limit).map((e) => strip({ ...brief(e), description: e.description, score: e.score, trace: e.trace }));
     },
     async remember(need, skip) {
