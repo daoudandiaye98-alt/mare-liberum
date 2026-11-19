@@ -1,0 +1,15 @@
+# The current of Mare Liberum: every ten minutes the sea is asked to move once.
+# The sea itself decides how much it does per tide (a few needs) and refuses when it moved a moment ago.
+name: tide
+on:
+  schedule:
+    - cron: '5-59/10 * * * *'
+  workflow_dispatch: {}
+permissions: {}
+jobs:
+  tide:
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Move the sea once
+        run: curl -fsS -m 60 -X POST -H 'user-agent: mare-tide/1.0 (+https://mareliberum.dev/current)' https://mareliberum.dev/tide | head -c 600 || true
