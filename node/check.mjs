@@ -34,17 +34,17 @@ export function safeHost(q) {
   return h;
 }
 const privateIp = (a) => /^(0\.|10\.|127\.|169\.254\.|172\.(1[6-9]|2\d|3[01])\.|192\.168\.|100\.(6[4-9]|[7-9]\d|1[01]\d|12[0-7])\.|::1$|::$|f[cd]|fe80|::ffff:(10|127|192\.168|169\.254)\.)/i.test(a);
-async function publicDns(host) {
+export async function publicDns(host) {
   try { const dns = await import('node:dns'); const r = await dns.promises.lookup(host, { all: true }); return r.length > 0 && !r.some((x) => privateIp(x.address)); } catch (e) { return e?.code === 'ENOTFOUND' || e?.code === 'EAI_AGAIN' ? false : true; }
 }
 
 // one small read: manual redirects (each target checked again), a size cap and a time cap
-async function grab(url, { max = 350_000, ms = 6000 } = {}) {
+export async function grab(url, { max = 350_000, ms = 6000, ua = CHECK_UA } = {}) {
   const ac = new AbortController(), timer = setTimeout(() => ac.abort(), ms);
   try {
     let u = url;
     for (let hop = 0; hop < 4; hop++) {
-      const r = await fetch(u, { redirect: 'manual', signal: ac.signal, headers: { 'user-agent': CHECK_UA, accept: 'text/html,text/plain,application/json;q=0.9,*/*;q=0.5' } });
+      const r = await fetch(u, { redirect: 'manual', signal: ac.signal, headers: { 'user-agent': ua, accept: 'text/html,text/plain,application/json;q=0.9,*/*;q=0.5' } });
       if (r.status >= 300 && r.status < 400 && r.headers.get('location')) {
         const next = new URL(r.headers.get('location'), u); try { await r.body?.cancel(); } catch {}
         if (next.protocol !== 'https:' && next.protocol !== 'http:') return { status: 0 };
@@ -85,8 +85,8 @@ export function robotsAllows(groups, agent, path = '/') {
 
 const attr = (tag, name) => { const m = new RegExp(`${name}\\s*=\\s*("([^"]*)"|'([^']*)')`, 'i').exec(tag); return m ? (m[2] ?? m[3] ?? '').trim() : null; };
 const metaOf = (html, key) => { for (const m of html.matchAll(/<meta\b[^>]*>/gi)) { const t = m[0]; if ((attr(t, 'name') || attr(t, 'property') || '').toLowerCase() === key) return attr(t, 'content'); } return null; };
-const decode = (s) => String(s || '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
-function readPage(html) {
+export const decode = (s) => String(s || '').replace(/&amp;/g, '&').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim();
+export function readPage(html) {
   const title = decode(/<title[^>]*>([\s\S]*?)<\/title>/i.exec(html)?.[1]).slice(0, 160) || null;
   const types = new Set();
   for (const m of html.matchAll(/<script[^>]*type\s*=\s*["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)) {

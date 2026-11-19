@@ -64,11 +64,13 @@ export function createEco(h) {
       // the brain is seeded from everything the current has read so far, thirty needs per tide
       { const rec = (await kv.get('tide:recent')) || [], c0 = Number(await kv.get('brain:seedcursor')) || 0;
         if (c0 < rec.length) { for (const sl of rec.slice(c0, c0 + 30)) { const sn = await kv.get(`tide:${sl}`); if (sn) await api.layFromCurrent?.(sn); } await kv.set('brain:seedcursor', Math.min(rec.length, c0 + 30), 400 * DAY); } }
+      // the state of the agent web: three of the most visited websites are read again with every tide
+      let web = []; try { web = (await api.webStep?.(3)) || []; } catch {}
       const last = strip({ at, needs: out.length, moved: out.filter((x) => x.change && x.change !== 'steady' && x.change !== 'charted').length, charted: out.filter((x) => x.change === 'charted').length, watchHits: out.reduce((s, x) => s + (x.watchers || 0), 0) });
       await kv.set('tide:last', last, 60 * DAY);
       await update('tide:count', 365 * DAY, (c) => (Number(c) || 0) + 1, () => true);
       await listPut('tide:recent', 60 * DAY, (l) => [...out.filter((x) => x.slug && !x.empty).map((x) => x.slug), ...l.filter((s) => !out.some((x) => x.slug === s))].slice(0, 400), () => true);
-      return { tide: last, refreshed: out };
+      return { tide: last, refreshed: out, web };
     },
     // one need, asked again: the sea compares with what it saw last time and says what changed
     async flowOver(need, at) {

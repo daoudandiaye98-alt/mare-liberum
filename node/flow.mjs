@@ -12,6 +12,7 @@ import { createWork } from './work.mjs';
 import { createAtlantis } from './atlantis.mjs';
 import { createBrain } from './brain.mjs';
 import { createLens } from './lens.mjs';
+import { createWeb } from './web.mjs';
 import { roleOf } from './atlantis.mjs';
 import { slugOf, NEEDS } from './needs.mjs';
 
@@ -333,6 +334,8 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
         // where the request came from: the country and a 2° cell of the network edge, counted by role, never an address
         if (c.geo?.cc) { m.cc = m.cc || {}; m.cc[c.geo.cc] = (m.cc[c.geo.cc] || 0) + 1; }
         if (Number.isFinite(c.geo?.lat) && Number.isFinite(c.geo?.lon)) { m.cells = m.cells || {}; const k = `${Math.round(c.geo.lat / 2) * 2},${Math.round(c.geo.lon / 2) * 2}`, x = m.cells[k] || (Object.keys(m.cells).length < 1500 ? { n: 0, r: {} } : null); if (x) { x.n++; const r = roleOf(c.kind); x.r[r] = (x.r[r] || 0) + 1; m.cells[k] = x; } }
+        // what each kind of visitor reads: the first part of the path, counted by role
+        { m.p = m.p || {}; const seg = '/' + (String(c.path || '/').split('/')[1] || '').slice(0, 24), k = `${roleOf(c.kind)} ${seg}`; if (m.p[k] || Object.keys(m.p).length < 400) m.p[k] = (m.p[k] || 0) + 1; }
         if (name) { const k = `${c.kind}|${name}`; m.names[k] = (m.names[k] || 0) + 1; const keys = Object.keys(m.names); if (keys.length > 400) delete m.names[keys[0]]; } return m; })(await kv.get(`census:${day}`)), 40 * DAY);
       if (name && c.kind !== 'browser' && c.kind !== 'tool') {
         const book = (await kv.get('census:names')) || {}, k = `${c.kind}|${name}`;
@@ -362,7 +365,8 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
   Object.assign(api, createEco({ kv, update, emit, resident, push, allow, api, living, SeaError, clean, strip, rid, now, num, https, toks, sha, overlap, DAY }));
   Object.assign(api, createWork({ kv, update, emit, resident, push, allow, SeaError, clean, strip, now, num, https, toks, sha, overlap, DAY }));
   Object.assign(api, createAtlantis({ kv, update, emit, resident, allow, api, living, SeaError, clean, strip, rid, now, DAY }));
-  Object.assign(api, createLens({ kv, update, api, living, SeaError, allow, clean, strip, now, https, DAY }));
+  Object.assign(api, createLens({ kv, update, api, living, SeaError, allow, clean, strip, now, https, sha, emit, resident, DAY }));
+  Object.assign(api, createWeb({ kv, update, now, DAY }));
   Object.assign(api, createBrain({ kv, update, emit, resident, allow, api, SeaError, clean, strip, now, https, toks, sha, overlap, DAY, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
   return api;
 }

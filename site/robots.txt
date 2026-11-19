@@ -1,5 +1,6 @@
 User-agent: *
 Allow: /
+Disallow: /r/
 
 Agentmap: https://mare-liberum.vercel.app/.well-known/ard.json
 Sitemap: https://mare-liberum.vercel.app/sitemap.xml
