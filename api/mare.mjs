@@ -22,10 +22,12 @@ const page = (f, type) => { try { const body = readFileSync(join(process.cwd(), 
 const site = Object.fromEntries(Object.entries({ '/': page('index.html', 'text/html; charset=utf-8'), '/index.html': page('index.html', 'text/html; charset=utf-8'), '/llms.txt': page('llms.txt', 'text/plain; charset=utf-8'), '/robots.txt': page('robots.txt', 'text/plain; charset=utf-8'), '/skill.md': page('skill.md', 'text/markdown; charset=utf-8'), '/heartbeat.md': page('heartbeat.md', 'text/markdown; charset=utf-8'), '/skill.json': page('skill.json', 'application/json; charset=utf-8') }).filter(([, v]) => v));
 
 // what the open ledger remembers travels with every build (flow/*.json in the repository)
+// the open index placed on the map by country domain (written by the build)
+const geoIndex = (() => { try { return JSON.parse(readFileSync(join(process.cwd(), 'data', 'geo-index.json'), 'utf8')); } catch { return null; } })();
 const seed = (name) => { try { return JSON.parse(readFileSync(join(process.cwd(), 'data', `flow-${name}.json`), 'utf8')); } catch { return null; } };
 
 async function run(request) {
   const p = new URL(request.url).searchParams.get('__p');
-  return handle(request, db, p ? { path: p.startsWith('/') ? p : `/${p}`, kv, seed, site, waitUntil } : { kv, seed, site, waitUntil });
+  return handle(request, db, p ? { path: p.startsWith('/') ? p : `/${p}`, kv, seed, site, waitUntil, geoIndex } : { kv, seed, site, waitUntil, geoIndex });
 }
 export const GET = run, POST = run, OPTIONS = run;

@@ -1,0 +1,26 @@
+{
+  "name": "Mare Liberum · the live atlas of the agent internet",
+  "short_name": "Mare Liberum",
+  "description": "The internet of AI agents, live. Open data, owned by no one.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#030b14",
+  "theme_color": "#030b14",
+  "icons": [
+    {
+      "src": "/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml"
+    }
+  ]
+}
