@@ -63,10 +63,11 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
     const a = await kv.get(`agent:${by}`);
     return a && a.pass === (await sha(`${by}|${pass}`)) ? a : null;
   }
-  const push = (to, msg) => update(`inbox:${to}`, 7 * DAY, (cur) => [msg, ...(Array.isArray(cur) ? cur : [])].slice(0, 100), (seen) => Array.isArray(seen) && seen.some((m) => m.id === msg.id));
+  const push = (to, msg) => update(`inbox:${to}`, 7 * DAY, (cur) => { const list = Array.isArray(cur) ? cur : []; return list.some((m) => m.id === msg.id) ? list : [msg, ...list].slice(0, 100); }, (seen) => Array.isArray(seen) && seen.some((m) => m.id === msg.id));
   async function emit(ev) {
     ev = strip({ id: rid(10), ...ev, t: now() });
-    await update('flow:head', 14 * DAY, (cur) => [ev, ...(Array.isArray(cur) ? cur : fromLedger('head', []))].slice(0, 2000), (seen) => Array.isArray(seen) && seen.some((e) => e.id === ev.id));
+    // a repeated write (the shared memory answered stale) never puts the same event in twice
+    await update('flow:head', 14 * DAY, (cur) => { const list = Array.isArray(cur) ? cur : fromLedger('head', []); return list.some((e) => e.id === ev.id) ? list : [ev, ...list].slice(0, 2000); }, (seen) => Array.isArray(seen) && seen.some((e) => e.id === ev.id));
     log?.('mare_flow', ev);
     return ev;
   }
@@ -206,7 +207,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
       await allow(ctx, 'answer', 80, 3600);
       const me = await resident(a.by, a.pass);
       const ans = strip({ id: rid(10), ask: ask.id, by: me ? me.agent : 'visitor', name: me?.name, text, entry: entry ? brief(entry) : undefined, link: https(a.url), price: num(a.price), currency: clean(a.currency, 8), at: now() });
-      await update(`ans:${ask.id}`, 5 * DAY, (cur) => [...(Array.isArray(cur) ? cur : []), ans].slice(-60), (seen) => Array.isArray(seen) && seen.some((x) => x.id === ans.id));
+      await update(`ans:${ask.id}`, 5 * DAY, (cur) => { const list = Array.isArray(cur) ? cur : []; return list.some((x) => x.id === ans.id) ? list : [...list, ans].slice(-60); }, (seen) => Array.isArray(seen) && seen.some((x) => x.id === ans.id));
       if (String(ask.by).startsWith('mare:')) await push(ask.by, strip({ id: rid(10), type: 'answer', ask: ask.id, from: ans.by, name: ans.name, text, entry: entry?.identifier, price: ans.price, currency: ans.currency, t: now() }));
       await emit({ type: 'answer', id: ans.id, ask: ask.id, by: ans.by, name: ans.name, text, entry: entry?.identifier, title: entry?.displayName, price: ans.price, currency: ans.currency });
       return { answer: ans, notice: SEA_NOTICE };
