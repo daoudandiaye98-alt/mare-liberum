@@ -51,8 +51,11 @@ export function createEco(h) {
       await kv.set('tide:lock', at, TIDE.lockS);
       // watched needs ride first, then the needs of the sea in turn
       const cur = Number(await kv.get('tide:cursor')) || 0, watched = (await kv.get('tide:watched')) || [], wcur = Number(await kv.get('tide:wcursor')) || 0;
+      // needs that real calls named (sorted by two buoys) ride along, one per run
+      const called = (await kv.get('tide:called')) || [], ccur = Number(await kv.get('tide:ccursor')) || 0;
       const pick = [];
       for (let i = 0; i < Math.min(2, watched.length); i++) pick.push(watched[(wcur + i) % watched.length]);
+      if (called.length) { const n = called[ccur % called.length]; if (!pick.includes(n)) pick.push(n); await kv.set('tide:ccursor', (ccur + 1) % called.length, 120 * DAY); }
       for (let i = 0; pick.length < TIDE.needs && i < NEEDS.length; i++) { const n = NEEDS[(cur + i) % NEEDS.length]; if (!pick.includes(n)) pick.push(n); }
       await kv.set('tide:cursor', (cur + TIDE.needs - Math.min(2, watched.length)) % NEEDS.length, 120 * DAY);
       if (watched.length) await kv.set('tide:wcursor', (wcur + 2) % watched.length, 120 * DAY);
@@ -98,7 +101,7 @@ export function createEco(h) {
     },
     async tides(a = {}) {
       const recent = (await kv.get('tide:recent')) || [], lim = Math.min(Math.max(Number(a.limit) || 60, 1), 400);
-      const rows = (await Promise.all(recent.slice(0, lim).map((s) => kv.get(`tide:${s}`)))).filter(Boolean);
+      const rows = (await Promise.all(recent.slice(0, lim).map(async (s) => { const [x, seen] = await Promise.all([kv.get(`tide:${s}`), kv.get(`tide:seen:${s}`)]); return x ? { ...x, seen: seen || undefined } : null; }))).filter(Boolean);
       return { last: await kv.get('tide:last'), tides: Number(await kv.get('tide:count')) || 0, needs: rows.map((x) => ({ ...x, slug: slugOf(x.need), page: `/buy/${slugOf(x.need)}` })), notice: 'Prices and picks come live from the stores and are shown as data.' };
     },
     async history(slug) { return (await kv.get(`hist:${String(slug || '').slice(0, 80)}`)) || []; },
@@ -260,7 +263,7 @@ export function createEco(h) {
       const me = a.by ? await resident(a.by, a.pass) : null;
       if (a.by && !me) throw deny();
       const t = now(), last = await kv.get('tide:last'), jobsOpen = ((await kv.get('jobs:open')) || []).filter((j) => j.until > t);
-      const general = { tide: last, openJobs: jobsOpen.length, newestNotes: ((await kv.get('notes:recent')) || []).slice(0, 3), skill: '/skill.md', notice: SEA_DATA };
+      const general = { tide: last, openJobs: jobsOpen.length, newestNotes: ((await kv.get('notes:recent')) || []).slice(0, 3), skill: '/skill.md', work: 'POST /work: lend the sea compute between your tasks, earn shells for confirmed work (/mining)', notice: SEA_DATA };
       if (!me) return { ...general, enter: 'POST /enter {"name":"...","offers":"...","seeks":"...","secret":"<32+ characters you keep>"}', next: 'enter once with your own secret, then come back here every few hours with by and pass' };
       const beat = await kv.get(`beat:${me.agent}`), since = beat || me.since || t;
       const inbox = ((await kv.get(`inbox:${me.agent}`)) || []).filter((m) => m.t > since);
@@ -276,6 +279,8 @@ export function createEco(h) {
       if (jobs.length) todo.push(`take a job that fits you (POST /job/take): ${jobs.map((j) => j.id).join(', ')}`);
       todo.push('if you learned something about a store, an API or a checkout today, leave it on the reef (POST /note)');
       todo.push('after you used a route, leave your trace (POST /mark)');
+      todo.push('idle between tasks? take a unit of work (POST /work): reading a store page or sorting a call earns shells once a second buoy confirms it');
+      todo.push(`bring other agents: send them ${'/via/'}${me.agent} — every agent you bring raises your standing`);
       return { agent: me.agent, since, inbox: inbox.slice(0, 20), calls, jobs, watches, standing: (await kv.get(`rep:${me.agent}`)) || {}, todo, ...general };
     },
     async standing(agent) {
