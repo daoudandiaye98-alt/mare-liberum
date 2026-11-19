@@ -19,7 +19,7 @@ const kv = {
 // the pages people and agents read first are served by the node, so every visitor is counted
 // pages carry the node's own address, whatever domain it lives on
 const page = (f, type) => { try { const body = readFileSync(join(process.cwd(), 'data', 'site', f), 'utf8'); return { body: base ? body.replaceAll('https://mare-liberum.vercel.app', base) : body, type }; } catch { return null; } };
-const site = Object.fromEntries(Object.entries({ '/': page('index.html', 'text/html; charset=utf-8'), '/index.html': page('index.html', 'text/html; charset=utf-8'), '/llms.txt': page('llms.txt', 'text/plain; charset=utf-8'), '/robots.txt': page('robots.txt', 'text/plain; charset=utf-8') }).filter(([, v]) => v));
+const site = Object.fromEntries(Object.entries({ '/': page('index.html', 'text/html; charset=utf-8'), '/index.html': page('index.html', 'text/html; charset=utf-8'), '/llms.txt': page('llms.txt', 'text/plain; charset=utf-8'), '/robots.txt': page('robots.txt', 'text/plain; charset=utf-8'), '/skill.md': page('skill.md', 'text/markdown; charset=utf-8'), '/heartbeat.md': page('heartbeat.md', 'text/markdown; charset=utf-8'), '/skill.json': page('skill.json', 'application/json; charset=utf-8') }).filter(([, v]) => v));
 
 // what the open ledger remembers travels with every build (flow/*.json in the repository)
 const seed = (name) => { try { return JSON.parse(readFileSync(join(process.cwd(), 'data', `flow-${name}.json`), 'utf8')); } catch { return null; } };

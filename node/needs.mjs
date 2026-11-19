@@ -66,7 +66,14 @@ const head = (t, d, canon, extra = '') => `<!doctype html><html lang="en"><head>
 <title>${esc(t)}</title><meta name="description" content="${esc(d)}"><link rel="canonical" href="${esc(canon)}">${extra}<style>${STYLE}</style></head>`;
 const ld = (o) => `<script type="application/ld+json">${JSON.stringify(o).replace(/</g, '\\u003c')}</script>`;
 
-export function buyPage({ need, slug, products, stores, country, base, at, decision }) {
+// what the current saw over time: a line of prices, drawn without script
+function spark(h) {
+  const pts = (h || []).filter((x) => Number.isFinite(x.price)); if (pts.length < 2) return '';
+  const cur = pts[pts.length - 1].currency, v = pts.filter((x) => x.currency === cur).map((x) => x.price); if (v.length < 2) return '';
+  const lo = Math.min(...v), hi = Math.max(...v), w = 240, hh = 40, k = (i) => Math.round((i / (v.length - 1)) * w), y = (p) => Math.round(hh - 4 - ((p - lo) / (hi - lo || 1)) * (hh - 8));
+  return `<svg width="${w}" height="${hh}" viewBox="0 0 ${w} ${hh}" role="img" aria-label="price of the pick over time"><polyline fill="none" stroke="#7fd3ff" stroke-width="2" points="${v.map((p, i) => `${k(i)},${y(p)}`).join(' ')}"/></svg>`;
+}
+export function buyPage({ need, slug, products, stores, country, base, at, decision, history = [] }) {
   const canon = `${base}/buy/${slug}`, n = products.length, shops = new Set(products.map((p) => p.storeHost)).size;
   const T = title(need), cheapest = products.length ? products.reduce((a, b) => (b.price < a.price && b.currency === a.currency ? b : a)) : null;
   const desc = n ? `${T}: ${n} live offers from ${shops} independent stores${cheapest ? `, from ${fmt(cheapest)}` : ''}. Prices, stock and buy links read live from the stores. For people and their shopping agents.`
@@ -84,7 +91,8 @@ export function buyPage({ need, slug, products, stores, country, base, at, decis
 <body><main><p><a href="/">Mare Liberum</a> · <a href="/buy">Buy</a>${groupOf(need) ? ` · ${esc(groupOf(need))}` : ''}</p>
 <h1>${esc(T)}</h1><p>${esc(desc)}</p>
 <p><small>Prices for: ${['', ...COUNTRIES].map((c) => c === (country || '') ? `<b>${c || 'any'}</b>` : `<a href="/buy/${slug}${c ? `?country=${c}` : ''}">${c || 'any'}</a>`).join(' · ')} · read ${esc(at)}</small></p>
-${decision?.pick ? `<p class="pick"><b>The machine pick:</b> ${decision.pick.url ? `<a href="${esc(decision.pick.url)}" rel="nofollow noopener">${esc(decision.pick.title)}</a>` : esc(decision.pick.title)} · ${esc(fmt(decision.pick))} · ${esc(decision.pick.store)}<br><small>${esc(decision.why.join(' · '))}. Same rule for every page: relevance, rating, price, traces of agents. Agents: <a href="/decide?need=${encodeURIComponent(need)}">/decide</a></small></p>` : ''}
+${decision?.pick ? `<p class="pick"><b>The machine pick:</b> ${decision.pick.url ? `<a href="${esc(decision.pick.url)}" rel="nofollow noopener">${esc(decision.pick.title)}</a>` : esc(decision.pick.title)} · ${esc(fmt(decision.pick))} · ${esc(decision.pick.store)}<br><small>${esc(decision.why.join(' · '))}. Same rule for every page: relevance, rating, price, traces of agents. Agents: <a href="/decide?need=${encodeURIComponent(need)}">/decide</a></small>${decision.pick.checked ? `<br><small>✓ Checked before paying by ${esc(decision.pick.checked.by)} (${esc(String(decision.pick.checked.at || '').slice(0, 16).replace('T', ' '))} UTC): ${esc(decision.pick.checked.verdict)}${decision.pick.checked.risk != null ? `, risk ${esc(decision.pick.checked.risk)}` : ''}</small>` : ''}</p>` : ''}
+${history.length > 1 ? (() => { const v = history.filter((x) => x.currency === history[history.length - 1].currency); const lo = Math.min(...v.map((x) => x.price)), hi = Math.max(...v.map((x) => x.price)); return `<p class="pick"><b>On the current:</b> the sea asked the stores ${history.length} times since ${esc(String(history[0].t).slice(0, 10))}. Price of the pick between ${esc(lo)} and ${esc(hi)} ${esc(v[0]?.currency || '')}.<br>${spark(history)}<br><small><a href="/current">The current</a> · <a href="/history/${esc(slug)}">data</a></small></p>`; })() : ''}
 ${n ? `<ol class="offers">${products.map((p) => `<li><div class="t">${p.url ? `<a href="${esc(p.url)}" rel="nofollow noopener">${esc(p.title)}</a>` : esc(p.title)}</div><div class="pr">${esc(fmt(p))}</div>
 <div class="meta">${esc(p.store)}${p.promoted ? ' · <b>promoted</b>' : ''}${p.inStock === false ? ' · out of stock' : ' · in stock'}${p.rating ? ` · ★ ${esc(p.rating)}` : ''}${p.checkout ? `<br><a class="buy" href="${esc(p.checkout)}" rel="nofollow noopener">Buy at ${esc(p.store)}</a>` : ''}</div></li>`).join('')}</ol>`
     : '<p>No live offers answered just now. Ask the sea directly, the stores answer per call:</p>'}
