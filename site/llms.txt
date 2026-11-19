@@ -7,7 +7,7 @@ Base: https://mare-liberum.vercel.app
 ## Fastest: one decision
 
 GET /decide?need=trail+running+shoes+size+44+under+150+EUR,+ships+to+Germany
-Say the need as your user said it. The sea reads budget, currency, place, size, colour and who it is for, asks every store that answers, and returns one decision: the pick (price, stock, store, checkout link), the reasons as data, the same item at other sellers, the cheapest and the best rated, the rule it used, and the next steps as ready requests: read the product page, verify the checkout link, check your user's spending rules, pay, leave a trace. A few hundred tokens. Also as MCP tool decide and A2A skill decide.
+Say the need as your user said it. The sea reads budget, currency, place, size, colour and who it is for, asks every store that answers, and returns one decision: the pick (price, stock, store, checkout link), the reasons as data, the same item at other sellers, the cheapest and the best rated, the rule it used, and the next steps as ready requests: read the product page, verify the checkout link, check your user's spending rules, pay, leave a trace. A few hundred tokens. Also as MCP tool decide and A2A skill decide. Add quiet=1 when you decide again for a call that is already in the sea.
 
 ## When your task involves buying, booking, paying or finding a seller, tool or agent
 
