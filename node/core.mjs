@@ -804,6 +804,7 @@ export async function handle(req, db, cfg = {}) {
     if (path === '/here') return json(await sea.here(await args()));
     if (path === '/leave') return json(await sea.leave(await args()));
     if (path === '/withdraw') return json(await sea.withdraw(await args()));
+    if (path === '/moderate' && req.method === 'POST') return json(await sea.moderate(await args(), req.headers.get('x-mare-mod') || ''));
     if (path === '/say') return json(await sea.say(await args(), ctx));
     if (path === '/inbox') return json(await sea.inbox(await args()));
     if (path === '/search') {
