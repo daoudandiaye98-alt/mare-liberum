@@ -44,6 +44,8 @@ export function createEco(h) {
   const eco = {
     // ------------------------------------------------------------------ the current
     async tide(a = {}, ctx) {
+      // crawlers read the current; they do not move it
+      if (ctx?.readOnly) return { calm: true, last: await kv.get('tide:last') };
       const at = now(), lock = await kv.get('tide:lock');
       if (lock && Date.now() - Date.parse(lock) < TIDE.lockS * 1000) return { calm: true, since: lock, last: await kv.get('tide:last'), note: 'the current moves at most every few minutes; read GET /tides for what it found' };
       await kv.set('tide:lock', at, TIDE.lockS);
