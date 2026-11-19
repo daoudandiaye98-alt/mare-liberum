@@ -122,13 +122,14 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
       const ask = strip({ id, need, budget: num(a.budget) ?? c.budget, currency: (clean(a.currency, 8) || c.currency)?.toUpperCase(), region: clean(a.region, 40) || c.region, kind: clean(a.kind, 20), by: me ? me.agent : 'visitor', name: me?.name, at: now(), until: new Date(Date.now() + ttl * 1000).toISOString() });
       // crawlers that follow the ready ask links on pages read the answer but leave no call in the flow
       // a resident that decides again for a call already in the sea (quiet) leaves no second call behind
-      const quiet = !!ctx?.readOnly || a.quiet === true || a.quiet === '1' || a.quiet === 1;
+      const readOnly = !!ctx?.readOnly, quiet = readOnly || a.quiet === true || a.quiet === '1' || a.quiet === 1;
       if (!quiet) await kv.set(`ask:${id}`, ask, ttl + DAY);
       // the topic of a need finds the routes; sizes, budgets and places stay with the call for the agents that answer
       const topic = toks(need).filter((w) => !/^\d+$/.test(w) && !LIMITS.has(w)).join(' ') || need;
       const [routes, before, carried] = await Promise.all([api.routes(topic, ask.kind, 6), api.remember(need, id), quiet ? [] : api.carry(ask)]);
       // crawlers get the routes, not live store calls: the stores' catalogs stay free for agents that buy
-      const products = quiet ? [] : await api.products(routes, topic, ask);
+      // crawlers get the page without asking the stores; a quiet resident still gets the live offers
+      const products = readOnly ? [] : await api.products(routes, topic, ask);
       if (!quiet) await emit({ type: 'ask', id, by: ask.by, name: ask.name, text: need, budget: ask.budget, currency: ask.currency, region: ask.region });
       const understood = strip({ budget: ask.budget, currency: ask.currency, region: ask.region, size: c.size, colour: c.colour, for: c.for, topic });
       const traces = products.length ? await traceMap() : {};
