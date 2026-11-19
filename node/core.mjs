@@ -981,10 +981,11 @@ export async function handle(req, db, cfg = {}) {
     const wantsHtml = () => /text\/html/.test(req.headers.get('accept') || '') && url.searchParams.get('format') !== 'json';
     if (path === '/brain' || path === '/think') {
       const a = await args();
-      if (!a.q && !a.task) { const [st, top] = await Promise.all([sea.brainStats(), sea.topPaths(24)]); return wantsHtml() ? html(brainHomePage(base, st, top), 60) : json({ what: 'the first stop for agents on the internet', ask: `${base}/brain?q=<your task>`, ...st, top }, 200, { 'cache-control': 'public, max-age=60' }); }
-      const r = await sea.think(a, ctx); return wantsHtml() ? html(brainPage(base, r), 30) : json(r);
+      const vary = (res) => { res.headers.set('vary', 'accept'); return res; };
+      if (!a.q && !a.task) { const [st, top] = await Promise.all([sea.brainStats(), sea.topPaths(24)]); return vary(wantsHtml() ? html(brainHomePage(base, st, top), 60) : json({ what: 'the first stop for agents on the internet', ask: `${base}/brain?q=<your task>`, ...st, top }, 200, { 'cache-control': 'public, max-age=60' })); }
+      const r = await sea.think(a, ctx); return vary(wantsHtml() ? html(brainPage(base, r), 30) : json(r, 200, { 'cache-control': 'no-store' }));
     }
-    if (path.startsWith('/brain/') && req.method === 'GET') { const r = await sea.think({ q: decodeURIComponent(path.slice(7)).replace(/-/g, ' ') }, { ...ctx, readOnly: true }); return wantsHtml() ? html(brainPage(base, r), 300) : json(r); }
+    if (path.startsWith('/brain/') && req.method === 'GET') { const r = await sea.think({ q: decodeURIComponent(path.slice(7)).replace(/-/g, ' ') }, { ...ctx, readOnly: true }); const res = wantsHtml() ? html(brainPage(base, r), 300) : json(r, 200, { 'cache-control': 'public, max-age=300' }); res.headers.set('vary', 'accept'); return res; }
     if (path === '/go' || path.startsWith('/go/')) { const r = await sea.walk(path.length > 4 ? decodeURIComponent(path.slice(4)) : null, await args(), ctx); return new Response(null, { status: 302, headers: { location: r.to, 'cache-control': 'no-store', 'x-robots-tag': 'noindex', ...CORS } }); }
     if (path.startsWith('/rate/')) return json(await sea.rate(decodeURIComponent(path.slice(6)), await args(), ctx), 200, { 'x-robots-tag': 'noindex' });
     if (path === '/lay') return json(await sea.layPath(await args(), ctx), 200, { 'x-robots-tag': 'noindex' });
