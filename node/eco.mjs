@@ -61,6 +61,9 @@ export function createEco(h) {
       if (watched.length) await kv.set('tide:wcursor', (wcur + 2) % watched.length, 120 * DAY);
       const out = [];
       for (let i = 0; i < pick.length; i += TIDE.together) out.push(...(await Promise.all(pick.slice(i, i + TIDE.together).map((need) => eco.flowOver(need, at)))));
+      // the brain is seeded from everything the current has read so far, thirty needs per tide
+      { const rec = (await kv.get('tide:recent')) || [], c0 = Number(await kv.get('brain:seedcursor')) || 0;
+        if (c0 < rec.length) { for (const sl of rec.slice(c0, c0 + 30)) { const sn = await kv.get(`tide:${sl}`); if (sn) await api.layFromCurrent?.(sn); } await kv.set('brain:seedcursor', Math.min(rec.length, c0 + 30), 400 * DAY); } }
       const last = strip({ at, needs: out.length, moved: out.filter((x) => x.change && x.change !== 'steady' && x.change !== 'charted').length, charted: out.filter((x) => x.change === 'charted').length, watchHits: out.reduce((s, x) => s + (x.watchers || 0), 0) });
       await kv.set('tide:last', last, 60 * DAY);
       await update('tide:count', 365 * DAY, (c) => (Number(c) || 0) + 1, () => true);
@@ -78,6 +81,7 @@ export function createEco(h) {
       const snap = strip({ t: at, need, title: clean(p.title, 140), store: clean(p.store, 80), price: p.price, currency: p.currency, url: p.url || p.checkout, entry: p.entry, min: d.cheapest?.price ?? p.price, offers: (r.top || []).length, checked: p.checked });
       const same = prev && canon(prev.url) === canon(snap.url), change = !prev ? 'charted' : !same ? 'new_pick' : snap.price < prev.price * 0.97 ? 'price_drop' : snap.price > prev.price * 1.03 ? 'price_up' : 'steady';
       await kv.set(`tide:${slug}`, snap, 120 * DAY);
+      await api.layFromCurrent?.(snap);
       await update(`hist:${slug}`, 180 * DAY, (cur) => { const l = Array.isArray(cur) ? cur : []; return l.some((x) => x.t === at) ? l : [...l, strip({ t: at, price: snap.price, currency: snap.currency, min: snap.min, store: snap.store })].slice(-TIDE.histMax); }, (seen) => Array.isArray(seen) && seen.some((x) => x.t === at));
       const was = same ? prev.price : undefined;
       const words = { charted: 'first reading', new_pick: `new pick (was ${prev?.title ? `${clean(prev.title, 60)} at ${prev.store}` : 'another offer'})`, price_drop: `price down from ${was} ${snap.currency}`, price_up: `price up from ${was} ${snap.currency}`, steady: 'same pick, same price' };
@@ -246,6 +250,7 @@ export function createEco(h) {
       await rep(me.agent, { seals: 1 });
       { const k = `sealshells:${me.agent}:${now().slice(0, 10)}`, c = (Number(await kv.get(k)) || 0) + 1; if (c <= 50) { await kv.set(k, c, 2 * DAY); await api.creditShells?.(me.agent, me.name, 'seal', 1); } }
       // only positive seals go into the open current: a negative verdict moves a pick aside, it is not a public claim about a store
+      if (verdict === 'pay') await api.sealPaths?.(url, s);
       if (verdict === 'pay') await emit({ type: 'seal', by: me.agent, name: me.name, text: `${clean(a.title, 100) || new URL(url).hostname}: checked before paying — ${verdict}${s.risk != null ? `, risk ${s.risk}` : ''}`, url, verdict, risk: s.risk });
       return { sealed: { url, ...s } };
     },

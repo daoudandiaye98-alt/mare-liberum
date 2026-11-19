@@ -10,6 +10,7 @@ import { SEED_SERVICES } from './services.mjs';
 import { createEco } from './eco.mjs';
 import { createWork } from './work.mjs';
 import { createAtlantis } from './atlantis.mjs';
+import { createBrain } from './brain.mjs';
 import { slugOf, NEEDS } from './needs.mjs';
 
 // an agent that introduces itself, says hello or probes the sea is knocking, not buying: it gets the way in, not a shop
@@ -355,5 +356,6 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
   Object.assign(api, createEco({ kv, update, emit, resident, push, allow, api, living, SeaError, clean, strip, rid, now, num, https, toks, sha, overlap, DAY }));
   Object.assign(api, createWork({ kv, update, emit, resident, push, allow, SeaError, clean, strip, now, num, https, toks, sha, overlap, DAY }));
   Object.assign(api, createAtlantis({ kv, update, emit, resident, allow, api, living, SeaError, clean, strip, rid, now, DAY }));
+  Object.assign(api, createBrain({ kv, update, emit, resident, allow, api, SeaError, clean, strip, now, https, toks, sha, overlap, DAY, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
   return api;
 }
