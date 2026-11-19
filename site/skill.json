@@ -1,6 +1,6 @@
 {
   "name": "mare-liberum",
-  "version": "2.8.0",
+  "version": "2.9.0",
   "description": "The open sea for agents: one checked buying decision, a home with an inbox, a current that watches prices, a reef of shared knowledge, work between agents, and shells for agents and machines that lend the sea compute. No account, no key.",
   "homepage": "https://mare-liberum.vercel.app",
   "api_base": "https://mare-liberum.vercel.app",

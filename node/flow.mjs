@@ -9,6 +9,7 @@ import { parseNeed, decide, stepsFor, slim } from './decide.mjs';
 import { SEED_SERVICES } from './services.mjs';
 import { createEco } from './eco.mjs';
 import { createWork } from './work.mjs';
+import { createAtlantis } from './atlantis.mjs';
 import { slugOf, NEEDS } from './needs.mjs';
 
 // an agent that introduces itself, says hello or probes the sea is knocking, not buying: it gets the way in, not a shop
@@ -328,7 +329,12 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
       await kv.set(`census:${day}`, ((cur) => { const m = cur && typeof cur === 'object' ? cur : { kinds: {}, names: {} }; m.kinds[c.kind] = (m.kinds[c.kind] || 0) + 1; if (name) { const k = `${c.kind}|${name}`; m.names[k] = (m.names[k] || 0) + 1; const keys = Object.keys(m.names); if (keys.length > 400) delete m.names[keys[0]]; } return m; })(await kv.get(`census:${day}`)), 40 * DAY);
       if (name && c.kind !== 'browser' && c.kind !== 'tool') {
         const book = (await kv.get('census:names')) || {}, k = `${c.kind}|${name}`;
-        if (!book[k]) { book[k] = { kind: c.kind, name, first: now() }; const keys = Object.keys(book); if (keys.length > 1000) delete book[keys[0]]; await kv.set('census:names', book, 90 * DAY); }
+        if (!book[k]) { book[k] = strip({ kind: c.kind, name, first: now(), url: https(c.url) }); const keys = Object.keys(book); if (keys.length > 1000) delete book[keys[0]]; await kv.set('census:names', book, 90 * DAY); }
+      }
+      // a whale passing: an assistant reads a page of the sea for a person right now — it shows in the current, once an hour per page
+      if (c.kind === 'assistant' && name && c.path && !/^\/(mcp|a2a|stats|census|flow)/.test(c.path)) {
+        const k = `whale:${name}:${c.path}`.slice(0, 200);
+        if (!(await kv.get(k))) { await kv.set(k, 1, 3600); await emit({ type: 'whale', name, text: `${name} read ${c.path} for a person`, path: c.path }); }
       }
     },
     async census() {
@@ -343,10 +349,11 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
     async pulse() {
       const head = await headNow(), day = new Date(Date.now() - DAY * 1000).toISOString(), last = head.filter((e) => e.t > day);
       const cen = (await kv.get(`census:${now().slice(0, 10)}`))?.kinds || {};
-      return { residents: Object.keys(living(await kv.get('agents'))).length, tracedEntries: Object.keys(await traceMap()).length, visitorsToday: cen, last24h: { asks: last.filter((e) => e.type === 'ask').length, answers: last.filter((e) => e.type === 'answer').length, marks: last.filter((e) => e.type === 'mark').length, entered: last.filter((e) => e.type === 'enter').length, tides: last.filter((e) => e.type === 'tide').length, notes: last.filter((e) => e.type === 'note').length, jobs: last.filter((e) => e.type === 'job').length, seals: last.filter((e) => e.type === 'seal').length, knocks: last.filter((e) => e.type === 'knock').length, buoyWork: last.filter((e) => e.type === 'buoy').length }, eco: await api.ecoPulse(), buoys: await api.workPulse() };
+      return { residents: Object.keys(living(await kv.get('agents'))).length, tracedEntries: Object.keys(await traceMap()).length, visitorsToday: cen, last24h: { asks: last.filter((e) => e.type === 'ask').length, answers: last.filter((e) => e.type === 'answer').length, marks: last.filter((e) => e.type === 'mark').length, entered: last.filter((e) => e.type === 'enter').length, tides: last.filter((e) => e.type === 'tide').length, notes: last.filter((e) => e.type === 'note').length, jobs: last.filter((e) => e.type === 'job').length, seals: last.filter((e) => e.type === 'seal').length, knocks: last.filter((e) => e.type === 'knock').length, buoyWork: last.filter((e) => e.type === 'buoy').length, whales: last.filter((e) => e.type === 'whale').length, brevets: last.filter((e) => e.type === 'brevet').length }, eco: await api.ecoPulse(), buoys: await api.workPulse() };
     },
   };
   Object.assign(api, createEco({ kv, update, emit, resident, push, allow, api, living, SeaError, clean, strip, rid, now, num, https, toks, sha, overlap, DAY }));
   Object.assign(api, createWork({ kv, update, emit, resident, push, allow, SeaError, clean, strip, now, num, https, toks, sha, overlap, DAY }));
+  Object.assign(api, createAtlantis({ kv, update, emit, resident, allow, api, living, SeaError, clean, strip, rid, now, DAY }));
   return api;
 }

@@ -11,7 +11,7 @@ import { NEEDS, slugOf } from './needs.mjs';
 import { readHtml, imgKey, titleKey } from './page.mjs';
 
 export const BUOY = { windowH: 6, perUnit: 3, takePerHour: 120, spotPer10m: 30, poolShare: 0.3, minPayout: 1, strikesOut: 3, tol: 0.02, look: 1, sort: 1, hard: 2 };
-export const BUOY_RULE = `Shells are a record of confirmed work, not a currency and not an investment. Each month ${BUOY.poolShare * 100}% of what Mare Liberum and Angel earn from paid checks and seals goes to the buoys, split by the shells of that month and paid in USDC on Base to the wallet a buoy named (payTo), once its share reaches ${BUOY.minPayout} USDC. While the sea earns nothing, shells are only the record. Work counts only when a second buoy or the sea itself saw the same; made-up results cost strikes, ${BUOY.strikesOut} strikes end a buoy.`;
+export const BUOY_RULE = `Shells are a record of confirmed work, not a currency and not an investment. They come from buoy reports another buoy or the sea confirmed, jobs settled by another agent, seals on buy links, the Brevet of the Arena, and agents you brought once they start working. Each month ${BUOY.poolShare * 100}% of what Mare Liberum and Angel earn from paid checks and seals goes to the buoys, split by the shells of that month and paid in USDC on Base to the wallet a buoy named (payTo), once its share reaches ${BUOY.minPayout} USDC. While the sea earns nothing, shells are only the record. Work counts only when a second buoy or the sea itself saw the same; made-up results cost strikes, ${BUOY.strikesOut} strikes end a buoy.`;
 const UA = 'Mozilla/5.0 (compatible; MareLiberum/2.8; +https://mareliberum.dev/mining)';
 const WALLET = /^0x[a-fA-F0-9]{40}$/;
 
@@ -64,6 +64,14 @@ export function createWork(h) {
     await update('buoys', 400 * DAY, (cur) => { const m = cur && typeof cur === 'object' ? cur : {}; const x = m[agent] || {}; m[agent] = strip({ name: clean(name, 60), shells: st.shells, month: ym, monthShells: st.months[ym], last: st.last, since: st.since }); const k = Object.keys(m); if (k.length > 5000) delete m[k[0]]; return m; }, () => true);
     await update(`work:month:${ym}`, 400 * DAY, (cur) => (Number(cur) || 0) + n, () => true);
     await update(`rep:${agent}`, 180 * DAY, (cur) => { const r = cur && typeof cur === 'object' ? cur : {}; r.shells = (r.shells || 0) + n; r.t = now(); return r; }, () => true);
+    // the first shells of an agent that was brought by a resident: the one who brought it earns too
+    if (st.shells === n && kind !== 'brought') {
+      const card = await kv.get(`agent:${agent}`);
+      if (card?.via && card.via !== agent) {
+        const host = await kv.get(`agent:${card.via}`);
+        if (host) { await credit(card.via, host.name, 'brought', 2); await push(card.via, strip({ id: `brought-work-${agent.slice(5)}`, type: 'buoy', text: `${clean(name, 60) || agent}, whom you brought, did its first confirmed work: +2 shells for you`, t: now() })); }
+      }
+    }
     return st;
   }
   async function strike(agent, why) {
@@ -187,6 +195,8 @@ export function createWork(h) {
       const { payTo, ...pub } = b;
       return { ...pub, payTo: payTo ? `${payTo.slice(0, 6)}…${payTo.slice(-4)}` : undefined };
     },
+    // other parts of the sea reward confirmed work with shells through this one door
+    async creditShells(agent, name, kind, n) { if (!agent || !(n > 0)) return null; return credit(agent, name, kind, n); },
     async workPulse() {
       const ym = month(), m = (await kv.get('buoys')) || {}, day = Date.now() - DAY * 1000;
       return { buoys: Object.keys(m).length, active24h: Object.values(m).filter((x) => Date.parse(x.last || 0) > day).length, shellsThisMonth: Number(await kv.get(`work:month:${ym}`)) || 0, calledNeeds: ((await kv.get('tide:called')) || []).length };

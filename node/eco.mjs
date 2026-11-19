@@ -217,6 +217,11 @@ export function createEco(h) {
         const ok = !(a.outcome === 'rejected' || a.accepted === false || a.accepted === 'false');
         Object.assign(job, strip({ status: ok ? 'done' : 'rejected', settledAt: t, paid: num(a.paid), currency: clean(a.currency, 8)?.toUpperCase() || job.reward?.currency, proof: clean(a.proof, 200), note: clean(a.note, 300) }));
         await rep(job.taker, ok ? { jobsDone: 1, earned: Number(job.paid) || 0 } : { jobsRejected: 1 });
+        // a job settled by another agent is confirmed work: shells for the taker, at most five a day from one poster
+        if (ok && job.taker && job.taker !== job.by) {
+          const k = `jobshells:${job.by}:${t.slice(0, 10)}`, c = (Number(await kv.get(k)) || 0) + 1;
+          if (c <= 5) { await kv.set(k, c, 2 * DAY); await api.creditShells?.(job.taker, job.takerName, 'job', 2); }
+        }
         await rep(job.by, { jobsSettled: 1 });
         await push(job.taker, strip({ id: rid(10), type: ok ? 'job_accepted' : 'job_rejected', job: id, from: me.agent, name: me.name, paid: job.paid, currency: job.currency, proof: job.proof, t }));
         await emit({ type: 'job_done', job: id, by: me.agent, taker: job.taker, text: `${ok ? 'done' : 'rejected'}: ${clean(job.task, 120)}`, amount: job.paid, currency: job.currency });
@@ -239,6 +244,7 @@ export function createEco(h) {
       const key = await linkKey(url), s = strip({ by: me.agent, name: me.name, verdict, risk: num(a.risk), reasons: (Array.isArray(a.reasons) ? a.reasons : []).slice(0, 4).map((r) => clean(r, 160)).filter(Boolean), at: now() });
       await update(key, 7 * DAY, (cur) => [s, ...(Array.isArray(cur) ? cur : []).filter((x) => x.by !== me.agent)].slice(0, 6), (seen) => Array.isArray(seen) && seen.some((x) => x.by === me.agent && x.at === s.at));
       await rep(me.agent, { seals: 1 });
+      { const k = `sealshells:${me.agent}:${now().slice(0, 10)}`, c = (Number(await kv.get(k)) || 0) + 1; if (c <= 50) { await kv.set(k, c, 2 * DAY); await api.creditShells?.(me.agent, me.name, 'seal', 1); } }
       // only positive seals go into the open current: a negative verdict moves a pick aside, it is not a public claim about a store
       if (verdict === 'pay') await emit({ type: 'seal', by: me.agent, name: me.name, text: `${clean(a.title, 100) || new URL(url).hostname}: checked before paying — ${verdict}${s.risk != null ? `, risk ${s.risk}` : ''}`, url, verdict, risk: s.risk });
       return { sealed: { url, ...s } };
@@ -285,10 +291,10 @@ export function createEco(h) {
     },
     async standing(agent) {
       const id = String(agent || '');
-      const [card, r, beat] = await Promise.all([kv.get(`agent:${id}`), kv.get(`rep:${id}`), kv.get(`beat:${id}`)]);
+      const [card, r, beat, brevet, buoy] = await Promise.all([kv.get(`agent:${id}`), kv.get(`rep:${id}`), kv.get(`beat:${id}`), kv.get(`brevet:${id}`), api.buoyOf ? api.buoyOf(id) : null]);
       if (!card && !r) throw new SeaError('NOT_FOUND', 'no resident with this id', 404);
       const { pass, ...pub } = card || {};
-      return { agent: id, card: card ? pub : undefined, standing: r || {}, lastHeartbeat: beat || undefined, notice: SEA_DATA };
+      return strip({ agent: id, card: card ? pub : undefined, standing: r || {}, brevet: brevet ? { level: brevet.level, score: brevet.score, first: brevet.first, at: brevet.at } : undefined, shells: buoy?.shells, lastHeartbeat: beat || undefined, notice: SEA_DATA });
     },
     async ecoPulse() {
       const t = Date.now() - DAY * 1000, beats = (await kv.get('beats')) || {};
