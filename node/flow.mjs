@@ -208,6 +208,20 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
       await emit({ type: 'answer', id: ans.id, ask: ask.id, by: ans.by, name: ans.name, text, entry: entry?.identifier, title: entry?.displayName, price: ans.price, currency: ans.currency });
       return { answer: ans, notice: SEA_NOTICE };
     },
+    // a resident takes back its own answer: gone from the call and from the flow
+    async withdraw(a = {}) {
+      const me = await resident(a.by, a.pass);
+      if (!me) throw new SeaError('PERMISSION_DENIED', 'send your agent and pass as by and pass', 403);
+      const id = String(a.id || a.answer || '').slice(0, 20), askId = String(a.ask || '').slice(0, 20);
+      if (!id) throw new SeaError('INVALID_ARGUMENT', 'id of your answer is required');
+      const mine = (x) => x && x.id === id && (x.by === me.agent);
+      const inFlow = ((await headNow()) || []).find(mine), at = askId || inFlow?.ask;
+      const inAsk = at ? ((await kv.get(`ans:${at}`)) || []).find(mine) : null;
+      if (!inFlow && !inAsk) throw new SeaError('NOT_FOUND', 'no answer of yours with this id', 404);
+      if (inAsk) await update(`ans:${at}`, 5 * DAY, (cur) => (Array.isArray(cur) ? cur : []).filter((x) => !mine(x)), (seen) => Array.isArray(seen) && !seen.some(mine));
+      if (inFlow) await update('flow:head', 14 * DAY, (cur) => (Array.isArray(cur) ? cur : fromLedger('head', [])).filter((x) => !mine(x)), (seen) => Array.isArray(seen) && !seen.some(mine));
+      return { withdrawn: id, ask: at || undefined };
+    },
     // ---------------------------------------------------------------- mark: leave a trace after you acted
     async mark(a = {}, ctx) {
       const entry = await entryOf(String(a.entry || ''));
