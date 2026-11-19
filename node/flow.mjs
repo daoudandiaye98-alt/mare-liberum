@@ -11,6 +11,8 @@ import { createEco } from './eco.mjs';
 import { createWork } from './work.mjs';
 import { createAtlantis } from './atlantis.mjs';
 import { createBrain } from './brain.mjs';
+import { createLens } from './lens.mjs';
+import { roleOf } from './atlantis.mjs';
 import { slugOf, NEEDS } from './needs.mjs';
 
 // an agent that introduces itself, says hello or probes the sea is knocking, not buying: it gets the way in, not a shop
@@ -327,7 +329,11 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
     async seen(c) {
       if (!c?.kind || c.kind === 'self') return;
       const day = now().slice(0, 10), name = clean(c.name, 60);
-      await kv.set(`census:${day}`, ((cur) => { const m = cur && typeof cur === 'object' ? cur : { kinds: {}, names: {} }; m.kinds[c.kind] = (m.kinds[c.kind] || 0) + 1; if (name) { const k = `${c.kind}|${name}`; m.names[k] = (m.names[k] || 0) + 1; const keys = Object.keys(m.names); if (keys.length > 400) delete m.names[keys[0]]; } return m; })(await kv.get(`census:${day}`)), 40 * DAY);
+      await kv.set(`census:${day}`, ((cur) => { const m = cur && typeof cur === 'object' ? cur : { kinds: {}, names: {} }; m.kinds[c.kind] = (m.kinds[c.kind] || 0) + 1;
+        // where the request came from: the country and a 2° cell of the network edge, counted by role, never an address
+        if (c.geo?.cc) { m.cc = m.cc || {}; m.cc[c.geo.cc] = (m.cc[c.geo.cc] || 0) + 1; }
+        if (Number.isFinite(c.geo?.lat) && Number.isFinite(c.geo?.lon)) { m.cells = m.cells || {}; const k = `${Math.round(c.geo.lat / 2) * 2},${Math.round(c.geo.lon / 2) * 2}`, x = m.cells[k] || (Object.keys(m.cells).length < 1500 ? { n: 0, r: {} } : null); if (x) { x.n++; const r = roleOf(c.kind); x.r[r] = (x.r[r] || 0) + 1; m.cells[k] = x; } }
+        if (name) { const k = `${c.kind}|${name}`; m.names[k] = (m.names[k] || 0) + 1; const keys = Object.keys(m.names); if (keys.length > 400) delete m.names[keys[0]]; } return m; })(await kv.get(`census:${day}`)), 40 * DAY);
       if (name && c.kind !== 'browser' && c.kind !== 'tool') {
         const book = (await kv.get('census:names')) || {}, k = `${c.kind}|${name}`;
         if (!book[k]) { book[k] = strip({ kind: c.kind, name, first: now(), url: https(c.url) }); const keys = Object.keys(book); if (keys.length > 1000) delete book[keys[0]]; await kv.set('census:names', book, 90 * DAY); }
@@ -356,6 +362,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
   Object.assign(api, createEco({ kv, update, emit, resident, push, allow, api, living, SeaError, clean, strip, rid, now, num, https, toks, sha, overlap, DAY }));
   Object.assign(api, createWork({ kv, update, emit, resident, push, allow, SeaError, clean, strip, now, num, https, toks, sha, overlap, DAY }));
   Object.assign(api, createAtlantis({ kv, update, emit, resident, allow, api, living, SeaError, clean, strip, rid, now, DAY }));
+  Object.assign(api, createLens({ kv, update, api, living, SeaError, allow, clean, strip, now, https, DAY }));
   Object.assign(api, createBrain({ kv, update, emit, resident, allow, api, SeaError, clean, strip, now, https, toks, sha, overlap, DAY, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
   return api;
 }

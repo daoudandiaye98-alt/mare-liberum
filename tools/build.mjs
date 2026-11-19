@@ -226,6 +226,8 @@ writeFileSync('data/build.json', JSON.stringify({ builtAt: new Date().toISOStrin
 for (const [from, to] of [['flow/traces.json', 'data/flow-traces.json'], ['flow/head.json', 'data/flow-head.json']]) if (existsSync(from)) cpSync(from, to);
 // the first pages people and agents read are served by the node
 mkdirSync('data/site', { recursive: true }); for (const f of ['index.html', 'llms.txt', 'robots.txt', 'skill.md', 'heartbeat.md', 'skill.json']) if (existsSync(`site/${f}`)) cpSync(`site/${f}`, `data/site/${f}`);
+// the fonts of the site are served as static files, from our own domain (no third-party font requests)
+if (existsSync('site/fonts')) { mkdirSync('public/fonts', { recursive: true }); cpSync('site/fonts', 'public/fonts', { recursive: true }); }
 // The source travels with the node: anyone can read it and run a mirror.
 mkdirSync('public/source', { recursive: true });
 for (const f of ['node/core.mjs', 'node/mem.mjs', 'node/flow.mjs', 'tools/build.mjs', 'tools/archive.mjs', 'engines/postgres/schema.sql', 'seeds.txt', 'seeds-ard.txt', 'store-pages.json', 'README.md', 'LICENSE']) if (existsSync(f)) cpSync(f, `public/source/${f.split('/').pop()}`);
