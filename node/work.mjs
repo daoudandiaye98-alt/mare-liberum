@@ -81,7 +81,7 @@ export function createWork(h) {
   }
   async function sortUnit(text) {
     const t = clean(text, 300);
-    if (!t || t.length < 4) return null;
+    if (!t || t.length < 4 || NEED_BY_SLUG.has(slugOf(t))) return null;
     const words = toks(t);
     const choices = NEEDS.map((n) => ({ n, s: overlap(words, toks(n)) })).filter((x) => x.s > 0).sort((a, b) => b.s - a.s).slice(0, 8).map((x) => slugOf(x.n));
     if (!choices.length) return null;
