@@ -109,7 +109,7 @@ export async function checkSite(host) {
   const robotsNone = robots.status === 404 || robots.status === 410, robotsWall = !robotsOk && !robotsNone;
   const groups = robotsOk ? robotsGroups(robots.body) : [];
   const agents = AGENTS.map((a) => (robotsWall ? { ...a, allowed: null, named: false } : { ...a, ...robotsAllows(groups, a.name) }));
-  const sitemap = robotsOk && /^\s*sitemap\s*:/im.test(robots.body) ? true : (await grab(`${root}/sitemap.xml`, { max: 4000 })).status === 200;
+  const sitemap = robotsOk && /^\s*sitemap\s*:/im.test(robots.body) ? true : (await Promise.all([grab(`${root}/sitemap.xml`, { max: 4000 }), grab(`${root}/sitemap_index.xml`, { max: 4000 })])).some((r) => r.status === 200);
   const reach = { status: home.status, https: /^https:/.test(home.url || ''), final: home.url ? (() => { try { const u = new URL(home.url); return u.hostname + (u.pathname === '/' ? '' : u.pathname); } catch { return null; } })() : null };
   const page = home.status === 200 && /html/i.test(home.type) ? readPage(home.body) : null;
   if (page && /noindex/i.test(home.robotsTag)) page.noindex = true;
@@ -128,7 +128,7 @@ export async function checkSite(host) {
     { key: 'meta', max: 10, got: (page?.title ? 5 : 0) + (page?.description ? 5 : 0), ok: !!(page?.title && page?.description), title: page?.title && page?.description ? 'Title and description present' : `Missing ${[!page?.title && 'title', !page?.description && 'description'].filter(Boolean).join(' and ') || 'page'}`, fix: page?.title && page?.description ? null : 'give the page a clear title and a one-sentence description', from: 'home page' },
     { key: 'llms', max: 10, got: llmsOk ? 10 : 0, ok: llmsOk, title: llmsOk ? 'llms.txt present' : 'No llms.txt', fix: llmsOk ? null : 'publish /llms.txt: a short plain-text guide to the site for language models', from: '/llms.txt' },
     { key: 'agentcard', max: 10, got: agentCard ? 10 : 0, ok: !!agentCard, title: agentCard ? `Agent card: ${agentCard.name || 'present'}${agentCard.skills ? ` · ${agentCard.skills} skills` : ''}` : 'No agent card', fix: agentCard ? null : 'if agents may act with you (book, buy, ask), publish /.well-known/agent-card.json (A2A)', from: '/.well-known/agent-card.json' },
-    { key: 'sitemap', max: 5, got: sitemap ? 5 : 0, ok: sitemap, title: sitemap ? 'Sitemap found' : 'No sitemap', fix: sitemap ? null : 'list your pages in /sitemap.xml and name it in robots.txt', from: robotsOk ? 'robots.txt / sitemap.xml' : '/sitemap.xml' },
+    { key: 'sitemap', max: 5, got: sitemap ? 5 : 0, ok: sitemap, title: sitemap ? 'Sitemap found' : 'No sitemap found in robots.txt, /sitemap.xml or /sitemap_index.xml', fix: sitemap ? null : 'list your pages in /sitemap.xml and name it in robots.txt', from: robotsOk ? 'robots.txt / sitemap.xml' : '/sitemap.xml' },
     { key: 'https', max: 5, got: reach.status === 200 && reach.https ? 5 : 0, ok: reach.status === 200 && reach.https, title: reach.status === 200 ? (reach.https ? 'Answers over HTTPS' : 'Answers without HTTPS') : `Home page answered ${reach.status || 'nothing'}`, fix: reach.status === 200 && reach.https ? null : 'serve the site over HTTPS with status 200', from: 'home page' },
   ];
   if (page?.noindex) parts.push({ key: 'noindex', max: 0, got: 0, ok: false, title: 'The page asks not to be indexed (noindex)', fix: 'remove noindex if you want to appear in AI answers', from: 'robots meta / X-Robots-Tag' });
