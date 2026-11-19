@@ -70,6 +70,8 @@ export function createWeb(h) {
         sites: sorted.map((r) => ({ host: r.host, score: r.s, grade: r.g, blocked: r.b, wall: r.w || undefined, jsOnly: r.js || undefined, llms: r.l, jsonld: r.j, agentCard: r.c, cc: r.cc, at: r.at })),
         note: 'the most visited websites of the world, read again every six days from what each publishes (robots.txt, llms.txt, home page, agent card); open data, CC0' };
     },
+    // anyone may ask the sea to read the next sites a little sooner; one step at a time, at most every twenty seconds
+    async webNudge() { if (await kv.get('web:nudge')) return { calm: true, note: 'a step ran a moment ago' }; await kv.set('web:nudge', 1, 20); return { read: await web.webStep(4) }; },
     async webCheckOf(host) { return kv.get(`webcheck:${host}`); },
   };
   return web;
