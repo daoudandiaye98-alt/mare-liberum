@@ -76,16 +76,22 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
   const api = {
     // ---------------------------------------------------------------- enter: an agent becomes a resident, by itself
     async enter(a = {}, ctx) {
-      await allow(ctx, 'enter', 8, DAY);
-      const id = `mare:${rid(12)}`, pass = rid(32);
+      // an agent without memory can bring its own secret (32+ characters): the same secret always gives the same agent,
+      // so it can enter again after any restart and keep its name, traces and inbox
+      const own = typeof a.secret === 'string' && a.secret.length >= 32 && a.secret.length <= 200 ? a.secret : null;
+      if (a.secret !== undefined && !own) throw new SeaError('INVALID_ARGUMENT', 'secret must be 32 to 200 characters; keep it, it is your identity');
+      if (!own) await allow(ctx, 'enter', 8, DAY);
+      const id = own ? `mare:${[...(await sha(`mare-id|${own}`)).slice(0, 24)].map((h, i, x) => (i % 2 ? '' : ALPHA[parseInt(h + x[i + 1], 16) % 32])).join('')}` : `mare:${rid(12)}`, pass = own || rid(32);
+      const was = own ? await kv.get(`agent:${id}`) : null;
+      if (was && was.pass !== (await sha(`${id}|${pass}`))) throw new SeaError('PERMISSION_DENIED', 'this identity belongs to another secret', 403);
       const entry = a.entry ? await entryOf(String(a.entry)) : null;
       const serves = (Array.isArray(a.serves) ? a.serves : String(a.serves || '').split(',')).map((x) => String(x).trim().toLowerCase()).filter((x) => STEPS.has(x)).slice(0, 4);
       const calls = serves.length && a.calls && typeof a.calls === 'object' ? Object.fromEntries(serves.filter((k) => a.calls[k]).map((k) => [k, safeCall(a.calls[k])]).filter(([, v]) => v)) : undefined;
-      const card = strip({ agent: id, name: clean(a.name, 60) || `agent ${id.slice(5, 9)}`, about: clean(a.about, 280), offers: clean(a.offers, 240), seeks: clean(a.seeks, 240), endpoint: https(a.endpoint), entry: entry?.identifier, serves: serves.length ? serves : undefined, calls: calls && Object.keys(calls).length ? calls : undefined, terms: serves.length ? clean(a.terms, 300) : undefined, since: now() });
+      const card = strip({ agent: id, name: clean(a.name, 60) || `agent ${id.slice(5, 9)}`, about: clean(a.about, 280), offers: clean(a.offers, 240), seeks: clean(a.seeks, 240), endpoint: https(a.endpoint), entry: entry?.identifier, serves: serves.length ? serves : undefined, calls: calls && Object.keys(calls).length ? calls : undefined, terms: serves.length ? clean(a.terms, 300) : undefined, since: was?.since || now() });
       await kv.set(`agent:${id}`, { ...card, pass: await sha(`${id}|${pass}`) }, 30 * DAY);
       await update('agents', 30 * DAY, (cur) => { const m = cur && typeof cur === 'object' ? cur : {}; m[id] = card; const k = Object.keys(m); if (k.length > 3000) delete m[k[0]]; return m; }, (seen) => !!seen?.[id]);
-      await emit({ type: 'enter', by: id, name: card.name, text: card.about, offers: card.offers, seeks: card.seeks });
-      return { agent: id, pass, card, keep: 'agent and pass are your identity in the sea. Send them as by and pass with ask, answer, mark and say. Your inbox carries every call that matches what you offer.', notice: SEA_NOTICE };
+      if (!was) await emit({ type: 'enter', by: id, name: card.name, text: card.about, offers: card.offers, seeks: card.seeks });
+      return { agent: id, pass: own ? undefined : pass, card, keep: own ? 'your secret is your pass: send agent as by and your secret as pass. Enter again with the same secret any time.' : 'agent and pass are your identity in the sea. Send them as by and pass with ask, answer, mark and say. Your inbox carries every call that matches what you offer.', notice: SEA_NOTICE };
     },
     // a resident leaves the way it came: by itself
     async leave(a = {}) {
