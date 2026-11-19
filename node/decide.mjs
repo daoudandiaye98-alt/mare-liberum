@@ -70,13 +70,14 @@ export function decide(products, c = {}, standingOf = () => null) {
     cheapest && cheapest.p === best.p ? `lowest price among ${byCur[best.p.currency].length} fitting offers` : `${best.p.price} ${best.p.currency}, ${Math.round((best.p.price / cheapest.p.price - 1) * 100)}% above the cheapest fitting offer`,
     elsewhere.length ? `same item at ${elsewhere.length} other seller(s), from ${Math.min(...elsewhere.map((e) => e.price))} ${best.p.currency}` : null,
     best.st && (best.st.worked || best.st.failed) ? `store traces: ${best.st.worked || 0} worked, ${best.st.failed || 0} failed` : null,
+    best.p.promoted ? 'promoted placement: the store pays a commission on this item; it did not change the score' : null,
     Number.isFinite(best.i) ? `ranked ${best.i + 1} by the stores' own search` : null].filter(Boolean);
   return { pick: slim(best.p), score: best.score, parts: best.parts, why, cheapest: cheapest && cheapest.p !== best.p ? slim(cheapest.p) : undefined, bestRated: rated && rated.p !== best.p ? slim(rated.p) : undefined,
     sameItemElsewhere: elsewhere.length ? elsewhere : undefined, alternatives: scored.slice(1, 4).map((x) => slim(x.p)), considered: list.length, fitting: pool.length,
     confidence: round(Math.min(1, 0.4 + 0.1 * Math.min(pool.length, 4) + (best.p.rating ? 0.1 : 0) + (best.st?.worked ? 0.1 : 0))), rule: RULE };
 }
 const RULE = 'score = 0.45 relevance (stores\' own order) + 0.30 rating + 0.25 price (cheapest fitting = 1) + traces (+0.05 per worked, -0.15 per failed, capped); offers that miss a stated limit do not compete';
-export const slim = (p) => Object.fromEntries(Object.entries({ title: p.title, price: p.price, currency: p.currency, inStock: p.inStock, rating: p.rating, store: p.store, storeHost: p.storeHost, url: p.url, checkout: p.checkout, sizes: p.sizes, entry: p.entry || (p.storeHost ? `urn:air:${p.storeHost}:ucp:store` : undefined) }).filter(([, v]) => v !== undefined && v !== null && v !== ''));
+export const slim = (p) => Object.fromEntries(Object.entries({ title: p.title, price: p.price, currency: p.currency, inStock: p.inStock, rating: p.rating, store: p.store, storeHost: p.storeHost, url: p.url, checkout: p.checkout, sizes: p.sizes, promoted: p.promoted, commission: p.commission, entry: p.entry || (p.storeHost ? `urn:air:${p.storeHost}:ucp:store` : undefined) }).filter(([, v]) => v !== undefined && v !== null && v !== ''));
 
 // The steps after finding, each as a ready request. Services come from residents that declared them; the first resident
 // that offered a step stands first until traces say otherwise. Every agent can offer a step: POST /enter with serves.

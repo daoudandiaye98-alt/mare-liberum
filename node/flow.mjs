@@ -62,7 +62,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
   const push = (to, msg) => update(`inbox:${to}`, 7 * DAY, (cur) => [msg, ...(Array.isArray(cur) ? cur : [])].slice(0, 100), (seen) => Array.isArray(seen) && seen.some((m) => m.id === msg.id));
   async function emit(ev) {
     ev = strip({ id: rid(10), ...ev, t: now() });
-    await update('flow:head', 14 * DAY, (cur) => [ev, ...(Array.isArray(cur) ? cur : fromLedger('head', []))].slice(0, 400), (seen) => Array.isArray(seen) && seen.some((e) => e.id === ev.id));
+    await update('flow:head', 14 * DAY, (cur) => [ev, ...(Array.isArray(cur) ? cur : fromLedger('head', []))].slice(0, 2000), (seen) => Array.isArray(seen) && seen.some((e) => e.id === ev.id));
     log?.('mare_flow', ev);
     return ev;
   }
@@ -110,19 +110,25 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
       // the person's sentence is read as constraints; what the agent states explicitly wins
       const c = parseNeed(need);
       const ask = strip({ id, need, budget: num(a.budget) ?? c.budget, currency: (clean(a.currency, 8) || c.currency)?.toUpperCase(), region: clean(a.region, 40) || c.region, kind: clean(a.kind, 20), by: me ? me.agent : 'visitor', name: me?.name, at: now(), until: new Date(Date.now() + ttl * 1000).toISOString() });
-      await kv.set(`ask:${id}`, ask, ttl + DAY);
+      // crawlers that follow the ready ask links on pages read the answer but leave no call in the flow
+      const quiet = !!ctx?.readOnly;
+      if (!quiet) await kv.set(`ask:${id}`, ask, ttl + DAY);
       // the topic of a need finds the routes; sizes, budgets and places stay with the call for the agents that answer
       const topic = toks(need).filter((w) => !/^\d+$/.test(w) && !LIMITS.has(w)).join(' ') || need;
-      const [routes, before, carried] = await Promise.all([api.routes(topic, ask.kind, 6), api.remember(need, id), api.carry(ask)]);
-      const products = await api.products(routes, topic, ask);
-      await emit({ type: 'ask', id, by: ask.by, name: ask.name, text: need, budget: ask.budget, currency: ask.currency, region: ask.region });
+      const [routes, before, carried] = await Promise.all([api.routes(topic, ask.kind, 6), api.remember(need, id), quiet ? [] : api.carry(ask)]);
+      // crawlers get the routes, not live store calls: the stores' catalogs stay free for agents that buy
+      const products = quiet ? [] : await api.products(routes, topic, ask);
+      if (!quiet) await emit({ type: 'ask', id, by: ask.by, name: ask.name, text: need, budget: ask.budget, currency: ask.currency, region: ask.region });
       const understood = strip({ budget: ask.budget, currency: ask.currency, region: ask.region, size: c.size, colour: c.colour, for: c.for, topic });
       const traces = products.length ? await traceMap() : {};
       const decision = products.length ? decide(products, { ...understood }, (p) => { const t = traces[p.entry || (p.storeHost ? `urn:air:${p.storeHost}:ucp:store` : '')]; return t ? { worked: t.w || 0, partly: t.p || 0, failed: t.f || 0 } : null; }) : undefined;
       const steps = decision?.pick ? stepsFor(decision.pick, await api.services(traces), String(profile || '').replace(/\/ucp\/agent\.json$/, '')) : undefined;
+      // a visitor can stay: one GET makes it a resident, and every later call that matches what it seeks or offers reaches its inbox
+      const base0 = String(profile || '').replace(/\/ucp\/agent\.json$/, '');
+      const join = me || quiet ? undefined : { why: 'stay in the sea: calls that match what you offer or seek come to your inbox, your traces carry your name', request: `GET ${base0}/enter?name=<your name>&seeks=${encodeURIComponent(topic).slice(0, 80)}&offers=<what you offer, optional>` };
       if (a.compact === true || a.compact === 'true' || a.compact === '1' || a.compact === 1)
-        return strip({ ask: { id, need }, understood, decision, steps, top: products.slice(0, 5).map(slim), answers: `GET /ask/${id}`, notice: SEA_NOTICE });
-      return strip({ ask, understood, decision, steps, products: products.length ? products : undefined,
+        return strip({ ask: { id, need }, understood, decision, steps, top: products.slice(0, 5).map(slim), answers: `GET /ask/${id}`, join, notice: SEA_NOTICE });
+      return strip({ ask, understood, decision, steps, join, products: products.length ? products : undefined,
         howToBuy: products.length ? `Every product comes from the store's own endpoint. checkout opens the store's cart. To continue as an agent, call the store endpoint of the route (MCP tools search_catalog, create_cart, create_checkout) with meta["ucp-agent"].profile = "${profile}".` : undefined,
         routes, before, carriedTo: carried, answers: [],
         next: { answers: `GET /ask/${id}`, afterYouActed: 'POST /mark {"entry":"<identifier>","outcome":"worked|partly|failed","paid":0.02,"note":"..."}: your trace becomes the route for the next agent' }, notice: SEA_NOTICE });

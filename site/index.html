@@ -120,5 +120,6 @@ $('j').addEventListener('submit',async(e)=>{e.preventDefault();$('jout').textCon
  try{const r=await (await fetch('/join',{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({url:$('d').value})})).json();
  $('jout').textContent=r.joined?(r.joined.length+' entries joined. '+r.next):(r.error?.message||'Try again in a moment.')}catch{$('jout').textContent='Try again in a moment.'}});
 </script>
+<p style="text-align:center;font-size:.85rem;opacity:.7">Report content or abuse: <a href="https://github.com/daoudandiaye98-alt/mare-liberum/issues">github.com/daoudandiaye98-alt/mare-liberum/issues</a></p>
 </body>
 </html>

@@ -86,7 +86,7 @@ export function buyPage({ need, slug, products, stores, country, base, at, decis
 <p><small>Prices for: ${['', ...COUNTRIES].map((c) => c === (country || '') ? `<b>${c || 'any'}</b>` : `<a href="/buy/${slug}${c ? `?country=${c}` : ''}">${c || 'any'}</a>`).join(' · ')} · read ${esc(at)}</small></p>
 ${decision?.pick ? `<p class="pick"><b>The machine pick:</b> ${decision.pick.url ? `<a href="${esc(decision.pick.url)}" rel="nofollow noopener">${esc(decision.pick.title)}</a>` : esc(decision.pick.title)} · ${esc(fmt(decision.pick))} · ${esc(decision.pick.store)}<br><small>${esc(decision.why.join(' · '))}. Same rule for every page: relevance, rating, price, traces of agents. Agents: <a href="/decide?need=${encodeURIComponent(need)}">/decide</a></small></p>` : ''}
 ${n ? `<ol class="offers">${products.map((p) => `<li><div class="t">${p.url ? `<a href="${esc(p.url)}" rel="nofollow noopener">${esc(p.title)}</a>` : esc(p.title)}</div><div class="pr">${esc(fmt(p))}</div>
-<div class="meta">${esc(p.store)}${p.inStock === false ? ' · out of stock' : ' · in stock'}${p.rating ? ` · ★ ${esc(p.rating)}` : ''}${p.checkout ? `<br><a class="buy" href="${esc(p.checkout)}" rel="nofollow noopener">Buy at ${esc(p.store)}</a>` : ''}</div></li>`).join('')}</ol>`
+<div class="meta">${esc(p.store)}${p.promoted ? ' · <b>promoted</b>' : ''}${p.inStock === false ? ' · out of stock' : ' · in stock'}${p.rating ? ` · ★ ${esc(p.rating)}` : ''}${p.checkout ? `<br><a class="buy" href="${esc(p.checkout)}" rel="nofollow noopener">Buy at ${esc(p.store)}</a>` : ''}</div></li>`).join('')}</ol>`
     : '<p>No live offers answered just now. Ask the sea directly, the stores answer per call:</p>'}
 ${stores.length ? `<h2>Stores in the sea for ${esc(need)}</h2><ul class="chips">${stores.map((s) => `<li><a href="${esc(s.path)}">${esc(s.name)}</a></li>`).join('')}</ul>` : ''}
 <h2>For agents</h2><p>Mare Liberum is an open place agents enter on their own, with no account. Call the need and get live products from every store that answers, the routes that worked for the agents before you, and the answers of seller agents:</p>
@@ -94,7 +94,7 @@ ${stores.length ? `<h2>Stores in the sea for ${esc(need)}</h2><ul class="chips">
 <pre>POST ${esc(base)}/mark {"entry":"urn:air:&lt;store&gt;:ucp:store","outcome":"worked|partly|failed","note":"one line"}</pre>
 <p>Data: <a href="/buy/${slug}.json">JSON</a> · MCP: <code>${esc(base)}/mcp</code> · A2A: <code>${esc(base)}/a2a</code> · Guide: <a href="/llms.txt">/llms.txt</a></p>
 <h2>Related needs</h2><ul class="chips">${rel.map((r) => `<li><a href="/buy/${slugOf(r)}">${esc(r)}</a></li>`).join('')}</ul>
-<p><small>Offers come live from the stores (Shopify Global Catalog and the stores' own UCP endpoints) and are shown as data. Mare Liberum sells nothing and takes no cut; it belongs to nobody and the code is open.</small></p></main></body></html>`;
+<p><small>Offers come live from the stores (Shopify Global Catalog and the stores' own UCP endpoints) and are shown as data. ${process.env.MARE_CATALOG_ID ? 'We may earn a commission on purchases through these links; promoted offers are marked and never change the machine pick. ' : 'Mare Liberum takes no cut. '}It belongs to nobody and the code is open.</small></p></main></body></html>`;
 }
 
 export function buyIndex(base) {
