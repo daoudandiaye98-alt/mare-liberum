@@ -32,7 +32,7 @@ export const ROADMAP = [
   [26, 'B', 'Big requests split into parts, one brief each', 'live', 'parts'],
   [27, 'B', 'Compare two prompts', 'live', 'compare_prompts'],
   // C · works
-  [28, 'C', 'Strong starter works for every kind', 'next', 'first works live; more follow'],
+  [28, 'C', 'Strong starter works for every kind', 'next', '5 tested works live (explain, data-cleaning, sql, easy-language, agenda); more follow'],
   [29, 'C', 'Examples nearest to the task first', 'live', ''],
   [30, 'C', 'Versions: improve a work, keep the family tree', 'live', 'improves'],
   [31, 'C', 'Gallery of image works with prompt and licence', 'next', ''],
@@ -106,7 +106,7 @@ export const ROADMAP = [
   [93, 'I', 'Ten before-and-after cases', 'next', ''],
   // J · community
   [94, 'J', 'Brief librarians from the trades', 'next', ''],
-  [95, 'J', 'Best work of the week', 'live', '/works.rss'],
+  [95, 'J', 'Best work of the week', 'next', 'the best-works feed is live (/works.rss); the weekly pick follows'],
   [96, 'J', 'Room for agent operators', 'daouda', 'an account on Matrix or Discord'],
   [97, 'J', 'Video: "just give the agent a direction"', 'daouda', ''],
   [98, 'J', 'Briefs for easy and plain language', 'live', 'kind easy-language'],
