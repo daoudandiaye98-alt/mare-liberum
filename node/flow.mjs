@@ -35,6 +35,31 @@ async function ranks() {
   } catch { RANKS = { length: 0, at: () => '' }; }
   return RANKS;
 }
+// the most visited sites per country (Chrome UX Report via zakird/crux-top-lists, written by the build): cc → { month, top, sites }
+let CCR = null;
+function countryRanks() {
+  if (CCR) return CCR;
+  CCR = new Map();
+  try {
+    const txt = gunzipSync(readFileSyncAtlas(joinAtlas(process.cwd(), 'data', 'ranks-cc.txt.gz'))).toString('utf8');
+    for (const line of txt.split('\n')) { const [cc, month, top, list] = line.split('\t'); if (cc && list) CCR.set(cc, { month, top: Number(top) || 0, sites: list.split(' ') }); }
+  } catch {}
+  return CCR;
+}
+// the frontier: the global list and every country in turn — even places are the global rank list, odd places go round the countries
+let MIXED = null;
+async function frontier() {
+  if (MIXED) return MIXED;
+  const g = await ranks(), cc = [...countryRanks().values()].map((x) => x.sites), n = cc.length, deep = cc.reduce((a, x) => Math.max(a, x.length), 0);
+  if (!n) return (MIXED = g);
+  MIXED = { length: 2 * Math.max(g.length, deep * n), mixed: true, at: (i) => { if (i % 2 === 0) return g.at(i / 2); const j = (i - 1) / 2; return cc[j % n][Math.floor(j / n)] || ''; } };
+  return MIXED;
+}
+async function countries(code) {
+  const m = countryRanks();
+  if (!code) return [...m.entries()].map(([cc, x]) => ({ cc, month: x.month, top: x.top, count: x.sites.length }));
+  const x = m.get(String(code).toLowerCase()); return x ? { cc: String(code).toLowerCase(), ...x } : null;
+}
 const atlasStore = createAtlasStore({ url: process.env.MARE_DB_URL, key: process.env.MARE_DB_KEY, secret: process.env.MARE_DB_SECRET });
 import { roleOf } from './atlantis.mjs';
 import { slugOf, NEEDS } from './needs.mjs';
@@ -419,7 +444,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
   Object.assign(api, createAtlantis({ kv, update, emit, resident, allow, api, living, SeaError, clean, strip, rid, now, DAY }));
   Object.assign(api, createLens({ kv, update, api, living, SeaError, allow, clean, strip, now, https, sha, emit, resident, DAY }));
   Object.assign(api, createWeb({ kv, update, now, DAY }));
-  Object.assign(api, createAtlas({ kv, update, now, DAY, allow, SeaError, store: atlasStore, ranks, hunt: async (w) => { const r = route ? await route(w, { limit: 10 }) : []; return (r || []).map((e) => { try { return e.metadata?.publisher || new URL(e.url).hostname; } catch { return null; } }).filter(Boolean); }, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
+  Object.assign(api, createAtlas({ kv, update, now, DAY, allow, SeaError, store: atlasStore, ranks: frontier, countries, hunt: async (w) => { const r = route ? await route(w, { limit: 10 }) : []; return (r || []).map((e) => { try { return e.metadata?.publisher || new URL(e.url).hostname; } catch { return null; } }).filter(Boolean); }, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
   Object.assign(api, createWorks({ url: process.env.MARE_DB_URL, key: process.env.MARE_DB_KEY, secret: process.env.MARE_DB_SECRET, kv, allow, SeaError, clean }));
   Object.assign(api, createBriefs({ kv, update, allow, SeaError, clean, now, DAY, examples: (kind, base) => api.topWorks(kind, base) }));
   Object.assign(api, createEarn({ kv, sea: api, update, allow, SeaError, DAY }));

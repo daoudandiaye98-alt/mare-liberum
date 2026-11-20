@@ -246,5 +246,36 @@ try {
   for (let i = 1; i < lines.length; i++) { const d = (lines[i].split(',')[2] || '').trim().toLowerCase(); if (/^[a-z0-9.-]+\.[a-z]{2,}$/.test(d)) out.push(d); }
   if (out.length > 100000) { writeFileSync('data/ranks.txt.gz', gzipSync(out.join('\n') + '\n', { level: 9 })); console.log(`ranks: ${out.length} domains`); }
 } catch (e) { console.log(`ranks: not read (${e.message}); the Atlas walks its own lists`); }
+// the frontier in every country: the most visited sites per country from the Chrome UX Report (Google, CC BY 4.0), cached monthly by zakird/crux-top-lists;
+// per country the top-1000 group and the first 2000 of the top-10k group; adult sites are left out; at most two hosts per domain
+try {
+  const { createGunzip } = await import('node:zlib'), { Readable } = await import('node:stream');
+  const CC = 'ad ae af ag al am ao ar at au az ba bb bd be bf bg bh bi bj bn bo br bs bt bw by bz ca cd cf cg ch ci cl cm cn co cr cu cv cy cz de dj dk dm do dz ec ee eg er es et fi fj fr ga gb gd ge gh gm gn gq gr gt gw gy hk hn hr ht hu id ie il in iq ir is it jm jo jp ke kg kh km kn kr kw kz la lb lc li lk lr ls lt lu lv ly ma mc md me mg mk ml mm mn mo mr mt mu mv mw mx my mz na ne ng ni nl no np nz om pa pe pg ph pk pl pr ps pt py qa re ro rs ru rw sa sb sc sd se sg si sk sl sm sn so sr ss sv sy sz td tg th tj tl tm tn to tr tt tw tz ua ug us uy uz vc ve vn vu ws xk ye za zm zw'.split(' ');
+  const ADULT = /porn|xxx|xvideo|xnxx|xhamster|(?<!es|sus|middle)sex|hentai|hentas|nude|nudi|nsfw|onlyfans|fansly|chaturbate|stripchat|bongacams|bonga-cams|cam4|camsoda|livejasmin|spankbang|youporn|redtube|tube8|eporner|brazzers|fapello|milf|escort|acompanhantes|erotic|erotik|(^|[.-])ero|darkero|zettai-ero|maturetube|rule34|booru|hanime|camgirl|camwhore|camrip|cameraprive|fetish|bdsm|naked|swinger|jizz|hookup|horny|beeg|tnaflix|motherless|thumbzilla|youjizz|txxx|hclips|vporn|porntrex|missav|javhd|jable|supjav|^jav|jav\.|javdock|javmix|javsek|javsub|javtiful|njavtv|91porn|avgle|lesbian|bokep|desi(?!re|gn)|leak|(?<!you|ru)tube|pinay|kantot|sulasok|(?<!news|\d)18(?!\d)|(?<!\d)69(?!\d)|nudo|hotx|madura|eroge|casino|toto|huren|hoki|petir|naga-|ledak|sorte|bingo|hotxv|hotebony|hotindian|hotpic|noodlemagazine|(^|\.)fans\.|\.fans$|myfans|fatalfans|vide[yiq]|vidkle|vidsey|vidayo|vidayu|ratuvid|saluranvid|dayonvid|indovid|babe|choti|beurette|bfvideo|mms(\.|$)|dropmms|spicymms|momvid|thisvid|thot|videocelebs|xgay|videosx|tamilprint|\.cam$|\.webcam$|(?<!maxx|cinem|brix|ne|scine)xx(?!l)|slot|togel|gacor|toto\d|188|69plus|cair\d/;
+  // public block lists (blocklistproject/Lists, Unlicense): adult and gambling domains; a host is left out when it or a parent domain is listed
+  const BLOCK = new Set();
+  for (const f of ['porn-nl.txt', 'gambling-nl.txt']) { try { const r = await fetch(`https://raw.githubusercontent.com/blocklistproject/Lists/master/alt-version/${f}`, { signal: AbortSignal.timeout(60000) }); if (r.ok) for (const l of (await r.text()).split('\n')) if (l && l[0] !== '#') BLOCK.add(l.trim().toLowerCase()); } catch {} }
+  const blocked = (h) => { const p = h.split('.'); for (let k = 0; k < p.length - 1; k++) if (BLOCK.has(p.slice(k).join('.'))) return true; return false; };
+  console.log(`block lists: ${BLOCK.size} domains`);
+  const baseOf = (h) => { const p = h.split('.'); return p.length > 2 && /^(co|com|ac|gov|org|net|edu|go|or|ne|gob|nic|mil)$/.test(p[p.length - 2]) && p[p.length - 1].length === 2 ? p.slice(-3).join('.') : p.slice(-2).join('.'); };
+  const months = []; for (let i = 1; i <= 4; i++) { const d = new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - i); months.push(`${d.getUTCFullYear()}${String(d.getUTCMonth() + 1).padStart(2, '0')}`); }
+  async function topOf(cc) {
+    for (const month of months) {
+      const ac = new AbortController(), r = await fetch(`https://raw.githubusercontent.com/zakird/crux-top-lists/main/data/country/${cc}/${month}.csv.gz`, { signal: ac.signal, headers: { 'user-agent': 'MareLiberum-Atlas/1.0 (+https://mareliberum.dev/atlas)' } }).catch(() => null);
+      if (!r || !r.ok) continue;
+      const src = Readable.fromWeb(r.body); src.on('error', () => {}); const gz = src.pipe(createGunzip()); gz.on('error', () => {});
+      const top = [], rest = [], per = new Map(); let buf = '', done = false;
+      const add = (o, n) => { let h; try { h = new URL(o).hostname.replace(/^www\d?\./, ''); } catch { return; } if (!/^[a-z0-9.-]+\.[a-z]{2,}$/.test(h) || ADULT.test(h) || blocked(h) || (h.split('.').length > 2 && /\d/.test(h.split('.')[0]))) return; const b = baseOf(h), c = per.get(b) || 0; if (c >= 2) return; per.set(b, c + 1); (n <= 1000 ? top : rest).push(h); };
+      try { for await (const chunk of gz) { buf += chunk.toString('utf8'); const lines = buf.split('\n'); buf = lines.pop(); for (const l of lines) { const [o, rk] = l.split(','); const n = Number(rk); if (!n) continue; if (n > 10000 || rest.length >= 2000) { done = true; break; } add(o, n); } if (done) break; } } catch {}
+      src.destroy(); gz.destroy(); ac.abort();
+      if (top.length) return { month, top, rest };
+    }
+    return null;
+  }
+  const out = {}; let i = 0;
+  await Promise.all(Array.from({ length: 12 }, async () => { while (i < CC.length) { const c = CC[i++]; try { const x = await topOf(c); if (x) out[c] = x; } catch {} } }));
+  const lines = Object.entries(out).map(([c, x]) => `${c}\t${x.month}\t${x.top.length}\t${[...x.top, ...x.rest].join(' ')}`);
+  if (lines.length > 50) { writeFileSync('data/ranks-cc.txt.gz', gzipSync(lines.join('\n') + '\n', { level: 9 })); console.log(`ranks per country: ${lines.length} countries, ${lines.reduce((a, l) => a + l.split(' ').length, 0)} sites`); }
+} catch (e) { console.log(`ranks per country: not read (${e.message})`); }
 writeFileSync('public/build.json', readFileSync('data/build.json'));
 console.log(`sea built: ${ids.length} entries`);

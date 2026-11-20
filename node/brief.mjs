@@ -1,3 +1,4 @@
+import { langInfo, LANG_NAMES, kindsByLexicon } from './lexicon.mjs';
 // Mare Liberum · the Briefs: the missing half of every prompt.
 // People rarely say everything an agent needs: who it is for, how long, in what form, what "good" means, what to check.
 // A brief names the kind of task, lists what the request left out with a sensible default for each, the few questions
@@ -688,6 +689,16 @@ K('dataset', 'Publish a dataset', 'publish a dataset|publish dataset|release a d
   verify: ['Validate every row against the schema'],
 });
 
+// the same slots asked in other languages: a few common words per slot, so a Spanish or Japanese request counts as giving them too
+const MORE = {
+  length: /\d+\s*(palabras|mots|palavras|parole|woorden|słów|kelime|слов|كلمة|كلمات|शब्द|字|語|文字|단어|자|kata|từ|ord|páginas|pages|pagine|stron|sayfa|страниц|صفحة|صفحات|पेज|页|ページ|페이지|halaman|trang|sidor|diapositivas|diapositives|slides|minutos|minutes|minuti|minut|dakika|минут|دقيقة|मिनट|分钟|分|분|menit|phút|frases|phrases|zdań|предложени|句)|(?<!\p{L})(corto|corta|breve|court|courte|curto|kort|krótk|kısa|коротк)|簡潔|简短|짧게|singkat|ngắn/iu,
+  language: /(?<!\p{L})(español|inglés|francés|alemán|français|anglais|allemand|português|inglês|italiano|inglese|engels|angielsk|ingilizce|türkçe|английск|русск|bahasa inggris|tiếng anh|tiếng việt|engelska|svenska)|عربي|الإنجليزية|हिंदी|अंग्रेज़ी|中文|英文|英语|日本語|英語|한국어|영어/iu,
+  audience: /(?<!\p{L})(clientes|clients|lectores|lecteurs|leitores|lettori|lezers|czytelnik|okuyucu|читател|клиент|pelanggan|pembaca|khách hàng|độc giả|kunder|läsare|niños|enfants|crianças|bambini|kinderen|klant|klanten|dzieci|çocuk|дет|anak|trẻ em|barn|principiantes|débutants|iniciantes|principianti|początkując|yeni başlayan|новичк|pemula|người mới|nybörjare|inversores|investisseurs|investidores|investitori|yatırımcı|инвестор)|عملاء|أطفال|مبتدئين|ग्राहक|बच्चों|शुरुआती|客户|读者|孩子|初学者|投资人|顧客|読者|子供|初心者|投資家|고객|독자|아이|초보자|투자자/iu,
+  tone: /(?<!\p{L})(formal|informal|amigable|amical|amigável|amichevole|vriendelijk|przyjazn|samimi|resmi|дружелюб|официальн|ramah|thân thiện|trang trọng|vänlig|divertido|drôle|engraçado|divertente|grappig|zabawn|komik|смешн)|ودي|رسمي|औपचारिक|正式|友好|幽默|丁寧|カジュアル|격식|친근/iu,
+  format: /(?<!\p{L})(tabla|tableau|tabela|tabella|tabel|tablo|таблиц|lista|liste|список|daftar|danh sách|punktlista)|جدول|قائمة|तालिका|सूची|表格|列表|リスト|표|목록/iu,
+  goal: /(?<!\p{L})(para que|pour que|afin de|per far|zodat|żeby|aby|чтобы|agar|để|så att|objetivo|objectif|obiettivo|doel|cel|amaç|цель|tujuan|mục tiêu|mål)(?!\p{L})|كي|لكي|ताकि|为了|目的|ために|위해|목표/iu,
+};
+const slotGiven = (name, raw) => SLOTS[name][0].test(raw) || (MORE[name] ? MORE[name].test(raw) : false);
 const norm = (s) => String(s || '').toLowerCase().replace(/[‘’]/g, "'");
 const isDe = (t) => /[äöüß]/i.test(t) || (t.match(/\b(der|die|das|und|ich|für|mit|ein|eine|einen|nicht|bitte|mein|meine|meinen|unser|unsere|wie|was|soll|schreibe|schreib|erstelle|mach|als|bei|auf|zum|zur|vom|im|ist|sind|oder|auch|noch|nach|wir|uns|dem|den|des|für|über|mir|mich)\b/gi) || []).length >= 2;
 // how strongly a kind is named: longer key phrases weigh more; a key may sit inside a German compound
@@ -721,16 +732,19 @@ export function splitTask(task) {
   return parts.length >= 2 ? parts.slice(0, 8) : [];
 }
 // the brief for a task: the kind, what was left out (with defaults), the questions worth asking, the method, the bar, the checks
-export function briefFor(task, { base = 'https://mareliberum.dev', kind, for: forWhom } = {}) {
+export function briefFor(task, { base = 'https://mareliberum.dev', kind, for: forWhom, lang: langGiven } = {}) {
   const raw = String(task || '').trim().slice(0, 2000), t = norm(raw);
-  const ranked = LIB.map((k) => ({ k, ...scoreKind(t, k) })).filter((x) => x.s > 0).sort((a, b) => b.s - a.s);
+  const li = LANG_NAMES[langGiven] ? { lang: langGiven, sure: true } : langInfo(raw), lang = li.lang === 'en' && isDe(raw) ? 'de' : li.lang;
+  // requests in other languages: the core words of each kind in 16 more languages count too
+  const lex = lang === 'en' || lang === 'de' ? {} : kindsByLexicon(raw);
+  const ranked = LIB.map((k) => { const r = scoreKind(t, k); return { k, s: r.s + (lex[k.kind] || 0) * (k.w ?? 1), hit: r.hit }; }).filter((x) => x.s > 0).sort((a, b) => b.s - a.s);
   const k = (kind && briefKind(kind)) || ranked[0]?.k || null;
-  const de = isDe(raw);
+  const langName = LANG_NAMES[lang] || lang, known = lang !== 'en' || li.sure;
   const slots = k ? k.slots : ['audience', 'goal', 'length', 'format', 'language', 'source'];
   const given = [], missing = [];
   for (const sl of slots) {
     const name = typeof sl === 'string' ? sl : sl.name, def = SLOTS[name]; if (!def) continue;
-    if (def[0].test(raw)) given.push(name);
+    if (slotGiven(name, raw)) given.push(name);
     else missing.push({ slot: name, assume: (typeof sl === 'object' && sl.assume) || def[1], ask: (typeof sl === 'object' && sl.ask) || def[2] });
   }
   const preset = PRESETS[String(forWhom || '').toLowerCase()];
@@ -743,7 +757,8 @@ export function briefFor(task, { base = 'https://mareliberum.dev', kind, for: fo
     task: raw || undefined,
     kind: k?.kind || 'general', title: k?.title || 'General task',
     outcome: k?.outcome || 'A finished result the person can use as it is, with assumptions stated.',
-    respondIn: de ? 'German (the request is in German)' : 'the language of the request',
+    lang: known ? lang : undefined,
+    respondIn: known ? `${langName} (the request is in ${langName})` : 'the language of the request',
     given, missing,
     ask, worthKnowing: k?.ask || [], askNote: 'Ask these only if the person is there and a wrong guess would be costly; otherwise go on with the assumptions and list them.',
     steps: k?.steps || ['Restate the goal in one line.', 'List what you assume where the request is silent.', 'Gather what you need from sources you read now.', 'Do the work in one pass.', 'Check it against the bar below.'],
@@ -835,7 +850,7 @@ export function reviewDraft(task, draft, opts = {}) {
   if (/\d\s*[+\-×x*\/÷%]\s*\d/.test(d) || wrong.length) add(!wrong.length, 'arithmetic checks out', wrong.slice(0, 4).join('; '), 'Recompute these numbers in code.');
   const hidden = d.match(/[​-‏‪-‮⁠-⁤﻿]/g) || [];
   add(!hidden.length, 'no hidden characters', hidden.length ? `${hidden.length} invisible or direction-changing characters` : '', 'Remove invisible characters; they can hide text.');
-  if (/German/.test(b.respondIn) && words > 30) { const de = isDe(d); add(de, 'in the language of the request', de ? '' : 'the request is German, the draft is not', 'Write it in German.'); }
+  if (b.lang && words > 30) { const dl = langInfo(d).lang, got = dl === 'en' && isDe(d) ? 'de' : dl, same = got === b.lang; const name = LANG_NAMES[b.lang] || b.lang; add(same, 'in the language of the request', same ? '' : `the request is in ${name}, the draft is in ${LANG_NAMES[got] || got}`, `Write it in ${name}.`); }
   const score = Math.round((passed.length / Math.max(1, passed.length + issues.length)) * 100);
   return { kind: b.kind, title: b.title, words, score, issues, passed, bar: b.bar, verify: b.verify, note: 'These checks are mechanical; read the bar and judge the substance yourself.' };
 }
@@ -849,7 +864,7 @@ export function createBriefs({ kv, update, allow, SeaError, clean, now, DAY = 86
     async brief(a = {}) {
       const task = clean ? clean(a.task ?? a.q ?? a.need ?? a.prompt, 2000) : String(a.task ?? a.q ?? '').slice(0, 2000);
       if (!task && !a.kind) return { what: 'the missing half of a prompt: give a task in words and get what it left out, the method, the quality bar and the checks', kinds: BRIEF_KINDS.map((k) => k.kind) };
-      const b = briefFor(task, { base: a.base, kind: a.kind, for: a.for });
+      const b = briefFor(task, { base: a.base, kind: a.kind, for: a.for, lang: a.lang });
       const [tips, ex, out] = await Promise.all([this.briefTips(b.kind).catch(() => []), examples ? examples(b.kind, a.base, task).catch(() => []) : [], kv.get(`brief:out:${b.kind}`).catch(() => null)]);
       // how work of this kind went for agents who used the brief: accepted or sent back
       if (out && (out.ok || out.no)) b.outcomes = { accepted: out.ok || 0, rejected: out.no || 0, rate: Math.round(((out.ok || 0) / ((out.ok || 0) + (out.no || 0))) * 100), lessons: (out.notes || []).slice(0, 5) };

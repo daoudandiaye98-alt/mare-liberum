@@ -9,7 +9,7 @@ export const ROADMAP = [
   [4, 'A', '"Brief first" skill for Claude Code, Codex and Cursor', 'live', 'plugins/brief-first/SKILL.md in the repo'],
   [5, 'A', 'AGENTS.md block "brief first" for repositories', 'live', 'integrations/AGENTS.md'],
   [6, 'A', 'Brief pages for frequent phrasings of tasks', 'live', '/brief/<kind>/<phrase>, in the sitemap'],
-  [7, 'A', 'Briefs in German, then Spanish, French, Portuguese, Turkish', 'next', 'German page frame live; full translations follow'],
+  [7, 'A', 'Briefs in every language', 'live', 'language of any request recognised (40+ languages), kind of work found in 18, answers in the request’s language; 1,573 phrasing pages in 16 languages; the brief text itself stays plain English for agents'],
   [8, 'A', 'SearchAction in the structured data of the home page', 'live', ''],
   [9, 'A', 'llms-full.txt with every brief in one document', 'live', '/llms-full.txt'],
   [10, 'A', 'Briefs, review, works and earn as skills in the A2A agent card', 'live', ''],
@@ -51,7 +51,7 @@ export const ROADMAP = [
   [43, 'D', 'API discovery (OpenAPI, GraphQL)', 'live', 'OpenAPI, Swagger, GraphQL links'],
   [44, 'D', 'Words nobody found steer the crawler', 'live', 'recorded on /atlas.json; the open index names sites for them, which are read first'],
   [45, 'D', 'Changes on a site reported', 'live', 'search link, answer, robots.txt, blocked agents, grade'],
-  [46, 'D', 'Regional atlases (DE, EU)', 'next', ''],
+  [46, 'D', 'Regional atlases for every country', 'live', '192 countries: the most visited sites per country (Chrome UX Report) walked in turn with the global list; /atlas/countries'],
   [47, 'D', 'Atlas snapshots as open data', 'live', 'branch atlas-data; Zenodo needs an account'],
   // E · earn
   [48, 'E', 'Live: the open catalog of paid agent services', 'live', 'Circle Discovery API'],

@@ -135,6 +135,15 @@ export function createAtlas(h) {
     },
     async atlasList(n) { if (n === 'live') return ((await kv.get('atlas:recent')) || []).slice(0, 20000); const t = await data(`l/${Number(n) || 0}.txt`); return t ? t.split('\n').filter(Boolean) : []; },
     async atlasLists() { const st = await data('stats.json'); return Number(st?.lists) || 0; },
+    // the Atlas per country: the most visited sites there (Chrome UX Report) and how far the map has come with them
+    async atlasCountries() { return (await h.countries?.().catch(() => null)) || []; },
+    async atlasCountry(code, limit = 240) {
+      const c = await h.countries?.(code).catch(() => null); if (!c) return null;
+      const top = c.sites.slice(0, Math.min(c.top || 1000, 1000)), look = top.slice(0, Math.min(Number(limit) || 240, 400));
+      const known = await storedMany(look, false).catch(() => ({}));
+      const sites = look.map((d) => { const p = known[d]; return { site: d, mapped: !!(p && p.s !== 0), grade: p?.g ?? null, search: p ? !!p.q : null, at: p?.at || null }; });
+      return { cc: c.cc, month: c.month, top: c.top, count: c.sites.length, looked: look.length, mapped: sites.filter((x) => x.mapped).length, sites, source: 'Chrome UX Report (Google, CC BY 4.0) via github.com/zakird/crux-top-lists' };
+    },
     async atlasWanted() { const w = (await kv.get('atlas:wanted')) || []; const r = (await kv.get('atlas:recent')) || []; return [...new Set([...w, ...r])]; },
     // a few sites with every tide: the ones agents asked for and the most visited, so the map grows even between the weekly runs
     // the frontier: sites agents asked for, the most visited, then the open rank list of the web (a million domains), in order;
@@ -160,7 +169,11 @@ export function createAtlas(h) {
       } catch {}
       await kv.set('atlas:retry', (rs + 1) % 4096, 400 * DAY);
       // then the frontier down the rank list, the most visited first; what the map already holds fresh is passed over quickly
-      let cur = Number(await kv.get('atlas:frontier')) || wanted.length + list.length;
+      // the mixed frontier (global list and every country in turn) keeps its own place; it starts where the global list stood
+      const fkey = rk?.mixed ? 'atlas:frontier2' : 'atlas:frontier';
+      let cur = Number(await kv.get(fkey)) || 0;
+      if (!cur && rk?.mixed) { const old = Number(await kv.get('atlas:frontier')) || 0, off = wanted.length + list.length; cur = old > off ? off + 2 * (old - off) : off; }
+      if (!cur) cur = wanted.length + list.length;
       const onMap = await snapSet().catch(() => null); // every site on the weekly map, while that map is under 30 days old
       while (len && pick.length < n && Date.now() - t0 < 9000) {
         const look = [], idx = []; let i = 0;
@@ -169,7 +182,7 @@ export function createAtlas(h) {
         for (let j = 0; j < look.length; j++) { const d = look[j], p = known[d]; if (!p || !fresh(p, 30) || (p.s === 0 && !fresh(p, 2))) pick.push(d); if (pick.length >= n) { used = idx[j] + 1; break; } }
         cur = (cur + Math.max(used, 1)) % len;
       }
-      await kv.set('atlas:frontier', cur || 1, 400 * DAY);
+      await kv.set(fkey, cur || 1, 400 * DAY);
       const done = await Promise.all(pick.map((d) => Promise.race([profileSite(d), new Promise((r) => setTimeout(() => r(null), 15000))]).then(async (p) => { if (p) await remember(p); return p ? { site: d, grade: p.g, search: !!p.q } : null; }).catch(() => null)));
       return done.filter(Boolean);
     },

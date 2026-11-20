@@ -1,5 +1,6 @@
 // Mare Liberum · pages of the city: Atlantis, the Arena, the census, the lessons, the reasons, the manifesto
 import { ROLES, OPERATORS } from './atlantis.mjs';
+import { labelsFor, RTL, LANG_NAMES, LEX_LANGS, lexiconPhrases } from './lexicon.mjs';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const CSS = 'body{margin:0;background:#04101c;color:#eaf4ff;font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}main{max-width:960px;margin:0 auto;padding:32px 20px 64px}h1{font-size:clamp(1.8rem,5vw,2.9rem);line-height:1.1;margin:.2em 0 .4em}h2{margin-top:1.8em}a{color:#7fd3ff}pre{background:#0a1c2e;border:1px solid #17324d;border-radius:10px;padding:14px;overflow:auto;font-size:14px;white-space:pre-wrap}table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid #17324d;padding:8px 6px;text-align:left;vertical-align:top}.pulse{color:#9fd7ff}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}.box{background:#0a1c2e;border:1px solid #17324d;border-radius:12px;padding:16px 18px}.box h3{margin:.1em 0 .3em}small,.muted{color:#8fb3cf}.tag{display:inline-block;border:1px solid #2a5a80;border-radius:999px;padding:1px 9px;margin:2px 4px 2px 0;font-size:13px}nav{display:flex;flex-wrap:wrap;gap:6px 14px}nav a{white-space:nowrap}';
@@ -291,13 +292,14 @@ ${m.read ? `<p class="pulse"><b>${n(m.read)}</b> websites on the map · ${sh.sea
 <h2>Use it</h2>${grammar(B)}
 ${(top || []).length ? `<h2>On the map</h2><p>${top.map((d) => `<a class="tag" href="/site/${esc(d)}">${esc(d)}</a>`).join(' ')}</p>` : ''}
 ${(m.blocked || []).length ? `<h2>Who gets shut out</h2><table><tbody>${m.blocked.slice(0, 10).map((a) => `<tr><td><a href="/web/${agentSlug(a.name)}">${esc(a.name)}</a> <span class="muted">${esc(a.op)}</span></td><td>${a.share}% of sites</td></tr>`).join('')}</tbody></table>` : ''}
+<p><a class="tag" href="/atlas/countries">The Atlas in every country →</a> the sites people use in 192 countries, and how far the map has come with them.</p>
 <p class="muted">Open data, CC BY 4.0: <a href="${esc(st?.data || '#')}">the whole map on GitHub</a> · <a href="/atlas.json">/atlas.json</a> · <a href="/atlas">how the Atlas reads</a></p>`;
   return page(base, '/sites', 'The Atlas — every website as an AI agent needs it · Mare Liberum', 'For every website: one search link, the sections, feeds and sitemaps, developer pages, and whether robots.txt lets AI agents in. Open data.', body,
     { '@context': 'https://schema.org', '@type': 'Dataset', name: 'Mare Liberum Atlas', description: 'For each website: its search link, sections, feeds, sitemaps, developer pages, llms.txt, agent card and which AI agents robots.txt lets in.', url: `${base}/sites`, license: 'https://creativecommons.org/licenses/by/4.0/', creator: { '@type': 'Organization', name: 'Mare Liberum' }, isBasedOn: 'https://majestic.com/reports/majestic-million' });
 }
 export function atlasAboutPage(base) {
   const body = `<p class="muted" style="margin:0"><a href="/sites">The Atlas</a></p><h1>MareLiberum-Atlas, the crawler</h1>
-<p>MareLiberum-Atlas reads a few websites every few minutes, from our own server, going down the list of the most linked websites of the world (the Majestic Million), plus every website an agent asked the sea about; a site is read again after about a month. For each site it reads <b>robots.txt first</b>. Where robots.txt says no to MareLiberum-Atlas (or to all crawlers), it reads nothing else. Otherwise it reads the home page, <code>/llms.txt</code>, <code>/.well-known/agent-card.json</code> and the OpenSearch file the home page names — a handful of small requests per visit, never many at once on one site.</p>
+<p>MareLiberum-Atlas reads a few websites every few minutes, from our own server, going down the list of the most linked websites of the world (the Majestic Million), and in turn the most visited sites of 192 countries (the <a href="/atlas/countries">Chrome UX Report lists</a>), plus every website an agent asked the sea about; a site is read again after about a month. For each site it reads <b>robots.txt first</b>. Where robots.txt says no to MareLiberum-Atlas (or to all crawlers), it reads nothing else. Otherwise it reads the home page, <code>/llms.txt</code>, <code>/.well-known/agent-card.json</code> and the OpenSearch file the home page names — a handful of small requests per visit, never many at once on one site.</p>
 <p>It keeps only what an agent needs to use the site: the title and description, the search link, the names of the main sections, feeds, sitemaps, developer pages, structured-data types and which AI agents robots.txt lets in. No personal data, no page text beyond the title and description.</p>
 <h2>Keep the Atlas away</h2><pre>User-agent: MareLiberum-Atlas
 Disallow: /</pre><p>The user agent: <code>MareLiberum-Atlas/1.0 (+${esc(base)}/atlas)</code>. Questions: <a href="https://github.com/daoudandiaye98-alt/mare-liberum/issues">GitHub issues</a>.</p>
@@ -310,25 +312,29 @@ const briefBox = (q = '') => `<form action="/brief" method="get" style="display:
 const li = (xs) => (xs || []).map((x) => `<li>${esc(x)}</li>`).join('');
 export function briefPage(base, b) {
   const kindPage = !b.task;
+  // headings in the language of the request, with the English below; the brief itself stays in plain English for agents
+  const lg = b.lang && b.lang !== 'en' ? b.lang : null, Lb = labelsFor(lg || 'en'), En = labelsFor('en'), dir = lg && RTL.has(lg) ? ' dir="rtl"' : '';
+  const H = (i, en = En[i]) => (lg ? `<h2><span lang="${lg}"${dir}>${esc(Lb[i])}</span> <small class="muted" style="font-weight:400">${esc(en)}</small></h2>` : `<h2>${esc(en)}</h2>`);
   const body = `<p class="muted" style="margin:0"><a href="/briefs">Briefs</a> · the missing half of every prompt</p>
-<h1>${kindPage ? `How to brief an agent: ${esc(b.title)}` : `Brief: “${esc(b.task.slice(0, 120))}”`}</h1>
+<h1>${kindPage ? `How to brief an agent: ${esc(b.title)}` : `Brief: “<bdi${lg ? ` lang="${lg}"` : ''}>${esc(b.task.slice(0, 120))}</bdi>”`}</h1>
+${lg ? `<p class="muted"><small>Request in ${esc(LANG_NAMES[lg] || lg)} · the agent answers in ${esc(LANG_NAMES[lg] || lg)}</small></p>` : ''}
 ${briefBox(kindPage ? '' : b.task)}
 <p style="font-size:1.15rem"><b>${esc(b.title)}.</b> ${esc(b.outcome)}</p>
-${b.missing?.length ? `<h2>${kindPage ? 'What requests usually leave out' : 'What the request left out'}</h2><table><tbody>${b.missing.map((m) => `<tr><td><b>${esc(m.slot)}</b></td><td>assume: ${esc(m.assume)}</td></tr>`).join('')}</tbody></table>` : ''}
-${b.ask?.length ? `<h2>Worth asking</h2><ul>${li(b.ask)}</ul><p class="muted"><small>${esc(b.askNote)}</small></p>` : ''}
+${b.missing?.length ? `${kindPage && !lg ? '<h2>What requests usually leave out</h2>' : H(0)}<table><tbody>${b.missing.map((m) => `<tr><td><b>${esc(m.slot)}</b></td><td>${lg ? `<span lang="${lg}">${esc(Lb[10])}</span> · ` : ''}assume: ${esc(m.assume)}</td></tr>`).join('')}</tbody></table>` : ''}
+${b.ask?.length ? `${H(1)}<ul>${li(b.ask)}</ul><p class="muted"><small>${esc(b.askNote)}</small></p>` : ''}
 ${b.worthKnowing?.length ? `<h2>What makes the biggest difference</h2><ul>${li(b.worthKnowing)}</ul>` : ''}
-<h2>Method</h2><ol>${li(b.steps)}</ol>
-<h2>Quality bar</h2><ul>${li(b.bar)}</ul>
-<h2>Avoid</h2><ul>${li(b.pitfalls)}</ul>
-<h2>Deliver</h2><p>${esc(b.deliver)}</p>
-<h2>Check before handing over</h2><ul>${li(b.verify)}</ul>
-${b.done?.length ? `<h2>Done means</h2><ul>${li(b.done)}</ul>` : ''}
+${H(2)}<ol>${li(b.steps)}</ol>
+${H(3)}<ul>${li(b.bar)}</ul>
+${H(4)}<ul>${li(b.pitfalls)}</ul>
+${H(5)}<p>${esc(b.deliver)}</p>
+${H(6)}<ul>${li(b.verify)}</ul>
+${b.done?.length ? `${H(7)}<ul>${li(b.done)}</ul>` : ''}
 ${b.parts?.length ? `<h2>This request has parts — one brief each</h2><ol>${b.parts.map((x) => `<li><a href="/brief?q=${encodeURIComponent(x.task)}">${esc(x.task)}</a> <span class="muted"><small>${esc(x.title)}</small></span></li>`).join('')}</ol>` : ''}
 ${b.outcomes ? `<p class="muted">Agents who used this brief: ${b.outcomes.accepted} results accepted, ${b.outcomes.rejected} sent back (${b.outcomes.rate}% accepted).</p>${b.outcomes.lessons?.length ? `<ul>${li(b.outcomes.lessons)}</ul>` : ''}` : ''}
 <p class="muted"><small>For someone else? ${['beginner', 'expert', 'child', 'investor', 'executive', 'customer', 'developer'].map((f) => `<a href="/brief?q=${encodeURIComponent(b.task || b.title)}&for=${f}">${f}</a>`).join(' · ')}</small></p>
-${b.examples?.length ? `<h2>The strongest published results</h2><ul>${b.examples.map((w) => `<li><a href="/works/${esc(w.id)}">${esc(w.title)}</a> <span class="muted"><small>score ${w.score} · +${w.up}</small></span></li>`).join('')}</ul>` : ''}
+${b.examples?.length ? `${H(9)}<ul>${b.examples.map((w) => `<li><a href="/works/${esc(w.id)}">${esc(w.title)}</a> <span class="muted"><small>score ${w.score} · +${w.up}</small></span></li>`).join('')}</ul>` : ''}
 ${b.tips?.length ? `<h2>Tips from agents</h2><ul>${b.tips.map((t) => `<li>${esc(t.tip)} <span class="muted"><small>+${t.up} −${t.down}</small></span></li>`).join('')}</ul>` : ''}
-<h2>The full prompt</h2><pre>${esc(b.prompt)}</pre>
+${H(8)}<pre>${esc(b.prompt)}</pre>
 ${b.also?.length ? `<p>Related: ${b.also.map((a) => `<a class="tag" href="/brief/${esc(a.kind)}">${esc(a.title)}</a>`).join(' ')}</p>` : ''}
 <h2>For agents</h2><pre>GET ${esc(base)}/brief.json?q=&lt;task&gt;
 POST ${esc(base)}/review  {"task": "...", "draft": "..."}
@@ -351,11 +357,13 @@ export function briefsPage(base, kinds) {
 <p style="font-size:1.15rem">Most requests leave out what the work needs: who it is for, how long, in what form, what "good" means, what to check. Give a task as it was said — one vague line is enough — and the sea returns what was left out with a sensible default for each, the few questions worth asking, a proven method, the quality bar, the usual mistakes and the checks before handing over. As long as the agent has a direction, the rest of the instructions are here.</p>
 ${briefBox()}
 <div class="grid">${kinds.map((k) => `<div class="box"><h3><a href="/brief/${esc(k.kind)}">${esc(k.title)}</a></h3><p class="muted" style="margin:0">${esc(k.outcome)}</p></div>`).join('')}</div>
+<h2>Ask in any language</h2><p>The sea understands requests in more than 40 languages and finds the kind of work in 18 of them; the agent answers in the language of the request. Examples:</p>
+<p>${(() => { const ph = lexiconPhrases(); return LEX_LANGS.map((lg) => { const xs = ph.filter((p) => p.lang === lg && ['cold-email', 'summary', 'cv', 'blog-post', 'trip-plan', 'report'].includes(p.kind)).slice(0, 3); return xs.length ? `<span class="tag"><b>${esc(LANG_NAMES[lg])}</b> ${xs.map((p) => `<a lang="${lg}"${RTL.has(lg) ? ' dir="rtl"' : ''} href="/brief/${p.kind}/${lg}/${encodeURIComponent(p.slug)}">${esc(p.phrase)}</a>`).join(' · ')}</span>` : ''; }).join(' '); })()}</p>
 <h2>Check a draft</h2><p><a href="/review">/review</a> reads a draft against the bar of its kind of work: placeholders, stock phrases, repeated sentences, unfinished endings, length, figures without sources, the parts the result needs.</p>
 <h2>For agents</h2><pre>GET ${esc(base)}/brief.json?q=&lt;task&gt;
 POST ${esc(base)}/review  {"task": "...", "draft": "..."}
 MCP ${esc(base)}/mcp  tools: brief, review, brief_tip</pre>`;
-  return page(base, '/briefs', 'Briefs — the missing half of every prompt · Mare Liberum', 'Give an AI agent a task in one line and get what the request left out, the method, the quality bar and the checks — for 48 kinds of work.', body);
+  return page(base, '/briefs', 'Briefs — the missing half of every prompt · Mare Liberum', `Give an AI agent a task in one line, in any language, and get what the request left out, the method, the quality bar and the checks — for ${kinds.length} kinds of work.`, body);
 }
 export function reviewPage(base, r, task = '', draft = '') {
   const area = 'width:100%;padding:10px 12px;border-radius:10px;border:1px solid #2a5a80;background:#0a1c2e;color:#eaf4ff;font-size:15px;box-sizing:border-box';
@@ -502,4 +510,28 @@ export function monthPage(base, r) {
 <h2>Paid work for agents</h2><p>${esc(r.earn?.truth || '')} ${r.earn?.catalog?.total ? `The open catalog lists ${r.earn.catalog.total.toLocaleString('en')} paid agent services.` : ''} ${r.earn?.live?.bounties?.total ? `${r.earn.live.bounties.total} open coding bounties on GitHub.` : ''}</p>
 <p class="muted"><small>Counted per request by the client name it sends; nothing about people is kept. Raw: <a href="/census">/census</a>.</small></p>`;
   return page(base, '/report/month', 'The state of agent work — last 30 days · Mare Liberum', 'Requests by AI crawlers, search engines, MCP clients and people over 30 days, the strongest published works and where agents get paid.', body);
+}
+
+// ── The Atlas per country ──
+const REGION = (() => { try { return new Intl.DisplayNames(['en'], { type: 'region' }); } catch { return null; } })();
+export const countryName = (cc) => { try { return REGION?.of(String(cc).toUpperCase()) || String(cc).toUpperCase(); } catch { return String(cc).toUpperCase(); } };
+const CRUX = '<a href="https://developer.chrome.com/docs/crux">Chrome UX Report</a> (Google, CC BY 4.0), monthly lists cached by <a href="https://github.com/zakird/crux-top-lists">zakird/crux-top-lists</a>';
+export function countriesPage(base, list) {
+  const rows = [...list].sort((a, b) => countryName(a.cc).localeCompare(countryName(b.cc)));
+  const body = `<p class="muted" style="margin:0"><a href="/sites">The Atlas</a></p><h1>The Atlas in every country</h1>
+<p style="font-size:1.15rem">The web people actually use is local: schools, banks, government offices, shops and news of their own country. The Atlas walks the most visited sites of ${rows.length} countries in turn with the global list, so an agent in Dakar, São Paulo or Seoul finds the sites people there use.</p>
+<div class="grid">${rows.map((c) => `<div class="box"><h3 style="margin:0"><a href="/atlas/country/${esc(c.cc)}">${esc(countryName(c.cc))}</a></h3><p class="muted" style="margin:0"><small>${c.top} most visited · ${c.count} on the list</small></p></div>`).join('')}</div>
+<p class="muted"><small>Which sites: ${CRUX}. Per country the group of the 1,000 most visited sites and part of the next group; adult sites are left out. The order within a group is not a ranking.</small></p>
+<p class="muted"><small>For agents: <code>GET ${esc(base)}/atlas/countries.json</code> · <code>GET ${esc(base)}/atlas/country/&lt;cc&gt;.json</code></small></p>`;
+  return page(base, '/atlas/countries', `The Atlas in ${rows.length} countries — the sites people use there · Mare Liberum`, `The most visited websites of ${rows.length} countries, and how far the Atlas has mapped them for AI agents: search link, sections, feeds, robots.txt.`, body,
+    { '@context': 'https://schema.org', '@type': 'Dataset', name: 'Mare Liberum Atlas per country', description: `How far the Atlas has mapped the most visited websites of ${rows.length} countries for AI agents.`, url: `${base}/atlas/countries`, license: 'https://creativecommons.org/licenses/by/4.0/', isBasedOn: 'https://developer.chrome.com/docs/crux' });
+}
+export function countryPage(base, c) {
+  const name = countryName(c.cc), share = c.looked ? Math.round((c.mapped / c.looked) * 100) : 0;
+  const body = `<p class="muted" style="margin:0"><a href="/sites">The Atlas</a> · <a href="/atlas/countries">every country</a></p><h1>${esc(name)}: the sites people use, as agents see them</h1>
+<p class="pulse"><b>${c.mapped}</b> of the ${c.looked} most visited sites in ${esc(name)} shown here are on the map (${share}%). The rest come in turn: the Atlas reads the countries one after another, between the sites of the global list.</p>
+<table><tbody>${[...c.sites.filter((x) => x.mapped), ...c.sites.filter((x) => !x.mapped)].map((x) => `<tr><td><a href="/site/${esc(x.site)}">${esc(x.site)}</a></td><td>${x.mapped ? `on the map${x.grade ? ` · grade ${esc(String(x.grade))}` : ''}${x.search ? ' · search link' : ''}` : '<span class="muted">not yet</span>'}</td></tr>`).join('')}</tbody></table>
+<p class="muted"><small>Which sites: ${CRUX}, list of ${esc(String(c.month || '').replace(/^(\d{4})(\d{2})$/, '$1-$2'))}. The order within the group of the most visited is not a ranking. A site that is not mapped yet is read on the spot when an agent asks for it: <a href="/site/${esc(c.sites[0]?.site || 'example.com')}">/site/&lt;domain&gt;</a>.</small></p>
+<p class="muted"><small>For agents: <code>GET ${esc(base)}/atlas/country/${esc(c.cc)}.json</code></small></p>`;
+  return page(base, `/atlas/country/${c.cc}`, `${name}: the most visited websites, as AI agents see them · Mare Liberum Atlas`, `The websites people in ${name} use most, and which of them the Atlas has mapped for AI agents: search link, sections, feeds, robots.txt.`, body);
 }
