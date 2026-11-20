@@ -10,7 +10,7 @@ import { safeHost } from '../node/check.mjs';
 import { TOP } from '../node/web.mjs';
 
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i > 0 ? process.argv[i + 1] : d; };
-const JOB = Number(arg('job', 0)), JOBS = Number(arg('jobs', 1)), LIMIT = Number(arg('limit', 1000000)), CONC = Number(arg('conc', 96)), OUT = arg('out', `part-${JOB}.ndjson.gz`);
+const JOB = Number(arg('job', 0)), JOBS = Number(arg('jobs', 1)), LIMIT = Number(arg('limit', 1000000)), FROM = Number(arg('from', 0)), CONC = Number(arg('conc', 96)), OUT = arg('out', `part-${JOB}.ndjson.gz`);
 const BUDGET = Number(arg('minutes', 170)) * 60000, SEA = arg('sea', 'https://mareliberum.dev'), UA = 'MareLiberum-Atlas/1.0 (+https://mareliberum.dev/atlas)';
 const started = Date.now();
 
@@ -21,10 +21,9 @@ const seen = new Map();
 const add = (raw, rank) => { const h = safeHost(String(raw || '').trim()); if (!h) return; const d = siteOf(h); if (!seen.has(d)) seen.set(d, rank || 0); };
 const CSV = arg('csv', ''), HOME_MAX = Number(arg('home-max', 300000));
 const csv = CSV ? (await import('node:fs')).readFileSync(CSV, 'utf8') : (await text('https://downloads.majestic.com/majestic_million.csv') || await text('http://downloads.majestic.com/majestic_million.csv'));
-for (const line of csv.split('\n').slice(1)) { const c = line.split(','); if (c.length > 3) { const rank = Number(c[0]); if (rank > 0 && rank <= LIMIT) add(c[2], rank); } }
+for (const line of csv.split('\n').slice(1)) { const c = line.split(','); if (c.length > 3) { const rank = Number(c[0]); if (rank > FROM && rank <= LIMIT) add(c[2], rank); } }
 console.log(`majestic: ${seen.size} sites`);
-for (const h of TOP) add(h, 0);
-for (const h of (await text(`${SEA}/atlas/wanted.txt`)).split('\n')) add(h, 0);
+if (!FROM) { for (const h of TOP) add(h, 0); for (const h of (await text(`${SEA}/atlas/wanted.txt`)).split('\n')) add(h, 0); }
 const all = [...seen.entries()];
 const mine = all.filter((_, i) => i % JOBS === JOB);
 console.log(`job ${JOB}/${JOBS}: ${mine.length} of ${all.length} sites`);
