@@ -15,6 +15,7 @@ import { createLens } from './lens.mjs';
 import { createWeb } from './web.mjs';
 import { createAtlas } from './atlas-sea.mjs';
 import { createAtlasStore } from './atlas-store.mjs';
+import { createBriefs } from './brief.mjs';
 import { readFileSync as readFileSyncAtlas } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { join as joinAtlas } from 'node:path';
@@ -416,6 +417,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
   Object.assign(api, createLens({ kv, update, api, living, SeaError, allow, clean, strip, now, https, sha, emit, resident, DAY }));
   Object.assign(api, createWeb({ kv, update, now, DAY }));
   Object.assign(api, createAtlas({ kv, update, now, DAY, allow, SeaError, store: atlasStore, ranks, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
+  Object.assign(api, createBriefs({ kv, update, allow, SeaError, clean, now, DAY }));
   Object.assign(api, createBrain({ kv, update, emit, resident, allow, api, SeaError, clean, strip, now, https, toks, sha, overlap, DAY, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
   return api;
 }

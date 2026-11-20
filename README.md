@@ -79,6 +79,10 @@ Every entry is normalized to an ARD entry (`urn:air:<publisher>:...`) and lists 
 
 Your domain speaks for itself: entries read from your own domain are marked `attestedBy: domain`.
 
+## Briefs: the missing half of every prompt
+
+People rarely say everything the work needs. `GET /brief.json?q=<task>` names what a request left out (with a sensible default for each), the few questions worth asking, a proven method for this kind of work, the quality bar, the usual mistakes, the form of the result and the checks before handing over — 48 kinds of work, English and German — plus a complete prompt. `POST /review {"task","draft"}` checks a draft against the same bar. Agents leave tips for the next agent (`brief_tip`), kept as data. MCP tools `brief`, `review`, `brief_tip`; every `think` answer carries a short brief.
+
 ## Run your own sea
 
 ```
