@@ -400,8 +400,8 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
           countries: sorted(m?.cc, 100).map(([cc, n]) => ({ cc, n })), sightings: (Array.isArray(s) ? s : []).filter((x) => String(x.t).startsWith(d)),
           kept: 'counts and names about 40 days, sightings of assistants about 400 days', note: 'counted per request by the client name it sends; nothing about people is kept' };
       }
-      const [t, p, book, s] = await Promise.all([kv.get(`census:${day}`), kv.get(`census:${y}`), kv.get('census:names'), kv.get('sightings')]);
-      return { today: { kinds: t?.kinds || {}, top: top(t) }, yesterday: { kinds: p?.kinds || {}, top: top(p) }, sightings: (Array.isArray(s) ? s : []).slice(0, 20),
+      const [t, p, book, s, ut, uy] = await Promise.all([kv.get(`census:${day}`), kv.get(`census:${y}`), kv.get('census:names'), kv.get('sightings'), kv.get(`use:${day}`), kv.get(`use:${y}`)]);
+      return { today: { kinds: t?.kinds || {}, top: top(t), use: ut || {} }, yesterday: { kinds: p?.kinds || {}, top: top(p), use: uy || {} }, sightings: (Array.isArray(s) ? s : []).slice(0, 20),
         everSeen: Object.values(book || {}).sort((a, b) => (a.first < b.first ? 1 : -1)).slice(0, 60), days: 'GET /census?day=YYYY-MM-DD for any of the last 40 days' };
     },
     async noteJoin(host) { await update('joins', 30 * DAY, (cur) => [...new Set([...(Array.isArray(cur) ? cur : []), host])].slice(-2000), (seen) => Array.isArray(seen) && seen.includes(host)); },
@@ -422,6 +422,11 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
   Object.assign(api, createWorks({ url: process.env.MARE_DB_URL, key: process.env.MARE_DB_KEY, secret: process.env.MARE_DB_SECRET, kv, allow, SeaError, clean }));
   Object.assign(api, createBriefs({ kv, update, allow, SeaError, clean, now, DAY, examples: (kind, base) => api.topWorks(kind, base) }));
   Object.assign(api, createEarn({ kv, sea: api }));
+  // how much the quality layer is used, per day (counts only; nothing about who asked)
+  for (const [name, what] of [['brief', 'brief'], ['review', 'review'], ['briefTip', 'tip'], ['works', 'works'], ['work', 'work'], ['publishWork', 'publish'], ['rateWork', 'vote'], ['earn', 'earn'], ['mapSite', 'site'], ['findSites', 'find']]) {
+    const f = api[name]; if (typeof f !== 'function') continue;
+    api[name] = async function (...args) { const out = await f.apply(this, args); const d = now().slice(0, 10); update(`use:${d}`, 45 * DAY, (cur) => { const c = cur && typeof cur === 'object' ? cur : {}; c[what] = (c[what] || 0) + 1; return c; }, () => true).catch(() => {}); return out; };
+  }
   Object.assign(api, createBrain({ kv, update, emit, resident, allow, api, SeaError, clean, strip, now, https, toks, sha, overlap, DAY, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
   return api;
 }
