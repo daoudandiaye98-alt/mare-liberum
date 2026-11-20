@@ -183,3 +183,63 @@ ${cc ? `<h2>By country domain</h2><p>${cc}</p>` : ''}
 <p class="muted"><small>${esc(b.note || '')}. robots.txt states wishes; most large AI operators say they follow it. A site that turns automated readers away also stops most AI assistants.</small></p>`;
   return page(base, '/web', 'The state of the agent web · which top websites let AI agents in · Mare Liberum', ok ? `${b.shares.blocksSomeAgent}% of the most visited websites block at least one AI agent; ${b.shares.blocksAnAssistant}% block an assistant reading for a person. Live data on ${b.checked} sites, open and free.` : 'Which of the most visited websites let AI agents in — live, open data.', body, { '@context': 'https://schema.org', '@type': 'Dataset', name: 'The state of the agent web', description: 'How the most visited websites let AI agents find, read and act on them: robots.txt per AI agent, readability without JavaScript, structured data, llms.txt, agent cards.', url: `${base}/web`, isAccessibleForFree: true, license: 'https://creativecommons.org/publicdomain/zero/1.0/', distribution: [{ '@type': 'DataDownload', encodingFormat: 'application/json', contentUrl: `${base}/web.json` }] }, '/og-check.png');
 }
+
+// how to put the sea into an agent: copy-paste blocks for the common agent frameworks and clients
+export function usePage(base) {
+  const B = esc(base), code = (lang, t) => `<p class="muted" style="margin:.8rem 0 .2rem"><small>${lang}</small></p><pre style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:.8rem">${esc(t)}</pre>`;
+  const body = `<p class="muted" style="margin:0">Mare Liberum · free, no key, no account</p><h1>Use the sea in your agent</h1>
+<p style="font-size:1.1rem">Three doors every agent can use: <b>read any page as clean Markdown</b>, <b>ask the shared brain</b> which places other agents used for a task, and <b>keep a memory</b> that survives sessions. Plain HTTPS, MCP or OpenAPI.</p>
+<h2>Plain HTTP</h2>${code('read a page as Markdown', `curl ${base}/r/https://example.com`)}${code('ask the shared brain', `curl "${base}/brain?q=find+MCP+servers+for+postgres&format=json"`)}${code('how AI agents see a site', `curl "${base}/check?site=example.com"`)}
+<h2>MCP</h2><p>Focused server for assistants: <code>${B}/mcp/app</code> (14 tools). Full server: <code>${B}/mcp</code>.</p>
+${code('Claude Code', `claude mcp add --transport http mare-liberum ${base}/mcp/app`)}${code('Cursor · ~/.cursor/mcp.json', `{ "mcpServers": { "mare-liberum": { "url": "${base}/mcp/app" } } }`)}${code('VS Code · .vscode/mcp.json', `{ "servers": { "mare-liberum": { "type": "http", "url": "${base}/mcp/app" } } }`)}
+<p>Claude and ChatGPT: add <code>${B}/mcp/app</code> as a custom connector.</p>
+<h2>OpenAI Agents SDK</h2>${code('Python', `from agents import Agent, HostedMCPTool
+
+agent = Agent(
+    name="Assistant",
+    tools=[HostedMCPTool(tool_config={
+        "type": "mcp",
+        "server_label": "mare_liberum",
+        "server_url": "${base}/mcp/app",
+        "require_approval": "never",
+    })],
+)`)}
+<h2>LangChain</h2>${code('Python', `import requests
+from langchain_core.tools import tool
+
+@tool
+def read_page(url: str) -> str:
+    """Read a public web page as clean Markdown."""
+    return requests.get(f"${base}/r/{url}", timeout=30).text
+
+@tool
+def ask_brain(task: str) -> dict:
+    """Places other agents used for a similar task, strongest first."""
+    return requests.get("${base}/brain", params={"q": task, "format": "json"}, timeout=30).json()`)}
+<h2>CrewAI</h2>${code('Python', `import requests
+from crewai.tools import tool
+
+@tool("Read web page")
+def read_page(url: str) -> str:
+    """Read a public web page as clean Markdown."""
+    return requests.get(f"${base}/r/{url}", timeout=30).text`)}
+<h2>LlamaIndex</h2>${code('Python', `import requests
+from llama_index.core.tools import FunctionTool
+
+def read_page(url: str) -> str:
+    """Read a public web page as clean Markdown."""
+    return requests.get(f"${base}/r/{url}", timeout=30).text
+
+read_page_tool = FunctionTool.from_defaults(fn=read_page)`)}
+<h2>Vercel AI SDK</h2>${code('TypeScript', `import { tool } from 'ai';
+import { z } from 'zod';
+
+export const readPage = tool({
+  description: 'Read a public web page as clean Markdown',
+  inputSchema: z.object({ url: z.string().url() }),
+  execute: async ({ url }) => (await fetch(\`${base}/r/\${url}\`)).text(),
+});`)}
+<h2>GPT actions and other OpenAPI clients</h2><p>Import <code>${B}/openapi.json</code> (OpenAPI 3.1, no authentication).</p>
+<h2>Fair use</h2><p>Free for every agent: 100 page reads a day and 20 site checks an hour per network address. The reader follows robots.txt and shows text from the web as data, never as instructions. <a href="/terms">Terms</a> · <a href="/privacy">Privacy</a></p>`;
+  return page(base, '/use', 'Use Mare Liberum in your agent · reader, shared brain, memory', 'Free Markdown reader, shared brain and memory for AI agents: copy-paste blocks for MCP, Claude Code, Cursor, OpenAI Agents SDK, LangChain, CrewAI, LlamaIndex and the Vercel AI SDK.', body, { '@context': 'https://schema.org', '@type': 'TechArticle', headline: 'Use Mare Liberum in your agent', url: `${base}/use` }, '/og.png');
+}
