@@ -551,7 +551,7 @@ K('finance-info', 'Money, tax or investment questions (information, not advice)'
 });
 
 const norm = (s) => String(s || '').toLowerCase().replace(/[‘’]/g, "'");
-const isDe = (t) => /[äöüß]/i.test(t) || (t.match(/\b(der|die|das|und|ich|für|mit|ein|eine|nicht|bitte|mein|meine|unser|wie|was|soll|schreibe|erstelle|mach)\b/gi) || []).length >= 2;
+const isDe = (t) => /[äöüß]/i.test(t) || (t.match(/\b(der|die|das|und|ich|für|mit|ein|eine|einen|nicht|bitte|mein|meine|meinen|unser|unsere|wie|was|soll|schreibe|schreib|erstelle|mach|als|bei|auf|zum|zur|vom|im|ist|sind|oder|auch|noch|nach|wir|uns|dem|den|des|für|über|mir|mich)\b/gi) || []).length >= 2;
 // how strongly a kind is named: longer key phrases weigh more; a key may sit inside a German compound
 function scoreKind(t, k) {
   let s = 0; const hit = [];

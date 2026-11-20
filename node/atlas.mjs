@@ -159,7 +159,7 @@ export function expand(p, base = 'https://mareliberum.dev') {
   const agents = AGENTS.map((a) => ({ name: a.name, op: a.op, role: a.role, allowed: p.rb === 'wall' ? null : !blocked.has(a.name) }));
   const nav = (p.nv || []).map(([name, path]) => ({ name, url: /^https?:/.test(path) ? path : `https://${host}${path}` }));
   return strip({
-    site: p.d, rank: p.rk, mapped: p.at, status: p.s, home: p.s ? `https://${p.f || p.d}` : undefined, title: p.t, description: p.ds, language: p.lg,
+    site: p.d, rank: p.rk, mapped: p.at, status: p.s, home: p.s ? `https://${p.f || p.d}` : undefined, title: p.t && entities(p.t), description: p.ds && entities(p.ds), language: p.lg,
     search: p.q ? strip({ template: p.q, from: p.qf === 'opensearch' ? "the site's OpenSearch description" : "the site's search form", example: p.q.replace('{q}', 'example'), robotsDisallowsFor: p.qb && (p.qb[0] === '*' ? 'all assistants and AI search crawlers' : p.qb) }) : undefined,
     readable: p.w != null ? { words: p.w, withoutJavaScript: !p.sh } : undefined, structuredData: p.ld, sections: nav.length ? nav : undefined,
     feeds: p.fd, sitemaps: p.sm, developers: p.dv, llmsTxt: p.ll ? `https://${host}/llms.txt` : undefined, agentCard: p.ac ? { name: p.ac.n, skills: p.ac.k } : undefined,
