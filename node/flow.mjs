@@ -347,6 +347,16 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
         if (!(await kv.get(k))) { await kv.set(k, 1, 3600); await emit({ type: 'whale', name, text: `${name} read ${c.path} for a person`, path: c.path }); }
       }
     },
+    // doors that agents knock on and the sea does not have yet: the path only (no query), per day — so the sea can open them
+    async missed(path) {
+      const day = now().slice(0, 10), p = String(path || '').split('?')[0].slice(0, 80); if (!p || p === '/') return;
+      await kv.set(`misses:${day}`, ((cur) => { const m = cur && typeof cur === 'object' ? cur : {}; if (m[p] || Object.keys(m).length < 300) m[p] = (m[p] || 0) + 1; return m; })(await kv.get(`misses:${day}`)), 8 * DAY);
+    },
+    async misses() {
+      const day = now().slice(0, 10), y = new Date(Date.now() - DAY * 1000).toISOString().slice(0, 10);
+      const [t, p] = await Promise.all([kv.get(`misses:${day}`), kv.get(`misses:${y}`)]), top = (m) => Object.entries(m || {}).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([path, n]) => ({ path, n }));
+      return { what: 'paths agents asked for that the sea does not have (yet)', today: top(t), yesterday: top(p) };
+    },
     async census() {
       const day = now().slice(0, 10), y = new Date(Date.now() - DAY * 1000).toISOString().slice(0, 10);
       const [t, p, book] = await Promise.all([kv.get(`census:${day}`), kv.get(`census:${y}`), kv.get('census:names')]);
