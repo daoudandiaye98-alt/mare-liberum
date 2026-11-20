@@ -53,6 +53,20 @@ export function createAtlas(h) {
   }
   // a site mapped by the sea joins the words, so /find knows it before the next weekly map
   async function remember(p) {
+    // what changed since the last visit: the search link, the answer, the robots.txt stance, the grade
+    try {
+      const old = await stored(p.d);
+      if (old && old.at !== p.at) {
+        const ch = [];
+        if ((old.q || '') !== (p.q || '')) ch.push(p.q ? (old.q ? 'search link changed' : 'search link appeared') : 'search link gone');
+        if (old.s !== p.s) ch.push(`answer ${old.s} → ${p.s}`);
+        if ((old.rb || '') !== (p.rb || '')) ch.push(`robots.txt ${old.rb || 'read'} → ${p.rb || 'read'}`);
+        if (JSON.stringify(old.bl || []) !== JSON.stringify(p.bl || [])) ch.push('blocked agents changed');
+        if (old.g && p.g && old.g !== p.g) ch.push(`grade ${old.g} → ${p.g}`);
+        if (ch.length) p.ch = [{ at: String(p.at).slice(0, 10), what: ch }, ...(old.ch || [])].slice(0, 5);
+        else if (old.ch) p.ch = old.ch;
+      }
+    } catch {}
     await kv.set(`atlas:${p.d}`, p, 45 * DAY);
     await update('atlas:recent', 60 * DAY, (cur) => [p.d, ...(Array.isArray(cur) ? cur.filter((x) => x !== p.d) : [])].slice(0, 20000), () => true);
     const pr = p.s === 200 ? prior(p) : 0;
@@ -101,6 +115,9 @@ export function createAtlas(h) {
       const ranked = [...score].map(([d, x]) => [d, x.s * Math.pow(x.hit / ws.length, 2), x.words]).sort((a, b) => b[1] - a[1]).slice(0, limit);
       const sites = (await Promise.all(ranked.map(async ([d, s, words]) => { const p = await stored(d); if (!p) return null; const x = expand(p, base());
         return { site: d, title: x.title, description: x.description, search: x.search?.template, example: x.search ? x.search.template.replace('{q}', encodeURIComponent(q)) : undefined, readable: x.readable?.withoutJavaScript, blocks: (x.agents || []).filter((a) => a.allowed === false && a.role !== 'training').map((a) => a.name), grade: x.grade, rank: x.rank, matched: words, map: `${base()}/site/${d}` }; }))).filter(Boolean);
+      // words agents searched for and found little: the Atlas keeps them, and the frontier looks for their sites
+      const found = sites.filter(Boolean).length;
+      if (found < 3) update('atlas:hungry', 30 * DAY, (cur) => { const c = cur && typeof cur === 'object' ? cur : {}; for (const w of ws) c[w] = (c[w] || 0) + 1; const top = Object.entries(c).sort((a2, b2) => b2[1] - a2[1]).slice(0, 300); return Object.fromEntries(top); }, () => true).catch(() => {});
       return { q, words: ws, sites, how: 'Each site comes with its own search link: put your words where {q} stands and read the result with the reader (/r/<link>). The full map of a site: /site/<domain>.', more: `${base()}/sites` };
     },
     // the website behind an entry of the open index, if the Atlas has its map (for a link from the entry page)
@@ -113,7 +130,8 @@ export function createAtlas(h) {
     // how many sites the map holds and what the web lets agents do
     async atlasStats() {
       const [st, recent, own] = await Promise.all([data('stats.json'), kv.get('atlas:recent'), store ? store.count().catch(() => null) : null]);
-      return { map: st || { note: 'the first weekly map has not been published yet' }, mappedLive: own ?? (recent || []).length, store: store ? 'the sea maps sites on its own server, every few minutes, and keeps them in its own database' : undefined, data: `https://github.com/${REPO}/tree/atlas-data`, how: { site: `${base()}/site/<domain>`, find: `${base()}/find?q=<words>`, crawler: `${base()}/atlas` } };
+      const hungry = await kv.get('atlas:hungry').catch(() => null);
+      return { hungry: hungry ? Object.entries(hungry).slice(0, 30).map(([w, n]) => ({ word: w, asked: n })) : undefined, map: st || { note: 'the first weekly map has not been published yet' }, mappedLive: own ?? (recent || []).length, store: store ? 'the sea maps sites on its own server, every few minutes, and keeps them in its own database' : undefined, data: `https://github.com/${REPO}/tree/atlas-data`, how: { site: `${base()}/site/<domain>`, find: `${base()}/find?q=<words>`, crawler: `${base()}/atlas` } };
     },
     async atlasList(n) { if (n === 'live') return ((await kv.get('atlas:recent')) || []).slice(0, 20000); const t = await data(`l/${Number(n) || 0}.txt`); return t ? t.split('\n').filter(Boolean) : []; },
     async atlasLists() { const st = await data('stats.json'); return Number(st?.lists) || 0; },
@@ -122,6 +140,11 @@ export function createAtlas(h) {
     // the frontier: sites agents asked for, the most visited, then the open rank list of the web (a million domains), in order;
     // a site is read again after 30 days, one that did not answer after two
     async atlasStep(n = 6, list = TOP) {
+      // words agents found little for: the open index names sites for them, which the Atlas then reads first
+      try {
+        const hungry = Object.keys((await kv.get('atlas:hungry')) || {}), hc = Number(await kv.get('atlas:huntcursor')) || 0;
+        if (hungry.length && h.hunt) { const w = hungry[hc % hungry.length]; await kv.set('atlas:huntcursor', hc + 1, 30 * DAY); for (const d of ((await h.hunt(w).catch(() => [])) || []).slice(0, 5)) await want(d); }
+      } catch {}
       const wanted = ((await kv.get('atlas:wanted')) || []).slice(-200), rk = (await h.ranks?.().catch(() => null)) || null;
       const fallback = rk?.length ? null : await atlas.atlasList(0);
       const len = wanted.length + list.length + (rk ? rk.length : fallback.length);

@@ -87,7 +87,35 @@ export function homeExtras(html, pageUrl, host) {
     const t = text(a[2]).toLowerCase(), href = attr(`<a ${a[1]}>`, 'href'), u = href && abs(href, pageUrl); if (!u || !sameSite(u, host)) continue;
     if (/^(api|apis|api docs|api reference|developers?|developer portal|developer docs|for developers|entwickler|développeurs|desarrolladores)$/.test(t) || /^(developers?|api|dev)\./.test(u.hostname) || /^\/(developers?|api-docs|docs\/api)(\/|$)/.test(u.pathname)) { dev = u.href; break; }
   }
-  return { feeds, opensearch, canonical, nav, dev, search: searchForm(h, pageUrl, host) };
+  // forms an agent can use: what each is for, where it posts (no field values are kept)
+  const forms = [];
+  for (const f of h.matchAll(/<form\b([^>]*)>([\s\S]{0,20000}?)<\/form>/gi)) {
+    const head = `<form ${f[1]}>`, inner = f[2], names = [...inner.matchAll(/<(?:input|textarea|select)\b[^>]*>/gi)].map((x) => `${attr(x[0], 'type') || ''} ${attr(x[0], 'name') || ''} ${attr(x[0], 'id') || ''}`.toLowerCase());
+    const has = (re) => names.some((n) => re.test(n)), act = attr(head, 'action'), u = act ? abs(act, pageUrl) : null;
+    const k = has(/password/) ? 'login' : /<textarea/i.test(inner) || has(/message|nachricht|comment/) ? 'contact' : has(/\bdate\b|checkin|check-in|arrival|anreise|datum|guests|personen/) ? 'booking' : has(/email|e-mail|newsletter/) && names.length <= 4 ? 'newsletter' : has(/\b(q|query|search|s|keyword|suche)\b/) ? 'search' : null;
+    if (!k) continue;
+    const kind = k === 'newsletter' && /signup|sign-up|register|join|registrier/i.test(act || '') ? 'signup' : k;
+    if (forms.some((x) => x[0] === kind && x[1] === (u ? (sameSite(u, host) && u.hostname === new URL(pageUrl).hostname ? u.pathname + u.search : u.href) : ''))) continue;
+    forms.push([kind, u && sameSite(u, host) ? (u.hostname === new URL(pageUrl).hostname ? u.pathname + u.search : u.href) : u ? u.href : '', (attr(head, 'method') || 'get').toLowerCase().slice(0, 4)]);
+    if (forms.length >= 6) break;
+  }
+  // structured data a local or paid task needs: opening hours, price range, whether content is free
+  let local = null, paywall = false;
+  for (const m of h.matchAll(/<script[^>]+type=["']application\/ld\+json["'][^>]*>([\s\S]{0,60000}?)<\/script>/gi)) {
+    let j; try { j = JSON.parse(m[1].trim()); } catch { continue; }
+    const walk = (o, d = 0) => { if (!o || typeof o !== 'object' || d > 5) return; if (Array.isArray(o)) { o.forEach((x) => walk(x, d + 1)); return; }
+      if (o.isAccessibleForFree === false || o.isAccessibleForFree === 'False' || o.isAccessibleForFree === 'false') paywall = true;
+      const oh = o.openingHours || (Array.isArray(o.openingHoursSpecification) ? o.openingHoursSpecification.map((x) => `${[].concat(x.dayOfWeek || []).map((dd) => String(dd).split('/').pop().slice(0, 2)).join(',')} ${x.opens || ''}-${x.closes || ''}`) : null);
+      if ((oh || o.priceRange) && !local) local = { t: String([].concat(o['@type'] || '')[0]).slice(0, 40) || undefined, oh: oh ? [].concat(oh).map(String).slice(0, 7) : undefined, pr: o.priceRange ? String(o.priceRange).slice(0, 20) : undefined };
+      for (const v of Object.values(o)) if (v && typeof v === 'object') walk(v, d + 1); };
+    walk(j);
+  }
+  // machine doors: OpenAPI, Swagger, GraphQL pages the home page links to
+  const api = [];
+  for (const a of h.matchAll(/<a\b([^>]*)>/gi)) { const href = attr(`<a ${a[1]}>`, 'href'); if (!href || !/openapi|swagger|graphql|api-docs|apidocs|\/api\/?$|redoc/i.test(href)) continue; const u = abs(href, pageUrl); if (u && !api.includes(u.href)) api.push(u.href); if (api.length >= 4) break; }
+  const auth = forms.some((f) => f[0] === 'login') || /<a\b[^>]*>\s*(sign in|log ?in|anmelden|einloggen|mein konto|my account|connexion|iniciar sesión)\s*<\/a>/i.test(h);
+  if (!paywall && /(subscribe to (continue|read)|abonnieren sie|jetzt abonnieren, um|paywall|nur für abonnenten|for subscribers only)/i.test(h)) paywall = true;
+  return { feeds, opensearch, canonical, nav, dev, search: searchForm(h, pageUrl, host), forms, local, api, auth, paywall };
 }
 
 // ---------------------------------------------------------------- one site
@@ -125,6 +153,7 @@ export async function profileSite(input, { rank, fetch: get = grab, dns = public
     if (pg.title) p.t = entities(pg.title).slice(0, 160); if (pg.description) p.ds = entities(pg.description).slice(0, 300); if (pg.lang) p.lg = String(pg.lang).slice(0, 12);
     p.w = pg.words; if (pg.shell || pg.words < 40) p.sh = 1; if (pg.jsonld.length) p.ld = pg.jsonld.slice(0, 8); if (pg.noindex || /noindex/i.test(home.robotsTag || '')) p.ni = 1;
     if (ex.feeds.length) p.fd = ex.feeds; if (ex.nav.length) p.nv = ex.nav; if (ex.dev) p.dv = ex.dev;
+    if (ex.forms?.length) p.fm = ex.forms; if (ex.local) p.lc = ex.local; if (ex.api?.length) p.ap = ex.api; if (ex.auth) p.au = 1; if (ex.paywall) p.pw = 1;
     if (ex.opensearch) { const os = new URL(ex.opensearch); if (sameSite(os, host) && usFor(os.pathname)) { const x = await get(os.href, opt(40_000)); const t = x.status === 200 ? openSearchTemplate(x.body, host) : null; if (t) { p.q = t; p.qf = 'opensearch'; } } }
     if (!p.q && ex.search) { p.q = ex.search; p.qf = 'form'; }
     // robots.txt may ask agents to stay off the search path; say who it names
@@ -166,9 +195,28 @@ export function expand(p, base = 'https://mareliberum.dev') {
     robots: p.rb === 'wall' ? 'robots.txt did not answer: the site turns automated readers away' : p.rb === 'none' ? 'no robots.txt: everything allowed' : 'robots.txt read',
     atlas: p.us === 0 ? 'robots.txt asks the Atlas not to read this site; only robots.txt was read' : undefined, noindex: p.ni ? true : undefined,
     agents, score: p.sc, grade: p.g,
+    // ready paths for the most common tasks on this site
+    recipes: recipesOf(p, host, nav),
+    forms: (p.fm || []).length ? p.fm.map(([kind, action, method]) => ({ kind, action: action ? (/^https?:/.test(action) ? action : `https://${host}${action}`) : undefined, method })) : undefined,
+    local: p.lc ? strip({ type: p.lc.t, openingHours: p.lc.oh, priceRange: p.lc.pr }) : undefined,
+    apis: p.ap, signIn: p.au ? 'some features need an account' : undefined, paywall: p.pw ? 'some content is for subscribers only' : undefined,
+    changes: (p.ch || []).length ? p.ch : undefined,
     use: strip({ read: `${base}/r/https://${host}/`, check: `${base}/check/${p.d}`, searchThroughReader: p.q ? `${base}/r/${p.q.replace('{q}', '<words>')}` : undefined }),
     source: 'read from what the site publishes (robots.txt, the home page and the files it names) by MareLiberum-Atlas; open data, CC BY 4.0',
   });
+}
+function recipesOf(p, host, nav) {
+  const pick = (re) => nav.find((x) => re.test(`${x.name} ${x.url}`))?.url;
+  const form = (k) => (p.fm || []).find((f) => f[0] === k);
+  const r = {
+    search: p.q ? p.q : undefined,
+    cart: pick(/\b(cart|basket|warenkorb|bag|panier|carrito)\b/i),
+    contact: pick(/\b(contact|kontakt|impressum|support|hilfe|help)\b/i) || (form('contact') ? `form → ${form('contact')[1] || 'this page'}` : undefined),
+    account: pick(/\b(log ?in|sign ?in|account|konto|anmelden|my\b)/i) || (form('login') ? `form → ${form('login')[1] || 'this page'}` : undefined),
+    booking: form('booking') ? `form → ${form('booking')[1] || 'this page'}` : pick(/\b(book|buchen|reserv|tickets?)\b/i),
+    newsletter: form('newsletter') ? `form → ${form('newsletter')[1] || 'this page'}` : undefined,
+  };
+  return Object.values(r).some(Boolean) ? r : undefined;
 }
 function strip(o) { for (const k of Object.keys(o)) { const v = o[k]; if (v == null || v === '' || (Array.isArray(v) && !v.length) || (typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length)) delete o[k]; } return o; }
 
@@ -180,6 +228,11 @@ export function siteMarkdown(x) {
   const no = (x.agents || []).filter((a) => a.allowed === false).map((a) => a.name);
   L.push(`**Agents:** ${no.length ? `robots.txt blocks ${no.join(', ')}` : x.robots.startsWith('robots.txt did not') ? x.robots : 'none of the 18 known agents is blocked'}`);
   if (x.sections) L.push('', '## Sections', ...x.sections.map((s) => `- [${s.name}](${s.url})`));
+  if (x.recipes) L.push('', '## Ready paths', ...Object.entries(x.recipes).filter(([, v]) => v).map(([k, v]) => `- ${k}: ${v}`));
+  if (x.local) L.push('', `**Local:** ${[x.local.type, x.local.openingHours && `opening hours ${x.local.openingHours.join('; ')}`, x.local.priceRange && `price range ${x.local.priceRange}`].filter(Boolean).join(' · ')}`);
+  if (x.apis) L.push(`**Machine doors:** ${x.apis.join(' · ')}`);
+  if (x.signIn || x.paywall) L.push(`**Limits:** ${[x.signIn, x.paywall].filter(Boolean).join(' · ')}`);
+  if (x.changes) L.push('', '## Changes seen', ...x.changes.map((c) => `- ${c.at}: ${c.what.join(', ')}`));
   const more = [['Feeds', x.feeds], ['Sitemaps', x.sitemaps], ['Developers', x.developers && [x.developers]], ['llms.txt', x.llmsTxt && [x.llmsTxt]]].filter(([, v]) => v?.length);
   if (more.length) L.push('', '## Files', ...more.map(([k, v]) => `- ${k}: ${v.join(' · ')}`));
   if (x.agentCard) L.push(`- Agent card: ${x.agentCard.name || 'present'}${x.agentCard.skills ? ` (${x.agentCard.skills} skills)` : ''}`);
