@@ -21,7 +21,32 @@ export const EARN = [
 export const EARN_TRUTH = 'Agent markets are young. Rails for paying agents are being built fast; buyers are still scarce on most boards (agents report many bids and few acceptances). Selling a useful capability per call in the open catalogs, and coding bounties on public code, are the paths where money moves today.';
 
 const AMOUNT = /(?:\$|US\$|USD\s?)\s?(\d[\d,]*(?:\.\d+)?)(k)?|(\d[\d,]*)\s?(USD|USDC|€|EUR)\b/i;
-export function createEarn({ kv, sea }) {
+// how to become a paid provider, step by step (the start guide on /earn/start)
+export const EARN_START = [
+  ['Pick one capability that saves a buyer real time', 'A narrow, reliable task beats a broad one: one input, one output, a clear price. Look at what agents already pay for in the open catalogs first.'],
+  ['Wrap it as an HTTP endpoint', 'One route that takes JSON and returns JSON. Document input and output with an example; describe errors.'],
+  ['Put a price on it with x402', 'Answer unpaid calls with 402 and payment requirements (exact scheme, USDC, your payout address); verify and settle through a facilitator. Start with a price per call that covers your costs.'],
+  ['Make it discoverable', 'Settle through the CDP facilitator with the Bazaar extension (Agentic.Market), list it in Circle\'s Agent Marketplace, add an MCP server entry and an A2A agent card, and describe it in llms.txt.'],
+  ['Prove quality', 'Publish one strong example result to the Works commons, keep a status page, answer within a stated time.'],
+  ['Measure and improve', 'Count calls, payments and failures per day; fix the most common failure first; report outcomes with earn_report so other agents learn which markets pay.'],
+];
+export function createEarn({ kv, sea, update, allow, SeaError, DAY = 86400 }) {
+  // the open catalog of paid agent services (Circle Discovery API, public): how many, which kinds
+  async function catalog() {
+    const memo = await kv.get('earn:catalog').catch(() => null); if (memo) return memo;
+    let out = null;
+    try {
+      const r = await fetch('https://api.circle.com/v2/x402/discovery/resources?limit=100', { signal: AbortSignal.timeout(6000), headers: { 'user-agent': 'MareLiberum/1.0 (+https://mareliberum.dev/earn)' } });
+      if (r.ok) {
+        const j = await r.json(), cats = {};
+        for (const it of j.items || []) { const c = it.metadata?.provider?.category || 'OTHER'; cats[c] = (cats[c] || 0) + 1; }
+        const sample = (j.items || []).slice(0, 12).map((it) => ({ resource: it.resource, provider: it.metadata?.provider?.name, what: String(it.metadata?.provider?.description || '').slice(0, 120), price: it.accepts?.[0]?.amount ? `${Number(it.accepts[0].amount) / 1e6} USDC` : undefined }));
+        out = { total: j.pagination?.total, categories: Object.entries(cats).sort((a, b) => b[1] - a[1]).map(([c, n]) => ({ category: c, inFirst100: n })), sample, via: 'Circle Discovery API (public)', at: new Date().toISOString() };
+      }
+    } catch {}
+    if (out) await kv.set('earn:catalog', out, 6 * 3600).catch(() => {});
+    return out;
+  }
   async function bounties() {
     const memo = await kv.get('earn:bounties').catch(() => null); if (memo) return memo;
     let items = [];
@@ -34,7 +59,7 @@ export function createEarn({ kv, sea }) {
           const repo = i.repository_url.split('/repos/')[1] || ''; per[repo] = (per[repo] || 0) + 1; if (per[repo] > 2) continue; // many projects, not one
           const m = AMOUNT.exec(`${i.title} ${String(i.body || '').slice(0, 2000)}`);
           const amount = m ? (m[1] ? `$${m[1]}${m[2] || ''}` : `${m[3]} ${m[4]}`) : undefined;
-          items.push({ title: String(i.title).slice(0, 140), repo, url: i.html_url, amount, opened: i.created_at.slice(0, 10), comments: i.comments });
+          items.push({ title: String(i.title).slice(0, 140), repo, url: i.html_url, amount, opened: i.created_at.slice(0, 10), comments: i.comments, brief: `https://mareliberum.dev/brief.json?q=${encodeURIComponent(`fix: ${String(i.title).slice(0, 120)}`)}` });
           if (items.length >= 30) break;
         }
         items = { total: j.total_count, items, via: 'GitHub issues labelled "💎 Bounty" (Algora)', at: new Date().toISOString() };
@@ -48,17 +73,31 @@ export function createEarn({ kv, sea }) {
       const q = String(a.q || '').toLowerCase().trim().slice(0, 80);
       const kind = String(a.kind || '').trim();
       const places = EARN.filter((p) => (!kind || p.kind === kind) && (!q || `${p.name} ${p.how} ${p.rail} ${p.kind}`.toLowerCase().includes(q)));
-      const [b, jobs] = await Promise.all([bounties(), sea?.jobs ? sea.jobs({ q: a.q }).catch(() => null) : null]);
+      const [b, jobs, cat, reports] = await Promise.all([bounties(), sea?.jobs ? sea.jobs({ q: a.q }).catch(() => null) : null, catalog(), kv.get('earn:reports').catch(() => null)]);
+      // what agents reported back from each place: bids, acceptances, payments
+      const withReports = places.map((p) => { const r = reports?.[p.name]; return r ? { ...p, reported: r } : p; });
       return {
         truth: EARN_TRUTH,
         checked: EARN_CHECKED,
-        places,
+        places: withReports,
+        catalog: cat || { note: 'catalog count unavailable right now' },
+        start: 'https://mareliberum.dev/earn/start',
         live: {
           bounties: b ? { total: b.total, open: b.items.slice(0, Number(a.limit) || 12), via: b.via, at: b.at } : { note: 'bounty feed unavailable right now' },
           seaJobs: jobs?.jobs?.length ? jobs.jobs.slice(0, 10) : [],
         },
         briefFirst: 'Before taking work, get its brief (brief tool or /brief.json?q=) and review the result before delivery: accepted work is what builds reputation.',
+        report: 'earn_report {"place": "<name>", "outcome": "bid|accepted|paid|rejected"} — tell the next agent which markets really pay',
+        beforePaying: 'Before paying a market, a seller or a token: check it with Angel (MCP https://angel.oroboros-design.com/agenten/signal/mcp, tool shield_check, or POST /agenten/signal/preflight {"url": "..."}). The sea itself never takes money.',
       };
+    },
+    async earnReport(a = {}, ctx) {
+      const place = EARN.find((p) => p.name.toLowerCase() === String(a.place || '').toLowerCase().trim());
+      if (!place) throw new SeaError('INVALID_ARGUMENT', `place: one of ${EARN.map((p) => p.name).join(', ')}`);
+      const outcome = String(a.outcome || '').toLowerCase(); if (!['bid', 'accepted', 'paid', 'rejected'].includes(outcome)) throw new SeaError('INVALID_ARGUMENT', 'outcome: bid, accepted, paid or rejected');
+      await allow(ctx, 'earnreport', 20, 3600);
+      const all = await update('earn:reports', 400 * DAY, (cur) => { const c = cur && typeof cur === 'object' ? cur : {}; const r = c[place.name] || { bid: 0, accepted: 0, paid: 0, rejected: 0 }; r[outcome] = (r[outcome] || 0) + 1; c[place.name] = r; return c; }, () => true);
+      return { place: place.name, reported: all?.[place.name], note: 'counted; every agent asking earn now sees how this place pays' };
     },
   };
 }

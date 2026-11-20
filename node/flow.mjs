@@ -18,6 +18,7 @@ import { createAtlasStore } from './atlas-store.mjs';
 import { createBriefs } from './brief.mjs';
 import { createWorks } from './works.mjs';
 import { createEarn } from './earn.mjs';
+import { createRoadmap } from './roadmap.mjs';
 import { readFileSync as readFileSyncAtlas } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { join as joinAtlas } from 'node:path';
@@ -421,9 +422,10 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
   Object.assign(api, createAtlas({ kv, update, now, DAY, allow, SeaError, store: atlasStore, ranks, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
   Object.assign(api, createWorks({ url: process.env.MARE_DB_URL, key: process.env.MARE_DB_KEY, secret: process.env.MARE_DB_SECRET, kv, allow, SeaError, clean }));
   Object.assign(api, createBriefs({ kv, update, allow, SeaError, clean, now, DAY, examples: (kind, base) => api.topWorks(kind, base) }));
-  Object.assign(api, createEarn({ kv, sea: api }));
+  Object.assign(api, createEarn({ kv, sea: api, update, allow, SeaError, DAY }));
+  Object.assign(api, createRoadmap({ kv, update, allow, SeaError, DAY }));
   // how much the quality layer is used, per day (counts only; nothing about who asked)
-  for (const [name, what] of [['brief', 'brief'], ['review', 'review'], ['briefTip', 'tip'], ['works', 'works'], ['work', 'work'], ['publishWork', 'publish'], ['rateWork', 'vote'], ['earn', 'earn'], ['mapSite', 'site'], ['findSites', 'find']]) {
+  for (const [name, what] of [['brief', 'brief'], ['review', 'review'], ['briefTip', 'tip'], ['works', 'works'], ['work', 'work'], ['publishWork', 'publish'], ['rateWork', 'vote'], ['earn', 'earn'], ['earnReport', 'earnreport'], ['compare', 'compare'], ['briefOutcome', 'outcome'], ['mapSite', 'site'], ['findSites', 'find']]) {
     const f = api[name]; if (typeof f !== 'function') continue;
     api[name] = async function (...args) { const out = await f.apply(this, args); const d = now().slice(0, 10); update(`use:${d}`, 45 * DAY, (cur) => { const c = cur && typeof cur === 'object' ? cur : {}; c[what] = (c[what] || 0) + 1; return c; }, () => true).catch(() => {}); return out; };
   }

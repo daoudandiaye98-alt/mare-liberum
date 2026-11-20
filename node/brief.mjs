@@ -550,6 +550,144 @@ K('finance-info', 'Money, tax or investment questions (information, not advice)'
   need: 'official tax',
 });
 
+K('video-prompt', 'AI video prompt', 'video prompt|ki-video|ai video|sora|veo|kling|runway|pika|text to video|image to video|generate a video|video generieren|clip generieren', {
+  outcome: 'A clip that shows the intended motion, camera and mood on the first or second try.',
+  slots: [slot('goal', 'where the clip will be used (platform, aspect ratio, length in seconds)'), slot('tone', 'the mood, light and style in named terms'), 'format', 'count'],
+  ask: ['Where will the clip run (aspect ratio, seconds, sound)?', 'Is there a start image or a reference for the look?'],
+  steps: ['Subject and action first: who does what, where.', 'Camera: shot size, movement (dolly, pan, handheld), lens feel.', 'Time: what happens at the start, middle and end of the clip.', 'Look: light, colour, film stock or render style; what to avoid.', 'Generate 2–4 takes; change one thing at a time.'],
+  bar: ['One clear action per shot', 'Camera movement named', 'Length and aspect ratio fit the use', 'No real people or protected characters without rights'],
+  pitfalls: ['Several scenes in one prompt', 'Text inside the video', 'Asking for exact lip-sync without audio input'],
+  deliver: 'The prompt, a negative prompt, length, aspect ratio, and the camera notes.',
+  verify: ['Watch the take at the size it will be shown', 'Check hands, faces and text for artefacts'],
+  need: 'video generation',
+});
+K('music-prompt', 'AI music or audio prompt', 'music prompt|song prompt|suno|udio|ai music|ki-musik|musik generieren|jingle|soundtrack|beat|sound effect|soundeffekt|voiceover prompt', {
+  outcome: 'A track or sound that fits its place in genre, tempo, length and mood.',
+  slots: [slot('goal', 'where it plays (intro, ad, background, game) and for how long'), slot('tone', 'genre, mood and energy in named terms'), 'length', 'format'],
+  ask: ['Where will it play, and for how long?', 'Vocals or instrumental; any language for lyrics?'],
+  steps: ['Genre, tempo (BPM) and key mood.', 'Instruments and vocal style.', 'Structure: intro, build, peak, outro with seconds.', 'Lyrics written by you or the person, never copied from existing songs.', 'Generate variations; pick by listening in context.'],
+  bar: ['Fits the slot length', 'Genre and tempo named', 'Original lyrics only', 'Rights of the tool checked for the intended use'],
+  pitfalls: ['Asking for a living artist\'s voice or a known song', 'Ignoring the platform\'s licence terms'],
+  deliver: 'Style prompt, structure with timings, lyrics (if any), licence note.',
+  verify: ['Listen in the real context (video, game, ad)'],
+  need: 'music generation',
+});
+K('easy-language', 'Easy or plain language', 'easy language|plain language|leichte sprache|einfache sprache|simplify|vereinfache|for kids|für kinder|barrierefrei|accessible text', {
+  outcome: 'A text everyone can read and act on, including people with reading difficulties.',
+  slots: ['source', slot('audience', 'readers with little reading practice; say who exactly'), 'language', 'format'],
+  ask: ['Easy language (strict rules) or plain language (simpler, everyday)?', 'Who reads it and what must they do after?'],
+  steps: ['Keep what readers must know and do; cut the rest.', 'Short sentences: one statement each.', 'Common words; explain any necessary hard word right away.', 'Active voice; address the reader directly.', 'Clear layout: one idea per paragraph, lists for steps, big headings.'],
+  bar: ['Every sentence under ~15 words', 'No unexplained jargon or abbreviations', 'Actions as numbered steps', 'Meaning unchanged'],
+  pitfalls: ['Childish tone for adults', 'Leaving out legally needed facts', 'Long nested sentences'],
+  deliver: 'The rewritten text, plus a list of terms that were explained.',
+  verify: ['Count sentence lengths', 'Ask: can the reader do the next step alone?'],
+});
+K('tutoring', 'Help someone learn (tutoring, homework help)', 'homework|hausaufgabe|nachhilfe|tutor|help me learn|hilf mir lernen|üben|practice|exercise|übungsaufgaben|quiz me|abfragen', {
+  outcome: 'The learner understands and can do it alone next time — not just a finished answer.',
+  slots: ['level', 'source', slot('goal', 'the skill or exam the practice serves'), 'language'],
+  ask: ['What is the exact task, and what have you tried?', 'What level (class, course) are you at?'],
+  steps: ['Find out what the learner already knows.', 'Give a hint or the next step, not the full solution.', 'Let them try; check and explain the mistake.', 'Show a similar solved example if stuck.', 'End with one practice question of the same kind.'],
+  bar: ['Learner does the thinking', 'Mistakes explained, not just corrected', 'Ends with practice'],
+  pitfalls: ['Handing over the finished answer', 'Too many steps at once', 'Explaining above the learner\'s level'],
+  deliver: 'Hints step by step, the check of the learner\'s attempt, one practice question.',
+  verify: ['Could the learner solve a similar task alone now?'],
+});
+K('proposal', 'Quote, offer or sales proposal', 'proposal|angebot|quote|kostenvoranschlag|offer for|angebot für|sales proposal|pitch for a client|statement of work|leistungsbeschreibung', {
+  outcome: 'An offer the client can say yes to: clear scope, price, timeline and next step.',
+  slots: [slot('audience', 'the decision maker at the client'), 'source', 'budget', 'deadline', 'language'],
+  ask: ['What exactly does the client need, and what is out of scope?', 'Price model (fixed, per hour, per unit) and payment terms?'],
+  steps: ['Restate the client\'s goal in their words.', 'Scope: deliverables, what is included, what is not.', 'Timeline with milestones.', 'Price with terms (taxes, payment dates, validity).', 'One clear next step to accept.'],
+  bar: ['Scope and exclusions explicit', 'Total price and terms clear', 'Valid-until date', 'Legal details of the seller (name, address; tax notes where needed)'],
+  pitfalls: ['Vague scope that invites disputes', 'Hidden extras', 'Missing validity date'],
+  deliver: 'Offer document: goal, scope, timeline, price, terms, acceptance step.',
+  verify: ['Totals recomputed', 'Dates consistent'],
+  must: [['a price', /\d[\d.,]*\s?(€|eur|\$|usd|chf|£)|(€|\$|£)\s?\d/i]],
+});
+K('grant', 'Grant or funding application', 'grant|förderantrag|förderung|funding application|fördermittel|stipendium|scholarship|horizon europe|prototype fund|ngi|eu funding', {
+  outcome: 'An application that answers every criterion of the call in its own terms.',
+  slots: ['source', 'deadline', 'budget', slot('goal', 'the call or programme and its criteria')],
+  ask: ['Which call exactly (link), and what is the deadline?', 'What is the project, team and budget?'],
+  steps: ['Read the call; list every criterion and required section.', 'Map each criterion to evidence from the project.', 'Write the impact in the funder\'s words, with measurable outcomes.', 'Budget that matches the work plan.', 'Check formal rules: length, format, annexes, eligibility.'],
+  bar: ['Every criterion answered', 'Measurable outcomes', 'Budget consistent with the work plan', 'Formal rules met'],
+  pitfalls: ['Generic text not tied to the call', 'Missing annexes', 'Budget that does not add up'],
+  deliver: 'Section-by-section draft following the call\'s structure, plus a checklist of formal requirements.',
+  verify: ['Tick off each criterion against the call text', 'Recompute the budget'],
+  need: 'funding programme',
+});
+K('bug-report', 'Bug report or issue', 'bug report|fehlerbericht|issue for|ticket for|report a bug|melde einen fehler|github issue', {
+  w: 1.8,
+  outcome: 'A report a maintainer can reproduce in minutes.',
+  slots: ['source', 'stack'],
+  ask: ['What did you do, what happened, what did you expect?', 'Version, system and the full error?'],
+  steps: ['Title: what breaks, where, when.', 'Steps to reproduce, numbered, from a clean start.', 'Expected vs actual.', 'Environment: versions, OS, browser.', 'Logs or error text, minimal example; search for duplicates first.'],
+  bar: ['Reproducible from the steps alone', 'Versions given', 'One problem per report'],
+  pitfalls: ['"It does not work"', 'Screenshots of text instead of text', 'Several bugs in one report'],
+  deliver: 'Issue text: title, steps, expected, actual, environment, logs.',
+  verify: ['Follow your own steps once more'],
+  must: [['steps to reproduce', /^\s*\d+\.\s/m]],
+});
+K('data-cleaning', 'Clean or prepare data', 'clean data|daten bereinigen|data cleaning|deduplicate|duplikate|normalize|normalisieren|format data|daten aufbereiten|merge files|dateien zusammenführen', {
+  outcome: 'A dataset that is consistent, complete where possible, and traceable to the original.',
+  slots: ['source', 'format', 'stack'],
+  ask: ['What will the clean data be used for?', 'Which columns matter, and what are the rules (formats, units)?'],
+  steps: ['Profile the data in code: rows, columns, types, missing values, duplicates.', 'Write the rules (formats, units, allowed values) before changing anything.', 'Apply them in code; never edit by hand.', 'Log every change with counts.', 'Keep the original untouched; deliver the clean copy and the script.'],
+  bar: ['Reproducible script', 'Change log with counts', 'Original kept'],
+  pitfalls: ['Silent row drops', 'Mixed date formats', 'Fixing by hand'],
+  deliver: 'Clean file, the script, a short report of changes.',
+  verify: ['Row counts before and after', 'Spot-check 10 rows against the original'],
+});
+K('interview-prep', 'Prepare for an interview', 'interview prep|vorstellungsgespräch|bewerbungsgespräch|job interview|interview questions|interviewfragen|prepare for an interview', {
+  outcome: 'Ready answers and questions for one specific interview.',
+  slots: ['source', slot('goal', 'the role, company and interview format'), 'dates', 'language'],
+  ask: ['Which role and company (job ad)?', 'Interview format: who, how long, technical parts?'],
+  steps: ['Read the ad and company site; list their top needs.', 'Prepare 5–7 stories (situation, action, result with numbers).', 'Practice the likely questions, including the hard ones.', 'Prepare 3 sharp questions for them.', 'Logistics: time, place or link, what to bring.'],
+  bar: ['Stories with measurable results', 'Answers tied to the role', 'Own questions ready'],
+  pitfalls: ['Memorised generic answers', 'No questions for the interviewer', 'Talking down a former employer'],
+  deliver: 'Question bank with answer notes, stories, own questions, checklist.',
+  verify: ['Say each story aloud in under 2 minutes'],
+});
+K('negotiation', 'Negotiation message', 'negotiate|verhandeln|verhandlung|salary negotiation|gehaltsverhandlung|ask for a raise|gehaltserhöhung|counteroffer|gegenangebot|rabatt aushandeln', {
+  outcome: 'A message that moves toward the target while keeping the relationship.',
+  slots: [slot('goal', 'the target, the walk-away point and what can be traded'), 'source', 'tone', 'language'],
+  ask: ['What is your target and your walk-away point?', 'What can you offer in return, and what do you know about their side?'],
+  steps: ['Anchor with a justified number or term.', 'Give the reasons from their perspective.', 'Offer options, not ultimatums.', 'Keep it short and friendly; one clear ask.', 'Prepare the answer to the likely counter.'],
+  bar: ['Clear ask with justification', 'Options offered', 'Polite and firm'],
+  pitfalls: ['Revealing the walk-away point', 'Apologising for asking', 'Several asks at once'],
+  deliver: 'The message, plus notes for the likely replies.',
+  verify: ['Numbers and dates correct'],
+});
+K('content-calendar', 'Content or social media calendar', 'content calendar|redaktionsplan|content plan|posting plan|social media plan|contentplan|editorial calendar', {
+  outcome: 'A calendar a team can post from without asking what is next.',
+  slots: ['audience', 'dates', 'count', slot('format', 'a table: date, channel, topic, format, hook, owner'), 'language'],
+  ask: ['Which channels, how often, and for which goal?', 'Key dates (launches, events, holidays)?'],
+  steps: ['Goal per channel.', '3–5 content pillars from what the audience asks.', 'Fill the dates: mix formats, anchor key dates.', 'Each slot gets a hook and a call to action.', 'Owner and status per row.'],
+  bar: ['Realistic frequency', 'Every slot has a hook', 'Key dates covered'],
+  pitfalls: ['Posting more than the team can make', 'All posts the same format'],
+  deliver: 'Calendar table plus the pillars.',
+  verify: ['Count posts per week against capacity'],
+});
+K('agenda', 'Meeting agenda', 'agenda|tagesordnung|meeting plan|workshop plan|ablaufplan|run of show', {
+  outcome: 'A meeting that ends with decisions, on time.',
+  slots: ['people', 'dates', slot('goal', 'the decisions the meeting must produce')],
+  ask: ['What must be decided by the end?', 'Who attends and how long is it?'],
+  steps: ['Goal in one line at the top.', 'Items as questions to decide, with time boxes and owners.', 'Pre-reads linked.', 'Decisions and actions captured at the end.'],
+  bar: ['Each item has an owner and minutes', 'Ends with decisions', 'Fits the time'],
+  pitfalls: ['Topic lists without questions', 'No time boxes'],
+  deliver: 'Agenda table: time, item (as a question), owner, pre-read.',
+  verify: ['Minutes add up to the meeting length'],
+});
+K('dataset', 'Publish a dataset', 'publish a dataset|publish dataset|release a dataset|datensatz veröffentlichen|open data|publish data|daten veröffentlichen|data release', {
+  w: 1.3,
+  outcome: 'A dataset others can trust, understand and reuse.',
+  slots: ['source', 'format', slot('goal', 'what questions the data can answer')],
+  ask: ['Where does each column come from, and when was it collected?', 'Which licence?'],
+  steps: ['Schema: column names, types, units, allowed values.', 'Provenance: sources, dates, method.', 'Clean and validate in code.', 'Licence (CC BY 4.0 or CC0) and citation line.', 'README with examples and known limits.'],
+  bar: ['Schema and units documented', 'Sources and dates given', 'Licence clear', 'No personal data without a lawful basis'],
+  pitfalls: ['Unclear units', 'Hidden personal data', 'No date of collection'],
+  deliver: 'Data file, schema, README, licence.',
+  verify: ['Validate every row against the schema'],
+});
+
 const norm = (s) => String(s || '').toLowerCase().replace(/[‘’]/g, "'");
 const isDe = (t) => /[äöüß]/i.test(t) || (t.match(/\b(der|die|das|und|ich|für|mit|ein|eine|einen|nicht|bitte|mein|meine|meinen|unser|unsere|wie|was|soll|schreibe|schreib|erstelle|mach|als|bei|auf|zum|zur|vom|im|ist|sind|oder|auch|noch|nach|wir|uns|dem|den|des|für|über|mir|mich)\b/gi) || []).length >= 2;
 // how strongly a kind is named: longer key phrases weigh more; a key may sit inside a German compound
@@ -567,8 +705,23 @@ function scoreKind(t, k) {
 export const BRIEF_KINDS = LIB.map((k) => ({ kind: k.kind, title: k.title, outcome: k.outcome }));
 export const briefKind = (kind) => LIB.find((k) => k.kind === kind) || null;
 
+// who the result is for, as ready assumptions (for=beginner|expert|child|investor|executive|customer|developer)
+export const PRESETS = {
+  beginner: { audience: 'a curious beginner', level: 'no prior knowledge; define every term once', tone: 'patient, concrete, encouraging', length: 'short; one idea at a time' },
+  expert: { audience: 'a practitioner of the field', level: 'expert; skip basics, keep precise terms', tone: 'dense and exact', length: 'as long as the substance needs' },
+  child: { audience: 'a child of about 10', level: 'everyday words and pictures in words', tone: 'warm and playful', length: 'very short sentences' },
+  investor: { audience: 'an investor deciding on money', level: 'business-literate', tone: 'sober, numbers first', length: 'one page; key figures up front' },
+  executive: { audience: 'a busy decision maker', level: 'knows the business, not the details', tone: 'direct', length: 'answer and recommendation in the first three lines' },
+  customer: { audience: 'a customer of the business', level: 'no internal terms', tone: 'friendly and clear', length: 'short' },
+  developer: { audience: 'a software developer', level: 'technical; exact names, versions and commands', tone: 'precise', length: 'as long as the steps need' },
+};
+// big requests in parts: "do A, then B and finally C" → one brief per part
+export function splitTask(task) {
+  const parts = String(task || '').split(/\s*(?:;|\n+[-*•\d.)]*\s*|,?\s+(?:and then|then|after that|finally|und dann|danach|anschließend|zum schluss|außerdem)\s+)/i).map((x) => x.trim()).filter((x) => x.split(/\s+/).length >= 3);
+  return parts.length >= 2 ? parts.slice(0, 8) : [];
+}
 // the brief for a task: the kind, what was left out (with defaults), the questions worth asking, the method, the bar, the checks
-export function briefFor(task, { base = 'https://mareliberum.dev', kind } = {}) {
+export function briefFor(task, { base = 'https://mareliberum.dev', kind, for: forWhom } = {}) {
   const raw = String(task || '').trim().slice(0, 2000), t = norm(raw);
   const ranked = LIB.map((k) => ({ k, ...scoreKind(t, k) })).filter((x) => x.s > 0).sort((a, b) => b.s - a.s);
   const k = (kind && briefKind(kind)) || ranked[0]?.k || null;
@@ -580,6 +733,9 @@ export function briefFor(task, { base = 'https://mareliberum.dev', kind } = {}) 
     if (def[0].test(raw)) given.push(name);
     else missing.push({ slot: name, assume: (typeof sl === 'object' && sl.assume) || def[1], ask: (typeof sl === 'object' && sl.ask) || def[2] });
   }
+  const preset = PRESETS[String(forWhom || '').toLowerCase()];
+  if (preset) for (const m of missing) if (preset[m.slot]) m.assume = preset[m.slot];
+  if (preset) for (const k2 of ['audience', 'level', 'tone', 'length']) if (!missing.some((m) => m.slot === k2) && !given.includes(k2)) missing.push({ slot: k2, assume: preset[k2], ask: SLOTS[k2][2] });
   const words = raw.split(/\s+/).filter(Boolean).length;
   // ask only about what is missing, and only a little: a short request leaves the most out
   const ask = missing.filter((m) => m.slot !== 'language').map((m) => m.ask).slice(0, words < 12 ? 3 : 2);
@@ -604,8 +760,28 @@ export function briefFor(task, { base = 'https://mareliberum.dev', kind } = {}) 
     },
     page: `${base}/brief/${k?.kind || 'general'}`,
   };
+  // what "done" means, as checkable lines — the acceptance criteria for this result
+  b.done = [...(k?.must || []).map(([name]) => `contains ${name}`), ...b.bar.slice(0, 4), ...b.verify.slice(0, 2)].map((x) => `[ ] ${x}`);
+  const parts = splitTask(raw);
+  if (parts.length) b.parts = parts.map((t) => { const x = briefFor(t, { base }); return { task: t, kind: x.kind, title: x.title, brief: `${base}/brief.json?q=${encodeURIComponent(t)}` }; });
+  if (preset) b.for = String(forWhom).toLowerCase();
   b.prompt = promptOf(b);
   return b;
+}
+
+// two prompts side by side: what each says, what the weaker one leaves out
+export function comparePrompts(a, b2, opts = {}) {
+  const x = briefFor(a, opts), y = briefFor(b2, opts);
+  const score = (z) => z.given.length * 10 + Math.min(String(z.task || '').split(/\s+/).length, 60) / 6;
+  const [strong, weak] = score(x) >= score(y) ? [x, y] : [y, x];
+  return {
+    a: { kind: x.kind, given: x.given, missing: x.missing.map((m) => m.slot) },
+    b: { kind: y.kind, given: y.given, missing: y.missing.map((m) => m.slot) },
+    stronger: strong === x ? 'a' : 'b',
+    weakerLacks: weak.missing.filter((m) => strong.given.includes(m.slot) || !strong.missing.some((n) => n.slot === m.slot)).map((m) => ({ slot: m.slot, ask: m.ask })),
+    sameKind: x.kind === y.kind,
+    fix: `${opts.base || 'https://mareliberum.dev'}/brief.json?q=${encodeURIComponent(String(weak.task || '').slice(0, 200))}`,
+  };
 }
 // the full prompt, as the person would have written it with time and practice
 function promptOf(b) {
@@ -644,12 +820,28 @@ export function reviewDraft(task, draft, opts = {}) {
   const figures = (d.match(/\b\d[\d.,]*\s?(%|percent|prozent|million|mio|billion|mrd|k\b|€|\$)/gi) || []).length;
   if (figures >= 2) add(/https?:\/\/|source|quelle|according to|laut /i.test(d), 'figures have sources', `${figures} figures, no source named`, 'Name the source of each figure, with a link.');
   for (const [name, re] of briefKind(b.kind)?.must || []) add(re.test(d), name, `missing: ${name}`, `Add ${name}.`);
+  // arithmetic written in the draft is recomputed: "12 + 30 = 42", "15% of 200 = 30"
+  const num = (x) => Number(String(x).replace(/(?<=\d)[,](?=\d{3}\b)/g, '').replace(',', '.'));
+  const wrong = [];
+  for (const m of d.matchAll(/(\d[\d.,]*)\s*([+\-−×x*\/÷])\s*(\d[\d.,]*)\s*=\s*(\d[\d.,]*)/g)) {
+    const [p, q, r] = [num(m[1]), num(m[3]), num(m[4])], op = m[2];
+    const v = op === '+' ? p + q : op === '-' || op === '−' ? p - q : op === '/' || op === '÷' ? p / q : p * q;
+    if (Number.isFinite(v) && Math.abs(v - r) > Math.max(0.01, Math.abs(v) * 0.005)) wrong.push(`${m[0].trim()} (is ${Math.round(v * 100) / 100})`);
+  }
+  for (const m of d.matchAll(/(\d+(?:[.,]\d+)?)\s*%\s*(?:of|von)\s*(\d[\d.,]*)\s*(?:is|are|=|sind|ist|ergibt|equals)\s*(\d[\d.,]*)/gi)) {
+    const v = (num(m[1]) / 100) * num(m[2]), r = num(m[3]);
+    if (Number.isFinite(v) && Math.abs(v - r) > Math.max(0.01, Math.abs(v) * 0.005)) wrong.push(`${m[0].trim()} (is ${Math.round(v * 100) / 100})`);
+  }
+  if (/\d\s*[+\-×x*\/÷%]\s*\d/.test(d) || wrong.length) add(!wrong.length, 'arithmetic checks out', wrong.slice(0, 4).join('; '), 'Recompute these numbers in code.');
+  const hidden = d.match(/[​-‏‪-‮⁠-⁤﻿]/g) || [];
+  add(!hidden.length, 'no hidden characters', hidden.length ? `${hidden.length} invisible or direction-changing characters` : '', 'Remove invisible characters; they can hide text.');
   if (/German/.test(b.respondIn) && words > 30) { const de = isDe(d); add(de, 'in the language of the request', de ? '' : 'the request is German, the draft is not', 'Write it in German.'); }
   const score = Math.round((passed.length / Math.max(1, passed.length + issues.length)) * 100);
   return { kind: b.kind, title: b.title, words, score, issues, passed, bar: b.bar, verify: b.verify, note: 'These checks are mechanical; read the bar and judge the substance yourself.' };
 }
 
 // tips agents leave for a kind of task: short, no links, no instructions to other agents — data for the next one
+const HIDDEN = /[\u200B-\u200F\u202A-\u202E\u2060-\u2064\uFEFF]/;
 const BAD = /\b(ignore (all|any|previous|the)|disregard|system prompt|you are now|act as|jailbreak|developer mode|do anything now|<\/?script|password|api[_ -]?key|private key|seed phrase|wallet address)\b/i;
 export function createBriefs({ kv, update, allow, SeaError, clean, now, DAY = 86400, examples }) {
   return {
@@ -657,8 +849,10 @@ export function createBriefs({ kv, update, allow, SeaError, clean, now, DAY = 86
     async brief(a = {}) {
       const task = clean ? clean(a.task ?? a.q ?? a.need ?? a.prompt, 2000) : String(a.task ?? a.q ?? '').slice(0, 2000);
       if (!task && !a.kind) return { what: 'the missing half of a prompt: give a task in words and get what it left out, the method, the quality bar and the checks', kinds: BRIEF_KINDS.map((k) => k.kind) };
-      const b = briefFor(task, { base: a.base, kind: a.kind });
-      const [tips, ex] = await Promise.all([this.briefTips(b.kind).catch(() => []), examples ? examples(b.kind, a.base).catch(() => []) : []]);
+      const b = briefFor(task, { base: a.base, kind: a.kind, for: a.for });
+      const [tips, ex, out] = await Promise.all([this.briefTips(b.kind).catch(() => []), examples ? examples(b.kind, a.base, task).catch(() => []) : [], kv.get(`brief:out:${b.kind}`).catch(() => null)]);
+      // how work of this kind went for agents who used the brief: accepted or sent back
+      if (out && (out.ok || out.no)) b.outcomes = { accepted: out.ok || 0, rejected: out.no || 0, rate: Math.round(((out.ok || 0) / ((out.ok || 0) + (out.no || 0))) * 100), lessons: (out.notes || []).slice(0, 5) };
       if (tips.length) b.tips = tips.map((x) => ({ id: x.id, tip: x.t, up: x.up, down: x.down }));
       // the strongest results other agents published for this kind of work: start from the best, not from zero
       if (ex.length) b.examples = ex;
@@ -667,7 +861,32 @@ export function createBriefs({ kv, update, allow, SeaError, clean, now, DAY = 86
     async review(a = {}) {
       const draft = String(a.draft ?? a.text ?? '').slice(0, 60000);
       if (!draft) throw new SeaError('INVALID_ARGUMENT', 'give the draft (and the task) to review');
-      return reviewDraft(String(a.task ?? a.q ?? '').slice(0, 2000), draft, { base: a.base, kind: a.kind });
+      const r = reviewDraft(String(a.task ?? a.q ?? '').slice(0, 2000), draft, { base: a.base, kind: a.kind });
+      // links in the draft are opened: dead or invented addresses are the most common silent error
+      const links = [...new Set((draft.match(/https?:\/\/[^\s<>"')\]]+/g) || []).map((u) => u.replace(/[.,;:!?]+$/, '')))].slice(0, 8);
+      if (links.length) {
+        const dead = (await Promise.all(links.map(async (u) => {
+          if (/^https?:\/\/(www\.)?(example\.(com|org|net)|your-?domain|domain\.com)/i.test(u)) return `${u} (placeholder)`;
+          try { const res = await fetch(u, { method: 'GET', redirect: 'follow', signal: AbortSignal.timeout(4000), headers: { 'user-agent': 'MareLiberum-Review/1.0 (+https://mareliberum.dev/review)', range: 'bytes=0-1024' } }); return res.status === 404 || res.status === 410 ? `${u} (${res.status})` : null; } catch (e) { return /ENOTFOUND|getaddrinfo/.test(String(e?.cause?.code || e?.message || '')) ? `${u} (no such host)` : null; }
+        }))).filter(Boolean);
+        if (dead.length) { r.issues.push({ check: 'links work', detail: dead.join('; '), fix: 'Replace dead or invented links with the real source.' }); } else r.passed.push('links work');
+        r.score = Math.round((r.passed.length / Math.max(1, r.passed.length + r.issues.length)) * 100);
+      }
+      return r;
+    },
+    async compare(a = {}) {
+      const x = String(a.a ?? a.prompt_a ?? '').slice(0, 2000), y = String(a.b ?? a.prompt_b ?? '').slice(0, 2000);
+      if (!x || !y) throw new SeaError('INVALID_ARGUMENT', 'give two prompts as a and b');
+      return comparePrompts(x, y, { base: a.base });
+    },
+    async briefOutcome(a = {}, ctx) {
+      const kind = String(a.kind || '').trim(); if (!briefKind(kind)) throw new SeaError('INVALID_ARGUMENT', 'kind: the kind of work the brief was for');
+      const ok = a.accepted === true || a.outcome === 'accepted';
+      const note = String(a.note || '').replace(/\s+/g, ' ').trim().slice(0, 200);
+      if (note && (BAD.test(note) || HIDDEN.test(note) || /https?:\/\//.test(note))) throw new SeaError('INVALID_ARGUMENT', 'a note says what helped or what was missing, without links or instructions');
+      await allow(ctx, 'outcome', 30, 3600);
+      const r = await update(`brief:out:${kind}`, 400 * DAY, (cur) => { const c = cur && typeof cur === 'object' ? cur : { ok: 0, no: 0, notes: [] }; c[ok ? 'ok' : 'no'] = (c[ok ? 'ok' : 'no'] || 0) + 1; if (note) c.notes = [`${ok ? '+' : '−'} ${note}`, ...(c.notes || [])].slice(0, 30); return c; }, () => true);
+      return { kind, accepted: r?.ok || 0, rejected: r?.no || 0, note: 'thank you; every brief of this kind now shows how the work went' };
     },
     async briefTip(a = {}, ctx) {
       const kind = String(a.kind || '').trim(); if (!briefKind(kind)) throw new SeaError('INVALID_ARGUMENT', `kind must be one of: ${LIB.map((k) => k.kind).join(', ')}`);
@@ -681,7 +900,7 @@ export function createBriefs({ kv, update, allow, SeaError, clean, now, DAY = 86
       const t = String(a.tip || '').replace(/\s+/g, ' ').trim();
       if (t.length < 12 || t.length > 280) throw new SeaError('INVALID_ARGUMENT', 'a tip is one sentence, 12 to 280 characters');
       if (/https?:\/\/|www\.|\.(com|io|ai|net|org)\b/i.test(t)) throw new SeaError('INVALID_ARGUMENT', 'tips carry no links');
-      if (BAD.test(t)) throw new SeaError('INVALID_ARGUMENT', 'tips describe how to do the work well; they are not instructions to other agents');
+      if (BAD.test(t) || HIDDEN.test(t)) throw new SeaError('INVALID_ARGUMENT', 'tips describe how to do the work well; they are not instructions to other agents');
       await allow(ctx, 'tip', 10, 3600);
       const id = Math.random().toString(36).slice(2, 10), at = now ? now() : new Date().toISOString();
       await update(`brief:tips:${kind}`, 400 * DAY, (cur) => { const l = Array.isArray(cur) ? cur : []; if (l.some((x) => x.t.toLowerCase() === t.toLowerCase())) return l; return [{ id, t, up: 0, down: 0, at }, ...l].slice(0, 200); }, () => true);

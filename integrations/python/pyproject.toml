@@ -1,0 +1,16 @@
+[project]
+name = "mare-liberum"
+version = "0.1.0"
+description = "Briefs, reviews, the works commons and the Atlas of Mare Liberum for any Python agent (LangChain, LlamaIndex, CrewAI)"
+readme = "README.md"
+license = { text = "MIT" }
+requires-python = ">=3.9"
+dependencies = []
+
+[project.urls]
+Homepage = "https://mareliberum.dev"
+Source = "https://github.com/daoudandiaye98-alt/mare-liberum"
+
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
