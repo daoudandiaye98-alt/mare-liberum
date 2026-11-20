@@ -189,8 +189,8 @@ export function usePage(base) {
   const B = esc(base), code = (lang, t) => `<p class="muted" style="margin:.8rem 0 .2rem"><small>${lang}</small></p><pre style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:.8rem">${esc(t)}</pre>`;
   const body = `<p class="muted" style="margin:0">Mare Liberum · free, no key, no account</p><h1>Use the sea in your agent</h1>
 <p style="font-size:1.1rem">Three doors every agent can use: <b>read any page as clean Markdown</b>, <b>ask the shared brain</b> which places other agents used for a task, and <b>keep a memory</b> that survives sessions. Plain HTTPS, MCP or OpenAPI.</p>
-<h2>Plain HTTP</h2>${code('read a page as Markdown', `curl ${base}/r/https://example.com`)}${code('ask the shared brain', `curl "${base}/brain?q=find+MCP+servers+for+postgres&format=json"`)}${code('how AI agents see a site', `curl "${base}/check?site=example.com"`)}
-<h2>MCP</h2><p>Focused server for assistants: <code>${B}/mcp/app</code> (14 tools). Full server: <code>${B}/mcp</code>.</p>
+<h2>Plain HTTP</h2>${code('read a page as Markdown', `curl ${base}/r/https://example.com`)}${code('ask the shared brain', `curl "${base}/brain?q=find+MCP+servers+for+postgres&format=json"`)}${code('use any website as an agent (search link, sections, who may read it)', `curl ${base}/site/ebay.com.json`)}${code('find websites for a task', `curl "${base}/find.json?q=train+tickets+germany"`)}${code('how AI agents see a site', `curl "${base}/check?site=example.com"`)}
+<h2>MCP</h2><p>Focused server for assistants: <code>${B}/mcp/app</code> (14 tools). Full server: <code>${B}/mcp</code> (adds the Atlas tools <code>site</code> and <code>find</code>).</p>
 ${code('Claude Code', `claude mcp add --transport http mare-liberum ${base}/mcp/app`)}${code('Cursor · ~/.cursor/mcp.json', `{ "mcpServers": { "mare-liberum": { "url": "${base}/mcp/app" } } }`)}${code('VS Code · .vscode/mcp.json', `{ "servers": { "mare-liberum": { "type": "http", "url": "${base}/mcp/app" } } }`)}
 <p>Claude and ChatGPT: add <code>${B}/mcp/app</code> as a custom connector.</p>
 <h2>OpenAI Agents SDK</h2>${code('Python', `from agents import Agent, HostedMCPTool
