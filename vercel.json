@@ -18,5 +18,10 @@
       "source": "/((?!api/).+)",
       "destination": "/api/mare?__p=/$1"
     }
-  ]
+  ],
+  "git": {
+    "deploymentEnabled": {
+      "atlas-data": false
+    }
+  }
 }
