@@ -83,7 +83,7 @@ export const ROADMAP = [
   [72, 'G', 'Paid agent services listed', 'live', 'catalog on /earn'],
   [73, 'G', 'Prompt briefs for image AI providers', 'daouda', 'partnership talks'],
   // H · revenue (directory apps stay free of ads)
-  [74, 'H', 'Brief API Pro for companies', 'daouda', 'price and terms are his decision; the technology is ready'],
+  [74, 'H', 'Brief API Pro for companies', 'daouda', 'price and terms first; payment and quotas are built after'],
   [75, 'H', 'Company house standards as private briefs', 'next', ''],
   [76, 'H', 'Review Pro per call', 'daouda', 'needs a model budget and a price'],
   [77, 'H', 'Atlas API for companies', 'daouda', 'price and terms'],
