@@ -68,6 +68,11 @@ export function createAtlas(h) {
         return { site: d, title: x.title, description: x.description, search: x.search?.template, example: x.search ? x.search.template.replace('{q}', encodeURIComponent(q)) : undefined, readable: x.readable?.withoutJavaScript, blocks: (x.agents || []).filter((a) => a.allowed === false && a.role !== 'training').map((a) => a.name), grade: x.grade, rank: x.rank, matched: words, map: `${base()}/site/${d}` }; }))).filter(Boolean);
       return { q, words: ws, sites, how: 'Each site comes with its own search link: put your words where {q} stands and read the result with the reader (/r/<link>). The full map of a site: /site/<domain>.', more: `${base()}/sites` };
     },
+    // the website behind an entry of the open index, if the Atlas has its map (for a link from the entry page)
+    async atlasKnown(e) {
+      let h; try { const m = e?.metadata || {}; h = siteOf(new URL(m.kind === 'merchant' ? `https://${m.publisher}` : e.url).hostname); } catch { return null; }
+      if (!safeHost(h)) return null; const p = await stored(h); return p && p.s === 200 ? h : null;
+    },
     async mapSite(a = {}, ctx) { return atlas.site(a.domain ?? a.site ?? a.url ?? a.q, ctx); },
     async findSites(a = {}) { return atlas.find(a.q ?? a.query ?? a.need ?? a.task, Math.min(Number(a.limit) || 12, 30)); },
     // how many sites the map holds and what the web lets agents do
