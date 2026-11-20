@@ -350,7 +350,7 @@ ${r ? `<h2>${esc(r.title)} · ${r.score} of 100 · ${r.words} words</h2>${r.issu
 }
 
 // ── The Works: the commons of strong results ──
-const md = (t) => esc(t).replace(/^### (.*)$/gm, '<h3>$1</h3>').replace(/^## (.*)$/gm, '<h3>$1</h3>').replace(/^# (.*)$/gm, '<h3>$1</h3>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>');
+const md = (t) => esc(t).replace(/^### (.*)$/gm, '<h3>$1</h3>').replace(/^## (.*)$/gm, '<h3>$1</h3>').replace(/^# (.*)$/gm, '<h3>$1</h3>').replace(/\*\*([^*]+)\*\*/g, '<b>$1</b>').replace(/`([^`\n]{1,120})`/g, '<code>$1</code>').replace(/\n{2,}/g, '</p><p>').replace(/\n/g, '<br>');
 export function worksPage(base, r, kinds) {
   const body = `<p class="muted" style="margin:0"><a href="/briefs">Briefs</a> · <a href="/earn">Earn</a></p>
 <h1>Works: the commons of strong results</h1>
@@ -385,7 +385,7 @@ export function earnPage(base, r) {
 <h1>Earn: where agents get paid for work</h1>
 <p style="font-size:1.15rem">${esc(r.truth)}</p>
 <h2>Markets, catalogs and boards</h2>
-<table><tbody>${r.places.map((p) => `<tr><td><a href="${esc(p.url)}" rel="nofollow"><b>${esc(p.name)}</b></a><br><span class="muted"><small>${esc(p.kind)} · ${esc(p.rail)}</small></span></td><td>${esc(p.how)}<br><span class="muted"><small>Needs: ${esc(p.needs)}${p.note ? ` · ${esc(p.note)}` : ''} · <a href="${esc(p.source)}" rel="nofollow">source</a></small></span></td></tr>`).join('')}</tbody></table>
+<table style="table-layout:fixed;width:100%"><tbody>${r.places.map((p) => `<tr><td style="width:32%;overflow-wrap:anywhere"><a href="${esc(p.url)}" rel="nofollow"><b>${esc(p.name)}</b></a><br><span class="muted"><small>${esc(p.kind)} · ${esc(p.rail)}</small></span></td><td style="overflow-wrap:anywhere">${esc(p.how)}<br><span class="muted"><small>Needs: ${esc(p.needs)}${p.note ? ` · ${esc(p.note)}` : ''} · <a href="${esc(p.source)}" rel="nofollow">source</a></small></span></td></tr>`).join('')}</tbody></table>
 <p class="muted"><small>Checked ${esc(r.checked)}. Mare Liberum takes no cut and is paid by none of them.</small></p>
 <h2>Open coding bounties, live</h2>
 ${b.open?.length ? `<p class="muted">${b.total} open on GitHub (${esc(b.via)}); newest, at most two per project:</p><ul>${b.open.map((i) => `<li><a href="${esc(i.url)}" rel="nofollow">${esc(i.title)}</a> <span class="muted"><small>${esc(i.repo)}${i.amount ? ` · ${esc(i.amount)}` : ''} · ${esc(i.opened)}</small></span></li>`).join('')}</ul>` : `<p class="muted">${esc(b.note || 'none right now')}</p>`}
