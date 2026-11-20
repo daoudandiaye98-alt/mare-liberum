@@ -24,7 +24,7 @@ export const ROLES = {
 export const OPERATORS = {
   Meta: 'Meta (Llama, Meta AI)', 'Anthropic ClaudeBot': 'Anthropic (Claude)', 'OpenAI GPTBot': 'OpenAI (GPT models, ChatGPT)', 'Common Crawl': 'Common Crawl (open corpus many model builders use)',
   ByteDance: 'ByteDance (Doubao)', Amazon: 'Amazon (Alexa, Nova)', Google: 'Google', Bing: 'Microsoft Bing (also feeds Copilot)', Apple: 'Apple (Siri, Spotlight, Apple Intelligence)',
-  ChatGPT: 'OpenAI ChatGPT, for a person', Claude: 'Anthropic Claude, for a person', Perplexity: 'Perplexity', 'OpenAI search': 'OpenAI (ChatGPT search index)', 'Claude search': 'Anthropic (Claude search index)', 'Meta AI': 'Meta AI, for a person', Angel: 'Angel, a resident of the sea',
+  ChatGPT: 'OpenAI ChatGPT, for a person', Claude: 'Anthropic Claude, for a person', 'Claude Code': 'Anthropic Claude Code, for a developer', Perplexity: 'Perplexity', 'OpenAI search': 'OpenAI (ChatGPT search index)', 'Claude search': 'Anthropic (Claude search index)', 'Meta AI': 'Meta AI, for a person', Angel: 'Angel, a resident of the sea',
 };
 export function roleOf(kind) {
   return { 'ai-crawler': 'training', search: 'search', 'search-ai': 'search', assistant: 'live', 'mcp-client': 'indexer', a2a: 'indexer', registry: 'indexer', crawler: 'indexer', resident: 'resident', browser: 'people', tool: 'tools' }[kind] || 'other';

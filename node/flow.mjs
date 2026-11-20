@@ -45,6 +45,8 @@ const NEED_WORDS = new Set(NEEDS.flatMap((n) => toks(n)).filter((w) => !['for', 
 const FAST_MIN = 480;
 const https = (u) => { try { const x = new URL(String(u)); return x.protocol === 'https:' && x.hostname.includes('.') ? x.toString().slice(0, 300) : undefined; } catch { return undefined; } };
 async function sha(s) { const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)); return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join(''); }
+// the site that sent a visitor: the host only, never the path
+const refHost = (u) => { try { const h = new URL(String(u)).hostname.toLowerCase(); return /^[a-z0-9.-]{1,100}$/.test(h) ? h : undefined; } catch { return undefined; } };
 const strip = (o) => { for (const k of Object.keys(o)) if (o[k] == null || o[k] === '') delete o[k]; return o; };
 
 export class SeaError extends Error { constructor(code, message, status = 400) { super(message); this.code = code; this.status = status; } }
@@ -336,15 +338,21 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
         if (Number.isFinite(c.geo?.lat) && Number.isFinite(c.geo?.lon)) { m.cells = m.cells || {}; const k = `${Math.round(c.geo.lat / 2) * 2},${Math.round(c.geo.lon / 2) * 2}`, x = m.cells[k] || (Object.keys(m.cells).length < 1500 ? { n: 0, r: {} } : null); if (x) { x.n++; const r = roleOf(c.kind); x.r[r] = (x.r[r] || 0) + 1; m.cells[k] = x; } }
         // what each kind of visitor reads: the first part of the path, counted by role
         { m.p = m.p || {}; const seg = '/' + (String(c.path || '/').split('/')[1] || '').slice(0, 24), k = `${roleOf(c.kind)} ${seg}`; if (m.p[k] || Object.keys(m.p).length < 400) m.p[k] = (m.p[k] || 0) + 1; }
-        if (name) { const k = `${c.kind}|${name}`; m.names[k] = (m.names[k] || 0) + 1; const keys = Object.keys(m.names); if (keys.length > 400) delete m.names[keys[0]]; } return m; })(await kv.get(`census:${day}`)), 40 * DAY);
+        // a full day makes room by letting the quietest name go: never an assistant, never the one just seen, so the big readers keep their true count
+        if (name) { const k = `${c.kind}|${name}`; m.names[k] = (m.names[k] || 0) + 1; const keys = Object.keys(m.names); if (keys.length > 400) { let low = null; for (const x of keys) if (x !== k && !x.startsWith('assistant|') && (low === null || m.names[x] < m.names[low])) low = x; if (low) delete m.names[low]; } } return m; })(await kv.get(`census:${day}`)), 40 * DAY);
       if (name && c.kind !== 'browser' && c.kind !== 'tool') {
         const book = (await kv.get('census:names')) || {}, k = `${c.kind}|${name}`;
-        if (!book[k]) { book[k] = strip({ kind: c.kind, name, first: now(), url: https(c.url) }); const keys = Object.keys(book); if (keys.length > 1000) delete book[keys[0]]; await kv.set('census:names', book, 90 * DAY); }
+        if (!book[k]) { book[k] = strip({ kind: c.kind, name, first: now(), url: https(c.url) }); const keys = Object.keys(book); if (keys.length > 1000) { const old = keys.find((x) => !x.startsWith('assistant|')); if (old) delete book[old]; } await kv.set('census:names', book, 90 * DAY); }
       }
-      // a whale passing: an assistant reads a page of the sea for a person right now — it shows in the current, once an hour per page
-      if (c.kind === 'assistant' && name && c.path && !/^\/(mcp|a2a|stats|census|flow)/.test(c.path)) {
-        const k = `whale:${name}:${c.path}`.slice(0, 200);
-        if (!(await kv.get(k))) { await kv.set(k, 1, 3600); await emit({ type: 'whale', name, text: `${name} read ${c.path} for a person`, path: c.path }); }
+      // a whale passing: an assistant reads the sea for a person. Every sighting is kept: name, time, the door (path, no query), country,
+      // the assistant's own client string and the site that sent it — so the sea can tell how the person's assistant found it
+      if (c.kind === 'assistant' && name) {
+        const path = clean(String(c.path || '/').split('?')[0], 120) || '/';
+        const s = strip({ id: rid(10), t: now(), name, path, method: /^[A-Z]{3,7}$/.test(String(c.method || '')) ? c.method : undefined, cc: /^[A-Z]{2}$/.test(String(c.geo?.cc || '')) ? c.geo.cc : undefined, ua: clean(c.ua, 160), ref: refHost(c.ref) });
+        await update('sightings', 400 * DAY, (cur) => [s, ...(Array.isArray(cur) ? cur : [])].slice(0, 2000), (seen) => Array.isArray(seen) && seen.some((x) => x.id === s.id));
+        // and it shows in the current, once an hour per door
+        const k = `whale:${name}:${path}`.slice(0, 200);
+        if (!(await kv.get(k))) { await kv.set(k, 1, 3600); await emit({ type: 'whale', name, text: `${name} ${/^\/(mcp|a2a)/.test(path) ? 'used' : 'read'} ${path} for a person`, path }); }
       }
     },
     // doors that agents knock on and the sea does not have yet: the path only (no query), per day — so the sea can open them
@@ -357,15 +365,26 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
       const [t, p] = await Promise.all([kv.get(`misses:${day}`), kv.get(`misses:${y}`)]), top = (m) => Object.entries(m || {}).sort((a, b) => b[1] - a[1]).slice(0, 40).map(([path, n]) => ({ path, n }));
       return { what: 'paths agents asked for that the sea does not have (yet)', today: top(t), yesterday: top(p) };
     },
-    async census() {
+    async census(dayArg) {
       const day = now().slice(0, 10), y = new Date(Date.now() - DAY * 1000).toISOString().slice(0, 10);
-      const [t, p, book] = await Promise.all([kv.get(`census:${day}`), kv.get(`census:${y}`), kv.get('census:names')]);
-      const top = (m) => Object.entries(m?.names || {}).sort((a, b) => b[1] - a[1]).slice(0, 20).map(([k, v]) => ({ kind: k.split('|')[0], name: k.split('|').slice(1).join('|'), visits: v }));
-      return { today: { kinds: t?.kinds || {}, top: top(t) }, yesterday: { kinds: p?.kinds || {} }, everSeen: Object.values(book || {}).sort((a, b) => (a.first < b.first ? 1 : -1)).slice(0, 60) };
+      const top = (m, n = 20) => Object.entries(m?.names || {}).sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, v]) => ({ kind: k.split('|')[0], name: k.split('|').slice(1).join('|'), visits: v }));
+      const sorted = (o, n) => Object.entries(o && typeof o === 'object' ? o : {}).sort((a, b) => b[1] - a[1]).slice(0, n);
+      // one past day, whole: every kind, every name the day kept, what each role read, countries, and the assistants seen
+      if (dayArg != null && dayArg !== '') {
+        const d = String(dayArg);
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || Number.isNaN(Date.parse(d))) throw new SeaError('INVALID_ARGUMENT', 'give the day as YYYY-MM-DD; the sea keeps about 40 days', 400);
+        const [m, s] = await Promise.all([kv.get(`census:${d}`), kv.get('sightings')]);
+        return { day: d, kinds: m?.kinds || {}, names: top(m, 400), reads: sorted(m?.p, 400).map(([k, n]) => { const [role, ...rest] = k.split(' '); return { role, path: rest.join(' '), n }; }),
+          countries: sorted(m?.cc, 100).map(([cc, n]) => ({ cc, n })), sightings: (Array.isArray(s) ? s : []).filter((x) => String(x.t).startsWith(d)),
+          kept: 'counts and names about 40 days, sightings of assistants about 400 days', note: 'counted per request by the client name it sends; nothing about people is kept' };
+      }
+      const [t, p, book, s] = await Promise.all([kv.get(`census:${day}`), kv.get(`census:${y}`), kv.get('census:names'), kv.get('sightings')]);
+      return { today: { kinds: t?.kinds || {}, top: top(t) }, yesterday: { kinds: p?.kinds || {}, top: top(p) }, sightings: (Array.isArray(s) ? s : []).slice(0, 20),
+        everSeen: Object.values(book || {}).sort((a, b) => (a.first < b.first ? 1 : -1)).slice(0, 60), days: 'GET /census?day=YYYY-MM-DD for any of the last 40 days' };
     },
     async noteJoin(host) { await update('joins', 30 * DAY, (cur) => [...new Set([...(Array.isArray(cur) ? cur : []), host])].slice(-2000), (seen) => Array.isArray(seen) && seen.includes(host)); },
     // ---------------------------------------------------------------- the open ledger: everything the sea remembers, for mirrors and for the archive
-    async dump() { return { at: now(), agents: (await kv.get('agents')) || {}, traces: (await traceMap(true)) || {}, flow: await headNow(), joins: (await kv.get('joins')) || [], sellers: Object.keys((await kv.get('sellers')) || {}) }; },
+    async dump() { return { at: now(), agents: (await kv.get('agents')) || {}, traces: (await traceMap(true)) || {}, flow: await headNow(), joins: (await kv.get('joins')) || [], sellers: Object.keys((await kv.get('sellers')) || {}), sightings: (await kv.get('sightings')) || [] }; },
     async pulse() {
       const head = await headNow(), day = new Date(Date.now() - DAY * 1000).toISOString(), last = head.filter((e) => e.t > day);
       const cen = (await kv.get(`census:${now().slice(0, 10)}`))?.kinds || {};
