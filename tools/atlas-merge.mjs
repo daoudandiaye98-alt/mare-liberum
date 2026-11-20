@@ -5,7 +5,7 @@
 //   l/<n>.txt       the sites in rank order, 40,000 per file                   (the sitemaps)
 //   stats.json      what the web lets agents do, counted
 import { readdirSync, readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
-import { gunzipSync } from 'node:zlib';
+import { gunzipSync, constants } from 'node:zlib';
 import { join } from 'node:path';
 import { shardOf, idxOf, wordsOf, prior, ATLAS_LIST } from '../node/atlas.mjs';
 import { AGENTS } from '../node/check.mjs';
@@ -18,7 +18,8 @@ const sites = new Map();
 const prev = join(OUT, 's'); let kept = 0;
 if (existsSync(prev)) for (const f of readdirSync(prev)) { try { for (const [d, p] of Object.entries(JSON.parse(readFileSync(join(prev, f), 'utf8')))) { sites.set(d, p); kept++; } } catch {} }
 let fresh = 0;
-for (const f of files) for (const line of gunzipSync(readFileSync(f)).toString('utf8').split('\n')) { if (!line) continue; try { const p = JSON.parse(line); if (!p?.d) continue; const old = sites.get(p.d); if (!old || p.s || !old.s) { if (old?.rk && !p.rk) p.rk = old.rk; sites.set(p.d, p); fresh++; } } catch {} }
+// a part cut off mid-run still gives every whole line it holds
+for (const f of files) for (const line of gunzipSync(readFileSync(f), { finishFlush: constants.Z_SYNC_FLUSH }).toString('utf8').split('\n')) { if (!line) continue; try { const p = JSON.parse(line); if (!p?.d) continue; const old = sites.get(p.d); if (!old || p.s || !old.s) { if (old?.rk && !p.rk) p.rk = old.rk; sites.set(p.d, p); fresh++; } } catch {} }
 console.log(`${files.length} parts · ${fresh} sites read now · ${kept} kept from before · ${sites.size} in the atlas`);
 
 mkdirSync(join(OUT, 's'), { recursive: true }); mkdirSync(join(OUT, 'i'), { recursive: true }); mkdirSync(join(OUT, 'l'), { recursive: true });

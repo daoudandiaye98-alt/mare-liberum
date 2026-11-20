@@ -13,6 +13,7 @@ import { createAtlantis } from './atlantis.mjs';
 import { createBrain } from './brain.mjs';
 import { createLens } from './lens.mjs';
 import { createWeb } from './web.mjs';
+import { createAtlas } from './atlas-sea.mjs';
 import { roleOf } from './atlantis.mjs';
 import { slugOf, NEEDS } from './needs.mjs';
 
@@ -396,6 +397,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
   Object.assign(api, createAtlantis({ kv, update, emit, resident, allow, api, living, SeaError, clean, strip, rid, now, DAY }));
   Object.assign(api, createLens({ kv, update, api, living, SeaError, allow, clean, strip, now, https, sha, emit, resident, DAY }));
   Object.assign(api, createWeb({ kv, update, now, DAY }));
+  Object.assign(api, createAtlas({ kv, update, now, DAY, allow, SeaError, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
   Object.assign(api, createBrain({ kv, update, emit, resident, allow, api, SeaError, clean, strip, now, https, toks, sha, overlap, DAY, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
   return api;
 }

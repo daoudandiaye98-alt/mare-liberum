@@ -92,13 +92,16 @@ export function homeExtras(html, pageUrl, host) {
 
 // ---------------------------------------------------------------- one site
 // robots.txt first: where it says no to the Atlas, only robots.txt itself is read
-export async function profileSite(input, { rank, fetch: get = grab, dns = publicDns, ms = 7000 } = {}) {
+export async function profileSite(input, { rank, fetch: get = grab, dns = publicDns, ms = 7000, homeMax = 600_000 } = {}) {
   const host = safeHost(input); if (!host) return null;
   const d = siteOf(host), at = new Date().toISOString().slice(0, 10), p = { d, at };
   if (rank) p.rk = rank;
   if (!(await dns(host))) return { ...p, s: 0, x: 'no public address' };
   const opt = (max) => ({ max, ms, ua: ATLAS_UA });
-  const robots = await get(`https://${host}/robots.txt`, opt(300_000));
+  let robots = await get(`https://${host}/robots.txt`, opt(300_000));
+  if (!robots.status) { await new Promise((r) => setTimeout(r, 1500)); robots = await get(`https://${host}/robots.txt`, opt(300_000)); }
+  // no reply at all is not a wall: the site (or the way to it) was silent; it is read again next time
+  if (!robots.status && !robots.blocked) return { ...p, s: 0, x: 'no reply' };
   const robotsOk = robots.status === 200 && !/<html/i.test(robots.body || '') && !/text\/html/i.test(robots.type || '');
   const robotsNone = robots.status === 404 || robots.status === 410, wall = !robotsOk && !robotsNone;
   const groups = robotsOk ? robotsGroups(robots.body) : [];
@@ -109,7 +112,7 @@ export async function profileSite(input, { rank, fetch: get = grab, dns = public
   if (wall) { p.s = robots.status || 0; return finish(p); }
   if (!usFor('/')) { p.us = 0; return p; }
   const [home, llms, card] = await Promise.all([
-    get(`https://${host}/`, opt(600_000)),
+    get(`https://${host}/`, opt(homeMax)),
     usFor('/llms.txt') ? get(`https://${host}/llms.txt`, opt(40_000)) : null,
     usFor('/.well-known/agent-card.json') ? get(`https://${host}/.well-known/agent-card.json`, opt(40_000)) : null,
   ]);
@@ -119,7 +122,7 @@ export async function profileSite(input, { rank, fetch: get = grab, dns = public
   if (card && card.status === 200) { try { const j = JSON.parse(card.body); if (j && (j.name || j.skills)) p.ac = { n: String(j.name || '').slice(0, 80), k: Array.isArray(j.skills) ? j.skills.length : 0 }; } catch {} }
   if (home.status === 200 && /html/i.test(home.type || '') && home.body) {
     const pg = readPage(home.body), ex = homeExtras(home.body, home.url || `https://${host}/`, host);
-    if (pg.title) p.t = pg.title; if (pg.description) p.ds = pg.description; if (pg.lang) p.lg = String(pg.lang).slice(0, 12);
+    if (pg.title) p.t = entities(pg.title).slice(0, 160); if (pg.description) p.ds = entities(pg.description).slice(0, 300); if (pg.lang) p.lg = String(pg.lang).slice(0, 12);
     p.w = pg.words; if (pg.shell || pg.words < 40) p.sh = 1; if (pg.jsonld.length) p.ld = pg.jsonld.slice(0, 8); if (pg.noindex || /noindex/i.test(home.robotsTag || '')) p.ni = 1;
     if (ex.feeds.length) p.fd = ex.feeds; if (ex.nav.length) p.nv = ex.nav; if (ex.dev) p.dv = ex.dev;
     if (ex.opensearch) { const os = new URL(ex.opensearch); if (sameSite(os, host) && usFor(os.pathname)) { const x = await get(os.href, opt(40_000)); const t = x.status === 200 ? openSearchTemplate(x.body, host) : null; if (t) { p.q = t; p.qf = 'opensearch'; } } }

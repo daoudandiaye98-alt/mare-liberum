@@ -19,7 +19,8 @@ async function text(url) { for (let i = 0; i < 4; i++) { try { const r = await f
 // the list, the same in every job: ranked sites first, then the sea's own and the wanted ones
 const seen = new Map();
 const add = (raw, rank) => { const h = safeHost(String(raw || '').trim()); if (!h) return; const d = siteOf(h); if (!seen.has(d)) seen.set(d, rank || 0); };
-const csv = await text('https://downloads.majestic.com/majestic_million.csv') || await text('http://downloads.majestic.com/majestic_million.csv');
+const CSV = arg('csv', ''), HOME_MAX = Number(arg('home-max', 300000));
+const csv = CSV ? (await import('node:fs')).readFileSync(CSV, 'utf8') : (await text('https://downloads.majestic.com/majestic_million.csv') || await text('http://downloads.majestic.com/majestic_million.csv'));
 for (const line of csv.split('\n').slice(1)) { const c = line.split(','); if (c.length > 3) { const rank = Number(c[0]); if (rank > 0 && rank <= LIMIT) add(c[2], rank); } }
 console.log(`majestic: ${seen.size} sites`);
 for (const h of TOP) add(h, 0);
@@ -30,7 +31,7 @@ console.log(`job ${JOB}/${JOBS}: ${mine.length} of ${all.length} sites`);
 
 const gz = createGzip({ level: 6 }); const out = createWriteStream(OUT); gz.pipe(out);
 let done = 0, ok = 0, next = 0;
-const one = ([d, rank]) => Promise.race([profileSite(d, { rank: rank || undefined }), new Promise((r) => setTimeout(() => r({ d, at: new Date().toISOString().slice(0, 10), rk: rank || undefined, s: 0, x: 'timeout' }), 30000))]).catch(() => null);
+const one = ([d, rank]) => Promise.race([profileSite(d, { rank: rank || undefined, homeMax: HOME_MAX }), new Promise((r) => setTimeout(() => r({ d, at: new Date().toISOString().slice(0, 10), rk: rank || undefined, s: 0, x: 'timeout' }), 30000))]).catch(() => null);
 await Promise.all(Array.from({ length: CONC }, async () => {
   while (next < mine.length && Date.now() - started < BUDGET) {
     const item = mine[next++]; const p = await one(item); done++;

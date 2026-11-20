@@ -71,8 +71,11 @@ export function createBrain(h) {
         if (snap?.url) cand.push(strip({ to: snap.url, title: `${snap.title} — ${snap.price} ${snap.currency} at ${snap.store}`, kind: 'shop', from: 'the current', asOf: snap.t }));
         const routes = ctx?.readOnly ? [] : await api.routes(t.join(' ') || q, undefined, 6).catch(() => []);
         for (const e of routes) { const ep = (e.endpoints || [])[0], u = https(e.url) || https(typeof ep === 'string' ? ep : ep?.url); if (u && !cand.some((c) => c.to === u)) cand.push(strip({ to: u, title: e.displayName, kind: e.kind, from: 'the open index', pay: e.pay })); }
+        // websites from the Atlas: each with its own search link, already filled with the task
+        const atlas = ctx?.readOnly ? null : await Promise.race([api.find?.(q, 4), new Promise((r) => setTimeout(() => r(null), 2500))]).catch(() => null);
+        for (const x of atlas?.sites || []) { const u = https(x.example) || `https://${x.site}/`; if (!cand.some((c) => c.to === u)) cand.push(strip({ to: u, title: `${x.title || x.site}${x.search ? ' — search link' : ''}`, kind: 'site', from: 'the atlas', map: x.map })); }
         const known = new Set(paths.map((p) => canon(p.to)));
-        const keep = cand.filter((c) => !known.has(canon(c.to))).slice(0, 6);
+        const keep = cand.filter((c) => !known.has(canon(c.to))).slice(0, 8);
         if (keep.length && !ctx?.readOnly) await kv.set(`brain:cand:${qh}`, keep.map((c) => ({ u: canon(c.to), t: c.title, k: c.kind })), DAY);
         cand.length = 0; cand.push(...keep.map((c) => ({ ...c, go: `${base()}/go?${new URLSearchParams({ q, to: c.to, ...(tag ? { tag } : {}) })}` })));
       }
