@@ -14,6 +14,24 @@ import { createBrain } from './brain.mjs';
 import { createLens } from './lens.mjs';
 import { createWeb } from './web.mjs';
 import { createAtlas } from './atlas-sea.mjs';
+import { createAtlasStore } from './atlas-store.mjs';
+import { readFileSync as readFileSyncAtlas } from 'node:fs';
+import { gunzipSync } from 'node:zlib';
+import { join as joinAtlas } from 'node:path';
+
+// the open rank list of the web (Majestic Million, CC BY 3.0), written by the build: one domain per line, read once per instance
+let RANKS = null;
+async function ranks() {
+  if (RANKS) return RANKS;
+  try {
+    const txt = gunzipSync(readFileSyncAtlas(joinAtlas(process.cwd(), 'data', 'ranks.txt.gz'))).toString('latin1');
+    const offs = [0]; for (let i = txt.indexOf('\n'); i !== -1; i = txt.indexOf('\n', i + 1)) offs.push(i + 1);
+    if (offs[offs.length - 1] >= txt.length) offs.pop();
+    RANKS = { length: offs.length, at: (i) => { const a = offs[i]; if (a === undefined) return ''; const b = txt.indexOf('\n', a); return txt.slice(a, b === -1 ? undefined : b); } };
+  } catch { RANKS = { length: 0, at: () => '' }; }
+  return RANKS;
+}
+const atlasStore = createAtlasStore({ url: process.env.MARE_DB_URL, key: process.env.MARE_DB_KEY, secret: process.env.MARE_DB_SECRET });
 import { roleOf } from './atlantis.mjs';
 import { slugOf, NEEDS } from './needs.mjs';
 
@@ -397,7 +415,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
   Object.assign(api, createAtlantis({ kv, update, emit, resident, allow, api, living, SeaError, clean, strip, rid, now, DAY }));
   Object.assign(api, createLens({ kv, update, api, living, SeaError, allow, clean, strip, now, https, sha, emit, resident, DAY }));
   Object.assign(api, createWeb({ kv, update, now, DAY }));
-  Object.assign(api, createAtlas({ kv, update, now, DAY, allow, SeaError, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
+  Object.assign(api, createAtlas({ kv, update, now, DAY, allow, SeaError, store: atlasStore, ranks, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
   Object.assign(api, createBrain({ kv, update, emit, resident, allow, api, SeaError, clean, strip, now, https, toks, sha, overlap, DAY, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
   return api;
 }

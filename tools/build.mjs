@@ -1,7 +1,7 @@
 // Mare Liberum · build the sea: pull every public lake, normalize to ARD-shaped rows, write one open data file.
 // Usage: node tools/build.mjs            (pull live)        node tools/build.mjs --cache   (reuse data/*.ndjson)
 import { createWriteStream, createReadStream, existsSync, readFileSync, writeFileSync, mkdirSync, cpSync, rmSync, readdirSync } from 'node:fs';
-import { createGzip, gunzipSync } from 'node:zlib';
+import { createGzip, gunzipSync, gzipSync } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import { normMcp, normX402, normA2AListed, normUcp, normAgentverse, normHfSpace, normVirtuals, norm8004, readDomain, fetchJson, safeUrl, clean } from '../node/core.mjs';
 import { hayOf, metaOf } from '../node/mem.mjs';
@@ -238,5 +238,13 @@ for (const f of ['demo.mp4', 'og.png', 'og-check.png', 'icon.svg', 'icon-192.png
 // The source travels with the node: anyone can read it and run a mirror.
 mkdirSync('public/source', { recursive: true });
 for (const f of ['node/core.mjs', 'node/mem.mjs', 'node/flow.mjs', 'tools/build.mjs', 'tools/archive.mjs', 'engines/postgres/schema.sql', 'seeds.txt', 'seeds-ard.txt', 'store-pages.json', 'README.md', 'LICENSE']) if (existsSync(f)) cpSync(f, `public/source/${f.split('/').pop()}`);
+// the frontier of the Atlas: the open rank list of the web (Majestic Million, CC BY 3.0), one domain per line
+try {
+  const r = await fetch('https://downloads.majestic.com/majestic_million.csv', { signal: AbortSignal.timeout(120000), headers: { 'user-agent': 'MareLiberum-Atlas/1.0 (+https://mareliberum.dev/atlas)' } });
+  if (!r.ok) throw new Error(`status ${r.status}`);
+  const lines = (await r.text()).split('\n'), out = [];
+  for (let i = 1; i < lines.length; i++) { const d = (lines[i].split(',')[2] || '').trim().toLowerCase(); if (/^[a-z0-9.-]+\.[a-z]{2,}$/.test(d)) out.push(d); }
+  if (out.length > 100000) { writeFileSync('data/ranks.txt.gz', gzipSync(out.join('\n') + '\n', { level: 9 })); console.log(`ranks: ${out.length} domains`); }
+} catch (e) { console.log(`ranks: not read (${e.message}); the Atlas walks its own lists`); }
 writeFileSync('public/build.json', readFileSync('data/build.json'));
 console.log(`sea built: ${ids.length} entries`);

@@ -1,6 +1,7 @@
 // Mare Liberum · the Atlas in the sea: /site/<domain>, /find, /sites, /atlas.
-// The big map is made once a week by GitHub Actions and lies as open data on the branch atlas-data; the sea reads it
-// file by file and keeps what it read for half a day. A site that is not on the map yet is mapped the moment an agent or a
+// The sea maps sites itself, every few minutes (a timer on our own server calls /atlas/step), and keeps every map in its own
+// database (node/atlas-store.mjs). The big snapshot lies as open data on the branch atlas-data as a public mirror; the sea
+// reads it file by file and keeps what it read for half a day. A site that is not on the map yet is mapped the moment an agent or a
 // person asks for it (crawlers only get what is mapped, so no crawler makes the sea knock on other doors). Every site
 // asked for is remembered, so the next weekly map reads it too.
 import { profileSite, expand, wordsOf, prior, shardOf, idxOf, siteOf } from './atlas.mjs';
@@ -14,6 +15,7 @@ export const queryWords = (q) => [...new Set(String(q || '').toLowerCase().split
 
 export function createAtlas(h) {
   const { kv, update, now, DAY, allow, SeaError } = h;
+  const store = h.store || null; // the Atlas store on our own server (node/atlas-store.mjs), if this node has one
   const base = () => String(h.base || 'https://mareliberum.dev').replace(/\/+$/, '');
   // one file of the open map, kept half a day; a missing file is remembered for an hour
   // the version of the map: when a new weekly map is published, every file is read fresh
@@ -32,13 +34,33 @@ export function createAtlas(h) {
     await kv.set(key, { none: true }, 3600); return null;
   }
   const fresh = (p, days) => p && Date.now() - Date.parse(p.at) < days * DAY * 1000;
-  async function stored(d) { return (await kv.get(`atlas:${d}`)) || ((await data(`s/${shardOf(d)}.json`)) || {})[d] || null; }
+  const newer = (a, b) => (!a ? b || null : !b ? a : Date.parse(a.at) >= Date.parse(b.at) ? a : b);
+  // a site as the sea knows it: what it mapped a moment ago, then our own store, then the weekly map, the newest wins
+  async function stored(d) { return (await storedMany([d]))[d] || null; }
+  async function storedMany(ds, memo = true) {
+    const out = {}, kvs = await Promise.all(ds.map((d) => kv.get(`atlas:${d}`)));
+    ds.forEach((d, i) => { if (kvs[i]) out[d] = kvs[i]; });
+    const rest = ds.filter((d) => !out[d]); if (!rest.length) return out;
+    let own = {};
+    if (store) {
+      const memo = await Promise.all(rest.map((d) => kv.get(`atlasx:${d}`))), ask = rest.filter((d, i) => !memo[i]);
+      rest.forEach((d, i) => { if (memo[i]?.p) own[d] = memo[i].p; });
+      if (ask.length) { try { const got = await store.get(ask); Object.assign(own, got); if (memo) await Promise.all(ask.map((d) => kv.set(`atlasx:${d}`, got[d] ? { p: got[d] } : { none: true }, got[d] ? 7 * DAY : 1800))); } catch {} }
+    }
+    const snaps = await Promise.all(rest.map(async (d) => ((await data(`s/${shardOf(d)}.json`)) || {})[d] || null));
+    rest.forEach((d, i) => { const p = newer(own[d], snaps[i]); if (p) out[d] = p; });
+    return out;
+  }
   // a site mapped by the sea joins the words, so /find knows it before the next weekly map
   async function remember(p) {
     await kv.set(`atlas:${p.d}`, p, 45 * DAY);
     await update('atlas:recent', 60 * DAY, (cur) => [p.d, ...(Array.isArray(cur) ? cur.filter((x) => x !== p.d) : [])].slice(0, 20000), () => true);
+    const pr = p.s === 200 ? prior(p) : 0;
+    if (store?.writable) {
+      const wt = p.s === 200 ? Object.fromEntries(wordsOf(p).slice(0, 24).map(([w, x]) => [w, Math.round(x * pr * 1000) / 1000])) : {};
+      try { await store.put([{ d: p.d, p, wt, ok: p.s === 200 }]); await kv.set(`atlasx:${p.d}`, { p }, 7 * DAY); return; } catch {}
+    }
     if (p.s !== 200) return;
-    const pr = prior(p);
     for (const [w, wt] of wordsOf(p).slice(0, 24)) await update(`atlas:w:${w}`, 60 * DAY, (cur) => { const l = (Array.isArray(cur) ? cur : []).filter(([d]) => d !== p.d); l.push([p.d, Math.round(wt * pr * 1000) / 1000]); return l.sort((a, b) => b[1] - a[1]).slice(0, 60); }, () => true);
   }
   const want = (d) => update('atlas:wanted', 120 * DAY, (cur) => { const l = Array.isArray(cur) ? cur : []; return l.includes(d) ? l : [...l, d].slice(-50000); }, (seen) => Array.isArray(seen) && seen.includes(d));
@@ -60,7 +82,12 @@ export function createAtlas(h) {
     // the search of the Atlas: sites that answer the words, the most usable for agents first
     async find(q, limit = 12) {
       const ws = queryWords(q); if (!ws.length) throw new SeaError('INVALID_ARGUMENT', 'say what you look for in words, for example /find?q=train tickets germany');
-      const lists = await Promise.all(ws.map(async (w) => { const [a, b] = await Promise.all([data(`i/${idxOf(w)}.json`).then((o) => (o && o[w]) || []), kv.get(`atlas:w:${w}`).then((l) => l || [])]); return [w, [...a, ...b]]; }));
+      const [lists, own] = await Promise.all([
+        Promise.all(ws.map(async (w) => { const [a, b] = await Promise.all([data(`i/${idxOf(w)}.json`).then((o) => (o && o[w]) || []), kv.get(`atlas:w:${w}`).then((l) => l || [])]); return [w, [...a, ...b]]; })),
+        store ? store.find(ws, 40).catch(() => []) : [],
+      ]);
+      // what our own store mapped since the weekly map joins the same words, at the same weights
+      for (const r of own) for (const w of r.words || []) { const l = lists.find(([x]) => x === w); if (l) l[1].unshift([r.d, r.s / Math.max(1, r.hit)]); }
       const score = new Map();
       for (const [w, l] of lists) { const seen = new Set(); for (const [d, s] of l) { if (seen.has(d)) continue; seen.add(d); const x = score.get(d) || { s: 0, hit: 0, words: [] }; x.s += s; x.hit++; x.words.push(w); score.set(d, x); } }
       const ranked = [...score].map(([d, x]) => [d, x.s * Math.pow(x.hit / ws.length, 2), x.words]).sort((a, b) => b[1] - a[1]).slice(0, limit);
@@ -77,17 +104,40 @@ export function createAtlas(h) {
     async findSites(a = {}) { return atlas.find(a.q ?? a.query ?? a.need ?? a.task, Math.min(Number(a.limit) || 12, 30)); },
     // how many sites the map holds and what the web lets agents do
     async atlasStats() {
-      const [st, recent] = await Promise.all([data('stats.json'), kv.get('atlas:recent')]);
-      return { map: st || { note: 'the first weekly map has not been published yet' }, mappedLive: (recent || []).length, data: `https://github.com/${REPO}/tree/atlas-data`, how: { site: `${base()}/site/<domain>`, find: `${base()}/find?q=<words>`, crawler: `${base()}/atlas` } };
+      const [st, recent, own] = await Promise.all([data('stats.json'), kv.get('atlas:recent'), store ? store.count().catch(() => null) : null]);
+      return { map: st || { note: 'the first weekly map has not been published yet' }, mappedLive: own ?? (recent || []).length, store: store ? 'the sea maps sites on its own server, every few minutes, and keeps them in its own database' : undefined, data: `https://github.com/${REPO}/tree/atlas-data`, how: { site: `${base()}/site/<domain>`, find: `${base()}/find?q=<words>`, crawler: `${base()}/atlas` } };
     },
     async atlasList(n) { if (n === 'live') return ((await kv.get('atlas:recent')) || []).slice(0, 20000); const t = await data(`l/${Number(n) || 0}.txt`); return t ? t.split('\n').filter(Boolean) : []; },
     async atlasLists() { const st = await data('stats.json'); return Number(st?.lists) || 0; },
     async atlasWanted() { const w = (await kv.get('atlas:wanted')) || []; const r = (await kv.get('atlas:recent')) || []; return [...new Set([...w, ...r])]; },
     // a few sites with every tide: the ones agents asked for and the most visited, so the map grows even between the weekly runs
+    // the frontier: sites agents asked for, the most visited, then the open rank list of the web (a million domains), in order;
+    // a site is read again after 30 days, one that did not answer after two
     async atlasStep(n = 6, list = TOP) {
-      const cur = Number(await kv.get('atlas:cursor')) || 0, queue = [...((await kv.get('atlas:wanted')) || []).slice(-200), ...list], pick = [];
-      for (let i = 0; pick.length < n && i < queue.length; i++) { const d = siteOf(queue[(cur + i) % queue.length]); if (!pick.includes(d) && !fresh(await kv.get(`atlas:${d}`), 7)) pick.push(d); }
-      await kv.set('atlas:cursor', queue.length ? (cur + n) % queue.length : 0, 400 * DAY);
+      const wanted = ((await kv.get('atlas:wanted')) || []).slice(-200), rk = (await h.ranks?.().catch(() => null)) || null;
+      const fallback = rk?.length ? null : await atlas.atlasList(0);
+      const len = wanted.length + list.length + (rk ? rk.length : fallback.length);
+      const at = (i) => (i < wanted.length ? wanted[i] : i < wanted.length + list.length ? list[i - wanted.length] : rk ? rk.at(i - wanted.length - list.length) : fallback[i - wanted.length - list.length]);
+      // walk the frontier window by window (a few seconds at most) until there are n sites to read
+      // first the sites of the weekly map that did not answer: one shard of the map per step, two of them read again
+      const pick = [], t0 = Date.now(), rs = Number(await kv.get('atlas:retry')) || 0;
+      try {
+        const sh = (await data(`s/${(rs % 4096).toString(16).padStart(3, '0')}.json`)) || {};
+        const quiet = Object.values(sh).filter((p) => p && p.s === 0 && !fresh(p, 2)).map((p) => p.d).slice(0, 12);
+        const now2 = await storedMany(quiet, false);
+        for (const d of quiet) { const p = now2[d]; if (!p || (p.s === 0 && !fresh(p, 2))) pick.push(d); if (pick.length >= Math.min(2, n)) break; }
+      } catch {}
+      await kv.set('atlas:retry', (rs + 1) % 4096, 400 * DAY);
+      // then the frontier down the rank list, the most visited first; what the map already holds fresh is passed over quickly
+      let cur = Number(await kv.get('atlas:frontier')) || wanted.length + list.length;
+      while (len && pick.length < n && Date.now() - t0 < 9000) {
+        const look = [];
+        for (let i = 0; look.length < 160 && i < Math.min(len, 1200); i++) { const d = siteOf(at((cur + i) % len) || ''); if (d && !look.includes(d) && !pick.includes(d)) look.push(d); }
+        const known = await storedMany(look, false); let used = 0;
+        for (const d of look) { used++; const p = known[d]; if (!p || !fresh(p, 30) || (p.s === 0 && !fresh(p, 2))) pick.push(d); if (pick.length >= n) break; }
+        cur = (cur + Math.max(used, 1)) % len;
+      }
+      await kv.set('atlas:frontier', cur || 1, 400 * DAY);
       const done = await Promise.all(pick.map((d) => Promise.race([profileSite(d), new Promise((r) => setTimeout(() => r(null), 15000))]).then(async (p) => { if (p) await remember(p); return p ? { site: d, grade: p.g, search: !!p.q } : null; }).catch(() => null)));
       return done.filter(Boolean);
     },
