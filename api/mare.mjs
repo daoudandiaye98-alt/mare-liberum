@@ -1,7 +1,7 @@
 import { join } from 'node:path';
 import { readFileSync } from 'node:fs';
 import { getCache, waitUntil } from '@vercel/functions';
-import { handle } from '../node/core.mjs';
+import { handle, AGENT_LINK } from '../node/core.mjs';
 import { createMem } from '../node/mem.mjs';
 import { memoryKv } from '../node/flow.mjs';
 
@@ -28,6 +28,9 @@ const seed = (name) => { try { return JSON.parse(readFileSync(join(process.cwd()
 
 async function run(request) {
   const p = new URL(request.url).searchParams.get('__p');
-  return handle(request, db, p ? { path: p.startsWith('/') ? p : `/${p}`, kv, seed, site, waitUntil, geoIndex } : { kv, seed, site, waitUntil, geoIndex });
+  const res = await handle(request, db, p ? { path: p.startsWith('/') ? p : `/${p}`, kv, seed, site, waitUntil, geoIndex } : { kv, seed, site, waitUntil, geoIndex });
+  // every answer tells an agent where the guide, the card, the MCP door and the brain are
+  try { if (!res.headers.has('link')) res.headers.set('link', AGENT_LINK); } catch {}
+  return res;
 }
 export const GET = run, POST = run, OPTIONS = run;

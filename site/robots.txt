@@ -1,3 +1,5 @@
+# AI agents and assistants are welcome. Guide: https://mare-liberum.vercel.app/llms.txt
+# Read any web page as Markdown: https://mare-liberum.vercel.app/r/<address> · Before you search, ask: https://mare-liberum.vercel.app/brain?q=<task>
 User-agent: *
 Allow: /
 Disallow: /r/
