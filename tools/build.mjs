@@ -1,6 +1,6 @@
 // Mare Liberum · build the sea: pull every public lake, normalize to ARD-shaped rows, write one open data file.
 // Usage: node tools/build.mjs            (pull live)        node tools/build.mjs --cache   (reuse data/*.ndjson)
-import { createWriteStream, createReadStream, existsSync, readFileSync, writeFileSync, mkdirSync, cpSync, rmSync } from 'node:fs';
+import { createWriteStream, createReadStream, existsSync, readFileSync, writeFileSync, mkdirSync, cpSync, rmSync, readdirSync } from 'node:fs';
 import { createGzip, gunzipSync } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import { normMcp, normX402, normA2AListed, normUcp, normAgentverse, normHfSpace, normVirtuals, norm8004, readDomain, fetchJson, safeUrl, clean } from '../node/core.mjs';
@@ -225,6 +225,7 @@ if (process.env.VERCEL) rmSync('data/sea.tsv');
 writeFileSync('data/build.json', JSON.stringify({ builtAt: new Date().toISOString(), entries: ids.length, endpointHosts: hosts.size, lakes: lakeStats }));
 // the index on the map: entries whose publisher uses a country domain, placed at that country's centre (global endings are not placed)
 { const cc = {}; let placed = 0; for (const r of all.values()) { const c = tldCountry(r.publisher || ''); if (c) { cc[c] = (cc[c] || 0) + 1; placed++; } }
+  { const k = readdirSync('public').find((f) => /^[0-9a-f]{32}\.txt$/.test(f)); if (k) writeFileSync('data/indexnow.json', JSON.stringify({ key: k.slice(0, -4) })); }
   writeFileSync('data/geo-index.json', JSON.stringify({ at: new Date().toISOString(), total: ids.length, placed, countries: Object.entries(cc).sort((a, b) => b[1] - a[1]).map(([c, n]) => ({ cc: c, n, lat: CENTROID[c][0], lon: CENTROID[c][1] })), note: 'entries of the open index whose publisher uses a country domain, placed at the centre of that country; .com, .io, .ai and other global endings are not placed' })); }
 // the open ledger of the living sea (traces, latest events) travels with the build, so the sea remembers across restarts
 for (const [from, to] of [['flow/traces.json', 'data/flow-traces.json'], ['flow/head.json', 'data/flow-head.json']]) if (existsSync(from)) cpSync(from, to);

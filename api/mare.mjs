@@ -23,12 +23,13 @@ const site = Object.fromEntries(Object.entries({ '/': page('index.html', 'text/h
 
 // what the open ledger remembers travels with every build (flow/*.json in the repository)
 // the open index placed on the map by country domain (written by the build)
+const indexnowKey = (() => { try { return JSON.parse(readFileSync(join(process.cwd(), 'data', 'indexnow.json'), 'utf8')).key; } catch { return null; } })();
 const geoIndex = (() => { try { return JSON.parse(readFileSync(join(process.cwd(), 'data', 'geo-index.json'), 'utf8')); } catch { return null; } })();
 const seed = (name) => { try { return JSON.parse(readFileSync(join(process.cwd(), 'data', `flow-${name}.json`), 'utf8')); } catch { return null; } };
 
 async function run(request) {
   const p = new URL(request.url).searchParams.get('__p');
-  const res = await handle(request, db, p ? { path: p.startsWith('/') ? p : `/${p}`, kv, seed, site, waitUntil, geoIndex } : { kv, seed, site, waitUntil, geoIndex });
+  const res = await handle(request, db, p ? { path: p.startsWith('/') ? p : `/${p}`, kv, seed, site, waitUntil, geoIndex, indexnowKey } : { kv, seed, site, waitUntil, geoIndex, indexnowKey });
   // every answer tells an agent where the guide, the card, the MCP door and the brain are
   try { if (!res.headers.has('link')) res.headers.set('link', AGENT_LINK); } catch {}
   return res;
