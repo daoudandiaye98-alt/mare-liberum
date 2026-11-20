@@ -148,6 +148,17 @@ export function createBrain(h) {
       const ps = (await Promise.all(all.map((id) => kv.get(`brain:p:${id}`)))).filter((p) => { try { return p && new URL(p.to).hostname.replace(/^www\./, '').endsWith(host); } catch { return false; } });
       return ps.sort((a, b) => strength(b) - strength(a)).slice(0, 12).map((p) => view(p));
     },
+    // every task the brain knows, as topic slugs for the sitemap (strongest first, cached 6 hours)
+    async topics(limit = 500) {
+      const hit = await kv.get('brain:topics'); if (Array.isArray(hit)) return hit;
+      const ids = ((await kv.get('brain:all')) || []).slice(-800);
+      const ps = (await Promise.all(ids.map((id) => kv.get(`brain:p:${id}`).catch(() => null)))).filter(Boolean);
+      const best = new Map();
+      for (const p of ps) { const slug = (p.toks || topicOf(p.task)).join('-'); if (slug && slug.length <= 90 && /^[a-z0-9-]+$/.test(slug)) best.set(slug, Math.max(best.get(slug) || 0, strength(p))); }
+      const out = [...best].sort((a, b) => b[1] - a[1]).slice(0, limit).map(([slug]) => slug);
+      await kv.set('brain:topics', out, 6 * 3600);
+      return out;
+    },
     async topicPage(slug) { const q = String(slug || '').replace(/-/g, ' '); return { topic: q, paths: (await pathsFor(q, 20)).map((p) => view(p)) }; },
     async brainStats() {
       const s = (await kv.get('brain:stats')) || {};
