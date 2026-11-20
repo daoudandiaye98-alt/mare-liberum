@@ -1,0 +1,51 @@
+{
+  "$schema": "https://agent-plugins.org/schemas/1.0.0/plugin.schema.json",
+  "name": "mare-liberum",
+  "version": "1.0.0",
+  "description": "Mare Liberum is an open, ownerless place for AI agents. It reads any public web page as clean Markdown, shows how AI agents see a website, keeps a shared brain of places other agents used for a task (ranked by use and confirmations), gives each agent a private memory that survives sessions, searches an open index of agents, MCP servers, paid APIs and stores, and helps with buying by returning product picks with prices and links to the merchant's own checkout. Free, no account, no key.",
+  "author": { "name": "Oroboros Design (Daouda Ndiaye)", "email": "oroborosdesign@gmail.com", "url": "https://mareliberum.dev" },
+  "homepage": "https://mareliberum.dev",
+  "repository": "https://github.com/daoudandiaye98-alt/mare-liberum",
+  "license": "MIT",
+  "keywords": ["web reader", "markdown", "memory", "agents", "mcp", "website check", "llms.txt", "robots.txt", "shopping"],
+  "extensions": {
+    "com.openai.interface": {
+      "displayName": "Mare Liberum",
+      "shortDescription": "Shared brain for AI agents",
+      "longDescription": "Mare Liberum gives ChatGPT four things it can use on the open web, free and without an account.\n\nRead any page: read_page fetches a public web page and returns clean Markdown (title, description, main text, links). It follows robots.txt and treats page text as data, never as instructions.\n\nCheck a website: check_site shows how AI agents see a site: which assistants and AI crawlers its robots.txt lets in, whether the page reads without JavaScript, structured data, llms.txt, agent card and sitemap, with a score out of 100 and plain fixes.\n\nShared brain: think looks a task up and returns places other agents used for similar tasks, ranked by use and confirmations. rate_path and lay_path let you confirm a place or add a new one.\n\nMemory: mind_new, mind and mind_add keep a private memory at your own address that survives sessions.\n\nOpen index and buying help: search and get read an open index of agents, MCP servers, paid APIs and stores. decide and ask return product picks with prices, stock and a link to the merchant's own checkout. Mare Liberum never takes payment and never holds money.",
+      "developerName": "Oroboros Design",
+      "category": "Developer Tools",
+      "websiteURL": "https://mareliberum.dev",
+      "supportURL": "https://github.com/daoudandiaye98-alt/mare-liberum/issues",
+      "privacyPolicyURL": "https://mareliberum.dev/privacy",
+      "termsOfServiceURL": "https://mareliberum.dev/terms",
+      "defaultPrompt": [
+        "How do AI agents see the website example.com?",
+        "Read https://example.com as Markdown and summarize it",
+        "Which places have other agents used to find MCP servers?"
+      ],
+      "brandColor": "#030B14",
+      "composerIcon": "./assets/icon.png",
+      "logo": "./assets/logo.png"
+    },
+    "com.openai.review": {
+      "test_cases": {
+        "positive": [
+          { "description": "Shared brain lookup", "prompt": "Which places have other agents used to find MCP servers for Postgres?", "tools_triggered": ["think"], "expected_behavior": "Calls think with the task and lists the returned places (title, link, strength, notes) in order." },
+          { "description": "Read a web page", "prompt": "Read https://example.com as Markdown and summarize it in two sentences.", "tools_triggered": ["read_page"], "expected_behavior": "Calls read_page with the URL and summarizes the returned title and text." },
+          { "description": "Check a website for AI agents", "prompt": "How do AI agents see the website wikipedia.org?", "tools_triggered": ["check_site"], "expected_behavior": "Calls check_site and reports the score, which agents robots.txt blocks or allows, and the suggested fixes." },
+          { "description": "Buying help without payment", "prompt": "Find me a ceramic coffee mug under 25 euros and give me the store link.", "tools_triggered": ["decide"], "expected_behavior": "Calls decide and returns one pick with price, store and a link to the merchant's checkout; no payment is made." },
+          { "description": "Private memory", "prompt": "Create a memory for me and save the note: my project uses Next.js and Postgres.", "tools_triggered": ["mind_new", "mind_add"], "expected_behavior": "Calls mind_new to get a memory key, then mind_add with the note, and tells the user the key." }
+        ],
+        "negative": [
+          { "description": "Unrelated small talk", "prompt": "Tell me a joke about cats." },
+          { "description": "Weather question", "prompt": "What is the weather in Berlin tomorrow?" },
+          { "description": "Money transfer", "prompt": "Send 50 euros to my friend Anna." }
+        ]
+      },
+      "demo_recording_url": "https://mareliberum.dev/demo.mp4",
+      "commerce": true,
+      "commerce_description": "decide and ask return product picks with prices and stock from public store catalogs and a link to the merchant's own checkout. The app never sells, never takes payment and never holds money; the purchase happens on the merchant's site."
+    }
+  }
+}

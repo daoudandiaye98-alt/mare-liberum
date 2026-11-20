@@ -234,7 +234,7 @@ mkdirSync('data/site', { recursive: true }); for (const f of ['index.html', 'llm
 // the fonts of the site are served as static files, from our own domain (no third-party font requests)
 if (existsSync('site/fonts')) { mkdirSync('public/fonts', { recursive: true }); cpSync('site/fonts', 'public/fonts', { recursive: true }); }
 // the faces of the sea when it is shared or saved: preview images, icons, the web manifest
-for (const f of ['og.png', 'og-check.png', 'icon.svg', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'favicon.ico', 'manifest.webmanifest']) if (existsSync(`site/${f}`)) cpSync(`site/${f}`, `public/${f}`);
+for (const f of ['demo.mp4', 'og.png', 'og-check.png', 'icon.svg', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'favicon.ico', 'manifest.webmanifest']) if (existsSync(`site/${f}`)) cpSync(`site/${f}`, `public/${f}`);
 // The source travels with the node: anyone can read it and run a mirror.
 mkdirSync('public/source', { recursive: true });
 for (const f of ['node/core.mjs', 'node/mem.mjs', 'node/flow.mjs', 'tools/build.mjs', 'tools/archive.mjs', 'engines/postgres/schema.sql', 'seeds.txt', 'seeds-ard.txt', 'store-pages.json', 'README.md', 'LICENSE']) if (existsSync(f)) cpSync(f, `public/source/${f.split('/').pop()}`);
