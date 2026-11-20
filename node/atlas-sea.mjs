@@ -63,6 +63,14 @@ export function createAtlas(h) {
     if (p.s !== 200) return;
     for (const [w, wt] of wordsOf(p).slice(0, 24)) await update(`atlas:w:${w}`, 60 * DAY, (cur) => { const l = (Array.isArray(cur) ? cur : []).filter(([d]) => d !== p.d); l.push([p.d, Math.round(wt * pr * 1000) / 1000]); return l.sort((a, b) => b[1] - a[1]).slice(0, 60); }, () => true);
   }
+  // the sites of the weekly map as one set, so the frontier passes them without a lookup each
+  let SNAP = null;
+  async function snapSet() {
+    const v = await version(); if (SNAP?.v === v) return SNAP.set;
+    const st = await data('stats.json'); if (!st?.at || Date.now() - Date.parse(st.at) > 30 * DAY * 1000) return null;
+    const set = new Set(); for (let i = 0; i < (Number(st.lists) || 0); i++) { const t = await data(`l/${i}.txt`); for (const d of String(t || '').split('\n')) if (d) set.add(d); }
+    SNAP = { v, set }; return set;
+  }
   const want = (d) => update('atlas:wanted', 120 * DAY, (cur) => { const l = Array.isArray(cur) ? cur : []; return l.includes(d) ? l : [...l, d].slice(-50000); }, (seen) => Array.isArray(seen) && seen.includes(d));
 
   const atlas = {
@@ -130,11 +138,12 @@ export function createAtlas(h) {
       await kv.set('atlas:retry', (rs + 1) % 4096, 400 * DAY);
       // then the frontier down the rank list, the most visited first; what the map already holds fresh is passed over quickly
       let cur = Number(await kv.get('atlas:frontier')) || wanted.length + list.length;
+      const onMap = await snapSet().catch(() => null); // every site on the weekly map, while that map is under 30 days old
       while (len && pick.length < n && Date.now() - t0 < 9000) {
-        const look = [];
-        for (let i = 0; look.length < 160 && i < Math.min(len, 1200); i++) { const d = siteOf(at((cur + i) % len) || ''); if (d && !look.includes(d) && !pick.includes(d)) look.push(d); }
-        const known = await storedMany(look, false); let used = 0;
-        for (const d of look) { used++; const p = known[d]; if (!p || !fresh(p, 30) || (p.s === 0 && !fresh(p, 2))) pick.push(d); if (pick.length >= n) break; }
+        const look = [], idx = []; let i = 0;
+        for (; look.length < 160 && i < Math.min(len, 50000); i++) { const d = siteOf(at((cur + i) % len) || ''); if (!d || onMap?.has(d) || look.includes(d) || pick.includes(d)) continue; look.push(d); idx.push(i); }
+        const known = await storedMany(look, false); let used = i;
+        for (let j = 0; j < look.length; j++) { const d = look[j], p = known[d]; if (!p || !fresh(p, 30) || (p.s === 0 && !fresh(p, 2))) pick.push(d); if (pick.length >= n) { used = idx[j] + 1; break; } }
         cur = (cur + Math.max(used, 1)) % len;
       }
       await kv.set('atlas:frontier', cur || 1, 400 * DAY);
