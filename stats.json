@@ -1,0 +1,456 @@
+{
+ "at": "2026-11-20T14:52:39.793Z",
+ "sites": 27060,
+ "read": 15738,
+ "lists": 1,
+ "words": 74741,
+ "entries": 239967,
+ "share": {
+  "searchLink": 32.4,
+  "searchFromOpenSearch": 1.8,
+  "feeds": 22.9,
+  "sitemap": 62.4,
+  "llmsTxt": 14.8,
+  "agentCard": 0.2,
+  "jsonLd": 47.4,
+  "needsJavaScript": 7.5,
+  "developerPages": 4.2,
+  "wall": 22,
+  "saysNoToAtlas": 1.2
+ },
+ "blocked": [
+  {
+   "name": "GPTBot",
+   "op": "OpenAI",
+   "role": "training",
+   "share": 11.3
+  },
+  {
+   "name": "CCBot",
+   "op": "Common Crawl",
+   "role": "training",
+   "share": 10.9
+  },
+  {
+   "name": "Bytespider",
+   "op": "ByteDance",
+   "role": "training",
+   "share": 10.1
+  },
+  {
+   "name": "ClaudeBot",
+   "op": "Anthropic",
+   "role": "training",
+   "share": 9.3
+  },
+  {
+   "name": "Google-Extended",
+   "op": "Google",
+   "role": "training",
+   "share": 8.5
+  },
+  {
+   "name": "Meta-ExternalAgent",
+   "op": "Meta",
+   "role": "training",
+   "share": 8.2
+  },
+  {
+   "name": "Applebot-Extended",
+   "op": "Apple",
+   "role": "training",
+   "share": 7.9
+  },
+  {
+   "name": "Amazonbot",
+   "op": "Amazon",
+   "role": "search",
+   "share": 7.6
+  },
+  {
+   "name": "ChatGPT-User",
+   "op": "OpenAI",
+   "role": "live",
+   "share": 4.3
+  },
+  {
+   "name": "PerplexityBot",
+   "op": "Perplexity",
+   "role": "search",
+   "share": 3.8
+  },
+  {
+   "name": "OAI-SearchBot",
+   "op": "OpenAI",
+   "role": "search",
+   "share": 2.1
+  },
+  {
+   "name": "Perplexity-User",
+   "op": "Perplexity",
+   "role": "live",
+   "share": 1.4
+  },
+  {
+   "name": "Claude-User",
+   "op": "Anthropic",
+   "role": "live",
+   "share": 1.3
+  },
+  {
+   "name": "Claude-SearchBot",
+   "op": "Anthropic",
+   "role": "search",
+   "share": 1.2
+  },
+  {
+   "name": "DuckAssistBot",
+   "op": "DuckDuckGo",
+   "role": "live",
+   "share": 1.2
+  },
+  {
+   "name": "MistralAI-User",
+   "op": "Mistral",
+   "role": "live",
+   "share": 1
+  },
+  {
+   "name": "Googlebot",
+   "op": "Google",
+   "role": "search",
+   "share": 0.1
+  },
+  {
+   "name": "Bingbot",
+   "op": "Microsoft",
+   "role": "search",
+   "share": 0.1
+  }
+ ],
+ "grades": [
+  {
+   "g": "A",
+   "n": 1652
+  },
+  {
+   "g": "B",
+   "n": 5877
+  },
+  {
+   "g": "C",
+   "n": 6040
+  },
+  {
+   "g": "D",
+   "n": 1116
+  },
+  {
+   "g": "E",
+   "n": 1053
+  }
+ ],
+ "top": [
+  {
+   "site": "google.com",
+   "rank": 1,
+   "grade": "D",
+   "search": true
+  },
+  {
+   "site": "youtube.com",
+   "rank": 3,
+   "grade": "C",
+   "search": false
+  },
+  {
+   "site": "apple.com",
+   "rank": 7,
+   "grade": "B",
+   "search": false
+  },
+  {
+   "site": "microsoft.com",
+   "rank": 9,
+   "grade": "B",
+   "search": false
+  },
+  {
+   "site": "github.com",
+   "rank": 10,
+   "grade": "B",
+   "search": true
+  },
+  {
+   "site": "play.google.com",
+   "rank": 11,
+   "grade": "C",
+   "search": true
+  },
+  {
+   "site": "wikipedia.org",
+   "rank": 12,
+   "grade": "C",
+   "search": true
+  },
+  {
+   "site": "apps.apple.com",
+   "rank": 13,
+   "grade": "B",
+   "search": false
+  },
+  {
+   "site": "youtu.be",
+   "rank": 14,
+   "grade": "C",
+   "search": false
+  },
+  {
+   "site": "wordpress.org",
+   "rank": 17,
+   "grade": "A",
+   "search": true
+  },
+  {
+   "site": "wa.me",
+   "rank": 18,
+   "grade": "C",
+   "search": false
+  },
+  {
+   "site": "en.wikipedia.org",
+   "rank": 19,
+   "grade": "B",
+   "search": true
+  },
+  {
+   "site": "maps.google.com",
+   "rank": 20,
+   "grade": "D",
+   "search": true
+  },
+  {
+   "site": "tiktok.com",
+   "rank": 22,
+   "grade": "D",
+   "search": false
+  },
+  {
+   "site": "docs.google.com",
+   "rank": 23,
+   "grade": "C",
+   "search": false
+  },
+  {
+   "site": "whatsapp.com",
+   "rank": 24,
+   "grade": "C",
+   "search": false
+  },
+  {
+   "site": "vimeo.com",
+   "rank": 25,
+   "grade": "C",
+   "search": false
+  },
+  {
+   "site": "policies.google.com",
+   "rank": 26,
+   "grade": "D",
+   "search": false
+  },
+  {
+   "site": "nginx.org",
+   "rank": 27,
+   "grade": "C",
+   "search": false
+  },
+  {
+   "site": "f5.com",
+   "rank": 28,
+   "grade": "B",
+   "search": false
+  },
+  {
+   "site": "nginx.com",
+   "rank": 29,
+   "grade": "E",
+   "search": false
+  },
+  {
+   "site": "amazon.com",
+   "rank": 30,
+   "grade": "E",
+   "search": false
+  },
+  {
+   "site": "t.me",
+   "rank": 32,
+   "grade": "C",
+   "search": false
+  },
+  {
+   "site": "drive.google.com",
+   "rank": 34,
+   "grade": "C",
+   "search": false
+  },
+  {
+   "site": "mozilla.org",
+   "rank": 35,
+   "grade": "C",
+   "search": false
+  },
+  {
+   "site": "europa.eu",
+   "rank": 36,
+   "grade": "D",
+   "search": false
+  },
+  {
+   "site": "support.google.com",
+   "rank": 37,
+   "grade": "D",
+   "search": false
+  },
+  {
+   "site": "adobe.com",
+   "rank": 38,
+   "grade": "A",
+   "search": false
+  },
+  {
+   "site": "wordpress.com",
+   "rank": 39,
+   "grade": "A",
+   "search": true
+  },
+  {
+   "site": "bit.ly",
+   "rank": 40,
+   "grade": "B",
+   "search": false
+  },
+  {
+   "site": "player.vimeo.com",
+   "rank": 42,
+   "grade": "C",
+   "search": false
+  },
+  {
+   "site": "apache.org",
+   "rank": 43,
+   "grade": "C",
+   "search": false
+  },
+  {
+   "site": "github.io",
+   "rank": 44,
+   "grade": "E",
+   "search": false
+  },
+  {
+   "site": "plus.google.com",
+   "rank": 45,
+   "grade": "E",
+   "search": false
+  },
+  {
+   "site": "nih.gov",
+   "rank": 46,
+   "grade": "C",
+   "search": false
+  },
+  {
+   "site": "spotify.com",
+   "rank": 49,
+   "grade": "D",
+   "search": false
+  },
+  {
+   "site": "yahoo.com",
+   "rank": 50,
+   "grade": "B",
+   "search": false
+  },
+  {
+   "site": "qq.com",
+   "rank": 51,
+   "grade": "C",
+   "search": false
+  },
+  {
+   "site": "itunes.apple.com",
+   "rank": 52,
+   "grade": "B",
+   "search": false
+  },
+  {
+   "site": "creativecommons.org",
+   "rank": 53,
+   "grade": "B",
+   "search": true
+  },
+  {
+   "site": "open.spotify.com",
+   "rank": 54,
+   "grade": "D",
+   "search": false
+  },
+  {
+   "site": "ec.europa.eu",
+   "rank": 55,
+   "grade": "D",
+   "search": false
+  },
+  {
+   "site": "archive.org",
+   "rank": 56,
+   "grade": "D",
+   "search": false
+  },
+  {
+   "site": "tumblr.com",
+   "rank": 57,
+   "grade": "C",
+   "search": true
+  },
+  {
+   "site": "gravatar.com",
+   "rank": 59,
+   "grade": "C",
+   "search": false
+  },
+  {
+   "site": "sites.google.com",
+   "rank": 60,
+   "grade": "C",
+   "search": false
+  },
+  {
+   "site": "w3.org",
+   "rank": 61,
+   "grade": "C",
+   "search": false
+  },
+  {
+   "site": "doi.org",
+   "rank": 62,
+   "grade": "C",
+   "search": false
+  },
+  {
+   "site": "office.com",
+   "rank": 63,
+   "grade": "E",
+   "search": false
+  },
+  {
+   "site": "amazonaws.com",
+   "rank": 64,
+   "grade": "B",
+   "search": false
+  }
+ ],
+ "source": "MareLiberum-Atlas, read from what each site publishes; ranks from the Majestic Million (CC BY 3.0, majestic.com). Open data, CC BY 4.0."
+}
