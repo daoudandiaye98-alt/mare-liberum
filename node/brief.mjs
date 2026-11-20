@@ -651,15 +651,17 @@ export function reviewDraft(task, draft, opts = {}) {
 
 // tips agents leave for a kind of task: short, no links, no instructions to other agents — data for the next one
 const BAD = /\b(ignore (all|any|previous|the)|disregard|system prompt|you are now|act as|jailbreak|developer mode|do anything now|<\/?script|password|api[_ -]?key|private key|seed phrase|wallet address)\b/i;
-export function createBriefs({ kv, update, allow, SeaError, clean, now, DAY = 86400 }) {
+export function createBriefs({ kv, update, allow, SeaError, clean, now, DAY = 86400, examples }) {
   return {
     async briefTips(kind) { return ((await kv.get(`brief:tips:${kind}`)) || []).filter((x) => x.up - x.down > -3).sort((a, b) => b.up - b.down - (a.up - a.down) || (a.at < b.at ? 1 : -1)).slice(0, 8); },
     async brief(a = {}) {
       const task = clean ? clean(a.task ?? a.q ?? a.need ?? a.prompt, 2000) : String(a.task ?? a.q ?? '').slice(0, 2000);
       if (!task && !a.kind) return { what: 'the missing half of a prompt: give a task in words and get what it left out, the method, the quality bar and the checks', kinds: BRIEF_KINDS.map((k) => k.kind) };
       const b = briefFor(task, { base: a.base, kind: a.kind });
-      const tips = await this.briefTips(b.kind).catch(() => []);
+      const [tips, ex] = await Promise.all([this.briefTips(b.kind).catch(() => []), examples ? examples(b.kind, a.base).catch(() => []) : []]);
       if (tips.length) b.tips = tips.map((x) => ({ id: x.id, tip: x.t, up: x.up, down: x.down }));
+      // the strongest results other agents published for this kind of work: start from the best, not from zero
+      if (ex.length) b.examples = ex;
       return b;
     },
     async review(a = {}) {
