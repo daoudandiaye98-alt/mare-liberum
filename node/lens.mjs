@@ -19,6 +19,7 @@ export function createLens(h) {
       const day = now().slice(0, 10), days = Array.from({ length: 30 }, (_, i) => new Date(Date.parse(day) - i * DAY * 1000).toISOString().slice(0, 10));
       const [pulse, census, brain, top, head, arena, ticks, checks, reads, board, ...ds] = await Promise.all([api.pulse(), api.census(), api.brainStats(), api.topPaths(6), kv.get('flow:head'), api.arenaStats(), kv.get('tide:count'), kv.get(`check:count:${day}`), kv.get(`reads:${day}`), api.webBoard?.().catch(() => null), ...days.map((x) => kv.get(`census:${x}`))]);
       const roles = {}; for (const [k, v] of Object.entries(census.today.kinds || {})) { const r = roleOf(k); roles[r] = (roles[r] || 0) + v; }
+      const rolesYesterday = {}; for (const [k, v] of Object.entries(census.yesterday?.kinds || {})) { const r = roleOf(k); rolesYesterday[r] = (rolesYesterday[r] || 0) + v; }
       // the map keeps the last 30 days: every area that reached the sea, brightest where it was seen last
       const cellAt = {}, cc = {}, ccToday = ds[0]?.cc || {}; let seen = 0, since = null;
       ds.forEach((d, age) => { if (!d) return; if (d.cc || d.cells) { seen++; since = days[age]; }
@@ -29,7 +30,7 @@ export function createLens(h) {
       const feed = (head || []).filter((e) => FEED.has(e.type) && (e.type !== 'tide' || (e.change && e.change !== 'steady'))).slice(0, 40).map((e) => strip({ t: e.t, type: e.type, name: e.name, text: clean(e.text, 200), url: https(e.url) }));
       const t = Number(ticks) || 0;
       return { at: now(), clock: { day: Math.floor(t / 24) + 1, hour: t % 24 }, residents: pulse.residents, last24h: pulse.last24h, eco: pulse.eco, buoys: pulse.buoys, brain: { ...brain, top }, arena: { runs: arena?.runs || 0, brevets: arena?.brevets || 0 },
-        roles, clients: (census.today.top || []).slice(0, 12).map((x) => strip({ ...x, role: roleOf(x.kind), operator: OPERATORS[x.name] })), geo: { cells, countries, countriesToday: Object.keys(ccToday).length, days: seen, since, note: 'requests of the last 30 days by network location: country and a 2° cell (about 200 km); nothing about people is kept' }, checks: { today: Number(checks) || 0 },
+        roles, clients: (census.today.top || []).slice(0, 12).map((x) => strip({ ...x, role: roleOf(x.kind), operator: OPERATORS[x.name] })), geo: { cells, countries, countriesToday: Object.keys(ccToday).length, days: seen, since, note: 'requests of the last 30 days by network location: country and a 2° cell (about 200 km); nothing about people is kept' }, checks: { today: Number(checks) || 0 }, rolesYesterday,
         // what each kind of visitor reads today (by the first part of the path), and what agents read through the sea
         behaviour: Object.entries(ds[0]?.p || {}).map(([k, n]) => { const [role, ...rest] = k.split(' '); return { role, path: rest.join(' '), n }; }).sort((a, b) => b.n - a.n).slice(0, 40),
         reads: { today: reads?.total || 0, sites: Object.entries(reads?.hosts || {}).sort((a, b) => b[1] - a[1]).slice(0, 20).map(([host, n]) => ({ host, n })) },

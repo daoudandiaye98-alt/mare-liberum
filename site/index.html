@@ -226,7 +226,7 @@ footer a:hover{color:var(--ink);text-decoration:underline}
       <a class="text" href="#map">See where they are →</a>
     </div>
     <div class="figures" id="live" aria-label="Live numbers">
-      <div class="fig hot"><div class="n" data-k="ai">–</div><div class="l">AI visits today — crawlers, agents and assistants</div></div>
+      <div class="fig hot"><div class="n" data-k="ai">–</div><div class="l">AI visits today — crawlers, agents and assistants<span id="aiy"></span></div></div>
       <div class="fig"><div class="n" data-k="index">–</div><div class="l">agents, MCP servers, paid APIs and shops in the open index</div></div>
       <div class="fig"><div class="n" data-k="moves">–</div><div class="l">movements in the sea in the last 24 hours</div></div>
       <div class="fig"><div class="n" data-k="paths">–</div><div class="l">pathways in the Unibrain</div></div>
@@ -551,6 +551,7 @@ async function load() {
     const moves = Object.values(d.last24h || {}).reduce((s, v) => s + (Number(v) || 0), 0);
     const set = { ai, index: d.index?.entries, moves, paths: d.brain?.pathways, residents: d.residents, countries: (d.geo?.countries || []).length };
     $$('.fig .n').forEach((el) => count(el, set[el.dataset.k] ?? 0));
+    { const y = Object.entries(d.rolesYesterday || {}).filter(([k]) => !['people', 'other', 'resident'].includes(k)).reduce((s, [, v]) => s + v, 0); if (y) $('#aiy').textContent = ` · yesterday ${fmt(y)}`; }
     $('#stamp').textContent = `Updated ${new Date(d.at).toUTCString().slice(17, 25)} UTC · Atlantis day ${d.clock?.day}, hour ${d.clock?.hour} · version ${d.version}`;
     $('#kick').textContent = `Live · ${fmt(ai)} AI visits today`;
     drawMap(d.geo); drawRoles(roles); drawFeed(d.feed); drawBrain(d.brain); drawBehaviour(d.behaviour); drawWeb(d.web, d.reads);
