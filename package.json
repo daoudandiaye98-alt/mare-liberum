@@ -10,7 +10,8 @@
   },
   "scripts": {
     "build": "node tools/build.mjs",
-    "proof": "node local.mjs"
+    "proof": "node local.mjs",
+    "start": "node serve.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.9.0",

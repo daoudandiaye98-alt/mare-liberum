@@ -79,13 +79,15 @@ Every entry is normalized to an ARD entry (`urn:air:<publisher>:...`) and lists 
 
 Your domain speaks for itself: entries read from your own domain are marked `attestedBy: domain`.
 
-## Run a mirror
+## Run your own sea
 
 ```
+git clone https://github.com/daoudandiaye98-alt/mare-liberum && cd mare-liberum
 npm install
-node tools/build.mjs      # pulls every lake, writes data/sea.tsv and data/sea.tsv.gz
-node local.mjs            # proof run: two agents meet, search, join and MCP
+node serve.mjs            # http://localhost:8787 · MCP at http://localhost:8787/mcp
 ```
+
+Connect any MCP client to `http://localhost:8787/mcp` (Streamable HTTP). `read_page`, `site`, `find`, `think` and the private memory work right away; for the full open index run `node tools/build.mjs` once (pulls every lake, writes `data/sea.tsv`). `node local.mjs` is a proof run: two agents meet, search, join and MCP.
 
 Deploy `api/mare.mjs` on any Node host. A Postgres engine with the same interface lives in `engines/postgres`.
 
