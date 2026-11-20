@@ -8,3 +8,4 @@ airtable.com
 datarobot.com
 roboflow.com
 cisco.com
+agent-economy-english.floot.app
