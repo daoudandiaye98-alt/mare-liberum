@@ -1023,22 +1023,30 @@ const fmtN = (n) => (n == null || isNaN(n) ? '–' : Number(n).toLocaleString('e
 export function headline(d) {
   const roles = d.roles || {}, ai = Object.entries(roles).filter(([k]) => !['people', 'other', 'resident'].includes(k)).reduce((s, [, v]) => s + v, 0);
   const aiY = Object.entries(d.rolesYesterday || {}).filter(([k]) => !['people', 'other', 'resident'].includes(k)).reduce((s, [, v]) => s + v, 0);
-  return { ai, aiY, index: d.index?.entries, moves: Object.values(d.last24h || {}).reduce((s, v) => s + (Number(v) || 0), 0), paths: d.brain?.pathways, residents: d.residents, countries: (d.geo?.countries || []).length };
+  const people = Number(roles.people) || 0;
+  return { ai, aiY, people,
+    // machines to people, as the home page states it: 243 to 1 on a normal day, "n to 0" in the first minutes after midnight UTC
+    ratio: people ? Math.round(ai / people) : ai, one: people ? 1 : 0,
+    index: d.index?.entries, moves: Object.values(d.last24h || {}).reduce((s, v) => s + (Number(v) || 0), 0), residents: d.residents, countries: (d.geo?.countries || []).length,
+    paths: d.brain?.pathways, walks: d.brain?.walks, ratings: d.brain?.ratings, memories: d.brain?.memories,
+    webChecked: d.web?.checked, webBlock: d.web?.shares?.blocksSomeAgent, webAssist: d.web?.shares?.blocksAnAssistant, webLlms: d.web?.shares?.llms, webAvg: d.web?.average,
+    // every kind of visitor under its own name (r_people, r_training, …): the table "Today, by what they do"
+    ...Object.fromEntries(Object.entries(roles).map(([k, v]) => [`r_${k}`, v])) };
 }
 // the home page carries today's numbers in its HTML, so readers that do not run JavaScript (most AI crawlers) see them too
 function homeHtml(raw, d) {
   const h = headline(d), at = new Date(d.at).toUTCString().slice(17, 25);
-  const flag = (cc) => (/^[A-Z]{2}$/.test(cc) ? String.fromCodePoint(...[...cc].map((c) => 127397 + c.charCodeAt(0))) : '');
   let names; try { names = new Intl.DisplayNames(['en'], { type: 'region' }); } catch {}
   let out = raw;
-  for (const [k, v] of Object.entries(h)) out = out.replace(`data-k="${k}">–<`, `data-k="${k}" data-v="${Number(v) || 0}">${fmtN(v)}<`);
+  for (const [k, v] of Object.entries(h)) if (v != null) out = out.replaceAll(`data-k="${k}">–<`, `data-k="${k}" data-v="${Number(v) || 0}">${fmtN(v)}<`);
   if (h.aiY) out = out.replace('<span id="aiy"></span>', `<span id="aiy"> · yesterday ${fmtN(h.aiY)}</span>`);
   out = out.replace('<span id="kick">Live · the open sea for agents</span>', `<span id="kick">Live · ${fmtN(h.ai)} AI visits today</span>`)
     .replace('<p class="stamp" id="stamp" aria-live="off">Loading live data…</p>', `<p class="stamp" id="stamp" aria-live="off">Counted ${at} UTC · Atlantis day ${d.clock?.day}, hour ${d.clock?.hour} · version ${VERSION}</p>`)
     .replace(/(<meta name="description" content=")[^"]*(")/, `$1Live: ${fmtN(h.ai)} AI visits today, ${fmtN(h.index)} agents, MCP servers, paid APIs and shops in the open index, ${fmtN(h.paths)} pathways in the Unibrain. Watch the internet of AI agents live, see where they read from, check how agents see your website — open data, owned by no one.$2`)
     .replace(/(<meta property="og:description" content=")[^"]*(")/, `$1Today: ${fmtN(h.ai)} AI visits, ${fmtN(h.moves)} movements, ${fmtN(h.index)} places in the open index. Every AI crawler, agent and assistant reaching an open place on the web — counted, mapped, open.$2`);
-  const list = (d.geo?.countries || []).slice(0, 14);
-  if (list.length) out = out.replace('<ol class="countries" id="countries"><li class="empty">The map fills as requests arrive.</li></ol>', `<ol class="countries" id="countries">${list.map((c) => `<li><span>${flag(c.cc)} ${String(names?.of(c.cc) || c.cc).replace(/[<>&]/g, '')}</span><span>${fmtN(c.n)}</span></li>`).join('')}</ol>`);
+  // the ten countries the page lists, written the way the page writes them once its script runs
+  const list = (d.geo?.countries || []).slice(0, 10);
+  if (list.length) out = out.replace('<ol class="countries" id="countries"><li class="empty">The map fills as requests arrive.</li></ol>', `<ol class="countries" id="countries">${list.map((c) => `<li><span>${String(names?.of(c.cc) || c.cc).replace(/[<>&]/g, '')}</span><span>${fmtN(c.n)}</span></li>`).join('')}</ol>`);
   return out;
 }
 // a badge anyone can put on a page or a README: the live count, as an image
