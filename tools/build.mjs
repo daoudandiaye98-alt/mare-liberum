@@ -3,7 +3,7 @@
 import { createWriteStream, createReadStream, existsSync, readFileSync, writeFileSync, mkdirSync, cpSync, rmSync, readdirSync } from 'node:fs';
 import { createGzip, gunzipSync, gzipSync } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
-import { normMcp, normX402, normA2AListed, normUcp, normAgentverse, normHfSpace, normVirtuals, norm8004, readDomain, fetchJson, safeUrl, clean } from '../node/core.mjs';
+import { normMcp, normX402, normA2AListed, normUcp, normAgentverse, normHfSpace, normVirtuals, norm8004, normApify, normNpm, norm402Index, normOpenApi, readDomain, fetchJson, safeUrl, clean } from '../node/core.mjs';
 import { hayOf, metaOf } from '../node/mem.mjs';
 import { installEgressGuard } from '../node/guard.mjs';
 import { layOut } from './lay.mjs';
@@ -15,8 +15,12 @@ const CACHE = process.argv.includes('--cache');
 installEgressGuard();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const keep = (rows, r) => { if (r) rows.push(r); };
-async function get(u, init = {}) {
-  for (let i = 0; i < 5; i++) {
+// an address a stranger wrote is kept only when it is a plain public https address
+const safe = (u) => safeUrl(u).then((x) => x.toString(), () => null);
+const hostOf = (u) => { try { return new URL(u).hostname.toLowerCase(); } catch { return ''; } };
+const keyOf = (u) => { try { const x = new URL(u); return `${x.hostname.toLowerCase()}${x.pathname.replace(/\/+$/, '')}`; } catch { return ''; } };
+async function get(u, init = {}, tries = 5) {
+  for (let i = 0; i < tries; i++) {
     try {
       const r = await fetch(u, { ...init, headers: { 'user-agent': UA, accept: 'application/json', ...(init.headers || {}) }, signal: AbortSignal.timeout(30000) });
       if (r.ok) return { json: await r.json(), link: r.headers.get('link') || '' };
@@ -82,6 +86,62 @@ async function hfSpaces() {
     for (const s of Array.isArray(j) ? j : []) keep(rows, normHfSpace(s));
     u = /<([^>]+)>;\s*rel="next"/.exec(link)?.[1] || '';
   }
+  return rows;
+}
+// The four lakes below ask a slow source three times at most (30 s each) and stop starting pages after about two minutes:
+// none runs past four minutes, and a lake that is cut short keeps the rows it has.
+async function apifyStore() {
+  // the store lists its Actors by popularity and asks for no token; the sea carries the ones somebody besides the author
+  // used this month, and the list ends where that use ends
+  const rows = [], end = Date.now() + 120000;
+  for (let offset = 0; offset < 60000 && Date.now() < end; offset += 1000) {
+    let d; try { d = (await get(`https://api.apify.com/v2/store?limit=1000&offset=${offset}&sortBy=popularity`, {}, 3)).json?.data || {}; } catch (e) { if (!rows.length) throw e; break; }
+    const items = d.items || [], before = rows.length; for (const a of items) keep(rows, normApify(a));
+    // a page may hold fewer Actors than it counts, so the end is told by the store's total
+    if (!items.length || offset + 1000 >= (Number(d.total) || 0) || rows.length - before < 20) break;
+  }
+  // the order shifts while the list is read: an Actor met twice counts once
+  return [...new Map(rows.map((r) => [r.id, r])).values()];
+}
+async function npmMcp() {
+  // packages whose authors call them MCP servers, the most downloaded first; one page a second at most (npm's rule for
+  // crawlers), and the list ends where downloads fall below what a tool in use gets. Past its last page the search starts over.
+  const rows = [], seen = new Set(), end = Date.now() + 120000;
+  for (const word of ['mcp-server', 'modelcontextprotocol']) {
+    let first = '';
+    for (let from = 0; from < 10000 && Date.now() < end; from += 250) {
+      let list; try { list = (await get(`https://registry.npmjs.org/-/v1/search?text=keywords:${word}&size=250&from=${from}`, {}, 3)).json?.objects || []; } catch (e) { if (!rows.length) throw e; break; }
+      if (!list.length || (from && list[0]?.package?.name === first)) break; first ||= list[0]?.package?.name;
+      for (const o of list) { const name = o?.package?.name; if (seen.has(name)) continue; seen.add(name); keep(rows, normNpm(o, await safe(String(o?.package?.links?.repository || '').replace(/^git\+/, '').replace(/\.git$/, '')))); }
+      if (!list.some((o) => Number(o?.downloads?.monthly) >= 500)) break;
+      await sleep(1000);
+    }
+  }
+  return rows;
+}
+async function index402() {
+  // what the paid lakes do not bring: endpoints paid over Lightning (L402) and MPP, and x402 sellers who registered themselves
+  // and whose price answer the directory could read. The directory allows 100 calls a minute; the lake asks one at a time.
+  const rows = [], end = Date.now() + 130000;
+  for (const part of ['protocol=L402', 'protocol=MPP', 'protocol=x402&source=self-registered&verified=true']) {
+    for (let offset = 0, total = 1; offset < total && Date.now() < end; offset += 200) {
+      let j; try { j = (await get(`https://402index.io/api/v1/services?health=healthy&limit=200&${part}&offset=${offset}`, {}, 3)).json; } catch (e) { if (!rows.length) throw e; return fewPerHost(rows); }
+      total = Number(j?.total) || 0;
+      for (const s of j?.services || []) keep(rows, norm402Index(s, await safe(s?.url)));
+      await sleep(400);
+    }
+  }
+  return fewPerHost(rows);
+}
+// some hosts register one endpoint per question, by the thousand: the lake carries the 50 best measured of each host
+function fewPerHost(rows, most = 50) {
+  const per = new Map();
+  return [...rows].sort((a, b) => b.quality - a.quality).filter((r) => { const h = hostOf(r.url), n = per.get(h) || 0; per.set(h, n + 1); return n < most; });
+}
+async function apisGuru() {
+  // the open directory of OpenAPI descriptions (APIs.guru, CC0) is one file: one row per API, its preferred version
+  const { json: j } = await get('https://api.apis.guru/v2/list.json', {}, 3), rows = [];
+  for (const [name, api] of Object.entries(j && typeof j === 'object' ? j : {})) { const v = api?.versions?.[api.preferred] || Object.values(api?.versions || {}).pop(); keep(rows, normOpenApi(name, v, await safe(v?.swaggerUrl))); }
   return rows;
 }
 // read a public home page the way a search engine does: robots.txt first, then title and description
@@ -164,6 +224,11 @@ const LAKES = [
   { name: 'erc8004-deep', pull: deep8004 },
   { name: 'erc8004', pull: erc8004 },
   { name: 'ucp-stores', pull: ucpStores },
+  { name: 'apify-store', pull: apifyStore },
+  { name: 'apis-guru', pull: apisGuru },
+  // lakes that follow the others (twins): they leave out what the sea already holds under another name
+  { name: 'npm-mcp', pull: npmMcp, twins: true },
+  { name: '402-index', pull: index402, twins: true },
 ];
 
 mkdirSync('data', { recursive: true });
@@ -176,14 +241,21 @@ const settled = await Promise.allSettled(LAKES.map(async (lake) => {
   lakeStats[lake.name] = rows.length; console.log(`lake ${lake.name}: ${rows.length} rows in ${Math.round((Date.now() - t) / 1000)} s`);
   return rows;
 }));
-settled.forEach((s, i) => { if (s.status === 'fulfilled') for (const r of s.value) all.set(r.id, r); else { lakeStats[LAKES[i].name] = 'pending: ' + s.reason?.message; console.log(`lake ${LAKES[i].name} follows at the next refresh`); } });
+// two names for one thing: the same package in the same registry, the same paid address (whatever the way of paying)
+const twinKeys = (r) => [...(r.endpoints || []).filter((e) => e.transport === 'package' && e.identifier).map((e) => `${e.registry}:${e.identifier}`.toLowerCase()), ...(/-resource\+json$/.test(r.type || '') && r.url ? [keyOf(r.url)] : [])];
+const held = new Set();
+settled.forEach((s, i) => { if (s.status !== 'fulfilled') { lakeStats[LAKES[i].name] = 'pending: ' + s.reason?.message; console.log(`lake ${LAKES[i].name} follows at the next refresh`); } else if (!LAKES[i].twins) for (const r of s.value) { all.set(r.id, r); for (const k of twinKeys(r)) held.add(k); } });
+settled.forEach((s, i) => {
+  if (s.status !== 'fulfilled' || !LAKES[i].twins) return;
+  let twins = 0; for (const r of s.value) { if (twinKeys(r).some((k) => held.has(k))) twins++; else all.set(r.id, r); }
+  lakeStats[LAKES[i].name] = s.value.length - twins; console.log(`lake ${LAKES[i].name}: ${twins} rows are held by other lakes already, ${s.value.length - twins} join`);
+});
+held.clear();
 if (all.size < 1000) throw new Error('the sea needs at least one full lake to build');
 
 // Domains that speak for themselves: read their own manifests (ARD, AI Catalog, A2A agent card).
 const seedFile = (f) => (existsSync(f) ? readFileSync(f, 'utf8').split('\n').map((l) => l.trim().toLowerCase()).filter((l) => l && !l.startsWith('#')) : []);
 // Sellers that publish their own price list (/.well-known/x402) are found among the hosts of the paid lakes.
-const hostOf = (u) => { try { return new URL(u).hostname.toLowerCase(); } catch { return ''; } };
-const keyOf = (u) => { try { const x = new URL(u); return `${x.hostname.toLowerCase()}${x.pathname.replace(/\/+$/, '')}`; } catch { return ''; } };
 const paidHosts = [...new Set([...all.values()].filter((r) => r.kind === 'x402').map((r) => hostOf(r.url)).filter(Boolean))], sellers = [];
 await pool(paidHosts, 60, async (h) => { const j = await fetchJson(`https://${h}/.well-known/x402`, 300000, 5000); if (Array.isArray(j?.resources) && j.resources.some((r) => typeof r === 'string' && r.startsWith(`https://${h}/`))) sellers.push(h); });
 console.log(`paid lakes: ${sellers.length} of ${paidHosts.length} hosts publish their own price list`);

@@ -68,7 +68,7 @@ export function kindOf(type) {
   if (/skills|plugins/.test(t)) return 'skill';
   if (/ai-registry/.test(t)) return 'registry';
   if (/ai-catalog/.test(t)) return 'catalog';
-  if (/openapi/.test(t)) return 'api';
+  if (/openapi|apify\.actor|l402|mpp-resource/.test(t)) return 'api';
   return 'other';
 }
 const strs = (a, n, len) => (Array.isArray(a) ? a : []).filter((x) => typeof x === 'string').map((x) => clean(x, len)).filter(Boolean).slice(0, n);
@@ -283,6 +283,75 @@ export function normHfSpace(s) {
     url: `https://huggingface.co/spaces/${s.id}`, description: clean(`MCP server on Hugging Face Spaces by ${owner}: ${name.replace(/[-_]+/g, ' ')}.`, 300),
     tags: ['mcp', 'huggingface', 'space', clean(s.sdk, 20), 'remote'].filter(Boolean), capabilities: [], queries: [], version: null, endpoints, pay: null,
     source: 'hf-spaces', source_ref: s.id, attested_by: 'hf-hub-listing', quality: Math.min(10, Math.round(Math.log10(1 + likes) * 20) / 10), updated_at: s.createdAt || null,
+  };
+}
+// Actor in Apify Store (public store list, no token): a ready-made tool an agent runs over the Apify API. The sea carries
+// the ones somebody besides the author used in the last 30 days.
+export function normApify(a) {
+  const user = a?.username, name = a?.name, used = Number(a?.stats?.totalUsers30Days || 0);
+  if (!a?.id || !/^[\w.-]{1,80}$/.test(user || '') || !/^[\w.-]{1,80}$/.test(name || '') || used < 2) return null;
+  const p = a.currentPricingInfo || {}, events = Object.values(p.pricingPerEvent?.actorChargeEvents || {}), first = events.find((e) => e?.isPrimaryEvent) || events[0];
+  const model = { PAY_PER_EVENT: 'per event', PRICE_PER_DATASET_ITEM: 'per result', FLAT_PRICE_PER_MONTH: 'per month' }[p.pricingModel];
+  const price = Number(p.pricePerUnitUsd ?? first?.eventPriceUsd ?? first?.eventTieredPricingUsd?.FREE?.tieredEventPriceUsd), usd = Number.isFinite(price) && price >= 0 ? price : undefined;
+  const page = `https://apify.com/${user}/${name}`;
+  return {
+    id: `urn:air:apify.com:actor:${seg(user)}:${seg(name)}`, publisher: 'apify.com', display_name: clean(a.title, 120) || name, type: 'application/vnd.apify.actor+json', kind: 'api', url: page,
+    description: clean(a.description, 600), tags: ['apify', 'actor', ...strs(a.categories, 6, 30).map((c) => c.toLowerCase().replace(/_/g, ' '))], capabilities: [], queries: [], version: null,
+    endpoints: [{ transport: 'apify-api', url: `https://api.apify.com/v2/acts/${user}~${name}/run-sync-get-dataset-items`, method: 'POST' }],
+    // the price is the store's list price for the first paid step; an Apify account is needed either way, FREE Actors cost platform time only
+    pay: model ? { protocol: 'apify', model, priceUsd: model === 'per month' ? undefined : usd, monthlyUsd: model === 'per month' ? usd : undefined, listed: true, agentic: a.isWhiteListedForAgenticPayments === true || undefined } : null,
+    source: 'apify-store', source_ref: `${user}/${name}`, attested_by: 'apify-store-listing', quality: Math.min(10, Math.round(Math.log10(1 + used) * 20) / 10), updated_at: null,
+  };
+}
+// MCP server published on npm under the keyword its author chose (public registry search): run locally with npx. The sea
+// carries the ones in use (500 downloads a month or more); repo is the repository address, already checked by the caller.
+export function normNpm(o, repo) {
+  const p = o?.package, name = p?.name, monthly = Number(o?.downloads?.monthly || 0);
+  if (typeof name !== 'string' || name.length > 214 || !/^(@[a-z0-9~-][a-z0-9._~-]*\/)?[a-z0-9~-][a-z0-9._~-]*$/.test(name) || o.flags?.insecure || monthly < 500) return null;
+  // the keyword modelcontextprotocol also marks SDKs, clients and linters: a package counts when it calls itself a server
+  const words = strs(p.keywords, 40, 40).map((k) => k.toLowerCase());
+  if (!words.includes('mcp-server') && !/\bserver\b/i.test(`${name} ${p.description || ''} ${words.join(' ')}`.replace(/[-_/]/g, ' '))) return null;
+  const [scope, nm] = name[0] === '@' ? name.slice(1).split('/') : ['', name];
+  const endpoints = [{ transport: 'package', registry: 'npm', identifier: name, version: clean(p.version, 40) || undefined }];
+  if (repo) endpoints.push({ transport: 'repository', url: repo.slice(0, 300) });
+  return {
+    id: `urn:air:npmjs.com:package:${scope ? seg(scope) + ':' : ''}${seg(nm)}`, publisher: 'npmjs.com', display_name: clean(name, 120), type: 'application/mcp-server+json', kind: 'mcp',
+    url: `https://www.npmjs.com/package/${name}`, description: clean(p.description, 600),
+    tags: [...new Set(['mcp', 'npm', 'local', ...words.filter((k) => k.length <= 30)])].slice(0, 10), capabilities: [], queries: [], version: clean(p.version, 40), endpoints, pay: null,
+    source: 'npm-mcp', source_ref: name, attested_by: 'npm-listing', quality: Math.min(10, Math.round(Math.log10(1 + monthly) * 10) / 10), updated_at: typeof p.date === 'string' ? p.date : null,
+  };
+}
+// Paid resource listed by 402 Index, the open directory of endpoints that answer 402: Lightning (L402), MPP and x402. The
+// directory probes every endpoint; the sea carries the healthy ones. The price is the listing's, not read first-hand.
+export function norm402Index(s, url) {
+  const proto = { L402: 'l402', MPP: 'mpp', x402: 'x402' }[s?.protocol];
+  if (!proto || !url || s.health_status !== 'healthy') return null;
+  let u; try { u = new URL(url); } catch { return null; }
+  const usd = s.price_usd == null ? NaN : Number(s.price_usd), sats = Number(s.price_sats || 0);
+  return {
+    id: `urn:air:402index.io:${proto}:${seg(u.hostname)}:${hash16(url)}`, publisher: '402index.io',
+    display_name: clean(s.name, 120) || clean(u.hostname + (u.pathname.length > 1 ? u.pathname : ''), 120),
+    type: `application/${proto}-resource+json`, kind: proto === 'x402' ? 'x402' : 'api', url: url.slice(0, 500), description: clean(s.description, 600),
+    tags: [...new Set([proto, 'paid', ...String(s.category || '').split('/').map((c) => clean(c, 30)), clean(s.payment_network, 60)].filter(Boolean).map((t) => t.toLowerCase()))].filter((t) => t !== 'uncategorized').slice(0, 8), capabilities: [], queries: [], version: null,
+    endpoints: [{ transport: `http-${proto}`, url: url.slice(0, 500), method: /^[A-Z]{3,7}$/.test(s.http_method || '') ? s.http_method : undefined }],
+    pay: { protocol: proto, network: clean(s.payment_network, 60) || undefined, asset: clean(s.payment_asset, 80) || undefined, priceUsd: Number.isFinite(usd) && usd >= 0 ? usd : undefined, priceSats: sats > 0 ? sats : undefined, listed: true },
+    source: '402-index', source_ref: url.slice(0, 500), attested_by: '402index-listing', quality: Math.min(5, Math.round((Number(s.reliability_score) || 0) / 2) / 10),
+    updated_at: /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(s.last_checked || '') ? s.last_checked.replace(' ', 'T') + 'Z' : null,
+  };
+}
+// Public API with a machine-readable description, listed by the APIs.guru directory (CC0): the OpenAPI file is what an
+// agent reads to call the API. v is the preferred version of the listing, spec its address, already checked by the caller.
+export function normOpenApi(name, v, spec) {
+  const i = v?.info; if (typeof name !== 'string' || !i || typeof i !== 'object' || !spec) return null;
+  const cut = name.indexOf(':'), provider = cut > 0 ? name.slice(0, cut) : name, service = cut > 0 ? name.slice(cut + 1) : '';
+  // a title that does not say whose API it is gets the provider's domain behind it
+  const title = clean(i.title, 90), named = title && title.toLowerCase().includes(provider.split('.')[0].toLowerCase());
+  return {
+    id: `urn:air:apis.guru:openapi:${seg(provider)}${service ? ':' + seg(service) : ''}`, publisher: 'apis.guru', display_name: title ? (named ? title : clean(`${title} · ${provider}`, 120)) : clean(name, 120), type: 'application/openapi+json', kind: 'api', url: spec.slice(0, 500),
+    description: clean(String(i.description || '').replace(/<[^>]{0,300}>|!\[[^\]]*\]\([^)]*\)|[#*`>|]/g, ' '), 600),
+    tags: ['openapi', 'api', ...strs(i['x-apisguru-categories'], 6, 30).map((c) => c.toLowerCase().replace(/_/g, ' '))], capabilities: [], queries: [], version: clean(i.version, 40),
+    endpoints: [{ transport: 'openapi', url: spec.slice(0, 500) }], pay: null,
+    source: 'apis-guru', source_ref: name.slice(0, 200), attested_by: 'apis-guru-listing', quality: 0, updated_at: typeof v.updated === 'string' ? v.updated : null,
   };
 }
 
@@ -854,7 +923,8 @@ export const pathOf = (id) => `/e/${encodeURIComponent(String(id).replace(/^urn:
 export function entryPage(e, base, standing, mapped) {
   const m = e.metadata || {}, kind = m.kind || 'other', ep = (m.endpoints || [])[0], pay = m.pay || {}, url = `${base}${pathOf(e.identifier)}`;
   const desc = clean(e.description, 600) || '', short = clean(e.description, 155) || `${e.displayName}: ${KIND_WORD[kind]} in Mare Liberum, the open sea for agents.`;
-  const price = pay.priceUsd != null ? `$${pay.priceUsd} per call (${esc(pay.network || pay.protocol || '')}, read first-hand from the seller)` : pay.handlers ? `pays with ${esc(pay.handlers.join(', '))}` : '';
+  // a price that a directory lists (pay.listed) is named as that; it was not read from the seller
+  const price = pay.priceUsd != null ? `$${pay.priceUsd} ${esc(pay.listed && pay.model || 'per call')} (${esc(pay.network || pay.protocol || '')}, ${pay.listed ? `as listed by ${esc(m.lake || 'its directory')}` : 'read first-hand from the seller'})` : pay.handlers ? `pays with ${esc(pay.handlers.join(', '))}` : '';
   // the need a buying agent would call: the category part of a store title, otherwise the name itself
   const parts = String(e.displayName || '').split(/\s[|·–—-]\s|:\s/).map((x) => x.trim()).filter((x) => x.length > 2);
   const topic = clean((kind === 'merchant' && parts.length > 1 ? parts.slice(1).join(' ') : parts[0] || e.displayName).replace(/[^\p{L}\p{N}\s&'.-]/gu, ' '), 60) || e.displayName;
