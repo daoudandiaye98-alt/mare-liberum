@@ -2,7 +2,7 @@
 // address, the release check, the server itself and the updater that fetches a build, runs it and takes it back.
 // Runs without the network (only this machine): node tools/server-proof.mjs   (exit code 1 when a proof fails)
 import assert from 'node:assert/strict';
-import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, existsSync, rmSync, cpSync, readlinkSync, chmodSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, existsSync, rmSync, cpSync, readlinkSync, chmodSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -244,17 +244,18 @@ await proof('asked to stop, the node writes its copy; started again, the day goe
 });
 
 // the updater, with a stand-in for systemctl that starts and stops the node of this proof
-const ops = join(tmp, 'ops'), srv = join(tmp, 'srv'); mkdirSync(ops); mkdirSync(srv);
-const pubPort = await freePort(); let served = join(rel, 'pub');
+const pubPort = await freePort(); const served = join(rel, 'pub');
 const files = createServer((q, s) => { try { const b = readFileSync(join(served, q.url.split('?')[0])); s.writeHead(200); s.end(b); } catch { s.writeHead(404); s.end(); } }).listen(pubPort, '127.0.0.1');
-const fake = join(tmp, 'systemctl');
-writeFileSync(fake, `#!/usr/bin/env bash
+// one stand-in server: its own folders, its own port, its own "systemctl"
+function standIn(name, nodePort, more = {}) {
+  const ops = join(tmp, `${name}-ops`), srv = join(tmp, `${name}-srv`), fake = join(tmp, `${name}-systemctl`); mkdirSync(ops); mkdirSync(srv);
+  writeFileSync(fake, `#!/usr/bin/env bash
 # stand-in for systemctl in the proof: "restart mare" stops the node that runs and starts the one in current/
 exec 9>&-   # what this starts must not hold the updater's lock (systemd never does)
 pidf="${ops}/node.pid"
 case "$1 $2" in
   "restart mare") [ -f "$pidf" ] && kill "$(cat "$pidf")" 2>/dev/null; for i in $(seq 1 100); do [ -f "$pidf" ] && kill -0 "$(cat "$pidf")" 2>/dev/null || break; sleep 0.1; done
-     ( cd "${srv}/current" && PORT=${port} HOST=127.0.0.1 MARE_STATE="${stateDir}" MARE_BASE=https://mare.test exec "${process.execPath}" serve.mjs >> "${ops}/node.log" 2>&1 ) &
+     ( cd "${srv}/current" && PORT=${nodePort} HOST=127.0.0.1 MARE_STATE="${stateDir}-${name}" MARE_BASE=https://mare.test exec "${process.execPath}" serve.mjs >> "${ops}/node.log" 2>&1 ) &
      echo $! > "$pidf" ;;
   "is-active mare") [ -f "$pidf" ] && kill -0 "$(cat "$pidf")" 2>/dev/null && echo active || echo inactive ;;
   "show mare") echo 0 ;;
@@ -262,68 +263,138 @@ case "$1 $2" in
 esac
 exit 0
 `); chmodSync(fake, 0o755);
-// the updater asks this very process for its files, so it must not hold the loop while it runs
-const upEnv = { ...process.env, NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost', MARE_RELEASE_URL: `http://127.0.0.1:${pubPort}`, MARE_RAW_URL: `http://127.0.0.1:${pubPort}/raw`, MARE_ROOT: srv, MARE_OPS: ops, MARE_ENV: join(tmp, 'env'), MARE_SETUP: join(tmp, 'setup'), MARE_PORT: String(port), MARE_SYSTEMCTL: fake, MARE_APPLY: '0' };
-const run = (file) => new Promise((res) => { const c = spawn("bash", [...(process.env.MARE_PROOF_TRACE ? ["-x"] : []), file], { env: upEnv, stdio: ['ignore', 'pipe', 'pipe'] }); let out = ''; c.stdout.on('data', (d) => { out += d; }); c.stderr.on('data', (d) => { out += d; }); c.on('exit', (status) => { if (process.env.MARE_PROOF_TRACE) writeFileSync(process.env.MARE_PROOF_TRACE, `\n===== run, exit ${status}\n${out}`, { flag: 'a' }); res({ status, out }); }); });
-const update = () => run(join(root, 'deploy', 'update.sh'));
-const statusOf = () => readFileSync(join(srv, 'boot', 'status.txt'), 'utf8');
-const hasTools = ['bash', 'jq', 'curl', 'tar', 'flock', 'sha256sum'].every((t) => spawnSync('bash', ['-c', `command -v ${t}`]).status === 0);
-if (!hasTools) console.log('  skip the updater proofs: bash, jq, curl, tar, flock and sha256sum are needed');
+  // the updater asks this very process for its files, so it must not hold the loop while it runs
+  const env = { ...process.env, NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost', MARE_RELEASE_URL: `http://127.0.0.1:${pubPort}`, MARE_RAW_URL: `http://127.0.0.1:${pubPort}/raw`, MARE_ROOT: srv, MARE_OPS: ops, MARE_ENV: join(tmp, `${name}-env`), MARE_SETUP: join(tmp, `${name}-setup`), MARE_PORT: String(nodePort), MARE_SYSTEMCTL: fake, MARE_APPLY: '0', MARE_BUILDER: '', ...more };
+  const update = (extra = {}) => new Promise((res) => { const c = spawn('bash', [...(process.env.MARE_PROOF_TRACE ? ['-x'] : []), join(root, 'deploy', 'update.sh')], { env: { ...env, ...extra }, stdio: ['ignore', 'pipe', 'pipe'] }); let out = ''; c.stdout.on('data', (d) => { out += d; }); c.stderr.on('data', (d) => { out += d; }); c.on('exit', (status) => { if (process.env.MARE_PROOF_TRACE) writeFileSync(process.env.MARE_PROOF_TRACE, `\n===== run, exit ${status}\n${out}`, { flag: 'a' }); res({ status, out }); }); });
+  return { ops, srv, env, update, port: nodePort, said: () => readFileSync(join(srv, 'boot', 'status.txt'), 'utf8'), live: () => readlinkSync(join(srv, 'current')), state: () => JSON.parse(readFileSync(join(srv, 'boot', 'status.json'), 'utf8')),
+    stats: () => until(() => get('/stats', { port: nodePort }).then((x) => (x.ok ? x.json() : null))), kill: () => { try { process.kill(Number(readFileSync(join(ops, 'node.pid'), 'utf8'))); } catch {} } };
+}
+const hasTools = ['bash', 'jq', 'curl', 'tar', 'flock', 'sha256sum', 'git'].every((t) => spawnSync('bash', ['-c', `command -v ${t}`]).status === 0);
+if (!hasTools) console.log('  skip the updater proofs: bash, jq, curl, tar, flock, sha256sum and git are needed');
 else {
-  await proof('the updater fetches a build, checks its sum, runs it and says how the server is doing', async () => {
-    const r = await update(); assert.equal(r.status, 0, r.out);
-    assert.match(statusOf(), /build r1 runs \(1200 entries\)/);
-    assert.equal(readFileSync(join(ops, 'release-id'), 'utf8').trim(), 'r1'); assert.match(readlinkSync(join(srv, 'current')), /releases\/r1$/);
-    assert.equal((await (await get('/stats')).json()).entries, 1200);
-    const st = JSON.parse(readFileSync(join(srv, 'boot', 'status.json'), 'utf8')); assert.equal(st.release, 'r1'); assert.equal(st.node, 'active'); assert.equal(st.longMemory, 'off');
-    const again = await update(); assert.equal(again.status, 0); assert.equal(statusOf().match(/build r1 found/g).length, 1, 'the same build is not fetched twice');
+  // ---- a finished build, fetched
+  const A = standIn('fetch', port, { MARE_SOURCE: 'release' });
+  await proof('the updater fetches a finished build, checks its sum, runs it and says how the server is doing', async () => {
+    const r = await A.update(); assert.equal(r.status, 0, r.out);
+    assert.match(A.said(), /build r1 runs \(1200 entries\)/);
+    assert.equal(readFileSync(join(A.ops, 'release-id'), 'utf8').trim(), 'r1'); assert.match(A.live(), /releases\/r1$/);
+    assert.equal((await A.stats()).entries, 1200);
+    const st = A.state(); assert.equal(st.release, 'r1'); assert.equal(st.node, 'active'); assert.equal(st.longMemory, 'off'); assert.equal(st.source, 'release');
+    const again = await A.update(); assert.equal(again.status, 0); assert.equal(A.said().match(/build r1 found/g).length, 1, 'the same build is not fetched twice');
   });
   await proof('a newer build takes over, and the day\'s count goes with it', async () => {
+    for (let i = 0; i < 3; i++) await get('/llms.txt', { port: A.port, headers: { 'user-agent': 'ClaudeBot/1.0 (+claudebot@anthropic.com)' } });
+    await until(async () => (await (await get('/census', { port: A.port })).json()).today?.kinds?.['ai-crawler'] === 3);
     makeRelease(rel, 'r2', { entries: 1500 });
-    const r = await update(); assert.equal(r.status, 0, r.out);
-    assert.match(statusOf(), /build r2 runs \(1500 entries\)/, `updater said: ${r.out}`);
-    assert.equal((await (await get('/stats')).json()).entries, 1500);
-    assert.equal((await (await get('/census')).json()).today.kinds['ai-crawler'], 3);
+    const r = await A.update(); assert.equal(r.status, 0, r.out);
+    assert.match(A.said(), /build r2 runs \(1500 entries\)/);
+    assert.equal((await A.stats()).entries, 1500);
+    assert.equal((await (await get('/census', { port: A.port })).json()).today.kinds['ai-crawler'], 3);
   });
   await proof('a build that does not come up is taken back; the one before runs on and the bad one is not tried again', async () => {
     makeRelease(rel, 'r3', { broken: true });
-    const patched = readFileSync(join(root, 'deploy', 'update.sh'), 'utf8').replace('for i in $(seq 1 90); do', 'for i in $(seq 1 4); do');
-    assert.ok(patched.includes('seq 1 4'), 'the proof shortens the wait for a healthy node');
-    const quick = join(tmp, 'update-quick.sh'); writeFileSync(quick, patched);
-    await run(quick);
-    assert.match(statusOf(), /build r3 did not come up healthy; taking it back/); assert.match(statusOf(), /the build before runs again/);
-    assert.match(readlinkSync(join(srv, 'current')), /releases\/r2$/); assert.equal(readFileSync(join(ops, 'release-bad'), 'utf8').trim(), 'r3');
-    assert.equal((await until(() => get('/stats').then((x) => (x.ok ? x.json() : null)))).entries, 1500);
-    await run(quick); assert.equal(statusOf().match(/build r3 found/g).length, 1);
+    await A.update({ MARE_HEALTH_TRIES: '4' });
+    assert.match(A.said(), /build r3 did not come up healthy; taking it back/); assert.match(A.said(), /the build before runs again/);
+    assert.match(A.live(), /releases\/r2$/); assert.equal(readFileSync(join(A.ops, 'release-bad'), 'utf8').trim(), 'r3');
+    assert.equal((await A.stats()).entries, 1500);
+    await A.update({ MARE_HEALTH_TRIES: '4' }); assert.equal(A.said().match(/build r3 found/g).length, 1);
   });
   await proof('a file that does not match its sum, or a build that is not whole, is left alone', async () => {
     makeRelease(rel, 'r4', { entries: 1300 });
     const m = JSON.parse(readFileSync(join(rel, 'pub', 'release.json'), 'utf8')); writeFileSync(join(rel, 'pub', 'release.json'), JSON.stringify({ ...m, sha256: '0'.repeat(64) }));
-    await update(); assert.match(statusOf(), /does not match its sum yet/); assert.match(readlinkSync(join(srv, 'current')), /releases\/r2$/);
+    await A.update(); assert.match(A.said(), /does not match its sum yet/); assert.match(A.live(), /releases\/r2$/);
     makeRelease(rel, 'r5', { entries: 40 });
-    await update(); assert.match(statusOf(), /build r5 is not whole \(entries: 40\)/); assert.match(readlinkSync(join(srv, 'current')), /releases\/r2$/);
-    writeFileSync(join(rel, 'pub', 'release.json'), JSON.stringify({ id: '../../etc', sha256: 'x' })); await update(); assert.match(statusOf(), /strange name/);
+    await A.update(); assert.match(A.said(), /build r5 is not whole \(entries: 40\)/); assert.match(A.live(), /releases\/r2$/);
+    writeFileSync(join(rel, 'pub', 'release.json'), JSON.stringify({ id: '../../etc', sha256: 'x' })); await A.update(); assert.match(A.said(), /strange name/);
   });
   await proof('the rescue line runs a changed file once, and not the one that was there when the server was made', async () => {
     mkdirSync(join(rel, 'pub', 'raw'), { recursive: true });
-    writeFileSync(join(rel, 'pub', 'raw', 'rescue.sh'), 'exit 0\n'); await update();
-    assert.ok(!statusOf().includes('rescue: running'));
-    writeFileSync(join(rel, 'pub', 'raw', 'rescue.sh'), `echo mended > "${join(tmp, 'mended')}"\n`); await update(); await update();
-    assert.equal(readFileSync(join(tmp, 'mended'), 'utf8').trim(), 'mended'); assert.equal(statusOf().match(/rescue: running/g).length, 1);
+    writeFileSync(join(rel, 'pub', 'raw', 'rescue.sh'), 'exit 0\n'); await A.update();
+    assert.ok(!A.said().includes('rescue: running'));
+    writeFileSync(join(rel, 'pub', 'raw', 'rescue.sh'), `echo mended > "${join(tmp, 'mended')}"\n`); await A.update(); await A.update();
+    assert.equal(readFileSync(join(tmp, 'mended'), 'utf8').trim(), 'mended'); assert.equal(A.said().match(/rescue: running/g).length, 1);
   });
   await proof('the long memory is set once the database knows the server, and the secret goes nowhere else', async () => {
     let asked = 0, got = null;
     const cfg = createServer((q, s) => { let b = ''; q.on('data', (d) => { b += d; }); q.on('end', () => { asked++; got = JSON.parse(b || '{}'); if (asked < 2) { s.writeHead(403); return s.end('{"error":"not allowed"}'); } s.writeHead(200, { 'content-type': 'application/json' }); s.end(JSON.stringify({ url: 'https://db.example', key: 'public-key' })); }); });
     const cfgPort = await freePort(); await new Promise((r) => cfg.listen(cfgPort, '127.0.0.1', r));
-    writeFileSync(join(tmp, 'env'), 'MARE_BASE=https://mare.test\nMARE_DB_SECRET=s3cret-of-this-server-0123456789abcdef\n'); writeFileSync(join(tmp, 'setup'), `MARE_CONFIG_URL=http://127.0.0.1:${cfgPort}/config\n`);
-    await update(); assert.ok(!readFileSync(join(tmp, 'env'), 'utf8').includes('MARE_DB_KEY'), 'not before the database knows the server');
-    await update(); const env = readFileSync(join(tmp, 'env'), 'utf8');
+    writeFileSync(A.env.MARE_ENV, 'MARE_BASE=https://mare.test\nMARE_DB_SECRET=s3cret-of-this-server-0123456789abcdef\n'); writeFileSync(A.env.MARE_SETUP, `MARE_SOURCE=release\nMARE_CONFIG_URL=http://127.0.0.1:${cfgPort}/config\n`);
+    await A.update(); assert.ok(!readFileSync(A.env.MARE_ENV, 'utf8').includes('MARE_DB_KEY'), 'not before the database knows the server');
+    await A.update(); const env = readFileSync(A.env.MARE_ENV, 'utf8');
     assert.match(env, /^MARE_DB_URL=https:\/\/db\.example$/m); assert.match(env, /^MARE_DB_KEY=public-key$/m); assert.equal(got.secret, 's3cret-of-this-server-0123456789abcdef');
-    await update(); assert.equal(asked, 2, 'once it is set, the database is not asked again');
-    assert.ok(!statusOf().includes('s3cret'), 'the secret is not in what the server says about itself'); assert.equal(JSON.parse(readFileSync(join(srv, 'boot', 'status.json'), 'utf8')).longMemory, 'on');
+    await A.update(); assert.equal(asked, 2, 'once it is set, the database is not asked again');
+    assert.ok(!A.said().includes('s3cret'), 'the secret is not in what the server says about itself'); assert.equal(A.state().longMemory, 'on');
     cfg.close();
   });
-  try { process.kill(Number(readFileSync(join(ops, 'node.pid'), 'utf8'))); } catch {}
+  A.kill();
+
+  // ---- a build made on the server itself, from the repository (the default)
+  const repo = join(tmp, 'repo'), git = (...a) => execFileSync('git', ['-C', repo, '-c', 'user.name=proof', '-c', 'user.email=proof@mare.test', ...a], { stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
+  // the repository of the proof: the real node, and a build that writes a small sea the way tools/build.mjs writes the real one
+  const commit = (msg, { entries = 1200, proofHolds = true, crash = false } = {}) => {
+    mkdirSync(join(repo, 'tools'), { recursive: true });
+    for (const f of ['serve.mjs', 'package.json', 'node', 'site', 'public', 'deploy']) cpSync(join(root, f), join(repo, f), { recursive: true });
+    cpSync(join(root, 'tools', 'release.mjs'), join(repo, 'tools', 'release.mjs'));
+    writeFileSync(join(repo, 'tools', 'doors-proof.mjs'), `process.exit(${proofHolds ? 0 : 1});\n`);
+    writeFileSync(join(repo, 'store-pages.json'), '{}');
+    writeFileSync(join(repo, 'tools', 'build.mjs'), `import { mkdirSync, writeFileSync, cpSync, readFileSync } from 'node:fs';
+import { gzipSync } from 'node:zlib';
+import { hayOf, metaOf } from '../node/mem.mjs';
+if (${crash}) { console.log('lake_unreachable'); process.exit(3); }
+if (process.env.MARE_DB_SECRET || process.env.SECRET_OF_ROOT) throw new Error('the build was handed something it must not see');
+const entries = ${entries}, lines = [];
+for (let i = 0; i < entries; i++) { const r = { id: 'urn:air:proof' + String(i).padStart(5, '0') + '.example:mcp:x', display_name: 'Proof server ' + i, type: 'application/mcp-server-card+json', url: 'https://proof' + i + '.example/mcp', kind: 'mcp', source: 'proof', publisher: 'proof' + i + '.example', description: 'made for the proof' }; lines.push(r.id + '\\t' + metaOf(r) + '\\t' + hayOf(r) + '\\t' + JSON.stringify(r)); }
+mkdirSync('data/site', { recursive: true });
+const tsv = lines.sort().join('\\n') + '\\n';
+writeFileSync('data/sea.tsv', tsv); writeFileSync('data/sea.tsv.gz', gzipSync(tsv)); writeFileSync('data/proof.ndjson', 'the raw rows of a lake\\n');
+writeFileSync('data/build.json', JSON.stringify({ builtAt: new Date().toISOString(), entries, lakes: { proof: entries } }));
+for (const f of ['index.html', 'llms.txt', 'robots.txt']) cpSync('site/' + f, 'data/site/' + f);
+const pages = JSON.parse(readFileSync('store-pages.json', 'utf8')); pages['shop' + Object.keys(pages).length + '.example'] = { title: 'read once' }; writeFileSync('store-pages.json', JSON.stringify(pages));
+console.log('sea built: ' + entries + ' entries');
+`);
+    if (!existsSync(join(repo, '.git'))) git('init', '-q', '-b', 'main');
+    git('add', '-A'); git('commit', '-q', '--allow-empty', '-m', msg); return git('rev-parse', 'HEAD');
+  };
+  const B = standIn('build', await freePort(), { MARE_GIT_URL: repo, SECRET_OF_ROOT: 'must not reach the build' });
+  let head = commit('the first sea');
+  await proof('the server builds the sea itself from the repository, as a build that sees nothing of its surroundings, and runs it', async () => {
+    const r = await B.update(); assert.equal(r.status, 0, r.out);
+    assert.match(B.said(), /build: \d{8}-\d{6}-[0-9a-f]{7} \(main moved to [0-9a-f]{7}\)/); assert.match(B.said(), /is ready \(1200 entries, peak \d+ MB\)/); assert.match(B.said(), /runs \(1200 entries\)/);
+    assert.equal(readFileSync(join(B.ops, 'built-sha'), 'utf8').trim(), head); assert.equal((await B.stats()).entries, 1200);
+    const live = B.live(); assert.ok(existsSync(join(live, 'data', 'sea.tsv.gz')));
+    for (const gone of ['data/sea.tsv', 'data/proof.ndjson', '.git']) assert.ok(!existsSync(join(live, gone)), `${gone} makes room`);
+    const st = B.state(); assert.equal(st.source, 'build'); assert.equal(st.commit, head); assert.ok(st.lastBuildPeakMB >= 0);
+    await B.update(); await B.update(); assert.equal(B.said().match(/ build: \d{8}-\d{6}-[0-9a-f]{7} \(/g).length, 1, 'nothing is built while main stands still');
+  });
+  await proof('when main moves the sea is built again; what was learned about the stores travels on', async () => {
+    head = commit('more of the sea', { entries: 1500 });
+    const r = await B.update(); assert.equal(r.status, 0, r.out);
+    assert.match(B.said(), /runs \(1500 entries\)/); assert.equal((await B.stats()).entries, 1500); assert.equal(readFileSync(join(B.ops, 'built-sha'), 'utf8').trim(), head);
+    assert.deepEqual(Object.keys(JSON.parse(readFileSync(join(B.ops, 'store-pages.json'), 'utf8'))).sort(), ['shop0.example', 'shop1.example']);
+  });
+  await proof('a build that lost a large part of the sea is held back; the commit can say that it is meant', async () => {
+    commit('a lake did not answer', { entries: 1000 });
+    await B.update(); assert.match(B.said(), /is held back, it lost part of the sea \(entries: 1000 now, 1500 before/); assert.equal((await B.stats()).entries, 1500);
+    await B.update(); assert.equal(B.said().match(/is held back, it lost/g).length, 1, 'the same commit is not built again every two minutes');
+    await B.update({ MARE_RETRY_MINUTES: '0' }); assert.equal(B.said().match(/is held back, it lost/g).length, 2, 'but again after a while'); assert.match(B.said(), /trying [0-9a-f]{7} again/);
+    head = commit('the sea is smaller now [force-sea]', { entries: 1000 });
+    await B.update(); assert.match(B.said(), /runs \(1000 entries\)/); assert.equal((await B.stats()).entries, 1000);
+  });
+  await proof('a commit whose proofs do not hold, or whose build breaks off, never reaches the node', async () => {
+    commit('a mistake', { entries: 1100, proofHolds: false });
+    await B.update(); assert.match(B.said(), /is held back, a proof does not hold/); assert.equal((await B.stats()).entries, 1000);
+    commit('the lakes are away', { entries: 1100, crash: true });
+    await B.update(); assert.match(B.said(), /did not finish \(exit 3/); assert.equal((await B.stats()).entries, 1000);
+    assert.equal(readFileSync(join(B.ops, 'built-sha'), 'utf8').trim(), head);
+  });
+  await proof('once a day the sea is built again although main stands still', async () => {
+    head = commit('back to work', { entries: 1100 }); await B.update(); assert.match(B.said(), /runs \(1100 entries\)/);
+    const n = B.said().match(/ build: \d{8}-\d{6}-[0-9a-f]{7} \(/g).length;
+    await sleep(1100); await B.update({ MARE_REFRESH_HOURS: '0', MARE_RETRY_MINUTES: '0' });
+    assert.equal(B.said().match(/ build: \d{8}-\d{6}-[0-9a-f]{7} \(/g).length, n + 1); assert.match(B.said(), /the sea is 0 hours old/);
+    assert.equal(readdirSync(join(B.srv, 'releases')).length <= 3, true, 'older builds make room');
+  });
+  B.kill();
 }
 files.close(); await stop();
 try { rmSync(tmp, { recursive: true, force: true }); } catch {}

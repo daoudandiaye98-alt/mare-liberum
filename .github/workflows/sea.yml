@@ -1,18 +1,9 @@
-# The sea is built here, in the open, and carried to the node: every public lake is pulled once, the open index is
-# written, and the whole node (code, index, pages) is published as one file with its SHA-256 (release "sea-latest").
-# The node on its own server looks for a new file every two minutes, runs it, and takes it back if it is not healthy
-# (deploy/update.sh). A build that lost a large part of the sea is not published; the node keeps the one before.
+# The sea as one file, built in the open: every public lake is pulled once, the open index is written, and the whole
+# node (code, index, pages) is published with its SHA-256 on the release "sea-latest". A server that should not build
+# the sea itself fetches that file instead (MARE_SOURCE=release in /etc/mare/setup, see deploy/update.sh).
+# mareliberum.dev builds on its own server, so this runs only when someone starts it by hand.
 name: sea
 on:
-  push:
-    branches: [main]
-    paths-ignore:
-      - 'integrations/**'
-      - 'plugins/**'
-      - '.github/workflows/atlas.yml'
-      - '.github/workflows/tide.yml'
-  schedule:
-    - cron: '17 13 * * *'
   workflow_dispatch:
     inputs:
       force:
@@ -41,7 +32,6 @@ jobs:
         run: node tools/build.mjs
       - name: Nothing large was lost against the build before
         env:
-          MARE_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
           MARE_FORCE: ${{ inputs.force && '1' || '0' }}
         run: node tools/release.mjs check
       - name: Pack the node as one file

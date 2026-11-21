@@ -9,7 +9,7 @@
 // New domains that joined over the API are added to seeds.txt. Usage: node tools/archive.mjs [base]
 import { existsSync, readFileSync, writeFileSync, mkdirSync, appendFileSync, readdirSync } from 'node:fs';
 
-const base = (process.argv[2] || 'https://mare-liberum.vercel.app').replace(/\/+$/, '');
+const base = (process.argv[2] || 'https://mareliberum.dev').replace(/\/+$/, '');
 const r = await fetch(`${base}/flow/dump`, { headers: { 'user-agent': 'MareLiberum-archive/1.0' }, signal: AbortSignal.timeout(30000) });
 if (!r.ok) throw new Error(`dump answered ${r.status}`);
 const d = await r.json();

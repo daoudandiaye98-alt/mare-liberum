@@ -5,3 +5,16 @@ public/build.json
 .vercel
 probe
 package-lock.json
+# written into public/ by the build (copied from site/)
+public/fonts
+public/demo.mp4
+public/og.png
+public/og-check.png
+public/icon.svg
+public/icon-192.png
+public/icon-512.png
+public/apple-touch-icon.png
+public/favicon.ico
+public/manifest.webmanifest
+sea.tar.gz
+release.json

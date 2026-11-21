@@ -4,7 +4,7 @@
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { fetchJson } from '../node/core.mjs';
 import { NEEDS } from '../node/needs.mjs';
-const EP = 'https://catalog.shopify.com/api/ucp/mcp', PROFILE = 'https://mare-liberum.vercel.app/ucp/agent.json', UA = 'MareLiberum/2.2 (open sea for agents; +https://mare-liberum.vercel.app)';
+const EP = 'https://catalog.shopify.com/api/ucp/mcp', PROFILE = 'https://mareliberum.dev/ucp/agent.json', UA = 'MareLiberum/2.2 (open sea for agents; +https://mareliberum.dev)';
 const PAGES = Number(process.argv[2]) || 2;
 const BASE_TOPICS = `running shoes;sneakers;hiking boots;sandals;dress shoes;winter jacket;rain jacket;hoodie;t-shirt;jeans;dress;swimwear;lingerie;socks;yoga pants;sportswear;suit;tie;hat;scarf;gloves;sunglasses;watch;necklace;earrings;ring;bracelet;handbag;backpack;wallet;luggage;belt;
 headphones;earbuds;speaker;phone case;charger;power bank;laptop sleeve;keyboard;mouse;monitor;webcam;microphone;camera;camera lens;drone;smart watch;fitness tracker;gaming controller;video game;board game;puzzle;

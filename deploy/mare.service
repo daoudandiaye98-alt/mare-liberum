@@ -15,6 +15,7 @@ TimeoutStopSec=30
 KillSignal=SIGTERM
 LimitNOFILE=65536
 MemoryMax=3300M
+OOMScoreAdjust=-600
 NoNewPrivileges=true
 ProtectSystem=strict
 ProtectHome=true

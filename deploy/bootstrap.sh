@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # Mare Liberum · make a fresh server into a node (Ubuntu or Debian, as root). Safe to run again.
 #   a web server with TLS in front (Caddy), the node behind it (Node.js, one process, user "mare"),
-#   and a timer that fetches the newest build of the sea and runs it. No key and no password is in this file.
+#   and a timer that builds the sea from the open repository whenever it has moved, and once a day.
+#   No key and no password is in this file.
 set -euo pipefail
 export DEBIAN_FRONTEND=noninteractive
 REPO="${MARE_REPO:-daoudandiaye98-alt/mare-liberum}"
@@ -19,12 +20,12 @@ fi
 
 # room to breathe on a small machine
 if ! swapon --show | grep -q . ; then
-  fallocate -l 2G /swapfile && chmod 600 /swapfile && mkswap /swapfile >/dev/null && swapon /swapfile && echo '/swapfile none swap sw 0 0' >> /etc/fstab && say "swap: 2 GB" || say "swap: not set"
+  fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile >/dev/null && swapon /swapfile && echo '/swapfile none swap sw 0 0' >> /etc/fstab && sysctl -q -w vm.swappiness=10 && echo 'vm.swappiness=10' > /etc/sysctl.d/60-mare.conf && say "swap: 4 GB" || say "swap: not set"
 fi
 
 say "packages"
 apt-get update -qq
-apt-get install -y -qq ca-certificates curl jq tar gzip xz-utils openssl ufw gnupg >/dev/null
+apt-get install -y -qq ca-certificates curl jq tar gzip xz-utils openssl ufw gnupg git >/dev/null
 apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https unattended-upgrades >/dev/null 2>&1 || true
 
 # Node.js 22: from the NodeSource repository; when that does not work, the build from nodejs.org, checked against its list of sums
@@ -52,6 +53,8 @@ fi
 say "caddy: $(caddy version | head -1)"
 
 id mare >/dev/null 2>&1 || useradd --system --home /var/lib/mare --shell /usr/sbin/nologin mare
+# the sea is built by a user of its own that can read nothing of the node's (it reads the open web)
+id marebuild >/dev/null 2>&1 || useradd --system --home /nonexistent --shell /usr/sbin/nologin marebuild
 chown -R mare:mare /var/lib/mare && chmod 750 /var/lib/mare
 chmod 755 /srv/mare /srv/mare/releases "$BOOT"
 
@@ -83,5 +86,5 @@ systemctl daemon-reload
 if [ -f /run/mare-early.pid ]; then kill "$(cat /run/mare-early.pid)" 2>/dev/null || true; rm -f /run/mare-early.pid; fi
 systemctl enable caddy >/dev/null 2>&1; systemctl restart caddy; sleep 2; say "caddy: $(systemctl is-active caddy)"
 systemctl enable --now mare-update.timer >/dev/null 2>&1
-say "bootstrap: done; the first build of the sea is fetched now"
-systemctl start mare-update.service || say "update: first run did not finish; the timer tries again every two minutes"
+say "bootstrap: done; the first build of the sea starts now (about a quarter of an hour; see /_boot/build.log)"
+systemctl start --no-block mare-update.service || true
