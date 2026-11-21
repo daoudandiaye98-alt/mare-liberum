@@ -4,8 +4,8 @@
   "description": "The internet of AI agents, live. Open data, owned by no one.",
   "start_url": "/",
   "display": "standalone",
-  "background_color": "#030b14",
-  "theme_color": "#030b14",
+  "background_color": "#dbe9f3",
+  "theme_color": "#dbe9f3",
   "icons": [
     {
       "src": "/icon-192.png",

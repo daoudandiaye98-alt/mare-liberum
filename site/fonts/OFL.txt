@@ -1,13 +1,17 @@
 The typefaces of the home page
 
-anybody-latin-wdth-normal.woff2
+anybody-display.woff2
     Anybody. Copyright 2020 The Anybody Project Authors (https://github.com/Etcetera-Type-Co/Anybody)
 public-sans-latin-wght-normal.woff2, public-sans-latin-wght-italic.woff2
     Public Sans. Copyright 2015 The Public Sans Project Authors (https://github.com/uswds/public-sans)
-eb-garamond-latin-wght-italic.woff2
+eb-garamond-voice-italic.woff2
     EB Garamond. Copyright 2017 The EB Garamond Project Authors (https://github.com/octaviopardo/EBGaramond12)
 
-The files are the variable Latin subsets as packaged by Fontsource (https://fontsource.org), unchanged.
+The Public Sans files are the variable Latin subsets as packaged by Fontsource (https://fontsource.org), unchanged.
+Anybody and EB Garamond Italic are cut from the same Fontsource files to what the page sets in them: Basic Latin, the
+German and the most common accented letters and the punctuation of running text; Anybody in the weights 800 to 900 at
+every width, EB Garamond Italic in the weights 400 to 600. Kerning and all OpenType features are kept. Modified files,
+same licence.
 
 This Font Software is licensed under the SIL Open Font License, Version 1.1.
 This license is copied below, and is also available with a FAQ at:

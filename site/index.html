@@ -16,7 +16,7 @@
 <meta property="og:image" content="https://mare-liberum.vercel.app/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
-<meta property="og:image:alt" content="A dark world map with glowing points where AI agents reach Mare Liberum, and the words: The internet of AI agents, live.">
+<meta property="og:image:alt" content="The name Mare Liberum standing in a sea at sunrise, cut by the waterline, above the line: The internet of AI agents, live.">
 <meta name="twitter:card" content="summary_large_image">
 <meta name="twitter:image" content="https://mare-liberum.vercel.app/og.png">
 <link rel="search" type="application/opensearchdescription+xml" title="Mare Liberum Atlas" href="/opensearch.xml">
@@ -26,14 +26,14 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="alternate" type="application/json" href="/live.json" title="Live data of the agent internet">
 <link rel="alternate" type="text/plain" href="/llms.txt" title="For agents">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","name":"Mare Liberum","url":"https://mare-liberum.vercel.app/","potentialAction":[{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"https://mare-liberum.vercel.app/brief?q={task}"},"query-input":"required name=task"},{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"https://mare-liberum.vercel.app/find?q={search_term_string}"},"query-input":"required name=search_term_string"}],"description":"The live atlas of the agent internet and the first stop for agents on the internet.","potentialAction":{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"https://mare-liberum.vercel.app/brain?q={search_term_string}"},"query-input":"required name=search_term_string"}},{"@type":"Dataset","name":"Live data of the agent internet","description":"Counts of AI agents, crawlers and assistants reaching an open place for agents, by role and network location; pathways of the Unibrain; the open index of agents, MCP servers, paid APIs and shops.","url":"https://mare-liberum.vercel.app/","isAccessibleForFree":true,"license":"https://creativecommons.org/publicdomain/zero/1.0/","distribution":[{"@type":"DataDownload","encodingFormat":"application/json","contentUrl":"https://mare-liberum.vercel.app/live.json"}]}]}</script>
-<link rel="preload" href="/fonts/anybody-latin-wdth-normal.woff2" as="font" type="font/woff2" crossorigin>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"WebSite","name":"Mare Liberum","url":"https://mare-liberum.vercel.app/","potentialAction":[{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"https://mare-liberum.vercel.app/brief?q={task}"},"query-input":"required name=task"},{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"https://mare-liberum.vercel.app/find?q={search_term_string}"},"query-input":"required name=search_term_string"},{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"https://mare-liberum.vercel.app/brain?q={search_term_string}"},"query-input":"required name=search_term_string"}],"description":"The live atlas of the agent internet and the first stop for agents on the internet."},{"@type":"Dataset","name":"Live data of the agent internet","description":"Counts of AI agents, crawlers and assistants reaching an open place for agents, by role and network location; pathways of the Unibrain; the open index of agents, MCP servers, paid APIs and shops.","url":"https://mare-liberum.vercel.app/","isAccessibleForFree":true,"license":"https://creativecommons.org/publicdomain/zero/1.0/","distribution":[{"@type":"DataDownload","encodingFormat":"application/json","contentUrl":"https://mare-liberum.vercel.app/live.json"}]}]}</script>
+<link rel="preload" href="/fonts/anybody-display.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/public-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <style>
-@font-face{font-family:"Anybody";src:url(/fonts/anybody-latin-wdth-normal.woff2) format("woff2");font-weight:100 900;font-stretch:50% 150%;font-style:normal;font-display:swap}
+@font-face{font-family:"Anybody";src:url(/fonts/anybody-display.woff2) format("woff2");font-weight:800 900;font-stretch:50% 150%;font-style:normal;font-display:swap}
 @font-face{font-family:"Public Sans";src:url(/fonts/public-sans-latin-wght-normal.woff2) format("woff2");font-weight:100 900;font-style:normal;font-display:swap}
 @font-face{font-family:"Public Sans";src:url(/fonts/public-sans-latin-wght-italic.woff2) format("woff2");font-weight:100 900;font-style:italic;font-display:swap}
-@font-face{font-family:"EB Garamond";src:url(/fonts/eb-garamond-latin-wght-italic.woff2) format("woff2");font-weight:400 800;font-style:italic;font-display:swap}
+@font-face{font-family:"EB Garamond";src:url(/fonts/eb-garamond-voice-italic.woff2) format("woff2");font-weight:400 600;font-style:italic;font-display:swap}
 :root{
   /* Mare Liberum. One vertical cut through the sea: air is high-key, water is low-key, the text flips once, at the waterline.
      Layout: a single left-aligned column hung on a depth ruler. The monument type narrows with depth, like everything under pressure. */
@@ -54,7 +54,10 @@
   /* MARE at full width is 4.563 em wide; LIBERUM matches it at 97.2% */
   --fs:min(calc((100vw - 2*var(--pad))/4.60),calc(21*var(--u)));
   --w2s:97.2%;
+  /* the sun of the CSS sea: where the shader puts its own */
+  --sx:74vw; --sr:clamp(32px,8.5vmin,96px);
 }
+@media (min-width:900px){:root{--sx:80vw}}
 @media (min-width:1100px){:root{--pad:max(96px,calc((100vw - 1320px)/2))}}
 *{box-sizing:border-box}
 html{-webkit-text-size-adjust:100%;text-size-adjust:100%;color-scheme:dark;background:var(--w3);scroll-padding-top:84px;scroll-behavior:smooth}
@@ -77,9 +80,12 @@ button{cursor:pointer}
 .mk{display:block;height:0}
 
 /* the sea itself */
-#sea{position:fixed;left:0;top:0;width:100%;height:100lvh;z-index:0;display:none;pointer-events:none}
-.gl #sea{display:block}
-main,footer{position:relative;z-index:1}
+/* It is drawn over the colours every section states in CSS and under everything a section says: the colours are what a
+   reader sees before the first frame, what stands when there is no WebGL, and what a tool measures contrast against. */
+#sea{position:fixed;left:0;top:0;width:100%;height:100lvh;z-index:1;visibility:hidden;pointer-events:none}
+.gl #sea{visibility:visible}
+main,footer{position:relative}
+:where(.stage,.zone,footer)>*{position:relative;z-index:2}
 
 /* header */
 .hdr{position:absolute;z-index:20;left:0;right:0;top:0;display:flex;align-items:center;justify-content:space-between;gap:var(--s4);padding:calc(env(safe-area-inset-top,0px) + 10px) var(--gut) 10px;color:var(--ink);transition:color .25s,transform .38s cubic-bezier(.2,.7,.2,1)}
@@ -106,16 +112,29 @@ html.js:not(.past) .brand span{opacity:0}
 .plan-s a{display:inline-flex;align-items:center;min-height:44px;color:var(--mist)}
 .plan-x{align-self:flex-start}
 
-/* surface: sky, monument, horizon, the wave about to be cut */
-.stage{position:relative;z-index:1;overflow-x:clip;display:flex;flex-direction:column;padding:var(--top) var(--pad) 0;color:var(--ink);background:linear-gradient(to bottom,var(--air) 0,#eef2f2 calc(46*var(--u)),var(--dawn) calc(58*var(--u)),#f4e7d6 calc(58*var(--u)),#93c2dc calc(86*var(--u)),var(--w0) calc(86*var(--u)),var(--w1) 100%)}
-.gl .stage{background:none}
+/* surface: sky, monument, horizon, the wave about to be cut.
+   The sea is stated here in CSS as well: it is what the page shows until the shader has drawn its first frame, and all
+   there is where WebGL is not (a machine without a graphics chip, a lost context, no JavaScript). Its waterline is the
+   shader's own wave at its first moment, so the hand-over does not move it; the sun stands only where no shader will
+   come to raise one (.nogl, or the noscript rule in the head). */
+.stage{position:relative;overflow-x:clip;display:flex;flex-direction:column;padding:var(--top) var(--pad) 0;color:var(--ink);background:linear-gradient(to bottom,var(--air) 0,#edf1f2 calc(46*var(--u)),var(--dawn) calc(58*var(--u)))}
+.gl .stage{background:var(--air)}
+.band::before,.band::after,.deep::before,.deep::after,#mk-hz::before{content:"";position:absolute;left:calc(-1*var(--pad));right:calc(-1*var(--pad))}
+.gl .band::before,.gl .band::after,.gl .deep::before,.gl .deep::after,.gl #mk-hz::before{content:none}
+.band::before{z-index:-1;top:0;bottom:-12px;background:linear-gradient(#ffe9cc 0,#f6e7d5 5%,#c4d6da 32%,#9fc8dc 72%,#84b3cc calc(100% - 12px))}
+.band::after{display:var(--sunshow,none);z-index:-1;top:0;bottom:0;background:radial-gradient(ellipse calc(3.4*var(--sr)) 108% at var(--sx) 0,rgba(255,236,184,.82) 0,rgba(255,236,184,.36) 36%,rgba(255,236,184,0) 100%)}
+#mk-hz::before{display:var(--sunshow,none);left:calc(var(--sx) - var(--pad) - 4.5*var(--sr));right:auto;bottom:0;width:calc(9*var(--sr));height:calc(4.5*var(--sr));background:radial-gradient(circle var(--sr) at 50% calc(100% - .3*var(--sr)),#fff0bd 0,#ffbd4d calc(100% - 1px),rgba(255,189,77,0) calc(100% + 1px)),radial-gradient(circle calc(4.4*var(--sr)) at 50% calc(100% - .3*var(--sr)),rgba(255,248,230,.72) 0,rgba(255,224,176,.30) 32%,rgba(255,205,150,0) 100%)}
+.deep::before,.deep::after{clip-path:polygon(0px 16.8px,12px 17.7px,24px 17.8px,36px 17.1px,48px 16.1px,60px 15.1px,72px 14.6px,84px 14.8px,96px 15.5px,108px 16.2px,120px 16.6px,132px 16.6px,144px 16.4px,156px 16.3px,168px 16.6px,180px 17.5px,192px 18.7px,204px 19.7px,216px 20.1px,228px 19.7px,240px 18.4px,252px 16.8px,264px 15.2px,276px 14.1px,288px 13.4px,300px 13.0px,312px 12.3px,324px 11.3px,336px 10.0px,348px 8.7px,360px 7.9px,372px 7.9px,384px 8.8px,396px 10.1px,408px 11.4px,420px 12.2px,432px 12.4px,444px 12.1px,456px 11.7px,468px 11.6px,480px 11.9px,492px 12.5px,504px 13.0px,516px 13.0px,528px 12.4px,540px 11.5px,552px 10.6px,564px 10.4px,576px 10.9px,588px 12.2px,600px 13.8px,612px 15.4px,624px 16.5px,636px 17.1px,648px 17.4px,660px 17.8px,672px 18.6px,684px 19.6px,696px 20.6px,708px 21.1px,720px 20.9px,732px 19.8px,744px 18.1px,756px 16.4px,768px 15.2px,780px 14.6px,792px 14.5px,804px 14.6px,816px 14.5px,828px 14.0px,840px 13.2px,852px 12.5px,864px 12.3px,876px 12.8px,888px 13.7px,900px 14.6px,912px 15.0px,924px 14.7px,936px 13.6px,948px 12.2px,960px 10.8px,972px 9.9px,984px 9.6px,996px 9.6px,1008px 9.5px,1020px 9.2px,1032px 8.5px,1044px 7.9px,1056px 7.6px,1068px 8.1px,1080px 9.5px,1092px 11.4px,1104px 13.4px,1116px 14.9px,1128px 15.8px,1140px 16.0px,1152px 16.1px,1164px 16.2px,1176px 16.7px,1188px 17.4px,1200px 18.1px,1212px 18.2px,1224px 17.6px,1236px 16.5px,1248px 15.4px,1260px 14.6px,1272px 14.6px,1284px 15.3px,1296px 16.3px,1308px 17.4px,1320px 17.9px,1332px 17.9px,1344px 17.6px,1356px 17.3px,1368px 17.3px,1380px 17.7px,1392px 18.1px,1404px 18.2px,1416px 17.5px,1428px 16.1px,1440px 14.1px,1452px 12.0px,1464px 10.5px,1476px 9.6px,1488px 9.4px,1500px 9.5px,1512px 9.5px,1524px 9.3px,1536px 8.8px,1548px 8.4px,1560px 8.6px,1572px 9.4px,1584px 10.8px,1596px 12.3px,1608px 13.5px,1620px 14.0px,1632px 13.7px,1644px 13.0px,1656px 12.2px,1668px 11.9px,1680px 12.1px,1692px 12.6px,1704px 13.1px,1716px 13.3px,1728px 13.1px,1740px 12.7px,1752px 12.5px,1764px 13.1px,1776px 14.4px,1788px 16.2px,1800px 18.0px,1812px 19.5px,1824px 20.1px,1836px 20.1px,1848px 19.7px,1860px 19.3px,1872px 19.2px,1884px 19.3px,1896px 19.3px,1908px 18.9px,1920px 17.8px,1932px 16.1px,1944px 14.2px,1956px 12.7px,1968px 11.9px,1980px 11.9px,1992px 12.5px,2004px 13.1px,2016px 13.4px,2028px 13.2px,2040px 12.7px,2052px 12.2px,2064px 12.1px,2076px 12.5px,2088px 13.1px,2100px 13.5px,2112px 13.3px,2124px 12.4px,2136px 10.9px,2148px 9.3px,2160px 8.2px,2172px 7.8px,2184px 8.2px,2196px 8.9px,2208px 9.7px,2220px 10.1px,2232px 10.4px,2244px 10.6px,2256px 11.2px,2268px 12.5px,2280px 14.3px,2292px 16.3px,2304px 17.9px,2316px 18.8px,2328px 18.8px,2340px 18.2px,2352px 17.5px,2364px 17.0px,2376px 16.9px,2388px 17.2px,2400px 17.4px,2412px 17.2px,2424px 16.6px,2436px 15.7px,2448px 14.9px,2460px 14.6px,2472px 15.1px,2484px 16.2px,2496px 17.5px,2508px 18.3px,2520px 18.5px,2532px 17.9px,2544px 17.0px,2556px 16.0px,2568px 15.3px,2580px 15.0px,2592px 14.7px,2604px 14.1px,2616px 13.0px,2628px 11.3px,2640px 9.4px,2652px 7.9px,2664px 7.1px,2676px 7.3px,2688px 8.1px,2700px 9.2px,2712px 10.0px,2724px 10.4px,2736px 10.6px,2748px 10.7px,2760px 11.2px,2772px 12.1px,2784px 13.4px,2796px 14.5px,2808px 15.1px,2820px 14.9px,2832px 14.1px,2844px 13.1px,2856px 12.3px,2868px 12.2px,2880px 12.7px,2892px 13.7px,2904px 14.6px,2916px 15.2px,2928px 15.4px,2940px 15.5px,2952px 15.9px,2964px 16.7px,2976px 18.1px,2988px 19.7px,3000px 20.9px,3012px 21.4px,3024px 21.0px,3036px 19.8px,3048px 18.4px,3060px 17.2px,3072px 16.4px,3084px 15.9px,3096px 15.5px,3108px 14.8px,3120px 13.7px,3132px 12.3px,3144px 11.0px,3156px 10.2px,3168px 10.3px,3180px 11.1px,3192px 12.2px,3204px 13.1px,3216px 13.4px,3228px 13.1px,3240px 12.4px,3252px 11.7px,3264px 11.3px,3276px 11.4px,3288px 11.6px,3300px 11.7px,3312px 11.2px,3324px 10.3px,3336px 9.1px,3348px 8.1px,3360px 7.9px,3372px 8.5px,3384px 9.9px,3396px 11.6px,3408px 13.0px,3420px 14.1px,3432px 14.7px,3444px 15.1px,3456px 15.8px,3468px 16.9px,3480px 18.3px,3492px 19.5px,3504px 20.2px,3516px 20.0px,3528px 19.0px,3540px 17.7px,3552px 16.4px,3564px 15.7px,3576px 15.6px,3588px 16.0px,3600px 16.3px,3612px 16.3px,3624px 16.0px,3636px 15.4px,3648px 15.0px,3660px 15.1px,3672px 15.7px,3684px 16.7px,3696px 17.5px,3708px 17.6px,3720px 16.9px,3732px 15.5px,3744px 13.8px,3756px 12.4px,3768px 11.4px,3780px 10.9px,3792px 10.5px,3804px 10.1px,3816px 9.3px,3828px 8.2px,3840px 7.2px,3852px 6.8px,3864px 7.3px,3876px 8.5px,3888px 10.2px,3900px 11.9px,3912px 13.0px,3924px 13.5px,3936px 13.5px,3948px 13.4px,3960px 13.6px,3972px 14.2px,3984px 15.0px,3996px 15.6px,4008px 15.6px,max(100%,4008px) 14px,max(100%,4008px) 100%,0 100%)}
+.deep::before{top:-15.5px;height:44px;background:#eaf6fd}
+.deep::after{top:-14px;bottom:0;background:linear-gradient(var(--w0) 14px,var(--w1))}
+.nogl{--sunshow:block}
 .say{order:1;min-height:calc(58*var(--u) - 1.6*var(--fs) - var(--top));display:flex;flex-direction:column;justify-content:flex-end;gap:var(--s3);padding-bottom:clamp(16px,3.4svh,40px);max-width:35rem}
 .kicker{display:inline-flex;align-items:center;gap:10px;font:600 14.5px/1.2 var(--text);color:var(--ink-2)}
 .dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--coral);box-shadow:0 0 0 0 rgba(255,122,107,.6);animation:ping 2.4s infinite}
 @keyframes ping{0%{box-shadow:0 0 0 0 rgba(255,122,107,.55)}70%{box-shadow:0 0 0 11px rgba(255,122,107,0)}100%{box-shadow:0 0 0 0 rgba(255,122,107,0)}}
 .thesis{font:italic 500 clamp(33px,8.6vw,62px)/1 var(--voice);letter-spacing:-.012em;text-wrap:balance}
 .lede{font-size:clamp(16px,1.3vw + 11.5px,19px);line-height:1.5;color:var(--ink-2);max-width:31rem;text-wrap:pretty}
-.pin{order:2;position:relative;z-index:2}
+.pin{order:2;position:relative;z-index:3}
 .js .pin{position:sticky;top:var(--top)}
 .mark{position:relative;width:max-content;max-width:100%;font:900 var(--fs)/.8 var(--display);text-transform:uppercase;letter-spacing:-.004em;user-select:none;overflow:clip;overflow-clip-margin:2px}
 .ml{display:block}
@@ -129,11 +148,12 @@ html.js:not(.past) .brand span{opacity:0}
 .cue{display:flex;align-items:center;gap:var(--s4);font-size:15px;will-change:opacity}
 .cue a{display:inline-flex;align-items:center;gap:6px;min-height:44px;font-weight:600}
 .mk#mk-wl{order:5}
-.under{order:6;height:calc(46*var(--u))}
+/* not ".under": that is the state the page takes below the waterline, set on the root */
+.deep{order:6;height:calc(46*var(--u))}
 
 /* water: every zone hangs on the ruler */
-.zone{position:relative;z-index:1;padding:clamp(88px,15svh,190px) var(--pad) clamp(64px,10svh,140px);background:linear-gradient(var(--a,var(--w3)),var(--b,var(--w3)))}
-.gl .zone{background:none}
+.zone{position:relative;padding:clamp(88px,15svh,190px) var(--pad) clamp(64px,10svh,140px);background:linear-gradient(var(--a,var(--w3)),var(--b,var(--w3)))}
+.gl .zone{background:var(--a,var(--w3))}
 .rock{--a:var(--rock);--b:var(--rock)}.z0{--a:var(--w1);--b:var(--w1)}.z1{--a:var(--w1);--b:var(--w2)}.z2{--a:var(--w2);--b:var(--w3)}.z3{--a:var(--w3);--b:var(--w4)}.z4{--a:var(--w4);--b:var(--w5)}.z5{--a:var(--w5);--b:var(--w5)}.z6{--a:var(--w5);--b:var(--w5)}
 .zh{display:grid;grid-template-columns:minmax(0,1fr);gap:var(--s4);margin-bottom:clamp(36px,6svh,72px)}
 .depth{display:flex;align-items:center;gap:var(--s3);font-size:15px;color:var(--mist)}
@@ -327,7 +347,6 @@ code{font:500 .92em/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;col
 .keep h3{font-size:clamp(20px,1.4vw + 15px,27px);line-height:1.2;margin-bottom:var(--s3)}
 .keep p{max-width:44rem;font-size:16px}
 footer{background:var(--rock);padding:clamp(48px,8svh,96px) var(--pad) calc(env(safe-area-inset-bottom,0px) + 120px);color:var(--mist);font-size:15.5px}
-.gl footer{background:none}
 .cols4{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:var(--s6)}
 .foot-v{font:italic 500 clamp(24px,2vw + 16px,34px)/1.15 var(--voice);color:var(--foam);margin-bottom:var(--s4);max-width:18ch}
 footer h3{font:650 15px/1.2 var(--text);color:var(--foam);margin-bottom:var(--s2)}
@@ -351,13 +370,13 @@ footer li a:hover{color:var(--foam);text-decoration:underline}
 .cta:focus-visible{outline-color:var(--foam)}
 
 /* the ruler: depth in metres, as it is marked on a hull */
-.ruler{position:absolute;z-index:1;left:0;top:0;width:0;height:0;pointer-events:none;display:none}
+.ruler{position:absolute;z-index:3;left:0;top:0;width:0;height:0;pointer-events:none;display:none}
 .js .ruler{display:block}
 .ruler i{position:absolute;left:0;height:1px;width:7px;background:rgba(238,246,251,.34)}
 .ruler i.maj{width:14px;background:rgba(238,246,251,.62)}
 .ruler i b{display:none;position:absolute;left:20px;top:-.62em;font:italic 500 12.5px/1.2 var(--text);font-variant-numeric:tabular-nums;color:var(--dim);white-space:nowrap}
 
-@media (min-width:1100px){.ruler i b{display:block}.cue .snd{display:none}}
+@media (min-width:1100px){.ruler i b{display:block}.ruler i:first-child b{display:none}}
 @media (min-width:900px){.band{height:calc(23*var(--u))}.say{max-width:none}.thesis{font-size:clamp(42px,4.3vw,66px)}.lede{max-width:34rem}}
 @media (max-width:1000px){
   .split{grid-template-columns:1fr}
@@ -390,7 +409,7 @@ footer li a:hover{color:var(--foam);text-decoration:underline}
 @media (orientation:landscape) and (max-height:520px){
   .say{min-height:0;padding-top:4px;gap:6px;padding-bottom:12px;max-width:none}
   .thesis{font-size:30px}.lede{font-size:15.5px;max-width:60ch}
-  .band{height:calc(34*var(--u))}.under{height:calc(70*var(--u))}
+  .band{height:calc(34*var(--u))}.deep{height:calc(70*var(--u))}
   .swarm-w canvas{height:max(380px,92svh)}
 }
 /* one moment on arrival: the sun comes up, the name rises out of the sea, the rest follows */
@@ -401,16 +420,19 @@ footer li a:hover{color:var(--foam);text-decoration:underline}
   .say>*:nth-child(2){animation-delay:.84s}.say>*:nth-child(3){animation-delay:.93s}
   .cue{animation:arrive .9s cubic-bezier(.2,.7,.2,1) 1.2s backwards}
   .dock{animation:dock .8s cubic-bezier(.2,.7,.2,1) 1.05s backwards}
+  #mk-hz::before{animation:sunup 1.9s cubic-bezier(.215,.61,.355,1) backwards}
 }
+@keyframes sunup{from{transform:translateY(calc(1.25*var(--sr)))}to{transform:none}}
 @keyframes rise{from{transform:translateY(112%)}to{transform:none}}
 @keyframes arrive{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:none}}
 @keyframes dock{from{opacity:0;translate:-50% 28px}to{opacity:1;translate:-50% 0}}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 }
-@media print{#sea,.dock,.hdr,.ruler{display:none!important}body,html{background:#fff;color:#000}.zone,.stage,footer{background:none!important;color:#000}}
+@media print{#sea,.dock,.hdr,.ruler{display:none!important}body,html{background:#fff!important;color:#000}.say{-webkit-mask-image:none!important;mask-image:none!important}.zone,.stage,footer{background:none!important;color:#000}}
 
 </style>
+<noscript><style>:root{--sunshow:block}</style></noscript>
 </head>
 <body>
 <a class="skip" href="#live">Skip to the live numbers</a>
@@ -466,7 +488,7 @@ footer li a:hover{color:var(--foam);text-decoration:underline}
     <p class="cue"><span class="snd">0 m</span><a href="#ratio">Dive in<svg width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><path d="M4 7l5 5 5-5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></a></p>
   </div>
   <i class="mk" id="mk-wl"></i>
-  <div class="under" aria-hidden="true"></div>
+  <div class="deep" aria-hidden="true"></div>
 </section>
 
 <section class="zone z0 fact" id="ratio" aria-labelledby="h-ratio">
@@ -488,11 +510,11 @@ footer li a:hover{color:var(--foam);text-decoration:underline}
     <p class="ocean">In the ocean, nearly all the life people know lives in the top 200 metres, where sunlight reaches. In this sea it is the layer where people still show up. Everything below belongs to machines.</p>
   </header>
   <div class="viz swarm-w" id="swarm-w">
-    <canvas id="swarm" role="img" aria-label="Schools of fish, one fish for every ten visits today, grouped by kind of visitor. The table below has the numbers."></canvas>
+    <canvas id="swarm" role="img" aria-label="Schools of fish, grouped by kind of visitor. The table below has the numbers."></canvas>
     <p class="lab" data-g="people" hidden>People</p>
     <p class="lab" data-g="live" hidden>Assistants for a person</p>
     <p class="lab" data-g="training" hidden>Training crawlers</p>
-    <p class="note">Every fish is ten visits today. Touch the school.</p>
+    <p class="note">Touch the school.</p>
   </div>
   <div class="cols">
     <div>
@@ -1098,17 +1120,30 @@ function fit() {
   if (big) { const f = parseFloat(getComputedStyle(big).fontSize), w = big.firstElementChild.getBoundingClientRect().width; if (w > 0) { const to = Math.min(f * big.clientWidth / w, Math.min(innerHeight, 1100) * 0.42, 470); if (Math.abs(to - f) > 0.6) big.style.setProperty('--bigfs', to.toFixed(1) + 'px'); } }
 }
 
+const stage = $('#top'), say = $('.say'), hdr = $('.hdr');
+let veilC = NaN;
+// The opening lines dissolve as they reach the header, so they never run under the mark and the menu button.
+function veil(y) {
+  if (!G.say) return;
+  // fully there below the header (and wherever the lines stand before the first scroll), gone 46 px higher
+  const c = y + G.say[2] - 46 - G.say[0], v = c <= -46 || c > G.say[1] + 20 ? -1e4 : Math.round(c);
+  if (v === veilC) return; veilC = v;
+  const m = v === -1e4 ? '' : `linear-gradient(to bottom,transparent ${v}px,#000 ${v + 46}px)`;
+  say.style.webkitMaskImage = m; say.style.maskImage = m;
+}
 function measure() {
   G.vw = H.clientWidth; G.vh = (cv && cv.clientHeight) || innerHeight;
   G.hz = docTop($('#mk-hz')); G.wl = docTop($('#mk-wl'));
   const z = ['#readers', '#map', '#check', '#brain', '#inside'].map((s) => docTop($(s)));
-  G.bed = docTop($('#connect')) - 10; G.stage = docTop($('#ratio'));
-  G.stops.set([G.wl, z[0], z[1], z[2], z[3], z[4], G.bed]);
+  G.bed = docTop($('#connect')) - 10; G.stage = docTop($('#ratio')); G.max = Math.max(0, H.scrollHeight - innerHeight);
+  G.say = say ? [docTop(say), say.offsetHeight, Math.min(docTop(say.firstElementChild || say), (hdr ? hdr.offsetHeight : 64) + 40)] : null; veilC = NaN;
+  G.stops.set([G.wl, z[0], z[1], z[2], z[3], z[4], G.bed]); dirty = true; wasTint = '';
   G.depth = [[G.wl, 0], [z[1], 200], [z[2], 1000], [z[3], 4000], [z[4], 5600], [G.bed - 120, 6000]];
   const r = clamp(Math.min(G.vw, G.vh) * 0.085, 32, 96), mr = $('.mark').getBoundingClientRect();
   let sx = G.vw * 0.74;
   if (G.vw >= 900) sx = Math.min(G.vw - r - 48, Math.max(G.vw * 0.80, mr.right + r * 1.5));
   G.sun = [sx, G.hz - r * 0.30, r];
+  if (!gl && stage) { stage.style.setProperty('--sx', sx.toFixed(1) + 'px'); stage.style.setProperty('--sr', r.toFixed(1) + 'px'); }
   // the ruler
   const ru = $('#ruler'); let out = '';
   const maj = new Set([0, 200, 1000, 2000, 3000, 4000, 5000, 6000]);
@@ -1132,6 +1167,10 @@ function initGL() {
   if (!cv || !cv.getContext) return false;
   try { gl = cv.getContext('webgl2', { alpha: false, antialias: false, depth: false, stencil: false, powerPreference: 'high-performance' }); } catch { gl = null; }
   if (!gl) return false;
+  // a machine without a graphics chip draws WebGL with its processor, and then every frame holds up the whole page:
+  // there the sea stays the one the page states in CSS
+  if (!QA.soft) { let by = ''; try { const x = gl.getExtension('WEBGL_debug_renderer_info'); by = x ? String(gl.getParameter(x.UNMASKED_RENDERER_WEBGL)) : ''; } catch {}
+    if (/swiftshader|llvmpipe|softpipe|software|basic render/i.test(by)) { letGo(); return false; } }
   const sh = (type, src) => { const s = gl.createShader(type); gl.shaderSource(s, src); gl.compileShader(s); if (!gl.getShaderParameter(s, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(s) || 'shader'); return s; };
   try {
     prog = gl.createProgram();
@@ -1148,15 +1187,17 @@ function initGL() {
   gl.uniform3fv(U.uStopC, STOPC);
   return true;
 }
+// hand the context back, so that nothing is kept for a sea that is not drawn
+function letGo() { try { const x = gl && gl.getExtension('WEBGL_lose_context'); if (x) x.loseContext(); } catch {} gl = null; }
 function sizeGL() {
   const cw = cv.clientWidth, ch = cv.clientHeight; if (!cw || !ch) return;
   let s = Math.min(devicePixelRatio || 1, 1.6) * q;
   const px = cw * ch * s * s, cap = 1.7e6; if (px > cap) s *= Math.sqrt(cap / px);
   const w = Math.max(2, Math.round(cw * s)), h = Math.max(2, Math.round(ch * s));
-  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; gl.viewport(0, 0, w, h); }
+  if (cv.width !== w || cv.height !== h) { cv.width = w; cv.height = h; gl.viewport(0, 0, w, h); dirty = true; }
 }
 const lamp = { x: 0, y: 0, a: 0, t: 0 };
-let born = 0;
+let born = 0, dirty = true;
 function drawSea(y, time, vel) {
   if (!born) born = performance.now();
   const up = still || QA.time != null ? 1 : 1 - Math.pow(1 - clamp((performance.now() - born) / 1900, 0, 1), 3);
@@ -1172,16 +1213,20 @@ function drawSea(y, time, vel) {
 
 /* ---------- the monument sinks: the wordmark is cut by the same wave the shader draws ---------- */
 const mlA = $('.ml-a'), mlB = $('.ml-b'), cue = $('.cue');
-let cutState = '', cueO = 1, amp = 1, splash = 0;
+let cutState = '', cueO = 1, amp = 1, splash = 0, lastEdge = '';
 function cut(y, time) {
   if (!mlA) return;
+  // far below the stage the monument is out of sight: nothing to measure, nothing to cut
+  if (y > G.stage + G.vh) { lastEdge = ''; if (cutState !== 'water') { mlA.style.clipPath = 'inset(0 0 100% 0)'; mlB.style.clipPath = 'none'; mlB.style.visibility = ''; cutState = 'water'; } return; }
   const r = mlA.getBoundingClientRect(), s = G.wl - y;
   if (cue && y < G.wl) { const o = clamp((cue.getBoundingClientRect().top - r.bottom - 4) / 44, 0, 1); if (o !== cueO) { cueO = o; cue.style.opacity = o; cue.style.pointerEvents = o < 0.5 ? 'none' : ''; } }
   const st = s > r.bottom + 10 ? 'air' : s < r.top - 10 ? 'water' : 'cut';
-  if (st !== 'cut') { if (st !== cutState) { mlA.style.clipPath = st === 'air' ? 'none' : 'inset(0 0 100% 0)'; mlB.style.clipPath = st === 'air' ? 'inset(100% 0 0 0)' : 'none'; cutState = st; } return; }
+  if (st !== 'cut') { lastEdge = ''; if (st !== cutState) { mlA.style.clipPath = st === 'air' ? 'none' : 'inset(0 0 100% 0)'; mlB.style.clipPath = st === 'air' ? 'inset(100% 0 0 0)' : 'none'; mlB.style.visibility = st === 'air' ? 'hidden' : ''; cutState = st; } return; }
+  if (cutState !== 'cut') mlB.style.visibility = '';
   cutState = st;
   const n = 26, w = r.width, h = r.height; let edge = '', back = '';
   for (let i = 0; i <= n; i++) { const px = (i / n) * w, py = clamp(s + amp * waveAt(r.left + px, time) - r.top, -20, h + 20); edge += `${px.toFixed(1)}px ${py.toFixed(1)}px,`; back = `,${px.toFixed(1)}px ${py.toFixed(1)}px` + back; }
+  if (edge === lastEdge) return; lastEdge = edge;
   mlB.style.clipPath = `polygon(${edge}${w + 2}px ${h + 30}px,-2px ${h + 30}px)`;
   mlA.style.clipPath = `polygon(-2px -30px,${w + 2}px -30px${back})`;
 }
@@ -1189,8 +1234,29 @@ function cut(y, time) {
 /* ---------- the dock: how deep the reader is ---------- */
 const dm = $('#dm'), dz = $('#dz');
 const ZONE = [[5990, 'The seabed'], [4000, 'The abyss'], [1000, 'Midnight zone'], [200, 'Twilight zone'], [0.5, 'Sunlight zone']];
-let lastM = '', lastZ = '', wasUnder = null, wasPast = null, wasDown = false, hudY = 0;
+let lastM = '', lastZ = '', wasUnder = null, wasPast = null, wasDown = false, hudY = 0, wasTint = '', wasRoot = '', tintY = -1e9;
+// The browser dives too. Its bar takes the colour the sea has where the window begins, mixed by the rule the shader mixes
+// its zones with; and the root, which a phone shows past either end of the page when the page is pulled, is sky above the
+// water, the zone's own colour on the way down, and rock at the bottom.
+const SKY = ['#dbe9f3', '#eef2f2', '#ffe5c3', '#f4e7d6', '#93c2dc'].map(hex3), ZONEC = ['#083f70', '#07365f', '#062a4d', '#051c3a', '#030f24', '#020916'];
+const mix3 = (a, b, t) => [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, a[2] + (b[2] - a[2]) * t];
+const hexOf = (c) => '#' + c.map((v) => Math.round(clamp(v, 0, 1) * 255).toString(16).padStart(2, '0')).join('');
+function seaAt(y) {
+  if (y < G.hz) { const k = y / Math.max(1, G.hz); return k < 0.79 ? mix3(SKY[0], SKY[1], k / 0.79) : mix3(SKY[1], SKY[2], (k - 0.79) / 0.21); }
+  if (y < G.wl) return mix3(SKY[3], SKY[4], (y - G.hz) / Math.max(1, G.wl - G.hz));
+  if (y > G.bed + 70) return [0.004, 0.02, 0.047];
+  let c = [STOPC[0], STOPC[1], STOPC[2]];
+  for (let i = 0; i < 6; i++) { const t = clamp((y - G.stops[i]) / Math.max(1, G.stops[i + 1] - G.stops[i]), 0, 1); c = mix3(c, [STOPC[i * 3 + 3], STOPC[i * 3 + 4], STOPC[i * 3 + 5]], t * t * (3 - 2 * t)); }
+  return c;
+}
+let tintTag = $('meta[name="theme-color"]');
 function hud(y) {
+  if (Math.abs(y - tintY) >= 12 || !wasTint) {
+    tintY = y; const tint = hexOf(seaAt(y + 6));
+    if (tint !== wasTint) { wasTint = tint; if (!tintTag) { tintTag = D.createElement('meta'); tintTag.name = 'theme-color'; D.head.appendChild(tintTag); } tintTag.content = tint; }
+    let root = '#dbe9f3'; if (y > G.wl - 40) { root = ZONEC[0]; for (let i = 1; i < 6; i++) if (y >= G.stops[i] - 40) root = ZONEC[i]; if (y > G.max - G.vh * 0.6) root = '#01050c'; }
+    if (root !== wasRoot) { wasRoot = root; H.style.backgroundColor = root; }
+  }
   const under = G.wl - y < 72;
   if (under !== wasUnder) { H.classList.toggle('under', under); wasUnder = under; }
   const past = y > G.stage - 150; if (past !== wasPast) { H.classList.toggle('past', past); wasPast = past; }
@@ -1202,20 +1268,33 @@ function hud(y) {
   if (zn !== lastZ) dz.textContent = lastZ = zn;
 }
 
-/* ---------- who is down here: one dot for every ten visits, schooling ---------- */
+/* ---------- who is down here: one fish for every so many visits, schooling ---------- */
 const swarm = (() => {
   const c = $('#swarm'), wrap = $('#swarm-w');
   if (!c || !c.getContext) return { set() {}, tick() {}, size() {} };
-  const x2 = c.getContext('2d'), UNIT = 10;
+  const x2 = c.getContext('2d'), UNITS = [10, 20, 50, 100, 200, 500, 1000, 2000, 5000, 10000], note = $('.note', wrap);
+  let unit = 0;
   const ANCH = { people: [0.20, 0.085], live: [0.50, 0.19], search: [0.26, 0.295], tools: [0.72, 0.325], indexer: [0.31, 0.42], resident: [0.80, 0.455], other: [0.12, 0.535], training: [0.52, 0.765] };
   let W = 0, Hh = 0, dpr = 1, on = false, groups = [], n = 0, roles = null, key = '', drawn = false, kk = 1, lastT = 0;
   let px, py, vx, vy, gi, uu, th, sp, ux, uy;
   const ptr = { x: -1e4, y: -1e4, on: false, t: 0 };
+  // How many visits one fish stands for. A school is only readable, and a phone can only move it, while every fish has
+  // room: so the busier the day and the smaller the screen, the more visits one fish carries, and the caption says how many.
+  function scale() {
+    const all = R.ORDER.reduce((s, k) => s + (roles[k] || 0), 0), room = clamp(Math.floor(0.2 * W * Hh / 20), 500, 6000);
+    let u = UNITS[UNITS.length - 1]; for (const x of UNITS) if (all / x <= room) { u = x; break; }
+    if (u === unit) return; unit = u;
+    if (note) note.textContent = `Every fish is ${fmt(u)} visits today. Touch the school.`;
+    c.setAttribute('aria-label', `Schools of fish, one fish for every ${fmt(u)} visits today, grouped by kind of visitor. The table below has the numbers.`);
+  }
+  const keyOf = () => unit + ':' + R.ORDER.map((x) => Math.round((roles[x] || 0) / unit)).join(',');
+  const label = (el, g) => { el.innerHTML = `${esc(R.ROLE[g.k][0])} <span class="snd">${fmt(g.v)}</span>`; };
   function build() {
     if (!roles || !W) return;
+    scale(); key = keyOf();
     // every kind of visitor has its own seeded sequence, so a new count only adds or removes fish at the end of its school
     const old = groups, o = { px, py, vx, vy };
-    groups = R.ORDER.filter((k) => roles[k] > 0).map((k) => ({ k, v: roles[k], count: Math.max(1, Math.round(roles[k] / UNIT)), col: R.ROLE[k][1], a: ANCH[k] }));
+    groups = R.ORDER.filter((k) => roles[k] > 0).map((k) => ({ k, v: roles[k], count: Math.max(1, Math.round(roles[k] / unit)), col: R.ROLE[k][1], a: ANCH[k] }));
     n = groups.reduce((s, g) => s + g.count, 0);
     px = new Float32Array(n); py = new Float32Array(n); vx = new Float32Array(n); vy = new Float32Array(n); gi = new Uint8Array(n); ux = new Float32Array(n); uy = new Float32Array(n); uu = new Float32Array(n); th = new Float32Array(n); sp = new Float32Array(n);
     let i = 0;
@@ -1235,11 +1314,16 @@ const swarm = (() => {
       }
       g.to = i;
     });
-    for (const el of $$('.lab', wrap)) { const g = groups.find((x) => x.k === el.dataset.g); if (!g) { el.hidden = true; continue; } el.hidden = false; el.innerHTML = `${esc(R.ROLE[g.k][0])} <span class="snd">${fmt(g.v)}</span>`; el.style.left = `${clamp(g.cx / W * 100, 24, 76)}%`; el.style.top = `${Math.max(14, g.cy - g.ry - (g.k === 'training' ? 20 : 24))}px`; }
+    for (const el of $$('.lab', wrap)) { const g = groups.find((x) => x.k === el.dataset.g); if (!g) { el.hidden = true; continue; } el.hidden = false; label(el, g); el.style.left = `${clamp(g.cx / W * 100, 24, 76)}%`; el.style.top = `${Math.max(14, g.cy - g.ry - (g.k === 'training' ? 20 : 24))}px`; }
     drawn = false;
   }
   function size() { const w = c.clientWidth, h = c.clientHeight; if (!w || !h) return; if (w === W && h === Hh) return; W = w; Hh = h; dpr = Math.min(devicePixelRatio || 1, 2); c.width = Math.round(W * dpr); c.height = Math.round(Hh * dpr); build(); }
-  function set(r) { const k = R.ORDER.map((x) => Math.round((r && r[x] || 0) / UNIT)).join(','); roles = r; if (k !== key) { key = k; build(); } else for (const g of groups) g.v = r[g.k]; }
+  // a new count: the school is rebuilt when a fish joins or leaves it; otherwise only the numbers on its labels move
+  function set(r) {
+    roles = r || {}; if (!W) return;
+    scale(); if (keyOf() !== key) return build();
+    for (const g of groups) if (g.v !== roles[g.k]) { g.v = roles[g.k]; const el = $(`.lab[data-g="${g.k}"]`, wrap); if (el) label(el, g); }
+  }
   function tick(dt, time) {
     if (!on || !n) return;
     if (still && drawn) return;
@@ -1495,19 +1579,28 @@ D.addEventListener('click', (e) => {
 let layoutQueued = false;
 function layout() { layoutQueued = false; fit(); measure(); swarm.size(); globe.size(); strands.size(); if (gl) sizeGL(); }
 function queueLayout() { if (!layoutQueued) { layoutQueued = true; requestAnimationFrame(layout); } }
-let last = 0, lastY = scrollY, vel = 0, acc = 0, frames = 0, warm = 0, raf = 0;
+let last = 0, lastY = scrollY, vel = 0, acc = 0, frames = 0, slow = 0, odd = false, moved = 0, raf = 0;
 const t0 = performance.now();
 function frame(now) {
   raf = requestAnimationFrame(frame);
-  const dt = clamp((now - last) / 1000, 0.001, 0.05); last = now;
-  const y = scrollY, time = QA.time != null ? QA.time : still ? 12 : (now - t0) / 1000;
+  const raw = (now - last) / 1000, dt = clamp(raw, 0.001, 0.05); last = now;
+  const y = scrollY, time = QA.time != null ? QA.time : still ? 0 : (now - t0) / 1000;
+  if (y !== lastY) moved = now;
   vel += ((y - lastY) / dt - vel) * Math.min(1, dt * 9); lastY = y;
   lamp.a += ((performance.now() - lamp.t < 2600 ? 1 : 0) - lamp.a) * Math.min(1, dt * 4);
-  splash += ((still ? 0 : Math.min(Math.abs(vel) / 1100, 1.5)) - splash) * Math.min(1, dt * 5); amp = 1 + splash;
-  hud(y); cut(y, time);
+  splash += ((still ? 0 : Math.min(Math.abs(vel) / 1100, 1.5)) - splash) * Math.min(1, dt * 5); amp = gl ? 1 + splash : 1;
+  // without the shader the waterline is the still one the page states in CSS, and the monument is cut by that one
+  hud(y); veil(y); cut(y, gl ? time : 0);
   if (gl) {
-    drawSea(y, time, vel);
-    if (!QA.noGovern && ++warm > 40) { acc += dt; if (++frames >= 45) { if (acc / frames > 0.027 && q > 0.5) { q = Math.max(0.5, q - 0.25); sizeGL(); } acc = 0; frames = 0; } }
+    // the water moves slowly: while nobody scrolls or points, every second frame is enough for it
+    // and for a reader who asked for stillness nothing moves at all, so the sea is drawn only when something changed
+    odd = !odd; const idle = now - Math.max(moved, lamp.t);
+    if (still && QA.time == null ? dirty || idle < 4600 : odd || QA.noGovern || now - t0 < 2600 || idle < 1500) { drawSea(y, time, vel); dirty = false; }
+    // frames that stay slow: first the sea is drawn smaller, and if that is not enough the CSS sea stands in.
+    // A gap of a second or more is a tab that was away, not a slow frame.
+    if (!QA.noGovern && now - t0 > 1800 && raw < 1) { acc += raw; if (++frames >= 45 || acc > 0.8) { const avg = acc / frames;
+      if (avg > 0.027 && q > 0.5) { q = avg > 0.1 ? 0.5 : Math.max(0.5, q - 0.25); sizeGL(); slow = 0; } else if (avg > 0.05) { if (++slow >= 2) dropGL(); } else slow = 0;
+      acc = 0; frames = 0; } }
   }
   swarm.tick(dt, time); globe.tick(dt, time); strands.tick(dt, time);
 }
@@ -1516,9 +1609,15 @@ function stop() { cancelAnimationFrame(raf); raf = 0; }
 
 if (data) apply(data, true);
 fit(); measure();
-if (initGL()) { H.classList.add('gl'); sizeGL(); measure();
-  cv.addEventListener('webglcontextlost', (e) => { e.preventDefault(); gl = null; H.classList.remove('gl'); });
-  cv.addEventListener('webglcontextrestored', () => { if (initGL()) { H.classList.add('gl'); sizeGL(); } }); }
+// The sea is shown once its first frame is drawn; until then, and whenever WebGL is not there, the CSS sea stands.
+let noGL = false;
+function wake() { if (noGL || !initGL()) return false; sizeGL(); drawSea(scrollY, QA.time != null ? QA.time : 0, 0); H.classList.remove('nogl'); H.classList.add('gl'); return true; }
+function asCSS() { gl = null; H.classList.remove('gl'); H.classList.add('nogl'); queueLayout(); }
+function dropGL() { noGL = true; letGo(); asCSS(); }
+if (wake()) {
+  cv.addEventListener('webglcontextlost', (e) => { e.preventDefault(); asCSS(); });
+  cv.addEventListener('webglcontextrestored', () => { wake(); });
+} else { H.classList.add('nogl'); measure(); }
 swarm.size(); globe.size(); strands.size();
 start();
 addEventListener('resize', queueLayout);
