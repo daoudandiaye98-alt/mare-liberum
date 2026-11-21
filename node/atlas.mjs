@@ -8,6 +8,7 @@
 // The same code maps a million sites from GitHub Actions (tools/atlas.mjs) and one site on demand in the sea.
 import { AGENTS, safeHost, publicDns, grab, robotsGroups, robotsAllows, readPage } from './check.mjs';
 import { entities } from './reader.mjs';
+import { aside } from './aside.mjs';
 
 export const ATLAS_UA = 'MareLiberum-Atlas/1.0 (+https://mareliberum.dev/atlas; maps how agents can use a website, once a week, follows robots.txt)';
 export const ATLAS_TOKENS = ['mareliberum-atlas', 'mareliberum'];
@@ -120,6 +121,8 @@ export function homeExtras(html, pageUrl, host) {
 
 // ---------------------------------------------------------------- one site
 // robots.txt first: where it says no to the Atlas, only robots.txt itself is read
+// what the map takes from a home page, in one go (run beside whoever maps, see aside.mjs)
+export function digestHome(html, pageUrl, host) { return { pg: readPage(html), ex: homeExtras(html, pageUrl, host) }; }
 export async function profileSite(input, { rank, fetch: get = grab, dns = publicDns, ms = 7000, homeMax = 600_000 } = {}) {
   const host = safeHost(input); if (!host) return null;
   const d = siteOf(host), at = new Date().toISOString().slice(0, 10), p = { d, at };
@@ -148,8 +151,9 @@ export async function profileSite(input, { rank, fetch: get = grab, dns = public
   if (home.url) { try { const u = new URL(home.url); const f = u.hostname + (u.pathname === '/' ? '' : u.pathname); if (f !== d) p.f = f; if (u.protocol !== 'https:') p.nh = 1; } catch {} }
   if (llms && llms.status === 200 && !/<html/i.test(llms.body || '') && (llms.body || '').trim().length > 20) p.ll = 1;
   if (card && card.status === 200) { try { const j = JSON.parse(card.body); if (j && (j.name || j.skills)) p.ac = { n: String(j.name || '').slice(0, 80), k: Array.isArray(j.skills) ? j.skills.length : 0 }; } catch {} }
-  if (home.status === 200 && /html/i.test(home.type || '') && home.body) {
-    const pg = readPage(home.body), ex = homeExtras(home.body, home.url || `https://${host}/`, host);
+  const read = home.status === 200 && /html/i.test(home.type || '') && home.body ? await aside(import.meta.url, 'digestHome', [home.body, home.url || `https://${host}/`, host], { wait: 120_000 }).catch(() => null) : null;
+  if (read) {
+    const { pg, ex } = read;
     if (pg.title) p.t = entities(pg.title).slice(0, 160); if (pg.description) p.ds = entities(pg.description).slice(0, 300); if (pg.lang) p.lg = String(pg.lang).slice(0, 12);
     p.w = pg.words; if (pg.shell || pg.words < 40) p.sh = 1; if (pg.jsonld.length) p.ld = pg.jsonld.slice(0, 8); if (pg.noindex || /noindex/i.test(home.robotsTag || '')) p.ni = 1;
     if (ex.feeds.length) p.fd = ex.feeds; if (ex.nav.length) p.nv = ex.nav; if (ex.dev) p.dv = ex.dev;

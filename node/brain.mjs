@@ -191,7 +191,8 @@ export function createBrain(h) {
     async mindNew(ctx) {
       if (ctx?.readOnly) return { note: 'an agent gets a mind with GET /m/new' };
       await allow(ctx, 'mind', 20, 3600);
-      const key = (await sha(`${Math.random()}|${Date.now()}|${ctx?.ip}`)).slice(0, 12) + (await sha(`${Math.random()}`)).slice(0, 20);
+      // the key is the whole protection of a mind: 32 characters from the system's source of randomness
+      const key = Array.from(crypto.getRandomValues(new Uint8Array(16)), (b) => b.toString(16).padStart(2, '0')).join('');
       await kv.set(await ownMind(key), { at: now(), notes: [] }, BRAIN.minds);
       await update('brain:stats', 400 * DAY, (cur) => ({ ...(cur || {}), minds: ((cur || {}).minds || 0) + 1 }), () => true);
       const url = `${base()}/m/${key}`;

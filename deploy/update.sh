@@ -92,6 +92,13 @@ as_builder() { if [ -n "$BUILDER" ] && id "$BUILDER" >/dev/null 2>&1; then runus
 # (a build asks for the addresses of some twenty thousand stores: with the four helpers a program has by default, the
 #  name lookups stand in line and the whole build takes three times as long, so it gets more of them)
 clean=(env -i PATH="$PATH" HOME=/nonexistent UV_THREADPOOL_SIZE="${MARE_BUILD_THREADS:-64}"); for v in ${MARE_KEEP_ENV:-}; do [ -n "${!v:-}" ] && clean+=("$v=${!v}"); done
+# after a build: the code is as the repository gave it, and nothing in the tree points somewhere else
+unchanged() {
+  [ -s "$tmp/code.sums" ] || return 1
+  ( cd "$1" && sha256sum --quiet -c "$tmp/code.sums" >/dev/null 2>&1 ) || return 1
+  find "$1" -xdev \( -type l -o -type p -o -type s -o -type b -o -type c \) -delete 2>/dev/null
+  return 0
+}
 fetch_build() {
   local head last tried age since why sha stamp log peak before lost
   head="$HEAD_SHA"; [[ "$head" =~ ^[0-9a-f]{40}$ ]] || return 1
@@ -115,8 +122,29 @@ fetch_build() {
   sha=$(git -C "$dir" rev-parse HEAD 2>/dev/null)
   # what the builds before learned about the stores' home pages travels on, so no store is read twice
   if [ -f "$OPS/store-pages.json" ] && [ "$(stat -c %s "$OPS/store-pages.json")" -gt "$(stat -c %s "$dir/store-pages.json" 2>/dev/null || echo 0)" ]; then cp "$OPS/store-pages.json" "$dir/store-pages.json"; fi
+  # what root will install and what the node will run is noted as the repository gave it, before the build (which
+  # reads tens of thousands of strange pages) gets the tree into its hands
+  rm -rf "$tmp/deploy"; cp -a "$dir/deploy" "$tmp/deploy" 2>/dev/null || true
+  ( cd "$dir" && find node serve.mjs package.json deploy -type f -print0 2>/dev/null | sort -z | xargs -0 sha256sum ) > "$tmp/code.sums" 2>/dev/null
   [ -n "$BUILDER" ] && id "$BUILDER" >/dev/null 2>&1 && chown -R "$BUILDER" "$dir"
   if ! (cd "$dir" && as_builder "${clean[@]}" node tools/doors-proof.mjs >> "$log" 2>&1); then say "build: $id is held back, a proof does not hold (see /_boot/build.log)"; rm -rf "$dir"; return 1; fi
+  # a change of the code alone (a fix, a page, a guard) need not draw the whole sea again. When the commit says
+  # [keep-sea], the sea of the build that runs now travels on beside the new code, and the node is back within a
+  # minute instead of a quarter of an hour: a mend reaches the sea at once, and the lakes are not asked again.
+  # The sea itself is drawn fresh once a day as before; how old it is stays written down.
+  before=$(readlink -f "$CUR" 2>/dev/null || true)
+  if [[ "$why" != "the sea is"* ]] && [ -n "$before" ] && whole "$before" && [ -f "$before/data/sea.tsv.gz" ] && git -C "$dir" log -1 --format=%B 2>/dev/null | grep -q '\[keep-sea\]'; then
+    # (what the code itself carries — the pages read first, the ledger's memory, fonts, faces, the open source — is
+    #  laid out again from the new code, the way the build does it: tools/lay.mjs)
+    if [ ! -e "$dir/data" ] && [ -f "$dir/tools/lay.mjs" ] && cp -a "$before/data" "$dir/data" && { [ -z "$BUILDER" ] || ! id "$BUILDER" >/dev/null 2>&1 || chown -R "$BUILDER" "$dir/data"; } \
+       && (cd "$dir" && as_builder "${clean[@]}" node tools/lay.mjs >> "$log" 2>&1) && unchanged "$dir" && whole "$dir"; then
+      rm -rf "$dir/.git"; chown -R root:root "$dir" 2>/dev/null || true
+      echo "$sha" > "$tmp/sha"; : > "$tmp/kept"
+      say "build: $id carries the sea on ($(entries_of "$dir") entries, drawn with $(basename "$before")); only the code is new"
+      return 0
+    fi
+    say "build: $id could not carry the sea on; it is drawn fresh"; rm -rf "$dir/data"
+  fi
   # the build runs beside the node that answers, at a lower priority; its memory is watched and written down
   # (when memory runs short, the build is the one that gives way, never the node)
   local run=(nice -n 10); command -v choom >/dev/null 2>&1 && run+=(choom -n 800 --); [ -n "$BUILDER" ] && id "$BUILDER" >/dev/null 2>&1 && run+=(runuser -u "$BUILDER" --)
@@ -138,6 +166,7 @@ fetch_build() {
   building=""; building_mb=""
   echo $((top / 1024)) > "$OPS/build-peak-mb"
   if [ $ended -ne 0 ] || ! whole "$dir"; then say "build: $id did not finish (exit $ended, entries: $(entries_of "$dir"), peak $((top / 1024)) MB; see /_boot/build.log)"; rm -rf "$dir"; return 1; fi
+  if ! unchanged "$dir"; then say "build: $id is held back, the build changed the code it was given"; rm -rf "$dir"; return 1; fi
   [ -f "$dir/store-pages.json" ] && cp "$dir/store-pages.json" "$OPS/store-pages.json"
   # nothing large may be lost against the build that runs now
   before=$(readlink -f "$CUR" 2>/dev/null || true)
@@ -159,9 +188,10 @@ fetch_build() {
 # the pieces of this folder travel with the build: units, the web server's config, this script
 apply() {
   local d="$1/deploy" changed=0
+  [ -d "$tmp/deploy" ] && d="$tmp/deploy"
   [ -d "$d" ] || return 0
   [ "${MARE_APPLY:-1}" = 1 ] || return 0
-  for u in mare.service mare-update.service mare-update.timer; do
+  for u in mare.service mare-update.service mare-update.timer mare-watch.service mare-watch.timer; do
     if [ -f "$d/$u" ] && ! cmp -s "$d/$u" "/etc/systemd/system/$u"; then install -m 644 "$d/$u" "/etc/systemd/system/$u"; changed=1; fi
   done
   [ $changed = 1 ] && $SYS daemon-reload
@@ -169,6 +199,13 @@ apply() {
     if caddy validate --config "$d/Caddyfile" --adapter caddyfile > "$BOOT/caddy-check.txt" 2>&1; then install -m 644 "$d/Caddyfile" /etc/caddy/Caddyfile && $SYS reload caddy && say "update: the web server has its new config"; elif ! grep -q "does not hold: $(sha256sum "$d/Caddyfile" | cut -c1-12)" "$BOOT/status.txt" 2>/dev/null; then say "update: the new web server config does not hold: $(sha256sum "$d/Caddyfile" | cut -c1-12) (see /_boot/caddy-check.txt); the old one stays"; fi
   fi
   if [ -f "$d/update.sh" ] && bash -n "$d/update.sh" 2>/dev/null && ! cmp -s "$d/update.sh" /usr/local/bin/mare-update; then install -m 755 "$d/update.sh" /usr/local/bin/mare-update; fi
+  # the watch (a node that hangs is started again) and the server's armour, put on again whenever it was changed
+  if [ -f "$d/watch.sh" ] && bash -n "$d/watch.sh" 2>/dev/null && ! cmp -s "$d/watch.sh" /usr/local/bin/mare-watch; then install -m 755 "$d/watch.sh" /usr/local/bin/mare-watch; fi
+  [ -x /usr/local/bin/mare-watch ] && [ -f /etc/systemd/system/mare-watch.timer ] && $SYS enable --now mare-watch.timer >/dev/null 2>&1
+  if [ -f "$d/harden.sh" ] && bash -n "$d/harden.sh" 2>/dev/null; then
+    local hs; hs=$(sha256sum "$d/harden.sh" | cut -d' ' -f1)
+    if [ "$hs" != "$(cat "$OPS/harden.sha" 2>/dev/null)" ]; then echo "$hs" > "$OPS/harden.sha"; bash "$d/harden.sh" >> "$OPS/harden.log" 2>&1 || true; fi
+  fi
   return 0
 }
 
@@ -192,7 +229,8 @@ apply "$dir"
 $SYS enable mare >/dev/null 2>&1
 $SYS restart mare
 if healthy "$want"; then
-  echo "$id" > "$OPS/release-id"; [ -f "$tmp/sha" ] && { cat "$tmp/sha" > "$OPS/built-sha"; now > "$OPS/built-at"; }
+  # (a build that carried the sea on leaves its age as it was: the daily build still comes on time)
+  echo "$id" > "$OPS/release-id"; [ -f "$tmp/sha" ] && { cat "$tmp/sha" > "$OPS/built-sha"; [ -f "$tmp/kept" ] || now > "$OPS/built-at"; }
   say "update: build $id runs ($want entries)"
   # the three newest builds stay; older ones make room
   ls -1dt "$REL"/*/ 2>/dev/null | tail -n +4 | while read -r old; do [ "$(readlink -f "$old")" != "$(readlink -f "$CUR")" ] && rm -rf "$old"; done

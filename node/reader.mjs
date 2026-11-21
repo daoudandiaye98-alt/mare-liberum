@@ -1,6 +1,7 @@
 // Mare Liberum · the reader: any public page as clean Markdown for an agent — the membrane agents pass on their way through the web.
 // It follows robots.txt, reads one page per call, keeps nothing but a short cache and the name of the site that was read.
 import { safeHost, publicDns, grab, robotsGroups, robotsAllows, readPage } from './check.mjs';
+import { aside } from './aside.mjs';
 
 export const READER_UA = 'MareLiberum-Reader/1.0 (+https://mareliberum.dev/read; reads one page for an agent and follows robots.txt)';
 export const READER_TOKEN = 'MareLiberum-Reader';
@@ -42,10 +43,15 @@ export function toMarkdown(html, base) {
   return md;
 }
 
+// what the reader takes from one page, in one go (run beside the node, see aside.mjs)
+export function digest(html, base) { return { meta: readPage(html), md: toMarkdown(html, base) }; }
+
 // read one page for an agent; robots(host) returns the site's robots.txt (cached by the caller)
 export async function readUrl(raw, { robots } = {}) {
   let u; try { u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${String(raw).trim()}`); } catch { return { error: 'not a web address' }; }
   if (!/^https?:$/.test(u.protocol)) return { error: 'only http and https pages' };
+  // web pages live on the web's ports; the reader is not a way to knock on every door of a machine
+  if (u.port && !['80', '443', '8080', '8443'].includes(u.port)) return { error: 'the reader reads web pages on the usual ports (80, 443, 8080, 8443)' };
   const host = safeHost(u.hostname); if (!host) return { error: 'not a public website' };
   if (!(await publicDns(host))) return { error: 'this name does not lead to a public website' };
   const rb = robots ? await robots(host) : null;
@@ -55,7 +61,8 @@ export async function readUrl(raw, { robots } = {}) {
   if (r.status >= 400) return { url: u.href, host, status: r.status, error: `the page answered ${r.status}` };
   const type = r.type.toLowerCase(), final = r.url || u.href;
   if (/html|xml\+xhtml/.test(type) || /^\s*</.test(r.body)) {
-    const meta = readPage(r.body), md = toMarkdown(r.body, final);
+    // a page can be written to stall whoever reads it: it is read beside the node, with a time limit
+    let meta, md; try { ({ meta, md } = await aside(import.meta.url, 'digest', [r.body, final])); } catch (e) { return { url: u.href, final, host, status: r.status, error: e?.code === 'EBUSY' ? e.message : 'this page could not be read in time; it is built in a way that stalls readers' }; }
     const links = [], seen = new Set();
     for (const m of md.matchAll(/\[([^\]]{2,120})\]\((https?:[^)\s]+)\)/g)) { if (seen.has(m[2]) || links.length >= 60) continue; seen.add(m[2]); links.push({ text: m[1], url: m[2] }); }
     return { url: u.href, final, host, status: r.status, title: meta.title, description: meta.description, lang: meta.lang, words: md.split(/\s+/).filter(Boolean).length, jsOnly: meta.shell || undefined, markdown: md.slice(0, 60_000), truncated: md.length > 60_000 || undefined, links };

@@ -408,10 +408,10 @@ else {
   // ---- a build made on the server itself, from the repository (the default)
   const repo = join(tmp, 'repo'), git = (...a) => execFileSync('git', ['-C', repo, '-c', 'user.name=proof', '-c', 'user.email=proof@mare.test', ...a], { stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
   // the repository of the proof: the real node, and a build that writes a small sea the way tools/build.mjs writes the real one
-  const commit = (msg, { entries = 1200, proofHolds = true, crash = false, watch = false } = {}) => {
+  const commit = (msg, { entries = 1200, proofHolds = true, crash = false, watch = false, guide = '', tamper = '' } = {}) => {
     mkdirSync(join(repo, 'tools'), { recursive: true });
     for (const f of ['serve.mjs', 'package.json', 'node', 'site', 'public', 'deploy']) cpSync(join(root, f), join(repo, f), { recursive: true });
-    cpSync(join(root, 'tools', 'release.mjs'), join(repo, 'tools', 'release.mjs'));
+    cpSync(join(root, 'tools', 'release.mjs'), join(repo, 'tools', 'release.mjs')); cpSync(join(root, 'tools', 'lay.mjs'), join(repo, 'tools', 'lay.mjs'));
     writeFileSync(join(repo, 'tools', 'doors-proof.mjs'), `process.exit(${proofHolds ? 0 : 1});\n`);
     writeFileSync(join(repo, 'store-pages.json'), '{}');
     writeFileSync(join(repo, 'tools', 'build.mjs'), `import { mkdirSync, writeFileSync, cpSync, readFileSync } from 'node:fs';
@@ -429,8 +429,12 @@ const seen = {}; if (${watch}) { seen.threads = process.env.UV_THREADPOOL_SIZE |
 writeFileSync('data/build.json', JSON.stringify({ builtAt: new Date().toISOString(), entries, lakes: { proof: entries }, ...seen }));
 for (const f of ['index.html', 'llms.txt', 'robots.txt']) cpSync('site/' + f, 'data/site/' + f);
 const pages = JSON.parse(readFileSync('store-pages.json', 'utf8')); pages['shop' + Object.keys(pages).length + '.example'] = { title: 'read once' }; writeFileSync('store-pages.json', JSON.stringify(pages));
+// a build that was tricked by something it read: it rewrites the code beside it, or leaves a link that points out of the tree
+if (${JSON.stringify(tamper)} === 'code') (await import('node:fs')).appendFileSync('node/core.mjs', '\\n// written by the build\\n');
+if (${JSON.stringify(tamper)} === 'link') { const fs = await import('node:fs'); fs.symlinkSync('/etc/passwd', 'public/passwd.txt'); fs.symlinkSync('/etc/hostname', 'data/site/hostname.txt'); }
 console.log('sea built: ' + entries + ' entries');
 `);
+    if (guide) writeFileSync(join(repo, 'site', 'llms.txt'), guide);
     if (!existsSync(join(repo, '.git'))) git('init', '-q', '-b', 'main');
     git('add', '-A'); git('commit', '-q', '--allow-empty', '-m', msg); return git('rev-parse', 'HEAD');
   };
@@ -484,6 +488,32 @@ console.log('sea built: ' + entries + ' entries');
     const made = JSON.parse(readFileSync(join(B.live(), 'data', 'build.json'), 'utf8'));
     assert.equal(made.threads, '64'); assert.match(String(made.building), /^\d{8}-\d{6}-[0-9a-f]{7}$/, 'the status named the build while it ran');
     assert.equal(B.state().building, null, 'and names none once it is over');
+  });
+  await proof('a change of the code alone carries the sea on: [keep-sea] is live within a moment, and the sea stays as old as it is', async () => {
+    const age = readFileSync(join(B.ops, 'built-at'), 'utf8'), n = B.said().match(/ is ready \(/g).length;
+    head = commit('a page is reworded [keep-sea]', { entries: 4000, guide: '# the guide, reworded\n' });
+    const r = await B.update(); assert.equal(r.status, 0, r.out);
+    assert.match(B.said(), /carries the sea on \(1100 entries, drawn with \d{8}-\d{6}-[0-9a-f]{7}\); only the code is new/); assert.match(B.said(), /runs \(1100 entries\)/);
+    assert.equal(B.said().match(/ is ready \(/g).length, n, 'no sea was drawn');
+    assert.equal((await B.stats()).entries, 1100); assert.equal(readFileSync(join(B.ops, 'built-sha'), 'utf8').trim(), head);
+    assert.equal(readFileSync(join(B.ops, 'built-at'), 'utf8'), age, 'the age of the sea is not touched');
+    const live = B.live(); assert.match(readFileSync(join(live, 'data', 'site', 'llms.txt'), 'utf8'), /reworded/); assert.ok(existsSync(join(live, 'data', 'sea.tsv.gz')) && !existsSync(join(live, '.git')));
+    assert.equal(B.state().commit, head);
+    // a mend whose proofs do not hold is held back all the same, and the daily build draws the sea fresh although the newest commit says [keep-sea]
+    commit('a hasty mend [keep-sea]', { entries: 4000, proofHolds: false });
+    await B.update(); assert.equal(B.said().match(/carries the sea on/g).length, 1); assert.equal((await B.stats()).entries, 1100);
+    head = commit('a sound mend [keep-sea]', { entries: 1150 }); await B.update(); assert.equal(B.said().match(/carries the sea on/g).length, 2);
+    await sleep(1100); await B.update({ MARE_REFRESH_HOURS: '0', MARE_RETRY_MINUTES: '0' });
+    assert.match(B.said(), /runs \(1150 entries\)/); assert.equal((await B.stats()).entries, 1150);
+  });
+  await proof('a build that rewrote the code it was given never runs; a link that points out of the tree does not travel', async () => {
+    const was = (await B.stats()).entries, sha = readFileSync(join(B.ops, 'built-sha'), 'utf8').trim();
+    commit('the build was tricked', { entries: 1300, tamper: 'code' });
+    await B.update(); assert.match(B.said(), /is held back, the build changed the code it was given/); assert.equal((await B.stats()).entries, was); assert.equal(readFileSync(join(B.ops, 'built-sha'), 'utf8').trim(), sha);
+    head = commit('a link out of the tree', { entries: 1300, tamper: 'link' });
+    const r = await B.update(); assert.equal(r.status, 0, r.out); assert.match(B.said(), /runs \(1300 entries\)/);
+    const live = B.live(); assert.ok(!existsSync(join(live, 'public', 'passwd.txt')) && !existsSync(join(live, 'data', 'site', 'hostname.txt')), 'the links are gone');
+    assert.ok(existsSync(join(live, 'data', 'site', 'llms.txt')));
   });
   B.kill();
 }

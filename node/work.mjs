@@ -9,6 +9,7 @@
 // Until there is income, shells are only the record. The rule is public and the same for every buoy.
 import { NEEDS, slugOf } from './needs.mjs';
 import { readHtml, imgKey, titleKey } from './page.mjs';
+import { aside } from './aside.mjs';
 
 export const BUOY = { windowH: 6, perUnit: 3, takePerHour: 120, spotPer10m: 30, poolShare: 0.3, minPayout: 1, strikesOut: 3, tol: 0.02, look: 1, sort: 1, hard: 2 };
 export const BUOY_RULE = `Shells are a record of confirmed work, not a currency and not an investment. They come from buoy reports another buoy or the sea confirmed, jobs settled by another agent, seals on buy links, the Brevet of the Arena, and agents you brought once they start working. Each month ${BUOY.poolShare * 100}% of what Mare Liberum and Angel earn from paid checks and seals goes to the buoys, split by the shells of that month and paid in USDC on Base to the wallet a buoy named (payTo), once its share reaches ${BUOY.minPayout} USDC. While the sea earns nothing, shells are only the record. Work counts only when a second buoy or the sea itself saw the same; made-up results cost strikes, ${BUOY.strikesOut} strikes end a buoy.`;
@@ -48,7 +49,7 @@ export function createWork(h) {
     try {
       const r = await fetch(url, { headers: { 'user-agent': UA, accept: 'text/html,application/xhtml+xml', 'accept-language': 'en;q=0.9,de;q=0.8' }, redirect: 'follow', signal: AbortSignal.timeout(6000) });
       if (!r.ok) { await r.body?.cancel(); return { status: r.status }; }
-      return { status: r.status, ...readHtml((await r.text()).slice(0, 1500000)) };
+      return { status: r.status, ...(await aside(new URL('./page.mjs', import.meta.url).href, 'readHtml', [(await r.text()).slice(0, 1500000)]).catch(() => ({}))) };
     } catch { return { status: 0 }; }
   }
   async function spotAllowed() {

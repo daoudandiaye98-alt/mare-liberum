@@ -22,6 +22,19 @@ http://127.0.0.1:8788 {
 	encode zstd gzip
 	# a caller that came by https once keeps coming by https (the node before said the same)
 	header Strict-Transport-Security "max-age=63072000"
+	# what a browser is told about every answer of the sea: take the type as it is sent, show the sea in no frame of
+	# another site, tell other sites the sea's name and never the path, run no plug-ins
+	header {
+		X-Content-Type-Options "nosniff"
+		X-Frame-Options "DENY"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "geolocation=(), camera=(), microphone=(), payment=()"
+		Content-Security-Policy "frame-ancestors 'none'; base-uri 'none'; object-src 'none'"
+	}
+	# a request carries at most a megabyte (the node says the same)
+	request_body {
+		max_size 1MB
+	}
 	# files that travel beside the node (fonts, icons, the keys of the search engines) are served as they are
 	root * /srv/mare/current/public
 	@file {

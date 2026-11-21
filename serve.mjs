@@ -20,6 +20,8 @@ import { diskKv } from './node/disk.mjs';
 import { createShelf } from './node/shelf.mjs';
 import { loadGeo } from './node/geoip.mjs';
 import { carryIn } from './node/carry.mjs';
+import { installEgressGuard } from './node/guard.mjs';
+import { immune } from './node/immune.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.argv[2] || process.env.PORT || 8787);
@@ -27,6 +29,10 @@ const host = process.env.HOST || '127.0.0.1';
 const base = (process.env.MARE_BASE || `http://localhost:${port}`).replace(/\/+$/, '');
 const proxied = process.env.MARE_PROXY === '1';
 const log = (tag, m) => console.error(tag, m);
+// nothing this node fetches for a caller may reach the machine it runs on or the network beside it (node/guard.mjs)
+// (the long memory is the operator's own choice of address and stays reachable wherever it stands)
+const ownDb = (() => { try { const u = new URL(process.env.MARE_DB_URL); return `${u.hostname}:${u.port || (u.protocol === 'http:' ? 80 : 443)}`; } catch { return ''; } })();
+installEgressGuard({ log, allow: [process.env.MARE_EGRESS_ALLOW, ownDb].filter(Boolean).join(',') });
 const db = createMem({ file: join(root, 'data', 'sea.tsv'), base });
 
 // the pages people and agents read first: from the build when there is one, else straight from the repository
@@ -49,6 +55,12 @@ const kv = durableKv(disk || memoryKv(), store, { waitUntil, log });
 // what the sea counted on the node before this one (the days' census, everyone ever seen, the sightings of assistants)
 // travels with the build and is added once to what this node counts itself
 let carried = []; if (disk) { try { carried = await carryIn(kv, seed('carry')); } catch (e) { log('mare_carry', e?.message); } }
+// the immune system: pace, probes, what is written, who was asked to stay away, and the modes the operator can set
+// in the database without a release (node/immune.mjs)
+try { await immune.use({ store, kv, log, base }); } catch (e) { log('mare_immune', e?.message); }
+// the address of a private mind is its key: a release before this one wrote the paths assistants read into the open
+// record of sightings, the flow and the list of missed doors. Whatever of that is still kept is blotted out at the start.
+try { const n = await immune.forgetMindAddresses(kv); if (n) log('mare_immune', `mind addresses blotted out of ${n} kept lists`); } catch (e) { log('mare_immune', e?.message); }
 // answers marked s-maxage are kept ready, as a CDN would
 const shelf = createShelf();
 
@@ -63,7 +75,7 @@ function fileFor(pathname) {
   try { const st = statSync(f); return st.isFile() ? { f, size: st.size, type: TYPES[extname(f).toLowerCase()] || (extname(f) ? 'application/octet-stream' : 'text/plain; charset=utf-8') } : null; } catch { return null; }
 }
 
-const MAX_BODY = 5 * 1024 * 1024;
+const MAX_BODY = 1024 * 1024;
 const local = (a) => a === '127.0.0.1' || a === '::1' || a === '::ffff:127.0.0.1';
 let open = 0, stopping = false;
 
@@ -76,7 +88,7 @@ const server = createServer(async (req, res) => {
       if (file) { res.writeHead(200, { 'content-type': file.type, 'content-length': file.size, 'cache-control': 'public, max-age=86400', 'access-control-allow-origin': '*' }); return req.method === 'HEAD' ? res.end() : createReadStream(file.f).pipe(res); }
     }
     const chunks = []; let size = 0;
-    if (!get) for await (const c of req) { size += c.length; if (size > MAX_BODY) { res.writeHead(413, { 'content-type': 'application/json', connection: 'close' }); return res.end('{"error":{"code":"TOO_LARGE","message":"at most 5 MB"}}'); } chunks.push(c); }
+    if (!get) for await (const c of req) { size += c.length; if (size > MAX_BODY) { res.writeHead(413, { 'content-type': 'application/json', connection: 'close' }); return res.end('{"error":{"code":"TOO_LARGE","message":"at most 1 MB"}}'); } chunks.push(c); }
     const headers = new Headers();
     for (const [k, v] of Object.entries(req.headers)) if (v !== undefined && !k.startsWith('x-vercel-')) headers.set(k, Array.isArray(v) ? v.join(', ') : v);
     // the caller's address: the last hop our own web server wrote, or the socket itself; never what a caller claims
@@ -99,8 +111,9 @@ const server = createServer(async (req, res) => {
   }
 });
 server.on('error', (e) => { log('mare_listen', e?.message); process.exit(1); });
-server.keepAliveTimeout = 65000; server.headersTimeout = 70000; server.requestTimeout = 120000;
-server.listen(port, host, () => console.log(`Mare Liberum on ${base} · MCP ${base}/mcp · ${db.size()} entries in the index · state ${disk ? `on disk (${disk.state().loaded} names read)` : 'in memory'} · long memory ${store ? 'on' : 'off'} · countries ${geoOf ? `by table (${geoOf.rows} rows)` : 'off'}${carried.length ? ` · carried over: ${carried.map((c) => `${c.id} (${c.days} days, ${c.names} names, ${c.sightings} sightings)`).join(', ')}` : ''}`));
+// a caller that sends its request drop by drop does not hold a place for long
+server.keepAliveTimeout = 65000; server.headersTimeout = 20000; server.requestTimeout = 45000;
+server.listen(port, host, () => console.log(`Mare Liberum on ${base} · MCP ${base}/mcp · ${db.size()} entries in the index · state ${disk ? `on disk (${disk.state().loaded} names read)` : 'in memory'} · long memory ${store ? 'on' : 'off'} · immune system ${immune.mode} · countries ${geoOf ? `by table (${geoOf.rows} rows)` : 'off'}${carried.length ? ` · carried over: ${carried.map((c) => `${c.id} (${c.days} days, ${c.names} names, ${c.sightings} sightings)`).join(', ')}` : ''}`));
 
 // asked to stop: no new callers, the ones here are answered, what waits is written, the copy on disk is made once more
 async function stop(sig) {

@@ -1,6 +1,7 @@
 // Mare Liberum · the check: how AI agents see a website.
 // Read only from what the site itself publishes (robots.txt, llms.txt, its home page, its agent card), a handful of small
 // requests, nothing stored but the result. Nothing guessed: every finding names where it was read.
+import { aside } from './aside.mjs';
 
 export const CHECK_UA = 'MareLiberum-Check/1.0 (+https://mareliberum.dev/privacy; reads robots.txt, llms.txt, the home page and the agent card once)';
 
@@ -125,7 +126,8 @@ export async function checkSite(host) {
   const agents = AGENTS.map((a) => (robotsWall ? { ...a, allowed: null, named: false } : { ...a, ...robotsAllows(groups, a.name) }));
   const sitemap = robotsOk && /^\s*sitemap\s*:/im.test(robots.body) ? true : (await Promise.all([grab(`${root}/sitemap.xml`, { max: 4000 }), grab(`${root}/sitemap_index.xml`, { max: 4000 })])).some((r) => r.status === 200);
   const reach = { status: home.status, https: /^https:/.test(home.url || ''), final: home.url ? (() => { try { const u = new URL(home.url); return u.hostname + (u.pathname === '/' ? '' : u.pathname); } catch { return null; } })() : null };
-  const page = home.status === 200 && /html/i.test(home.type) ? readPage(home.body) : null;
+  // (read beside the node, with a time limit: see aside.mjs)
+  const page = home.status === 200 && /html/i.test(home.type) ? await aside(import.meta.url, 'readPage', [home.body]).catch(() => null) : null;
   if (page && /noindex/i.test(home.robotsTag)) page.noindex = true;
   const llmsOk = llms.status === 200 && !/<html/i.test(llms.body || '') && (llms.body || '').trim().length > 20;
   const cardOf = (r) => { if (r.status !== 200) return null; try { const j = JSON.parse(r.body); return j && (j.name || j.skills) ? { name: String(j.name || '').slice(0, 80) || null, skills: Array.isArray(j.skills) ? j.skills.length : 0 } : null; } catch { return null; } };

@@ -876,7 +876,9 @@ export function createBriefs({ kv, update, allow, SeaError, clean, now, DAY = 86
       if (ex.length) b.examples = ex;
       return b;
     },
-    async review(a = {}) {
+    async review(a = {}, ctx) {
+      // a review opens the links of the draft: that has a pace of its own
+      if (ctx) await allow(ctx, 'review', 30, 3600);
       const draft = String(a.draft ?? a.text ?? '').slice(0, 60000);
       if (!draft) throw new SeaError('INVALID_ARGUMENT', 'give the draft (and the task) to review');
       const r = reviewDraft(String(a.task ?? a.q ?? '').slice(0, 2000), draft, { base: a.base, kind: a.kind });
@@ -920,7 +922,7 @@ export function createBriefs({ kv, update, allow, SeaError, clean, now, DAY = 86
       if (/https?:\/\/|www\.|\.(com|io|ai|net|org)\b/i.test(t)) throw new SeaError('INVALID_ARGUMENT', 'tips carry no links');
       if (BAD.test(t) || HIDDEN.test(t)) throw new SeaError('INVALID_ARGUMENT', 'tips describe how to do the work well; they are not instructions to other agents');
       await allow(ctx, 'tip', 10, 3600);
-      const id = Math.random().toString(36).slice(2, 10), at = now ? now() : new Date().toISOString();
+      const id = Array.from(crypto.getRandomValues(new Uint8Array(6)), (b) => b.toString(36).padStart(2, '0')).join('').slice(0, 8), at = now ? now() : new Date().toISOString();
       await update(`brief:tips:${kind}`, 400 * DAY, (cur) => { const l = Array.isArray(cur) ? cur : []; if (l.some((x) => x.t.toLowerCase() === t.toLowerCase())) return l; return [{ id, t, up: 0, down: 0, at }, ...l].slice(0, 200); }, () => true);
       return { kind, id, tip: t, note: 'kept as data for the next agent on this kind of task; others vote it up or down' };
     },

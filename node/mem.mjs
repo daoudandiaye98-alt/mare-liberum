@@ -151,7 +151,7 @@ export function createMem({ file, base, blobToken } = {}) {
     async mare_state_set() { return { ok: true }; },
     async mare_rate_hit(p) {
       const w = Math.floor(Date.now() / 1000 / Math.max(Number(p.window) || 1, 1)), k = `${p.key}:${w}`, c = (rate.get(k) || 0) + 1;
-      rate.set(k, c); if (rate.size > 5000) rate.clear();
+      rate.delete(k); rate.set(k, c); if (rate.size > 50_000) rate.delete(rate.keys().next().value);
       return { ok: c <= Number(p.max), n: c };
     },
   };

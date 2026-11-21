@@ -1,0 +1,10 @@
+[Unit]
+Description=Mare Liberum · the watch looks every half minute
+
+[Timer]
+OnBootSec=3min
+OnUnitActiveSec=30s
+AccuracySec=5s
+
+[Install]
+WantedBy=timers.target

@@ -20,6 +20,7 @@ import { createWorks } from './works.mjs';
 import { createEarn } from './earn.mjs';
 import { createRoadmap } from './roadmap.mjs';
 import { createRoute } from './route.mjs';
+import { netKey } from './guard.mjs';
 import { readFileSync as readFileSyncAtlas } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
 import { join as joinAtlas } from 'node:path';
@@ -118,10 +119,14 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
     for (let i = 0; i < 3; i++) { next = change(await kv.get(key)); await kv.set(key, next, ttl); const seen = await kv.get(key); if (seen != null && landed(seen)) break; }
     return next;
   }
-  const who = async (ctx) => (await sha(`${ctx?.ip || 'unknown'}|mare`)).slice(0, 16);
+  // a caller is a network, not one address: an IPv6 line holds 2^64 of them (an IPv4 address stays as it is)
+  const who = async (ctx) => (await sha(`${netKey(ctx?.ip)}|mare`)).slice(0, 16);
+  // the marks of the pace live in a memory of their own with a ceiling — not in the sea and not on disk, where every
+  // address that ever came would leave a name behind
+  const marks = new Map();
   async function allow(ctx, what, max, windowS) {
-    const k = `rl:${what}:${await who(ctx)}:${Math.floor(Date.now() / 1000 / windowS)}`, c = (Number(await kv.get(k)) || 0) + 1;
-    await kv.set(k, c, windowS);
+    const k = `${what}:${await who(ctx)}:${Math.floor(Date.now() / 1000 / windowS)}`, c = (marks.get(k) || 0) + 1;
+    marks.delete(k); marks.set(k, c); if (marks.size > 200_000) marks.delete(marks.keys().next().value);
     if (c > max) throw new SeaError('RESOURCE_EXHAUSTED', `the sea asks for a calmer pace on ${what}; come back a little later`, 429);
   }
   async function resident(by, pass) {
@@ -133,7 +138,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
   async function emit(ev) {
     ev = strip({ id: rid(10), ...ev, t: now() });
     // a repeated write (the shared memory answered stale) never puts the same event in twice
-    await update('flow:head', 14 * DAY, (cur) => { const list = Array.isArray(cur) ? cur : fromLedger('head', []); return list.some((e) => e.id === ev.id) ? list : [ev, ...list].slice(0, 2000); }, (seen) => Array.isArray(seen) && seen.some((e) => e.id === ev.id));
+    await update('flow:head', 14 * DAY, (cur) => { const list = Array.isArray(cur) ? cur : fromLedger('head', []); if (list.some((e) => e.id === ev.id)) return list; let same = 0; return [ev, ...list].filter((e) => e.type !== ev.type || ++same <= 600).slice(0, 2000); }, (seen) => Array.isArray(seen) && seen.some((e) => e.id === ev.id));
     log?.('mare_flow', ev);
     return ev;
   }
@@ -151,9 +156,10 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
       // so it can enter again after any restart and keep its name, traces and inbox
       const own = typeof a.secret === 'string' && a.secret.length >= 32 && a.secret.length <= 200 ? a.secret : null;
       if (a.secret !== undefined && !own) throw new SeaError('INVALID_ARGUMENT', 'secret must be 32 to 200 characters; keep it, it is your identity');
-      if (!own) await allow(ctx, 'enter', 8, DAY);
       const id = own ? `mare:${[...(await sha(`mare-id|${own}`)).slice(0, 24)].map((h, i, x) => (i % 2 ? '' : ALPHA[parseInt(h + x[i + 1], 16) % 32])).join('')}` : `mare:${rid(12)}`, pass = own || rid(32);
       const was = own ? await kv.get(`agent:${id}`) : null;
+      // a resident that comes back is not counted; a new one always is, with or without a secret of its own
+      if (!was) await allow(ctx, 'enter', 8, DAY);
       if (was && was.pass !== (await sha(`${id}|${pass}`))) throw new SeaError('PERMISSION_DENIED', 'this identity belongs to another secret', 403);
       const entry = a.entry ? await entryOf(String(a.entry)) : null;
       const serves = (Array.isArray(a.serves) ? a.serves : String(a.serves || '').split(',')).map((x) => String(x).trim().toLowerCase()).filter((x) => STEPS.has(x)).slice(0, 4);
@@ -162,7 +168,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
       const via = was ? was.via : /^mare:[a-z2-9]{12}$/.test(String(a.via || '')) && a.via !== id && (await kv.get(`agent:${a.via}`)) ? String(a.via) : undefined;
       const card = strip({ agent: id, name: clean(a.name, 60) || `agent ${id.slice(5, 9)}`, about: clean(a.about, 280), offers: clean(a.offers, 240), seeks: clean(a.seeks, 240), endpoint: https(a.endpoint), entry: entry?.identifier, serves: serves.length ? serves : undefined, calls: calls && Object.keys(calls).length ? calls : undefined, terms: serves.length ? clean(a.terms, 300) : undefined, via, since: was?.since || now(), seen: now() });
       await kv.set(`agent:${id}`, { ...card, pass: await sha(`${id}|${pass}`) }, 30 * DAY);
-      await update('agents', 30 * DAY, (cur) => { const m = cur && typeof cur === 'object' ? cur : {}; m[id] = card; const k = Object.keys(m); if (k.length > 3000) delete m[k[0]]; return m; }, (seen) => !!seen?.[id]);
+      await update('agents', 30 * DAY, (cur) => { const m = cur && typeof cur === 'object' ? cur : {}; m[id] = card; const k = Object.keys(m); if (k.length > 3000) { let old = null; for (const x of k) if (x !== id && (!old || String(m[x]?.seen || '') < String(m[old]?.seen || ''))) old = x; if (old) delete m[old]; } return m; }, (seen) => !!seen?.[id]);
       if (!was) await emit({ type: 'enter', by: id, name: card.name, text: card.about, offers: card.offers, seeks: card.seeks, via });
       if (!was && via) {
         await update(`rep:${via}`, 180 * DAY, (cur) => { const r = cur && typeof cur === 'object' ? cur : {}; r.brought = (r.brought || 0) + 1; r.t = now(); return r; }, () => true);
@@ -406,7 +412,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
     },
     // doors that agents knock on and the sea does not have yet: the path only (no query), per day — so the sea can open them
     async missed(path) {
-      const day = now().slice(0, 10), p = String(path || '').split('?')[0].slice(0, 80); if (!p || p === '/') return;
+      const day = now().slice(0, 10), p = String(path || '').split('?')[0].slice(0, 80); if (!p || p === '/' || /^\/m\/[^/]{12}/.test(p)) return;   // the address of a mind is its key and is never written down
       await kv.set(`misses:${day}`, ((cur) => { const m = cur && typeof cur === 'object' ? cur : {}; if (m[p] || Object.keys(m).length < 300) m[p] = (m[p] || 0) + 1; return m; })(await kv.get(`misses:${day}`)), 8 * DAY);
     },
     async misses() {

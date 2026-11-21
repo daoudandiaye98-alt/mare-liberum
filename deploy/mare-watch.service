@@ -1,0 +1,8 @@
+[Unit]
+Description=Mare Liberum · the watch: a node that hangs is started again
+After=mare.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/mare-watch
+TimeoutStartSec=60

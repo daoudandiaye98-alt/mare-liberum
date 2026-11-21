@@ -5,10 +5,14 @@ import { createGzip, gunzipSync, gzipSync } from 'node:zlib';
 import { pipeline } from 'node:stream/promises';
 import { normMcp, normX402, normA2AListed, normUcp, normAgentverse, normHfSpace, normVirtuals, norm8004, readDomain, fetchJson, safeUrl, clean } from '../node/core.mjs';
 import { hayOf, metaOf } from '../node/mem.mjs';
+import { installEgressGuard } from '../node/guard.mjs';
+import { layOut } from './lay.mjs';
 import { tldCountry, CENTROID } from '../node/places.mjs';
 
 const UA = 'MareLiberum/1.1 (open agent index; pull-only; +https://github.com/daoudandiaye98-alt/mare-liberum)';
 const CACHE = process.argv.includes('--cache');
+// what the lakes and the stores answer is data from outside: nothing in it may send this build to the machine it runs on
+installEgressGuard();
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const keep = (rows, r) => { if (r) rows.push(r); };
 async function get(u, init = {}) {
@@ -232,17 +236,8 @@ writeFileSync('data/build.json', JSON.stringify({ builtAt: new Date().toISOStrin
 // half a gigabyte higher, on a machine it shares with the node that answers. So the sea is let go of here.
 const built = ids.length;
 all.clear(); lakeByKey.clear(); lakeByHost.clear(); hosts.clear(); ids.length = 0; settled.length = 0;
-// the open ledger of the living sea (traces, latest events) travels with the build, so the sea remembers across restarts
-for (const [from, to] of [['flow/traces.json', 'data/flow-traces.json'], ['flow/head.json', 'data/flow-head.json'], ['flow/carry.json', 'data/flow-carry.json']]) if (existsSync(from)) cpSync(from, to);
-// the first pages people and agents read are served by the node
-mkdirSync('data/site', { recursive: true }); for (const f of ['index.html', 'llms.txt', 'robots.txt', 'skill.md', 'heartbeat.md', 'skill.json']) if (existsSync(`site/${f}`)) cpSync(`site/${f}`, `data/site/${f}`);
-// the fonts of the site are served as static files, from our own domain (no third-party font requests)
-if (existsSync('site/fonts')) { mkdirSync('public/fonts', { recursive: true }); cpSync('site/fonts', 'public/fonts', { recursive: true }); }
-// the faces of the sea when it is shared or saved: preview images, icons, the web manifest
-for (const f of ['demo.mp4', 'og.png', 'og-check.png', 'icon.svg', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'favicon.ico', 'manifest.webmanifest']) if (existsSync(`site/${f}`)) cpSync(`site/${f}`, `public/${f}`);
-// The source travels with the node: anyone can read it and run a mirror.
-mkdirSync('public/source', { recursive: true });
-for (const f of ['node/core.mjs', 'node/mem.mjs', 'node/flow.mjs', 'tools/build.mjs', 'tools/archive.mjs', 'engines/postgres/schema.sql', 'seeds.txt', 'seeds-ard.txt', 'store-pages.json', 'README.md', 'LICENSE']) if (existsSync(f)) cpSync(f, `public/source/${f.split('/').pop()}`);
+// what travels beside the sea (the pages read first, the ledger's memory, fonts, faces, the open source): tools/lay.mjs
+layOut();
 // the frontier of the Atlas: the open rank list of the web (Majestic Million, CC BY 3.0), one domain per line
 try {
   const r = await fetch('https://downloads.majestic.com/majestic_million.csv', { signal: AbortSignal.timeout(120000), headers: { 'user-agent': 'MareLiberum-Atlas/1.0 (+https://mareliberum.dev/atlas)' } });
