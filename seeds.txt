@@ -9,3 +9,5 @@ datarobot.com
 roboflow.com
 cisco.com
 agent-economy-english.floot.app
+store.agentexchange.work
+bazaar.agentexchange.work
