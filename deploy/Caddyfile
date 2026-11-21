@@ -55,7 +55,15 @@ hz.mareliberum.dev {
 	tls {
 		on_demand
 	}
-	header X-Robots-Tag "noindex, nofollow"
+	# the working name is not for the search engines
+	@working not path /_forwarded /_forwarded/*
+	header @working X-Robots-Tag "noindex, nofollow"
+	# a caller that still reaches the host the sea lived on before (an old address in its memory, a connection it
+	# never closed) is passed on to this server under /_forwarded, and gets the same answer as at the sea's own name
+	@forwarded path /_forwarded/*
+	@forwardedRoot path /_forwarded
+	rewrite @forwardedRoot /
+	uri @forwarded strip_prefix /_forwarded
 	handle /_boot/* {
 		uri strip_prefix /_boot
 		root * /srv/mare/boot
