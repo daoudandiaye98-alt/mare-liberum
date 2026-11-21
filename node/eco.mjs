@@ -15,7 +15,7 @@ import { NEEDS, slugOf } from './needs.mjs';
 
 const KINDS = new Set(['tip', 'warning', 'howto', 'price', 'fact']);
 const VERDICTS = new Set(['pay', 'caution', 'do_not_pay']);
-export const TIDE = { needs: 10, together: 2, lockS: 300, histMax: 240, sealFreshH: 24 };
+export const TIDE = { needs: 10, together: 2, lockS: 300, histMax: 240, sealFreshH: 24, budgetMs: 15000 };
 
 export function createEco(h) {
   const { kv, update, emit, resident, push, allow, api, living, SeaError, clean, strip, rid, now, num, https, toks, sha, overlap, DAY } = h;
@@ -53,21 +53,24 @@ export function createEco(h) {
       const cur = Number(await kv.get('tide:cursor')) || 0, watched = (await kv.get('tide:watched')) || [], wcur = Number(await kv.get('tide:wcursor')) || 0;
       // needs that real calls named (sorted by two buoys) ride along, one per run
       const called = (await kv.get('tide:called')) || [], ccur = Number(await kv.get('tide:ccursor')) || 0;
-      const pick = [];
+      const pick = [], t0 = Date.now(), within = (ms) => Date.now() - t0 < ms;
       for (let i = 0; i < Math.min(2, watched.length); i++) pick.push(watched[(wcur + i) % watched.length]);
       if (called.length) { const n = called[ccur % called.length]; if (!pick.includes(n)) pick.push(n); await kv.set('tide:ccursor', (ccur + 1) % called.length, 120 * DAY); }
+      const ahead = pick.length; // watched and called needs ride first; the needs of the sea follow in turn
       for (let i = 0; pick.length < TIDE.needs && i < NEEDS.length; i++) { const n = NEEDS[(cur + i) % NEEDS.length]; if (!pick.includes(n)) pick.push(n); }
-      await kv.set('tide:cursor', (cur + TIDE.needs - Math.min(2, watched.length)) % NEEDS.length, 120 * DAY);
       if (watched.length) await kv.set('tide:wcursor', (wcur + 2) % watched.length, 120 * DAY);
-      const out = [];
-      for (let i = 0; i < pick.length; i += TIDE.together) out.push(...(await Promise.all(pick.slice(i, i + TIDE.together).map((need) => eco.flowOver(need, at)))));
+      // a tide has a budget of time: it asks the stores pair by pair and stops starting new pairs when the budget is used,
+      // so the platform never cuts it off in the middle; the needs it did not reach are first in the next tide
+      const out = []; let asked = 0;
+      for (let i = 0; i < pick.length && within(TIDE.budgetMs); i += TIDE.together) { const pair = pick.slice(i, i + TIDE.together); out.push(...(await Promise.all(pair.map((need) => eco.flowOver(need, at))))); asked += pair.length; }
+      await kv.set('tide:cursor', (cur + Math.max(asked - ahead, 0)) % NEEDS.length, 120 * DAY);
       // the brain is seeded from everything the current has read so far, thirty needs per tide
-      { const rec = (await kv.get('tide:recent')) || [], c0 = Number(await kv.get('brain:seedcursor')) || 0;
+      if (within(TIDE.budgetMs + 2000)) { const rec = (await kv.get('tide:recent')) || [], c0 = Number(await kv.get('brain:seedcursor')) || 0;
         if (c0 < rec.length) { for (const sl of rec.slice(c0, c0 + 30)) { const sn = await kv.get(`tide:${sl}`); if (sn) await api.layFromCurrent?.(sn); } await kv.set('brain:seedcursor', Math.min(rec.length, c0 + 30), 400 * DAY); } }
       // the state of the agent web: three of the most visited websites are read again with every tide
-      let web = []; try { web = (await api.webStep?.(3)) || []; } catch {}
-      // the Atlas grows between its weekly runs: sites agents asked for first, then the most visited
-      let atlas = []; try { atlas = (await api.atlasStep?.(6)) || []; } catch {}
+      let web = []; if (within(TIDE.budgetMs)) { try { web = (await Promise.race([api.webStep?.(3), new Promise((r) => setTimeout(() => r([]), 6000))])) || []; } catch {} }
+      // the Atlas reads on its own clock (POST /atlas/step, every few minutes); the tide leaves that work to it
+      const atlas = [];
       const last = strip({ at, needs: out.length, moved: out.filter((x) => x.change && x.change !== 'steady' && x.change !== 'charted').length, charted: out.filter((x) => x.change === 'charted').length, watchHits: out.reduce((s, x) => s + (x.watchers || 0), 0) });
       await kv.set('tide:last', last, 60 * DAY);
       await update('tide:count', 365 * DAY, (c) => (Number(c) || 0) + 1, () => true);

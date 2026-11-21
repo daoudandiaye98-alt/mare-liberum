@@ -6,7 +6,7 @@
   "functions": {
     "api/mare.mjs": {
       "includeFiles": "data/**",
-      "maxDuration": 30
+      "maxDuration": 60
     }
   },
   "rewrites": [

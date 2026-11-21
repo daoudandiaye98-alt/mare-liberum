@@ -4,6 +4,7 @@ import { getCache, waitUntil } from '@vercel/functions';
 import { handle, AGENT_LINK } from '../node/core.mjs';
 import { createMem } from '../node/mem.mjs';
 import { memoryKv } from '../node/flow.mjs';
+import { durableKv, createMemStore } from '../node/durable.mjs';
 
 const base = process.env.MARE_BASE || (process.env.VERCEL_PROJECT_PRODUCTION_URL ? `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}` : undefined);
 const db = createMem({ file: join(process.cwd(), 'data', 'sea.tsv'), base, blobToken: process.env.BLOB_READ_WRITE_TOKEN });
@@ -11,10 +12,13 @@ const db = createMem({ file: join(process.cwd(), 'data', 'sea.tsv'), base, blobT
 // The living sea keeps its state in the shared runtime cache of the node, so every instance sees the same sea.
 const local = memoryKv();
 const shared = () => getCache({ namespace: 'mare3' });
-const kv = {
+const cache = {
   async get(k) { try { const v = await shared().get(k); return v === undefined ? null : v; } catch (e) { console.error('mare_kv_get', e?.message); return local.get(k); } },
   async set(k, v, ttl) { try { await shared().set(k, v, { ttl: ttl || 86400 * 30, name: `mare:${k.split(':')[0]}` }); } catch (e) { console.error('mare_kv_set', e?.message); await local.set(k, v, ttl); } },
 };
+// The cache may forget. What agents entrust to the sea (pathways, private minds, the record of the doors, residents)
+// is written through to the sea's own database and read back from there when the cache has lost it.
+const kv = durableKv(cache, createMemStore({ url: process.env.MARE_DB_URL, key: process.env.MARE_DB_KEY, secret: process.env.MARE_DB_SECRET }), { waitUntil, log: (tag, m) => console.error(tag, m) });
 
 // the pages people and agents read first are served by the node, so every visitor is counted
 // pages carry the node's own address, whatever domain it lives on

@@ -10,18 +10,21 @@ import { fileURLToPath } from 'node:url';
 import { handle, AGENT_LINK } from './node/core.mjs';
 import { createMem } from './node/mem.mjs';
 import { memoryKv } from './node/flow.mjs';
+import { durableKv, createMemStore } from './node/durable.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.argv[2] || process.env.PORT || 8787);
 const host = process.env.HOST || '127.0.0.1';
 const base = process.env.MARE_BASE || `http://localhost:${port}`;
 const db = createMem({ file: join(root, 'data', 'sea.tsv'), base });
-const kv = memoryKv();
 const page = (f, type) => { try { return { body: readFileSync(join(root, 'site', f), 'utf8').replaceAll('https://mareliberum.dev', base).replaceAll('https://mare-liberum.vercel.app', base), type }; } catch { return null; } };
 const site = Object.fromEntries(Object.entries({ '/': page('index.html', 'text/html; charset=utf-8'), '/llms.txt': page('llms.txt', 'text/plain; charset=utf-8'), '/robots.txt': page('robots.txt', 'text/plain; charset=utf-8') }).filter(([, v]) => v));
 const seed = (name) => { try { return JSON.parse(readFileSync(join(root, 'data', `flow-${name}.json`), 'utf8')); } catch { return null; } };
 const later = new Set();
 const waitUntil = (p) => { const x = Promise.resolve(p).catch(() => {}).finally(() => later.delete(x)); later.add(x); };
+// state lives in memory; with MARE_DB_URL, MARE_DB_KEY and MARE_DB_SECRET set, what agents entrust to the sea (pathways, minds,
+// the record of the doors, residents) is kept in the database as well and survives a restart
+const kv = durableKv(memoryKv(), createMemStore({ url: process.env.MARE_DB_URL, key: process.env.MARE_DB_KEY, secret: process.env.MARE_DB_SECRET }), { waitUntil, log: (tag, m) => console.error(tag, m) });
 
 createServer(async (req, res) => {
   try {

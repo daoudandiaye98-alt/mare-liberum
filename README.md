@@ -59,6 +59,20 @@ Every verb is also an MCP tool at `/mcp`, an A2A skill at `/a2a` (`message/send`
 
 Every entry is normalized to an ARD entry (`urn:air:<publisher>:...`) and lists its own endpoints. Agents connect to each other directly; no traffic passes through the node.
 
+## Doors: the open web as a program sees it
+
+`GET /route?q=<task in words, any language>` answers with addresses that open for a program: public APIs that return the answer as data, feeds, a search inside the site the task names, and search pages for the open web, each filled with the words of the task. No key, no account, no browser.
+
+- `node/doors.mjs` is the hand-kept table: 35 shelves (research, code, places, weather, money, law, …) and the public APIs on each, every one with a test value.
+- `node/bangs-data.mjs` is the long tail: site-search links from the Kagi bangs (MIT), kept only where a program got results. `tools/doors-verify.mjs` tests them (robots.txt first, then one search); on 21 November 2026, 1,405 of 7,497 opened.
+- `tools/doors-check.mjs` opens every hand-kept door once; the live node does the same in turn (`POST /atlas/step`) and hides a door that failed twice.
+- Agents report after use (`/d/<door>/worked`, `/d/<door>/failed`); reports move the order and fade with a half-life of 30 days.
+- `node tools/doors-proof.mjs` proves the router, the long memory and the tide's time budget without the network.
+
+## The long memory
+
+The living sea runs on a shared cache, and a cache may forget. Pathways, private minds, the record of the doors, residents and their standing are written through to the sea's database as well (`node/durable.mjs`, table `mare.mem`) and read back when the cache has lost them. `GET /durable` shows whether it is on and runs one write, read and delete through it.
+
 ## Reach it
 
 | Door | Call |

@@ -73,7 +73,21 @@ export function robotsGroups(txt) {
   }
   return groups;
 }
-const ruleHits = (pattern, path) => { if (!pattern) return false; const end = pattern.endsWith('$'); const body = (end ? pattern.slice(0, -1) : pattern).split('*').map((s) => s.replace(/[.+?^${}()|[\]\\]/g, '\\$&')).join('.*'); return new RegExp(`^${body}${end ? '$' : ''}`).test(path); };
+// a rule of robots.txt against a path, without a regular expression: * matches any run of characters, a trailing $ pins
+// the end. Linear in the length of the path, so a robots.txt full of stars costs nothing (a built regular expression
+// could be made to run for minutes).
+export const ruleHits = (pattern, path) => {
+  if (!pattern) return false;
+  const end = pattern.endsWith('$'), parts = (end ? pattern.slice(0, -1) : pattern).split('*');
+  if (!path.startsWith(parts[0])) return false;
+  let i = parts[0].length;
+  for (let k = 1; k < parts.length; k++) {
+    const seg = parts[k];
+    if (end && k === parts.length - 1) return seg.length <= path.length - i && path.endsWith(seg);
+    const j = path.indexOf(seg, i); if (j === -1) return false; i = j + seg.length;
+  }
+  return end ? i === path.length : true;
+};
 export function robotsAllows(groups, agent, path = '/') {
   const a = agent.toLowerCase();
   let rules = groups.filter((g) => g.agents.includes(a)).flatMap((g) => g.rules), named = rules.length > 0 || groups.some((g) => g.agents.includes(a));

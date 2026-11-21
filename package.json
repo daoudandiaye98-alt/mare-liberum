@@ -11,6 +11,7 @@
   "scripts": {
     "build": "node tools/build.mjs",
     "proof": "node local.mjs",
+    "proof:doors": "node tools/doors-proof.mjs",
     "start": "node serve.mjs"
   },
   "dependencies": {

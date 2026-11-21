@@ -125,6 +125,18 @@ export function createAtlas(h) {
       let h; try { const m = e?.metadata || {}; h = siteOf(new URL(m.kind === 'merchant' ? `https://${m.publisher}` : e.url).hostname); } catch { return null; }
       if (!safeHost(h)) return null; const p = await stored(h); return p && p.s === 200 ? h : null;
     },
+    // what the map holds about a few sites, without reading anything new: for the doors that lead to them.
+    // A site the map does not hold yet is put on the list, so the crawler reads the sites agents are sent to first.
+    async atlasPeek(hosts) {
+      const ds = [...new Set((hosts || []).map((x) => siteOf(x)).filter((x) => safeHost(x)))].slice(0, 12); if (!ds.length) return {};
+      const got = await storedMany(ds).catch(() => ({})), out = {};
+      for (const d of ds) {
+        const p = got[d];
+        if (p && p.s === 200) { const x = expand(p, base()); out[d] = { grade: x.grade, readsWithoutJavaScript: x.readable?.withoutJavaScript, keepsOff: (x.agents || []).filter((a) => a.allowed === false && a.role !== 'training').map((a) => a.name) }; }
+        else if (!p) want(d).catch(() => {});
+      }
+      return out;
+    },
     async mapSite(a = {}, ctx) { return atlas.site(a.domain ?? a.site ?? a.url ?? a.q, ctx); },
     async findSites(a = {}) { return atlas.find(a.q ?? a.query ?? a.need ?? a.task, Math.min(Number(a.limit) || 12, 30)); },
     // how many sites the map holds and what the web lets agents do
