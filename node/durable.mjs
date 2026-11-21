@@ -42,7 +42,8 @@ export function durableKv(kv, store, { waitUntil, log = () => {}, missTtl = 2160
   let noted = 0, downUntil = 0;
   const note = (ok, n, err) => { if (ok && Date.now() - noted < 60000) return; if (ok) noted = Date.now(); return quiet(kv.set(ok ? 'durable:ok' : 'durable:err', { at: new Date().toISOString(), n, err: err ? String(err).slice(0, 120) : undefined }, 86400 * 14)); };
   const down = () => Date.now() < downUntil;
-  const failed = (e) => { downUntil = Date.now() + restMs; log('mare_long_memory', e?.message); return note(false, 0, e?.message); };
+  // a failure is said once per rest, however many names waited on the same answer
+  const failed = (e) => { const was = down(); downUntil = Date.now() + restMs; if (was) return; log('mare_long_memory', e?.message); return note(false, 0, e?.message); };
   const hold = (p) => { try { waitUntil?.(p); } catch {} return p; };
 
   // ---- reads of one moment ask the database together; a flood of unknown names is not passed on

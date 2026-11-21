@@ -214,6 +214,13 @@ await proof('a database that is away costs one try; the sea works on and catches
   await kv.set('brain:p:3', { id: '3' }, 100); await settle(kv);
   assert.ok(s.rows.has('brain:p:2') && s.rows.has('brain:p:3'));                        // what waited went out with the next write
 });
+await proof('one failed answer for many names is said once, not once per name', async () => {
+  const c = forgetful(), s = fakeStore(), said = []; const kv = durableKv(c, s, { restMs: 100, log: (t, m) => said.push(m) });
+  let sets = 0; const set0 = c.set; c.set = async (k, v) => { if (k === 'durable:err') sets++; return set0(k, v); };
+  s.fail = true;
+  const got = await Promise.all(Array.from({ length: 200 }, (_, i) => kv.get(`brain:p:${i}`)));
+  assert.ok(got.every((x) => x === null)); assert.equal(said.length, 1); assert.equal(sets, 1); assert.equal(s.gets, 1);
+});
 await proof('a flood of unknown names is not passed on to the database', async () => {
   const c = forgetful(), s = fakeStore(), kv = durableKv(c, s, { asksPer10s: 5 });
   for (let i = 0; i < 30; i++) { await kv.get(`agent:mare:flood${i}`); }
