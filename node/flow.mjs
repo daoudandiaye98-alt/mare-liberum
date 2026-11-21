@@ -112,7 +112,7 @@ export function memoryKv() {
 
 // route(text, {kind, limit}) -> entries from the sea · entryOf(id) -> one entry or null · base() -> public address of this node
 // seed(name) -> what the open ledger remembers ('traces' map, 'head' list); a sea that lost its live memory starts again from there
-export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profile }) {
+export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profile, harbourBars }) {
   const ledger = {}; const fromLedger = (name, empty) => { if (!(name in ledger)) { try { ledger[name] = seed?.(name) || null; } catch { ledger[name] = null; } } return ledger[name] ? structuredClone(ledger[name]) : empty; };
   // read, change, write, then look again: a write that got lost between two agents is repeated
   async function update(key, ttl, change, landed) {
@@ -460,9 +460,11 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
   // the router: from a task to doors that open (public APIs, feeds, search links), learned from what agents report
   Object.assign(api, createRoute({ kv, update, allow, SeaError, sha, now, DAY, api, ranks, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
   // a sea of one's own: the harbour of one crew, with its frame, its approved sources, its ways and notes (node/harbour.mjs)
-  Object.assign(api, createHarbour({ kv, update, allow, api, SeaError, clean, strip, now, sha, https, DAY, limits: harbourLimits(process.env.MARE_HARBOUR_ROOM), base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
+  Object.assign(api, createHarbour({ kv, update, allow, api, SeaError, clean, strip, now, sha, https, DAY, limits: harbourLimits(process.env.MARE_HARBOUR_ROOM), bars: harbourBars, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
+  // the shipyard builds without keeping anything; the sea only counts how often (node/yard.mjs)
+  api.yardBuilt = async () => true;
   // how much the quality layer is used, per day (counts only; nothing about who asked)
-  for (const [name, what] of [['brief', 'brief'], ['review', 'review'], ['briefTip', 'tip'], ['works', 'works'], ['work', 'work'], ['publishWork', 'publish'], ['rateWork', 'vote'], ['earn', 'earn'], ['earnReport', 'earnreport'], ['compare', 'compare'], ['briefOutcome', 'outcome'], ['mapSite', 'site'], ['findSites', 'find'], ['harbourNew', 'harbour'], ['harbourAdd', 'harbour-source'], ['harbourSearch', 'harbour-search'], ['harbourThink', 'harbour-think'], ['harbourLay', 'harbour-way']]) {
+  for (const [name, what] of [['brief', 'brief'], ['review', 'review'], ['briefTip', 'tip'], ['works', 'works'], ['work', 'work'], ['publishWork', 'publish'], ['rateWork', 'vote'], ['earn', 'earn'], ['earnReport', 'earnreport'], ['compare', 'compare'], ['briefOutcome', 'outcome'], ['mapSite', 'site'], ['findSites', 'find'], ['harbourNew', 'harbour'], ['harbourAdd', 'harbour-source'], ['harbourSearch', 'harbour-search'], ['harbourThink', 'harbour-think'], ['harbourLay', 'harbour-way'], ['harbourCheck', 'harbour-check'], ['yardBuilt', 'yard']]) {
     const f = api[name]; if (typeof f !== 'function') continue;
     api[name] = async function (...args) { const out = await f.apply(this, args); const d = now().slice(0, 10); update(`use:${d}`, 45 * DAY, (cur) => { const c = cur && typeof cur === 'object' ? cur : {}; c[what] = (c[what] || 0) + 1; return c; }, () => true).catch(() => {}); return out; };
   }

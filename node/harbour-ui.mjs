@@ -84,6 +84,16 @@ export const HARBOUR_UI = String.raw`(function () {
     }).catch(fail('trymsg'));
   });
 
+  // ---- hold a draft against the sources
+  $('chk').addEventListener('submit', function (ev) {
+    ev.preventDefault(); var box = $('chkl'); clear(box); say('chkmsg', 'checking …');
+    call('check', { text: ev.target.text.value }).then(function (r) {
+      say('chkmsg', r.rule, r.notFound + r.figureNotInSources > 0);
+      r.sentences.forEach(function (x) { box.appendChild(el('p', {}, el('b', { text: x.found === 'yes' ? 'found ' : x.found === 'partly' ? 'partly ' : x.found + ' ' }), el('span', { text: x.sentence }), el('span', { class: 'muted', text: x.source ? '  · ' + x.source.title : '' }))); });
+      box.appendChild(el('p', { class: 'muted', text: r.limits }));
+    }).catch(fail('chkmsg'));
+  });
+
   // ---- ways and notes
   function ways() {
     call('ways', null, true).then(function (r) {

@@ -13,7 +13,7 @@ import { createMem } from '../node/mem.mjs';
 import { memoryKv, SeaError } from '../node/flow.mjs';
 import { immune } from '../node/immune.mjs';
 import { KEPT } from '../node/durable.mjs';
-import { words, body, passagesOf, frameText, harbourLimits, createHarbour, HARBOUR, HARBOUR_TOOLS, HARBOUR_VERBS } from '../node/harbour.mjs';
+import { words, body, passagesOf, frameText, harbourLimits, createHarbour, sentencesOf, figuresOf, HARBOUR, HARBOUR_TOOLS, HARBOUR_VERBS } from '../node/harbour.mjs';
 import { HARBOUR_UI } from '../node/harbour-ui.mjs';
 import { packHome } from './lay.mjs';
 
@@ -129,7 +129,7 @@ await proof('what a reader cannot see is taken out of a source; its lines stay',
   const hidden = 'Sichtbarer Satz eins.' + String.fromCharCode(0x200b, 0x202e) + '\n\nSichtbarer Satz zwei.' + String.fromCharCode(0x7) + ' Ende des Textes.';
   const r = await post('/harbour/add', { title: 'Mit Verstecktem', text: hidden }, K.owner);
   const t = (await call(`/harbour/read/${r.json.source.id}`, { key: K.owner })).json.source.text;
-  assert.ok(!/[​‮\u0007]/.test(t)); assert.match(t, /eins\.\s*\n\nSichtbarer Satz zwei/);
+  assert.ok(!/[\u200b\u202e\u0007]/.test(t)); assert.match(t, /eins\.\s*\n\nSichtbarer Satz zwei/);
   await post('/harbour/remove', { id: r.json.source.id }, K.owner);
   assert.equal(body('a\r\nb\n\n\n\nc  d\t e', 100), 'a\nb\n\nc d e');
 });
@@ -156,6 +156,23 @@ await proof('think gives the three shelves at once: ways, passages, notes', asyn
   assert.equal((await call('/harbour/notes?tag=team', { key: K.guest })).json.notes.length, 1);
   assert.equal((await post('/harbour/note', { text: 'x' }, K.guest)).status, 403);
 });
+await proof('a draft is held against the sources: every sentence, every figure; and the check says what it cannot see', async () => {
+  const draft = 'Vor jedem Patientenkontakt werden die Hände 30 Sekunden desinfiziert. Die Einwirkzeit der Flächendesinfektion beträgt zehn Minuten bei 45 Grad. Die Erstanamnese kostet 135 Euro. Der Mond besteht aus grünem Käse und kreist um den Jupiter.';
+  const r = await post('/harbour/check', { text: draft }, K.guest);
+  assert.equal(r.status, 200, r.text); assert.equal(r.json.checked, 4);
+  const [a, b, c, d] = r.json.sentences;
+  assert.equal(a.found, 'yes'); assert.equal(a.source.title, 'Praxishandbuch Hygiene');
+  assert.equal(b.found, 'figure not in the sources', 'the words are there, the figure 45 is in no source'); assert.equal(b.figuresMissing, 1);
+  assert.equal(c.found, 'yes'); assert.equal(c.source.title.toLowerCase(), 'preisliste 2026');
+  assert.equal(d.found, 'no'); assert.equal(d.source, undefined);
+  assert.match(r.json.rule, /Remove or rewrite/); assert.match(r.json.limits, /cannot judge whether the sentence means/);
+  const clean = await post('/harbour/check', { text: 'Instrumente der Klasse kritisch B werden im Autoklaven bei 134 Grad sterilisiert.' }, K.guest);
+  assert.equal(clean.json.found, 1); assert.match(clean.json.rule, /Every sentence finds its words/);
+  assert.equal((await tool(K.guest, 'check_answer', { text: draft })).data.notFound, 1);
+  assert.equal((await post('/harbour/check', { text: 'kurz' }, K.guest)).status, 400);
+  assert.deepEqual(figuresOf('1.000 Euro, 0,5 mg, 5 % und 3 Schritte am 21.11.2026'), ['1000', '05', '5', '21112026']);
+  assert.deepEqual(sentencesOf('Erstens geht das. Zweitens auch!\n- Drittens: ja.'), ['Erstens geht das.', 'Zweitens auch!', 'Drittens: ja.']);
+});
 await proof('the frame is what a model reads first; the owner sets it', async () => {
   const r = await post('/harbour/frame', { purpose: 'Fragen zu Hygiene und Abläufen der Praxis', rules: 'Antworte auf Deutsch.\nNenne Dokument und Abschnitt.\nKeine medizinische Beratung.', tone: 'ruhig, kurz' }, K.owner);
   assert.equal(r.json.frame.rules.length, 3); assert.match(r.json.instructions, /source-bound/); assert.match(r.json.instructions, /3\. Keine medizinische Beratung\./);
@@ -173,7 +190,7 @@ await proof('a model that enters is told the frame; the tools it sees follow its
   assert.equal(init.json.result.serverInfo.version, VERSION);
   const names = async (k) => (await rpc(k, 'tools/list')).json.result.tools.map((t) => t.name);
   const g = await names(K.guest), c = await names(K.crew), o = await names(K.owner);
-  assert.deepEqual(g, ['harbour', 'think', 'search_sources', 'read_source', 'list_sources', 'ways', 'notes']);
+  assert.deepEqual(g, ['harbour', 'think', 'search_sources', 'check_answer', 'read_source', 'list_sources', 'ways', 'notes']);
   assert.ok(c.includes('add_source') && c.includes('lay_way') && !c.includes('approve_source'));
   assert.ok(o.includes('approve_source') && o.includes('set_frame') && o.includes('remove_source'));
   for (const t of (await rpc(K.owner, 'tools/list')).json.result.tools) { assert.ok(t.description.length > 40 && t.inputSchema.type === 'object' && t.annotations.title, t.name); assert.equal(t.role, undefined); assert.equal(t.verb, undefined); }
@@ -227,6 +244,39 @@ await proof('calm mode rests the writes of a harbour like every write; reading g
   assert.equal((await call('/brain')).status, 200, 'the open sea is not touched by it');
   immune.set({});
   assert.equal((await post('/harbour/note', { text: 'nach der Ruhe' }, K.crew)).status, 200);
+});
+await proof('the operator can rest one harbour or close it; the harbour next door is not touched', async () => {
+  const f = await post('/harbour/new', { name: 'Gemeldet' }, null, { ip: '198.51.100.77' }), ko = f.json.keys.owner, id = f.json.harbour.id;
+  assert.match(id, /^[a-f0-9]{12}$/);
+  await post('/harbour/add', { title: 'Etwas', text: 'Ein Text, der in diesem Hafen liegt, mit genug Zeichen für einen Abschnitt.' }, ko);
+  const before = (await call('/harbour')).json.harbours;
+  // at rest: every door of this harbour says so and why; what it holds is kept
+  immune.set({ harbours: [{ id, do: 'rest', why: 'a report is being looked at' }, { id: 'not-an-id', do: 'close' }, { id: 'ffffffffffff', do: 'close' }] });
+  const r = await call('/harbour/about', { key: ko });
+  assert.equal(r.status, 503, r.text); assert.match(r.json.error.message, /rests by decision of the operator.*a report is being looked at/);
+  assert.equal((await post('/harbour/note', { text: 'eine Notiz' }, f.json.keys.crew)).status, 503);
+  assert.equal((await call(`/h/${f.json.keys.guest}/about`)).status, 503);
+  assert.match((await rpc(ko, 'tools/call', { name: 'search_sources', arguments: { q: 'Text Hafen' } })).text, /rests by decision of the operator/);
+  assert.equal((await call('/harbour/about', { key: K.guest })).status, 200, 'the harbour next door answers as before');
+  assert.equal((await call('/harbour')).json.harbours, before, 'a harbour at rest is still there');
+  assert.deepEqual((await call('/immune.json')).json.harboursHeld, { atRest: 1, closed: 1 }, 'the sea says how many it holds, not which');
+  immune.set({});
+  assert.equal((await call('/immune.json')).json.harboursHeld, undefined);
+  assert.match((await call('/harbour/search?q=Text+Hafen', { key: ko })).json.passages[0].text, /in diesem Hafen/, 'lifted, it answers again with all it holds');
+  // closed: taken away the next time the harbours are counted, even when nobody comes with a key any more
+  immune.set({ harbours: [{ id, do: 'close', why: 'unlawful content' }] });
+  assert.equal((await call('/harbour')).json.harbours, before - 1);
+  for (const [k] of written) if (k.includes(`:${id}`)) assert.equal(await kv.get(k), null, `${k} is still there`);
+  assert.equal((await call('/harbour/about', { key: ko })).status, 401);
+  // and whoever comes with a key first is told what happened
+  const g = await post('/harbour/new', { name: 'Auch gemeldet' }, null, { ip: '198.51.100.78' });
+  immune.set({ harbours: [{ id: g.json.harbour.id, do: 'close', why: 'unlawful content' }] });
+  const gone = await call('/harbour/about', { key: g.json.keys.owner });
+  assert.equal(gone.status, 410, gone.text); assert.match(gone.json.error.message, /closed by the operator.*unlawful content/);
+  immune.set({});
+  assert.equal((await call('/harbour/about', { key: g.json.keys.owner })).status, 401, 'closed stays closed');
+  assert.equal((await call('/harbour')).json.harbours, before - 1);
+  assert.equal((await call('/harbour/about', { key: K.guest })).status, 200);
 });
 await proof('room has an end: per harbour, per network, and for the node as a whole', async () => {
   // per network: three new harbours a day
@@ -286,7 +336,7 @@ await proof('the page of the harbours: for people, with a desk that keeps the ke
   for (const id of [...HARBOUR_UI.matchAll(/\$\('([a-z]+)'\)/g)].map((m) => m[1])) assert.ok(new RegExp(`id="${id}"`).test(r.text), `the page has no element "${id}"`);
   const j = await call('/harbour'); assert.equal(j.headers.get('content-type').split(';')[0], 'application/json'); assert.ok(j.json.verbs.includes(`POST ${BASE}/harbour/add`));
   assert.match((await call('/sitemaps/site.xml')).text, /\/harbour<\/loc>/);
-  assert.equal(Object.keys(HARBOUR_VERBS).length, 19); assert.equal(HARBOUR_TOOLS.length, 14);
+  assert.equal(Object.keys(HARBOUR_VERBS).length, 20); assert.equal(HARBOUR_TOOLS.length, 15);
 });
 await proof('words, passages: a question finds its passage across forms of a word', async () => {
   assert.deepEqual(words('Die Zahnärzte desinfizieren Instrumente'), words('zahnarzt desinfiziert instrument').map((w, i) => (i === 1 ? words('desinfizieren')[0] : w)));

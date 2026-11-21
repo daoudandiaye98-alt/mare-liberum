@@ -87,7 +87,7 @@ export function createImmune({ now = () => Date.now() } = {}) {
   function tidy(p) {
     const o = p && typeof p === 'object' ? p : {};
     const until = (x) => { const t = Date.parse(x); return Number.isFinite(t) ? t : 0; };
-    const out = { mode: MODES.includes(o.mode) ? o.mode : 'normal', note: text(o.note, 300), rest: [], ips: new Map(), nets: [], agents: new Map(), hosts: [], pace: null, banned: 0 };
+    const out = { mode: MODES.includes(o.mode) ? o.mode : 'normal', note: text(o.note, 300), rest: [], ips: new Map(), nets: [], agents: new Map(), hosts: [], harbours: new Map(), pace: null, banned: 0 };
     for (const r of Array.isArray(o.rest) ? o.rest.slice(0, 60) : []) { const s = text(r, 80); if (s) out.rest.push(s); }
     for (const b of Array.isArray(o.ban) ? o.ban.slice(0, 5000) : []) {
       if (!b || typeof b !== 'object') continue;
@@ -101,6 +101,8 @@ export function createImmune({ now = () => Date.now() } = {}) {
       else continue;
       out.banned++;
     }
+    // one harbour at rest (what it holds is kept) or closed (what it holds is taken away): { id, do: 'rest' | 'close', why }
+    for (const x of Array.isArray(o.harbours) ? o.harbours.slice(0, 500) : []) { if (x && typeof x === 'object' && /^[a-f0-9]{12}$/.test(String(x.id || ''))) out.harbours.set(x.id, { do: x.do === 'close' ? 'close' : 'rest', why: text(x.why, 200) }); }
     const pm = Number(o.pace?.perMinute), bu = Number(o.pace?.burst);
     if (pm >= 30 && pm <= 1_000_000) out.pace = { perMinute: pm, burst: bu >= 10 && bu <= 1_000_000 ? bu : Math.max(10, Math.round(pm / 3)) };
     return out;
@@ -303,6 +305,7 @@ export function createImmune({ now = () => Date.now() } = {}) {
     const pace = policy.pace || (policy.mode === 'shelter' ? SHELTER_PACE : PACE);
     return {
       mode: policy.mode, note: policy.note || undefined, doorsAtRest: policy.rest,
+      harboursHeld: policy.harbours.size ? { atRest: [...policy.harbours.values()].filter((x) => x.do === 'rest').length, closed: [...policy.harbours.values()].filter((x) => x.do === 'close').length } : undefined,
       askedToStayAway: { byTheOperator: policy.banned, restingNow: [...resting.values()].filter((r) => r.until > now()).length },
       pace: { requestsPerMinutePerAddress: pace.perMinute, burst: pace.burst, readsPerMinutePerSite: SITE_PACE.perMinute },
       since, counted: { ...count }, reportsKept: open, pagesReadBeside: { ...asideStats },
@@ -335,6 +338,7 @@ export function createImmune({ now = () => Date.now() } = {}) {
     set(p) { policy = tidy(p); loaded = new Date(now()).toISOString(); return policy.mode; },          // for a node without a database, and for the proofs
     load, meet, strike, hostile, shield, door, report, status, sweep, readText, spend, searching, forgetMindAddresses,
     get mode() { return policy.mode; },
+    get harbours() { return policy.harbours; },
   };
 }
 // one immune system per node
