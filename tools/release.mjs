@@ -13,12 +13,21 @@ const FROM = process.env.MARE_RELEASE_URL || `https://github.com/${REPO}/release
 const built = () => JSON.parse(readFileSync('data/build.json', 'utf8'));
 const num = (v) => (typeof v === 'number' ? v : 0);
 
-// what a build may lose against the one before it: at most a fifth of all entries, and no lake of size may fall to less than half
-export function compare(now, before, { total = 0.8, lake = 0.5, big = 2000 } = {}) {
+// what a build may lose against the one before it: at most a fifth of all entries; and when a lake of size falls to
+// less than half, the build is held back if that shows in the sea (more than one entry in a hundred is gone).
+// A lake whose rows another lake carries as well (the live top of a deep lake), or a small one, may rest for a day
+// without the whole sea standing still: on 2026-11-21 two such lakes did not answer, 0.7 % of the entries were
+// missing, and three builds in a row were held back, the fixes they carried with them.
+export function compare(now, before, { total = 0.8, lake = 0.5, big = 2000, seen = 0.01 } = {}) {
   const lost = [];
   if (num(before?.entries) >= 1000 && num(now?.entries) < before.entries * total) lost.push(`entries: ${now?.entries} now, ${before.entries} before`);
-  for (const [name, n] of Object.entries(before?.lakes || {})) if (num(n) >= big && num(now?.lakes?.[name]) < n * lake) lost.push(`lake ${name}: ${now?.lakes?.[name]} now, ${n} before`);
+  if (num(before?.entries) - num(now?.entries) > num(before?.entries) * seen) for (const [name, n] of Object.entries(before?.lakes || {})) if (num(n) >= big && num(now?.lakes?.[name]) < n * lake) lost.push(`lake ${name}: ${now?.lakes?.[name]} now, ${n} before`);
   return lost;
+}
+// the lakes that did not answer this build although they had rows before: said aloud, also when the build goes on
+export function tired(now, before, { lake = 0.5, small = 200 } = {}) {
+  return Object.entries(before?.lakes || {}).filter(([name, n]) => num(n) >= small && num(now?.lakes?.[name]) < n * lake)
+    .map(([name, n]) => `${name}: ${typeof now?.lakes?.[name] === 'number' ? now.lakes[name] : 'no answer'} now, ${n} before`);
 }
 
 if (cmd === 'check') {

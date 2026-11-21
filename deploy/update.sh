@@ -142,8 +142,11 @@ fetch_build() {
   # nothing large may be lost against the build that runs now
   before=$(readlink -f "$CUR" 2>/dev/null || true)
   if [ -n "$before" ] && [ -f "$before/data/build.json" ] && ! git -C "$dir" log -1 --format=%B 2>/dev/null | grep -q '\[force-sea\]'; then
-    lost=$(cd "$dir" && as_builder "${clean[@]}" node -e 'import("./tools/release.mjs").then(async ({ compare }) => { const fs = await import("node:fs"); const j = (f) => JSON.parse(fs.readFileSync(f, "utf8")); console.log(compare(j("data/build.json"), j(process.argv[1])).join("; ")); })' "$before/data/build.json" 2>> "$log")
+    local seen; seen=$(cd "$dir" && as_builder "${clean[@]}" node -e 'import("./tools/release.mjs").then(async ({ compare, tired }) => { const fs = await import("node:fs"); const j = (f) => JSON.parse(fs.readFileSync(f, "utf8")); const now = j("data/build.json"), was = j(process.argv[1]); console.log(compare(now, was).join("; ")); console.log((tired ? tired(now, was) : []).join("; ")); })' "$before/data/build.json" 2>> "$log")
+    lost=$(sed -n 1p <<< "$seen")
     if [ -n "$lost" ]; then say "build: $id is held back, it lost part of the sea ($lost); the build before runs on"; rm -rf "$dir"; return 1; fi
+    # a lake that rests for a day does not hold the sea back, but it is said
+    [ -n "$(sed -n 2p <<< "$seen")" ] && say "build: $id goes on although a lake did not answer today ($(sed -n 2p <<< "$seen"))"
   fi
   # the node reads the compressed index; the plain copy and the lakes' raw rows make room
   rm -f "$dir"/data/*.ndjson; [ -f "$dir/data/sea.tsv.gz" ] && rm -f "$dir/data/sea.tsv"

@@ -15,7 +15,7 @@ import { createShelf } from '../node/shelf.mjs';
 import { packGeo, loadGeo } from '../node/geoip.mjs';
 import { carryIn } from '../node/carry.mjs';
 import { hayOf, metaOf } from '../node/mem.mjs';
-import { compare } from './release.mjs';
+import { compare, tired } from './release.mjs';
 import { handle } from '../node/core.mjs';
 import { createMem } from '../node/mem.mjs';
 import { memoryKv } from '../node/flow.mjs';
@@ -238,6 +238,13 @@ await proof('a build that lost much of the sea is held back; an ordinary day is 
   assert.equal(compare({ entries: 175000, lakes: { erc8004: 0, 'ucp-stores': 21936, 'mcp-registry': 82000 } }, before).length, 2);
   assert.equal(compare({ entries: 370000, lakes: { erc8004: 206000, 'ucp-stores': 'pending: lake_unreachable', 'mcp-registry': 82000 } }, before).length, 1);
   assert.deepEqual(compare({ entries: 5000, lakes: {} }, null), []);
+  // the evening of 2026-11-21: the live top of a deep lake and a small lake did not answer; seven entries in a thousand were missing
+  const evening = { entries: 382376, lakes: { 'erc8004-deep': 206351, erc8004: 5000, 'virtuals-acp': 2769, 'mcp-registry': 68493 } };
+  const rested = { entries: 379826, lakes: { 'erc8004-deep': 206351, erc8004: 0, 'virtuals-acp': 0, 'mcp-registry': 68521 } };
+  assert.deepEqual(compare(rested, evening), [], 'two lakes that rest do not hold the sea back');
+  assert.deepEqual(tired(rested, evening), ['erc8004: 0 now, 5000 before', 'virtuals-acp: 0 now, 2769 before'], 'but they are named');
+  assert.equal(compare({ entries: 314000, lakes: { ...rested.lakes, 'mcp-registry': 'pending: lake_unreachable' } }, evening).length, 3, 'a lake whose loss shows in the sea still holds it back, and the resting ones are named with it');
+  assert.deepEqual(tired(evening, evening), []);
 });
 
 // ------------------------------------------------------------------ the server itself and the updater
