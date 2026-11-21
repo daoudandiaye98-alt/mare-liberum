@@ -20,6 +20,7 @@ import { createWorks } from './works.mjs';
 import { createEarn } from './earn.mjs';
 import { createRoadmap } from './roadmap.mjs';
 import { createRoute } from './route.mjs';
+import { createHarbour, harbourLimits } from './harbour.mjs';
 import { netKey } from './guard.mjs';
 import { readFileSync as readFileSyncAtlas } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
@@ -458,8 +459,10 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
   Object.assign(api, createRoadmap({ kv, update, allow, SeaError, DAY }));
   // the router: from a task to doors that open (public APIs, feeds, search links), learned from what agents report
   Object.assign(api, createRoute({ kv, update, allow, SeaError, sha, now, DAY, api, ranks, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
+  // a sea of one's own: the harbour of one crew, with its frame, its approved sources, its ways and notes (node/harbour.mjs)
+  Object.assign(api, createHarbour({ kv, update, allow, api, SeaError, clean, strip, now, sha, https, DAY, limits: harbourLimits(process.env.MARE_HARBOUR_ROOM), base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
   // how much the quality layer is used, per day (counts only; nothing about who asked)
-  for (const [name, what] of [['brief', 'brief'], ['review', 'review'], ['briefTip', 'tip'], ['works', 'works'], ['work', 'work'], ['publishWork', 'publish'], ['rateWork', 'vote'], ['earn', 'earn'], ['earnReport', 'earnreport'], ['compare', 'compare'], ['briefOutcome', 'outcome'], ['mapSite', 'site'], ['findSites', 'find']]) {
+  for (const [name, what] of [['brief', 'brief'], ['review', 'review'], ['briefTip', 'tip'], ['works', 'works'], ['work', 'work'], ['publishWork', 'publish'], ['rateWork', 'vote'], ['earn', 'earn'], ['earnReport', 'earnreport'], ['compare', 'compare'], ['briefOutcome', 'outcome'], ['mapSite', 'site'], ['findSites', 'find'], ['harbourNew', 'harbour'], ['harbourAdd', 'harbour-source'], ['harbourSearch', 'harbour-search'], ['harbourThink', 'harbour-think'], ['harbourLay', 'harbour-way']]) {
     const f = api[name]; if (typeof f !== 'function') continue;
     api[name] = async function (...args) { const out = await f.apply(this, args); const d = now().slice(0, 10); update(`use:${d}`, 45 * DAY, (cur) => { const c = cur && typeof cur === 'object' ? cur : {}; c[what] = (c[what] || 0) + 1; return c; }, () => true).catch(() => {}); return out; };
   }

@@ -24,11 +24,12 @@ reported at <https://mareliberum.dev/report>, with `POST /report {"about": "…"
 | The gate on the way out: nothing the node fetches for a caller reaches the machine it runs on, the network beside it or the cloud's service addresses. Checked at the moment of connecting, after the name is resolved | `node/guard.mjs` |
 | The immune system: pace per address (weighted by work), probes, screened writes, the reader's pace per site, who is asked to stay away, the three modes, reports | `node/immune.mjs` |
 | Pages from the web are read beside the node, with a time limit | `node/aside.mjs` |
+| Harbours (a private space for one team): three keys per harbour, only their hashes are stored; roles decide who reads, proposes and approves; nothing of a harbour enters the flow, the census, the brain or the index; room has a ceiling per harbour and for the node | `node/harbour.mjs` |
 | The server: sign-in by key only, automatic security updates, kernel defaults, the programs of the sea cannot call inwards | `deploy/harden.sh` |
 | Releases: built from this repository by a user without rights, proved before they run, taken back when the node does not come up; only what the repository gave is installed | `deploy/update.sh` |
 | The watch: a node that hangs is started again | `deploy/watch.sh` |
 
-The proofs run without the network: `npm run proof:immune`, `npm run proof:server`, `npm run proof:doors`.
+The proofs run without the network: `npm run proof:immune`, `npm run proof:harbour`, `npm run proof:server`, `npm run proof:doors`.
 
 ## For whoever runs a node
 
@@ -53,6 +54,11 @@ no release is needed to step in. A node without a database runs with the default
 - `mode`: `normal` · `calm` (reading works, writing rests) · `shelter` (the reader rests as well).
 - `rest`: single doors at rest: a verb (`lay_path`, `publish_work`, `read`, `join` …) or a path (`/works`).
 - `ban`: who is asked to stay away; without `until` it holds until it is taken out.
+
+Harbours: a hosted harbour is protected by its keys and is not encrypted end to end; whoever runs the node can read
+what lies on it. To rest all harbours at once, put `"/harbour"` and `"/h"` into `rest`. To take one harbour away (after
+a report of unlawful content), delete its names from the long memory: every name that starts with `harbour:` and
+carries the harbour's id. Knowledge that must not leave a house belongs on a node in that house: `/download`.
 
 Whoever can write to this repository decides what the server runs. Protect the account that owns it: two-factor
 sign-in, no force pushes to `main`, as few tokens with write access as possible.

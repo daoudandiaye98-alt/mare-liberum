@@ -9,8 +9,8 @@
 //   a database that does not answer is left alone for a while: the sea keeps working on the cache and catches up later
 // Without a database the sea works exactly as before.
 const READ_MS = 2500, WRITE_MS = 4000;
-// what is kept: the shared brain, private minds, the doors' record, residents and their standing
-export const KEPT = /^(brain:(p:|tok:|url:|all$|stats$)|mind:|door:(stats|live|asks)$|agent:|agents$|rep:|immune:reports$)/;
+// what is kept: the shared brain, private minds, the harbours of the crews, the doors' record, residents and their standing
+export const KEPT = /^(brain:(p:|tok:|url:|all$|stats$)|mind:|harbour:|door:(stats|live|asks)$|agent:|agents$|rep:|immune:reports$)/;
 // kept keys nobody can list (their names are secrets): adopted the first time an instance reads them from the cache
 const LAZY = /^mind:/;
 // plain counters: the cache counts every step, the database follows at a calm pace

@@ -7,6 +7,8 @@
 //   MARE_STATE         a folder for the copy of the living sea on disk; without it the sea lives in memory only
 //   MARE_PROXY=1       a web server on this machine stands in front; the caller's address is taken from what it says
 //   MARE_DB_URL, MARE_DB_KEY, MARE_DB_SECRET   the long memory (pathways, minds, the record of the doors, residents)
+//   MARE_HARBOUR_ROOM  room of every harbour on this node, as a multiple of the public node (1 to 100; see node/harbour.mjs)
+// A sea of your own for a team: open http://localhost:<port>/harbour. The package to take home: /download on any node.
 import { createServer } from 'node:http';
 import { Readable } from 'node:stream';
 import { join, dirname, normalize, extname, sep } from 'node:path';
@@ -40,7 +42,7 @@ const page = (f, type) => { for (const dir of ['data/site', 'site']) { try { ret
 const site = Object.fromEntries(Object.entries({ '/': page('index.html', 'text/html; charset=utf-8'), '/index.html': page('index.html', 'text/html; charset=utf-8'), '/llms.txt': page('llms.txt', 'text/plain; charset=utf-8'), '/robots.txt': page('robots.txt', 'text/plain; charset=utf-8'), '/skill.md': page('skill.md', 'text/markdown; charset=utf-8'), '/heartbeat.md': page('heartbeat.md', 'text/markdown; charset=utf-8'), '/skill.json': page('skill.json', 'application/json; charset=utf-8') }).filter(([, v]) => v));
 const data = (f) => { try { return JSON.parse(readFileSync(join(root, 'data', f), 'utf8')); } catch { return null; } };
 const seed = (name) => data(`flow-${name}.json`);
-const indexnowKey = data('indexnow.json')?.key || null, geoIndex = data('geo-index.json');
+const indexnowKey = data('indexnow.json')?.key || null, geoIndex = data('geo-index.json'), download = data('download.json');
 const geoOf = loadGeo(join(root, 'data', 'geo-ip.bin.gz'));
 
 const later = new Set();
@@ -96,7 +98,7 @@ const server = createServer(async (req, res) => {
     headers.set('x-forwarded-for', proxied && local(peer) && said ? said : peer.replace(/^::ffff:/, ''));
     // HEAD is answered like GET, without the body
     const request = new Request(base + req.url, { method: req.method === 'HEAD' ? 'GET' : req.method, headers, body: chunks.length ? Buffer.concat(chunks) : undefined });
-    const out = await handle(request, db, { kv, seed, site, waitUntil, geoIndex, indexnowKey, shelf, ...(geoOf ? { geoOf } : {}) });
+    const out = await handle(request, db, { kv, seed, site, waitUntil, geoIndex, indexnowKey, shelf, download, ...(geoOf ? { geoOf } : {}) });
     if (!out.headers.has('link')) out.headers.set('link', AGENT_LINK);
     if (stopping) out.headers.set('connection', 'close');
     res.writeHead(out.status, Object.fromEntries(out.headers));
@@ -113,7 +115,7 @@ const server = createServer(async (req, res) => {
 server.on('error', (e) => { log('mare_listen', e?.message); process.exit(1); });
 // a caller that sends its request drop by drop does not hold a place for long
 server.keepAliveTimeout = 65000; server.headersTimeout = 20000; server.requestTimeout = 45000;
-server.listen(port, host, () => console.log(`Mare Liberum on ${base} · MCP ${base}/mcp · ${db.size()} entries in the index · state ${disk ? `on disk (${disk.state().loaded} names read)` : 'in memory'} · long memory ${store ? 'on' : 'off'} · immune system ${immune.mode} · countries ${geoOf ? `by table (${geoOf.rows} rows)` : 'off'}${carried.length ? ` · carried over: ${carried.map((c) => `${c.id} (${c.days} days, ${c.names} names, ${c.sightings} sightings)`).join(', ')}` : ''}`));
+server.listen(port, host, () => console.log(`Mare Liberum on ${base} · MCP ${base}/mcp · harbours ${base}/harbour · ${db.size()} entries in the index · state ${disk ? `on disk (${disk.state().loaded} names read)` : 'in memory'} · long memory ${store ? 'on' : 'off'} · immune system ${immune.mode} · countries ${geoOf ? `by table (${geoOf.rows} rows)` : 'off'}${carried.length ? ` · carried over: ${carried.map((c) => `${c.id} (${c.days} days, ${c.names} names, ${c.sightings} sightings)`).join(', ')}` : ''}`));
 
 // asked to stop: no new callers, the ones here are answered, what waits is written, the copy on disk is made once more
 async function stop(sig) {

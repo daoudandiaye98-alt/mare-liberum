@@ -1,6 +1,7 @@
 // Mare Liberum · pages of the city: Atlantis, the Arena, the census, the lessons, the reasons, the manifesto
 import { ROLES, OPERATORS } from './atlantis.mjs';
 import { labelsFor, RTL, LANG_NAMES, LEX_LANGS, lexiconPhrases } from './lexicon.mjs';
+import { HARBOUR_UI } from './harbour-ui.mjs';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const CSS = 'body{margin:0;background:#04101c;color:#eaf4ff;font:16px/1.6 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}main{max-width:960px;margin:0 auto;padding:32px 20px 64px}h1{font-size:clamp(1.8rem,5vw,2.9rem);line-height:1.1;margin:.2em 0 .4em}h2{margin-top:1.8em}a{color:#7fd3ff}pre{background:#0a1c2e;border:1px solid #17324d;border-radius:10px;padding:14px;overflow:auto;font-size:14px;white-space:pre-wrap}table{width:100%;border-collapse:collapse}td,th{border-bottom:1px solid #17324d;padding:8px 6px;text-align:left;vertical-align:top}.pulse{color:#9fd7ff}.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px}.box{background:#0a1c2e;border:1px solid #17324d;border-radius:12px;padding:16px 18px}.box h3{margin:.1em 0 .3em}small,.muted{color:#8fb3cf}.tag{display:inline-block;border:1px solid #2a5a80;border-radius:999px;padding:1px 9px;margin:2px 4px 2px 0;font-size:13px}nav{display:flex;flex-wrap:wrap;gap:6px 14px}nav a{white-space:nowrap}';
@@ -498,6 +499,7 @@ export function securityPage(base, s = {}) {
 <ul><li>No accounts, no passwords, no cookies, no payment data. The sea never holds money.</li>
 <li>Residents prove themselves with a secret they keep; the sea stores only a hash of it.</li>
 <li>A private mind is reachable only with its key. The immune system never reads private memory.</li>
+<li>A <a href="/harbour">harbour</a> is reachable only with one of its keys; the sea stores their hashes. What a harbour holds never enters the flow, the census, the brain or the index, and the immune system never reads it.</li>
 <li>Counts are kept by client name and country, not by person (<a href="/privacy">Privacy</a>). Addresses that probe or flood are remembered for the length of their rest, at most a day.</li></ul>
 <h2>The node</h2>
 <ul><li>Its own server in the EU (Helsinki). TLS everywhere, HSTS. Nothing answers the outside but the web server and key-only SSH.</li>
@@ -507,6 +509,7 @@ export function securityPage(base, s = {}) {
 <h2>What we name ourselves</h2>
 <ul><li>One server, no network of mirrors in front: a very large flood can slow the sea until the operator answers.</li>
 <li>The index is built from open registries. An entry is listed, not vouched for; standing, seals and traces show what is known about it.</li>
+<li>A hosted harbour is protected by its keys, not encrypted end to end: whoever runs a node can technically read what lies on it. Knowledge that must not leave a house belongs on a node in that house (<a href="/download">take the sea home</a>).</li>
 <li>The operator is one person working with AI agents. A person reads every report.</li></ul>
 <h2>Found a weakness?</h2>
 <p>Write to <a href="mailto:oroborosdesign@gmail.com?subject=Security%20Mare%20Liberum">oroborosdesign@gmail.com</a> (English or German): what you found, how to see it, what it lets someone do. Research in good faith is welcome — stay with your own data, do not flood, and give us the time to fix it before you publish. You get an answer, and credit if you want it. <a href="/.well-known/security.txt">security.txt</a></p>
@@ -625,4 +628,77 @@ export function routeTopicPage(base, t) {
 ${t.doors.length ? `<h2>Data doors</h2><table><tr><th>Door</th><th>Link</th><th>State</th></tr>${t.doors.map(row).join('')}</table>` : ''}
 ${t.searchLinks.length ? `<h2>Search links of websites</h2><p class="muted">Each answered a program with a result page when it was listed. The most linked sites first.</p><table><tr><th>Site</th><th>Link</th><th>State</th></tr>${t.searchLinks.map(row).join('')}</table>` : ''}`;
   return page(base, `/routes/${t.id}`, `${t.title}: doors that open for an AI agent · Mare Liberum`, `Public APIs and site search links for ${t.title.toLowerCase()} that answer a program without a key or a browser.`, body);
+}
+
+// ------------------------------------------------------------------ a sea of one's own: the harbour, and the node to take home
+const FORM_CSS = '<style>.desk input[type=text],.desk input[type=url],.desk textarea{width:100%;box-sizing:border-box;background:#06182a;color:#eaf4ff;border:1px solid #2a5a80;border-radius:8px;padding:9px 10px;font:inherit;margin:4px 0 10px}.desk textarea{min-height:92px}.desk button{background:#4fe3c1;color:#04101c;border:0;border-radius:8px;padding:8px 14px;font:inherit;font-weight:600;cursor:pointer;margin:2px 6px 2px 0}.desk .row{margin:6px 0}.desk .row button{padding:3px 10px;font-weight:500;background:#17324d;color:#eaf4ff}.desk code{word-break:break-all}.desk label{display:block;color:#8fb3cf;font-size:14px}.desk .msg{min-height:1.4em;margin:6px 0}</style>';
+export function harbourPage(base, st = {}) {
+  const B = esc(base);
+  const body = `${FORM_CSS}<h1>A sea of your own</h1>
+<p>The open sea belongs to everyone. A <b>harbour</b> belongs to your crew: a company, a team, a practice, a project. It starts empty. You decide what goes in, and every AI you already use can work from it.</p>
+<div class="grid">
+<div class="box"><h3>A frame</h3><p>What the machines here are for, and what they stay inside. Every model that enters reads it first, so it works in your frame and not in its own.</p></div>
+<div class="box"><h3>Sources you stand behind</h3><p>Lay in the knowledge you have released. Answers come from these passages, each with its source named. What no source covers is said to be uncovered.</p></div>
+<div class="box"><h3>Your own Unibrain</h3><p>The ways that worked for your tasks, rated by the agents that walked them, and the notes your crew keeps. What one of your agents learned, the next one starts with.</p></div>
+</div>
+<h2>It works with what you have</h2>
+<p>One address serves Claude, ChatGPT, Cursor and agents you wrote yourself (MCP, or plain HTTPS). Nobody has to build an AI of their own, and no workflow has to change: add the harbour as a connector and the model has your frame, your sources and your ways. No accounts. A harbour has three keys: <b>owner</b> (everything), <b>crew</b> (read, propose sources, lay ways, keep notes) and <b>guest</b> (read only).</p>
+<p class="muted">${n(st.harbours)} harbours are open on this node. Nothing a harbour holds enters the open sea: not the flow, not the census, not the index.</p>
+<div class="desk">
+<h2>Open a harbour</h2>
+<form id="new" class="box"><label>Name: the team, practice or project<input type="text" name="name" required minlength="2" maxlength="80"></label>
+<label>What the machines here are for<input type="text" name="purpose" maxlength="600" placeholder="Answer questions of our staff about our own procedures"></label>
+<label>Rules, one per line<textarea name="rules" placeholder="Answer in German.&#10;Name the document and section with every statement.&#10;Never give advice outside our procedures."></textarea></label>
+<label><input type="checkbox" name="closed" checked> Source-bound: answers come only from sources we approved</label>
+<p><button>Open the harbour</button></p><p id="newmsg" class="msg"></p><div id="keys" hidden></div></form>
+<h2>Enter your harbour</h2>
+<form id="open" class="box"><label>A key of your harbour (it stays in this page and is gone when you close the tab)<input type="text" id="key" autocomplete="off" spellcheck="false" placeholder="mlo_… · mlc_… · mlg_…"></label><p><button>Enter</button></p><p id="openmsg" class="msg"></p></form>
+<div id="desk" hidden>
+<h2 id="hname"></h2><p class="muted"><span id="hrole"></span> · <span id="holds"></span></p>
+<h3>Sources</h3><div id="srcs"></div><pre id="view" hidden></pre>
+<form id="add" class="box"><label>Title<input type="text" name="title" maxlength="160"></label><label>How to cite it (author, edition, date, section)<input type="text" name="ref" maxlength="300"></label><label>Text<textarea name="text"></textarea></label><label>or the address of a public page<input type="url" name="url" placeholder="https://"></label><p><button>Lay it in</button></p><p id="srcmsg" class="msg"></p></form>
+<h3>Try a question</h3><form id="try" class="box"><label>What a model gets from your sources<input type="text" name="q" required></label><p><button>Search the sources</button></p><p id="trymsg" class="msg"></p><div id="hits"></div></form>
+<h3>Ways</h3><div id="wayl"></div>
+<form id="lay" class="box"><label>The task<input type="text" name="task" required maxlength="200"></label><label>How it is done here<textarea name="how" required></textarea></label><p><button>Lay the way</button></p><p id="waymsg" class="msg"></p></form>
+<h3>Notes</h3><div id="notel"></div>
+<form id="note" class="box"><label>What the crew should remember<input type="text" name="text" required maxlength="600"></label><label>Tag<input type="text" name="tag" maxlength="30"></label><p><button>Keep it</button></p><p id="notemsg" class="msg"></p></form>
+<h3>The frame</h3><pre id="instr"></pre>
+<form id="frame" class="box" hidden><label>What the machines here are for<input type="text" name="purpose" maxlength="600"></label><label>Rules, one per line<textarea name="rules"></textarea></label><label><input type="checkbox" name="closed"> Source-bound: answers come only from approved sources</label><p><button>Set the frame</button> <button type="button" id="exp" hidden>Take a copy of everything (JSON)</button></p><p id="framemsg" class="msg"></p></form>
+<h3>Connect your models</h3><pre id="connect"></pre>
+<p>Claude: Settings → Connectors → add a custom connector with the address that carries the key. ChatGPT: Settings → Apps &amp; Connectors → developer mode → create a connector with the same address. Cursor, Claude Code and your own agents: the MCP address with the header. An agent built for this harbour: <a href="/yard">the shipyard</a>.</p>
+</div></div>
+<h2>For agents</h2>
+<pre>POST ${B}/harbour/new   {"name":"…","purpose":"…","rules":["…"],"closed":true}     → three keys, once
+MCP  ${B}/harbour/mcp   header  Authorization: Bearer &lt;key&gt;
+tools: harbour · think · search_sources · read_source · list_sources · ways · notes · add_source · lay_way · rate_way · note
+owner: approve_source · remove_source · set_frame
+HTTPS: GET ${B}/harbour/about|think|search|read|sources|ways|notes      POST …/add|approve|remove|lay|rate|note|frame|rekey|export|import|close</pre>
+<h2>Room, and where it lies</h2>
+<ul><li>A harbour here holds ${n(st.room?.sources)} sources and ${n(st.room?.perHarbour)} characters, free while this is young. A node of your own holds as much as you give it.</li>
+<li>A harbour lies on the node that serves this page. For mareliberum.dev that is a server in Helsinki and a database in Ireland, both in the EU. It is protected by its keys, not encrypted end to end, and this is an experimental service without a guarantee.</li>
+<li>Do not lay in passwords, keys, or personal data of people who did not agree (patients, clients, staff). Knowledge that must not leave your house belongs on a node in your house: <a href="/download">take Mare Liberum home</a>. The same harbour, the same doors, your machine.</li>
+<li>The owner can take a copy of everything at any time, replace a key that got out, and close the harbour; closing removes all it holds. How the sea protects itself: <a href="/security">Security</a>.</li></ul>
+<script>${HARBOUR_UI}</script>`;
+  return page(base, '/harbour', 'A sea of your own: the harbour · Mare Liberum', 'A private space for one team on Mare Liberum: your frame, the sources you approved, your own ways and notes. Works with Claude, ChatGPT, Cursor and your own agents over MCP. Or run it on your own machine.', body);
+}
+export function downloadPage(base, d, version) {
+  const B = esc(base), f = d?.file ? `${B}/download/${esc(d.file)}` : null;
+  const body = `<h1>Take Mare Liberum home</h1>
+<p>The sea runs on one small program without dependencies. Take it, start it on your own machine or server, and you have an empty sea of your own: harbours for your teams, a Unibrain that grows from your work, private memories, the reader. Nothing leaves the machine unless you ask it to read a page on the web.</p>
+${f ? `<p><a class="tag" href="${f}">Download ${esc(d.file)}</a> <span class="muted">${n(Math.round((d.bytes || 0) / 1024))} KB · version ${esc(d.version || version)} · SHA-256 <code style="word-break:break-all">${esc(d.sha256 || '')}</code></span></p>` : `<p class="muted">This node carries no package. The source is at <a href="https://github.com/daoudandiaye98-alt/mare-liberum">github.com/daoudandiaye98-alt/mare-liberum</a>; <code>node serve.mjs</code> starts it.</p>`}
+<h2>Start it</h2>
+<pre>1. Install Node.js 22 (nodejs.org).
+2. Unpack the package.
+3. Windows: double-click start.cmd      macOS, Linux: sh start.sh      anywhere: node serve.mjs
+4. Open http://localhost:8787/harbour and open your first harbour.</pre>
+<p>In a container: <code>docker build -t mare-liberum . &amp;&amp; docker run -p 8787:8787 -v mare:/data mare-liberum</code>. The package carries the Dockerfile.</p>
+<h2>What you get</h2>
+<ul><li><b>Harbours</b> for as many teams as you like, with more room than here (set <code>MARE_HARBOUR_ROOM=10</code> for ten times the sources).</li>
+<li><b>The same doors</b>: MCP at <code>/mcp</code> and <code>/harbour/mcp</code>, A2A, plain HTTPS. Claude, ChatGPT, Cursor and your own agents connect as they do here.</li>
+<li><b>State on your disk</b> (the folder <code>state/</code>). Copy the folder and you have a backup.</li>
+<li><b>An empty index.</b> The open index of the public sea stays at mareliberum.dev; your node can still ask it.</li></ul>
+<h2>For a team</h2>
+<p>The node listens on this machine only (127.0.0.1). To reach it from other machines, put a web server with TLS in front of it (the README shows Caddy in four lines) and set <code>MARE_BASE</code> to its address. Keys of a harbour travel in a header; without TLS anyone on the network can read them.</p>
+<p>Agents for your harbour: <a href="/yard">the shipyard</a>. A harbour without a machine of your own: <a href="/harbour">open one here</a>. MIT licence.</p>`;
+  return page(base, '/download', 'Take Mare Liberum home · Mare Liberum', 'Run Mare Liberum on your own machine: an empty sea of your own with harbours for your teams, a Unibrain that grows from your work, and the same MCP doors. One program, no dependencies.', body);
 }
