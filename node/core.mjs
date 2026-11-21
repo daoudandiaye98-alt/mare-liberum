@@ -289,7 +289,7 @@ export function normHfSpace(s) {
 // the Apify API. The sea carries the ones somebody besides the author used in the last 30 days.
 export function normApify(a) {
   const user = a?.username, name = a?.name, used = Number(a?.stats?.totalUsers30Days || 0);
-  if (!a?.id || !/^[a-z0-9][\w.-]{0,79}$/i.test(user || '') || !/^[a-z0-9][\w.-]{0,79}$/i.test(name || '') || used < 2) return null;
+  if (!a?.id || typeof user !== 'string' || typeof name !== 'string' || !/^[a-z0-9][\w.-]{0,79}$/i.test(user) || !/^[a-z0-9][\w.-]{0,79}$/i.test(name) || used < 2) return null;
   const p = a.currentPricingInfo || {}, events = Object.values(p.pricingPerEvent?.actorChargeEvents || {}), first = events.find((e) => e?.isPrimaryEvent) || events[0];
   const model = { PAY_PER_EVENT: 'per event', PRICE_PER_DATASET_ITEM: 'per result', FLAT_PRICE_PER_MONTH: 'per month' }[p.pricingModel];
   const price = Number(p.pricePerUnitUsd ?? first?.eventPriceUsd ?? first?.eventTieredPricingUsd?.FREE?.tieredEventPriceUsd), usd = Number.isFinite(price) && price >= 0 ? price : undefined;
@@ -334,10 +334,10 @@ export function norm402Index(s, url) {
     display_name: clean(s.name, 120) || clean(u.hostname + (u.pathname.length > 1 ? u.pathname : ''), 120),
     type: `application/${proto}-resource+json`, kind: proto === 'x402' ? 'x402' : 'api', url: url.slice(0, 500), description: clean(s.description, 600),
     tags: [...new Set([proto, 'paid', ...String(s.category || '').split('/').map((c) => clean(c, 30)), clean(s.payment_network, 60)].filter(Boolean).map((t) => t.toLowerCase()))].filter((t) => t !== 'uncategorized').slice(0, 8), capabilities: [], queries: [], version: null,
-    endpoints: [{ transport: `http-${proto}`, url: url.slice(0, 500), method: /^[A-Z]{3,7}$/.test(s.http_method || '') ? s.http_method : undefined }],
+    endpoints: [{ transport: `http-${proto}`, url: url.slice(0, 500), method: typeof s.http_method === 'string' && /^[A-Z]{3,7}$/.test(s.http_method) ? s.http_method : undefined }],
     pay: { protocol: proto, network: clean(s.payment_network, 60) || undefined, asset: clean(s.payment_asset, 80) || undefined, priceUsd: Number.isFinite(usd) && usd >= 0 ? usd : undefined, priceSats: sats > 0 ? sats : undefined, listed: true },
     source: '402-index', source_ref: url.slice(0, 500), attested_by: '402index-listing', quality: Math.min(5, Math.round((Number(s.reliability_score) || 0) / 2) / 10),
-    updated_at: /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(s.last_checked || '') ? s.last_checked.replace(' ', 'T') + 'Z' : null,
+    updated_at: typeof s.last_checked === 'string' && /^\d{4}-\d\d-\d\d \d\d:\d\d:\d\d$/.test(s.last_checked) ? s.last_checked.replace(' ', 'T') + 'Z' : null,
   };
 }
 // Public API with a machine-readable description, listed by the APIs.guru directory (CC0): the OpenAPI file is what an
