@@ -307,6 +307,21 @@ await proof('the long memory says honestly when it is off', async () => {
   const r = await call('GET', '/durable.json'); assert.equal(r.status, 200); assert.equal(r.j.on, false);
 });
 
+// ------------------------------------------------------------------ briefs: the kind of work
+console.log('briefs');
+await proof('a comparison gets the decision brief; word stems of other languages count', async () => {
+  const { briefFor } = await import('../node/brief.mjs');
+  const kind = (q) => briefFor(q).kind;
+  assert.equal(kind('compare vector databases pgvector vs qdrant'), 'decision');           // was: sql
+  assert.equal(kind('should we use postgres or mongodb for our app'), 'decision');
+  assert.equal(kind('write a SQL query to find duplicate emails'), 'sql');
+  assert.equal(kind('summarize the comparison table'), 'summary');
+  assert.equal(kind('Hilf mir bei der Entscheidung zwischen zwei Jobangeboten'), 'decision'); // these four never matched before
+  assert.equal(kind('Wettbewerbsanalyse für Yogastudios in Köln'), 'market-research');
+  assert.equal(kind('Lokalisierung unserer App ins Spanische'), 'translation');
+  assert.equal(kind('keywords for a yoga studio website'), 'seo');
+});
+
 // ------------------------------------------------------------------ the sea opens its own doors
 console.log('the sea opens its doors in turn');
 await proof('one step opens doors from the sea\'s side and remembers how they answered', async () => {

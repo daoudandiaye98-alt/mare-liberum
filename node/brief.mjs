@@ -173,7 +173,7 @@ K('research', 'Research and fact-finding', 'research|recherche|recherchiere|find
   need: 'official statistics database',
   must: [['sources with links', /https?:\/\//i]],
 });
-K('market-research', 'Market or competitor analysis', 'market research|marktanalyse|marktforschung|competitor|wettbewerb\w*|konkurrenz\w*|competitive analysis|market size|marktgröße|tam|sam som|industry analysis|branchenanalyse', {
+K('market-research', 'Market or competitor analysis', 'market research|marktanalyse|marktforschung|competitor|wettbewerb|konkurrenz|competitive analysis|market size|marktgröße|tam|sam som|industry analysis|branchenanalyse', {
   outcome: 'A clear picture of a market: who buys, who sells, at what price, where the gap is.',
   slots: [slot('place', 'the country of the request, else the EU and the US'), 'source', 'goal', 'format', 'language'],
   ask: ['Which market exactly (product, customer, region)?', 'What will you decide with it (enter, price, position)?'],
@@ -298,7 +298,7 @@ K('scraping', 'Extract data from websites', 'scrape|scraping|crawl|extract data|
   deliver: 'Data file (CSV/JSON), schema, a log of sources.',
   verify: ['Spot-check 5 rows against the live page'],
 });
-K('translation', 'Translation or localization', 'translate|übersetze|übersetzung|translation|localize|lokalisier\w*|in english|ins englische|ins deutsche|auf englisch|auf deutsch', {
+K('translation', 'Translation or localization', 'translate|übersetze|übersetzung|translation|localize|lokalisier|in english|ins englische|ins deutsche|auf englisch|auf deutsch', {
   outcome: 'A text that reads as if written in the target language.',
   slots: ['source', slot('language', 'the target language named; if unclear, ask'), 'audience', 'tone'],
   ask: ['Into which language and for which country (de-DE, de-AT, en-US, en-GB)?', 'Formal or informal address (Sie/du, vous/tu)?'],
@@ -392,7 +392,7 @@ K('project-plan', 'Project plan or roadmap', 'project plan|projektplan|roadmap|p
   deliver: 'Goal, milestone table, task list, risks, next three actions.',
   verify: ['Dates add up; nothing depends on a later task'],
 });
-K('decision', 'Make a decision or compare options', 'should i|soll ich|decide|entscheid\w*|pros and cons|vor- und nachteile|vorteile und nachteile|option a or b|which option|welche option|choose between|wählen zwischen|trade-off', {
+K('decision', 'Make a decision or compare options', 'should i|soll ich|decide|entscheid|pros and cons|vor- und nachteile|vorteile und nachteile|option a or b|which option|welche option|choose between|wählen zwischen|trade-off', {
   outcome: 'A recommendation with the reasons, the risks, and what would change it.',
   slots: [slot('goal', 'what a good outcome looks like for the person'), 'budget', 'deadline', 'source'],
   ask: ['What matters most to you (rank 3 criteria)?', 'What can be undone later, and what not?'],
@@ -453,7 +453,7 @@ K('video-script', 'Video or podcast script', 'video script|skript für video|you
   deliver: 'Two-column script (spoken | on screen), timings.',
   verify: ['Read aloud with a timer'],
 });
-K('seo', 'SEO or being found online', 'seo|search engine|suchmaschine|google ranking|ranking|keywords?|keyword research|meta description|backlinks|sichtbarkeit|found on google|ai search|geo|llms.txt', {
+K('seo', 'SEO or being found online', 'seo|search engine|suchmaschine|google ranking|ranking|keyword|keyword research|meta description|backlinks|sichtbarkeit|found on google|ai search|geo|llms.txt', {
   outcome: 'Pages that answer what people search, readable by search engines and AI assistants.',
   slots: ['source', 'place', 'language', 'audience'],
   ask: ['Which site and which pages matter most?', 'Who should find it, searching for what?'],
@@ -732,12 +732,15 @@ export function splitTask(task) {
   return parts.length >= 2 ? parts.slice(0, 8) : [];
 }
 // the brief for a task: the kind, what was left out (with defaults), the questions worth asking, the method, the bar, the checks
+const COMPARING = /(^|[^\p{L}])(compare|versus|vs\.?|which (one )?is better|pros and cons|should (we|i) (use|choose|pick|go with)|vergleich\p{L}*|was ist besser|welche[rs]? ist besser|comparer|comparar|confronta)([^\p{L}]|$)/iu;
 export function briefFor(task, { base = 'https://mareliberum.dev', kind, for: forWhom, lang: langGiven } = {}) {
   const raw = String(task || '').trim().slice(0, 2000), t = norm(raw);
   const li = LANG_NAMES[langGiven] ? { lang: langGiven, sure: true } : langInfo(raw), lang = li.lang === 'en' && isDe(raw) ? 'de' : li.lang;
   // requests in other languages: the core words of each kind in 16 more languages count too
   const lex = lang === 'en' || lang === 'de' ? {} : kindsByLexicon(raw);
-  const ranked = LIB.map((k) => { const r = scoreKind(t, k); return { k, s: r.s + (lex[k.kind] || 0) * (k.w ?? 1), hit: r.hit }; }).filter((x) => x.s > 0).sort((a, b) => b.s - a.s);
+  // "compare pgvector vs qdrant" asks for a decision between options, whatever the options are about
+  const comparing = COMPARING.test(raw);
+  const ranked = LIB.map((k) => { const r = scoreKind(t, k); return { k, s: r.s + (lex[k.kind] || 0) * (k.w ?? 1) + (comparing && k.kind === 'decision' ? 4 : 0), hit: r.hit }; }).filter((x) => x.s > 0).sort((a, b) => b.s - a.s);
   const k = (kind && briefKind(kind)) || ranked[0]?.k || null;
   const langName = LANG_NAMES[lang] || lang, known = lang !== 'en' || li.sure;
   const slots = k ? k.slots : ['audience', 'goal', 'length', 'format', 'language', 'source'];
