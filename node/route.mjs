@@ -8,6 +8,7 @@
 import { TOPICS, DOORS, PLACES, CUISINES, WIKI_LANGS, VOYAGE_LANGS, LANG_COUNTRY, LANG_TLDS } from './doors.mjs';
 import { BANGS } from './bangs-data.mjs';
 import { langInfo } from './lexicon.mjs';
+import { robotsGroups, robotsAllows } from './check.mjs';
 
 export const ROUTE = { halfLifeDays: 30, perHour: 240, doors: 8, tail: 3, checkMs: 9000, brands: 30000, sure: 5000 };
 const DAYMS = 864e5;
@@ -378,6 +379,7 @@ export function planRoute(q, { base = 'https://mareliberum.dev', limit = ROUTE.d
 export const leadOf = (q) => topicsOf(readTask(q))[0]?.id || null;
 
 // ---- the living part: what agents report, and the sea opening its doors in turn
+const UA = 'MareLiberum-Atlas/1.0 (+https://mareliberum.dev/atlas; opens the doors of the routing table in turn)';
 export function createRoute(h) {
   const { kv, update, allow, SeaError, sha, now, DAY } = h;
   const base = () => String(h.base || 'https://mareliberum.dev').replace(/\/+$/, '');
@@ -445,8 +447,16 @@ export function createRoute(h) {
         const f = fillOf(d, t, { terms: test, place: test, count: 1, list: list2 }, base());
         if (!f.to) return null;
         let ok = false, status = 0;
+        // a site search is opened only where the site's robots.txt still lets a program in; a "no" shuts the door
+        if (d.tail || d.kind === 'page') {
+          try {
+            const u = new URL(f.to), rb = await fetch(`${u.origin}/robots.txt`, { signal: AbortSignal.timeout(5000), redirect: 'follow', headers: { 'user-agent': UA } });
+            const txt = rb.status === 200 ? (await rb.text()).slice(0, 300000) : '';
+            if (txt && !/^\s*</.test(txt) && !robotsAllows(robotsGroups(txt), 'mareliberum-atlas', u.pathname + u.search).allowed) return { id: d.id, ok: false, status: 'robots' };
+          } catch {}
+        }
         try {
-          const r = await fetch(f.to, { signal: AbortSignal.timeout(ROUTE.checkMs), redirect: 'follow', headers: { 'user-agent': 'MareLiberum-Atlas/1.0 (+https://mareliberum.dev/atlas; opens the doors of the routing table in turn)', accept: 'application/json, application/xml;q=0.9, text/html;q=0.8, */*;q=0.5' } });
+          const r = await fetch(f.to, { signal: AbortSignal.timeout(ROUTE.checkMs), redirect: 'follow', headers: { 'user-agent': UA, accept: 'application/json, application/xml;q=0.9, text/html;q=0.8, */*;q=0.5' } });
           status = r.status; const body = (await r.text()).slice(0, 200000);
           ok = status === 200 && body.length > 80 && (d.kind === 'page' ? /<html/i.test(body) && !/captcha|verify you are human|not a bot/i.test(body.slice(0, 4000)) : !/^\s*<!doctype html|^\s*<html/i.test(body));
         } catch { status = 0; }

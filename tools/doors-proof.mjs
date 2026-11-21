@@ -41,6 +41,9 @@ await proof('a hostile rule cannot hold the reader (was: catastrophic backtracki
 
 // ------------------------------------------------------------------ the table itself
 console.log('the table of doors');
+await proof('search pages that their own robots.txt closes to assistants are not in the table', () => {
+  for (const d of DOORS) assert.ok(!/^https:\/\/(www\.bing\.com\/search|news\.google\.com|pkg\.go\.dev\/search)/.test(d.url), d.id);
+});
 await proof('every door is well formed and every shelf has a way out', () => {
   const ids = new Set(), shelves = new Set(TOPICS.map((t) => t.id));
   for (const d of DOORS) {
@@ -113,7 +116,7 @@ await proof('a word that only looks like a shelf word does not call the shelf', 
 await proof('the language of the task picks the edition (Wikipedia, news, town names)', () => {
   assert.equal(readTask('Nachrichten Bundestag heute').lang, 'de');
   assert.equal(readTask('noticias economía hoy').lang, 'es');
-  assert.ok(first('noticias economía hoy').to.includes('hl=es&gl=ES'));
+  assert.ok(first('noticias economía hoy').to.includes('setlang=es&cc=ES&mkt=es-ES'));
   assert.ok(first('günstige Hotels in Rom').to.includes(encodeURIComponent('"name:de"="Rom"')));
   assert.ok(plan('Was ist Photosynthese').doors.find((d) => d.id === 'wikipedia').to.startsWith('https://de.wikipedia.org/'));
 });

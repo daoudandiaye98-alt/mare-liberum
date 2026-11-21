@@ -156,7 +156,6 @@ export const DOORS = [
   { id: 'mdn', when: 'html css javascript browser dom fetch http web webapi frontend typescript cors header headers', topics: ['code'], kind: 'api', name: 'MDN Web Docs', url: 'https://developer.mozilla.org/api/v1/search?q={q}&locale=en-US', returns: 'web platform documentation (HTML, CSS, JavaScript, HTTP)', test: 'fetch' },
   { id: 'cdnjs', mode: 'package', when: 'cdn cdnjs browser script library frontend', topics: ['code'], kind: 'api', name: 'cdnjs', url: 'https://api.cdnjs.com/libraries?search={q}&fields=version,description&limit=10', returns: 'browser libraries with their latest version', test: 'chart' },
   { id: 'hn', topics: ['code', 'news', 'community', 'agents', 'ops'], kind: 'api', name: 'Hacker News (Algolia)', url: 'https://hn.algolia.com/api/v1/search?query={q}&hitsPerPage=10', returns: 'stories and comments of Hacker News with points and links', test: 'mcp' },
-  { id: 'pkggodev', mode: 'package', when: 'golang go gopher', topics: ['code'], kind: 'page', name: 'pkg.go.dev', url: 'https://pkg.go.dev/search?q={q}', returns: 'Go packages', test: 'http' },
   // ---- security
   // ---- servers, systems and command lines
   { id: 'serverfault', mode: 'error', wait: true, topics: ['ops'], kind: 'api', name: 'Server Fault (Stack Exchange API)', url: 'https://api.stackexchange.com/2.3/search/advanced?order=desc&sort=relevance&q={q}&site=serverfault&pagesize=10&filter=withbody', returns: 'questions about running servers and networks, with body and score', test: 'nginx reverse proxy' },
@@ -201,8 +200,7 @@ export const DOORS = [
   { id: 'datamuse', topics: ['language'], kind: 'api', name: 'Datamuse', url: 'https://api.datamuse.com/words?ml={q}&max=20', returns: 'words with a similar meaning (rel_syn= for synonyms, rel_rhy= for rhymes)', test: 'ocean' },
   { id: 'mymemory', topics: ['language'], kind: 'api', by: 'ql', name: 'MyMemory translation', url: 'https://api.mymemory.translated.net/get?q={q}&langpair=en|de', returns: 'a translation; set langpair to source|target, for example en|de' },
   // ---- news
-  { id: 'googlenews', topics: ['news'], kind: 'feed', by: 'q', name: 'Google News (RSS)', url: 'https://news.google.com/rss/search?q={q}&hl={hl}&gl={gl}&ceid={gl}:{hl2}', returns: 'current news articles on the words as an RSS feed, in the language and country of the task', test: 'climate' },
-  { id: 'bingnews', topics: ['news'], kind: 'feed', by: 'q', name: 'Bing News (RSS)', url: 'https://www.bing.com/news/search?q={q}&format=rss', returns: 'current news articles as an RSS feed', test: 'climate' },
+  { id: 'bingnews', topics: ['news'], kind: 'feed', by: 'q', name: 'Bing News (RSS)', url: 'https://www.bing.com/news/search?q={q}&format=rss&setlang={hl}&cc={gl}&mkt={hl}-{gl}', returns: 'current news articles on the words as an RSS feed, in the language and country of the task (Microsoft offers the feed for personal, non-commercial reading)', test: 'climate' },
   { id: 'gdelt', wait: true, topics: ['news'], kind: 'api', name: 'GDELT', url: 'https://api.gdeltproject.org/api/v2/doc/doc?query={q}&mode=artlist&format=json&maxrecords=20&sort=datedesc', returns: 'news from around the world in 65 languages, newest first (one call every five seconds)', test: 'climate' },
   { id: 'guardian', wait: true, topics: ['news'], kind: 'api', name: 'The Guardian', url: 'https://content.guardianapis.com/search?q={q}&api-key=test', returns: 'Guardian articles (the public test key allows a few calls)', test: 'climate' },
   { id: 'tagesschau', wait: true, topics: ['news'], kind: 'api', lang: 'de', name: 'tagesschau', url: 'https://www.tagesschau.de/api2u/search/?searchText={q}&pageSize=10', returns: 'Meldungen der tagesschau als JSON', test: 'klima' },
@@ -266,7 +264,6 @@ export const DOORS = [
   { id: 'youtube-oembed', topics: ['video'], kind: 'api', by: 'url', name: 'YouTube oEmbed', url: 'https://www.youtube.com/oembed?url={q}&format=json', returns: 'title and channel of one YouTube video by its address', test: 'https://www.youtube.com/watch?v=dQw4w9WgXcQ' },
   // ---- the whole web, when no shelf fits: result pages that read without a browser
   { id: 'ddg-html', topics: ['general'], kind: 'page', name: 'DuckDuckGo (HTML)', url: 'https://html.duckduckgo.com/html/?q={q}', returns: 'web results as a plain page that reads without JavaScript', test: 'creatine research' },
-  { id: 'bing', topics: ['general'], kind: 'page', name: 'Bing', url: 'https://www.bing.com/search?q={q}', returns: 'web results', test: 'creatine research' },
   { id: 'ddg-lite', topics: ['general'], kind: 'page', name: 'DuckDuckGo Lite', url: 'https://lite.duckduckgo.com/lite/?q={q}', returns: 'web results as the smallest page there is', test: 'creatine research' },
 ];
 
