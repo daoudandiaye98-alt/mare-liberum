@@ -167,7 +167,11 @@ await proof('a draft is held against the sources: every sentence, every figure; 
   assert.equal(d.found, 'no'); assert.equal(d.source, undefined);
   assert.match(r.json.rule, /Remove or rewrite/); assert.match(r.json.limits, /cannot judge whether the sentence means/);
   const clean = await post('/harbour/check', { text: 'Instrumente der Klasse kritisch B werden im Autoklaven bei 134 Grad sterilisiert.' }, K.guest);
-  assert.equal(clean.json.found, 1); assert.match(clean.json.rule, /Every sentence finds its words/);
+  assert.equal(clean.json.found, 1); assert.match(clean.json.rule, /Every sentence long enough to judge finds its words/); assert.equal(clean.json.tooShort, 0);
+  // a short sentence is never passed over in silence: it is named as not judged, and its figures are held against the sources all the same
+  const brief = await post('/harbour/check', { text: 'Instrumente der Klasse kritisch B werden im Autoklaven bei 134 Grad sterilisiert. Wir haben auch sonntags geöffnet. Bei 180 Grad. Jede Charge.' }, K.guest);
+  assert.equal(brief.json.checked, 4, JSON.stringify(brief.json.sentences)); assert.deepEqual(brief.json.sentences.map((x) => x.found), ['yes', 'too short to judge', 'figure not in the sources', 'yes']);
+  assert.equal(brief.json.tooShort, 1); assert.equal(brief.json.figureNotInSources, 1); assert.match(brief.json.rule, /Remove or rewrite/); assert.match(brief.json.rule, /1 short sentence was not judged/);
   assert.equal((await tool(K.guest, 'check_answer', { text: draft })).data.notFound, 1);
   assert.equal((await post('/harbour/check', { text: 'kurz' }, K.guest)).status, 400);
   assert.deepEqual(figuresOf('1.000 Euro, 0,5 mg, 5 % und 3 Schritte am 21.11.2026'), ['1000', '05', '5', '21112026']);

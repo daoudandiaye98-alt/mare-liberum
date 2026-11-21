@@ -264,16 +264,18 @@ export function createHarbour(h) {
       const text = body(a.text ?? a.draft ?? a.answer, 8000); if (text.length < 10) throw new SeaError('INVALID_ARGUMENT', 'text is required: the draft to hold against the sources');
       const ix = await indexOf(hid), out = [];
       for (const s of sentencesOf(text).slice(0, 60)) {
-        const ws = [...new Set(words(s))]; if (ws.length < 3) continue;
-        const hits = rank(ix, s, 3), have = new Set(hits.flatMap((x) => words(x.text))), share = ws.filter((w) => have.has(w)).length / ws.length;
-        const known = new Set(figuresOf(hits.map((x) => x.text).join('\n'))), missing = figuresOf(s).filter((f) => !known.has(f));
-        const found = share < 0.35 ? 'no' : missing.length ? 'figure not in the sources' : share >= 0.6 ? 'yes' : 'partly';
-        out.push(strip({ sentence: s.length > 240 ? `${s.slice(0, 239)}…` : s, found, words: r2(share), figuresMissing: missing.length && share >= 0.35 ? missing.length : undefined, source: share >= 0.35 ? hits[0]?.source : undefined }));
+        const ws = [...new Set(words(s))], figs = figuresOf(s); if (!ws.length && !figs.length) continue;
+        const hits = ws.length ? rank(ix, s, 3) : [], have = new Set(hits.flatMap((x) => words(x.text))), share = ws.length ? ws.filter((w) => have.has(w)).length / ws.length : 0;
+        const known = new Set(figuresOf(hits.map((x) => x.text).join('\n'))), missing = figs.filter((f) => !known.has(f));
+        // a sentence of one or two words that carry meaning cannot be judged by its words; it is named, never passed over, and its figures are still held against the sources
+        const short = ws.length < 3;
+        const found = short ? (missing.length ? 'figure not in the sources' : share === 1 ? 'yes' : 'too short to judge') : share < 0.35 ? 'no' : missing.length ? 'figure not in the sources' : share >= 0.6 ? 'yes' : 'partly';
+        out.push(strip({ sentence: s.length > 240 ? `${s.slice(0, 239)}…` : s, found, words: r2(share), figuresMissing: missing.length && (short || share >= 0.35) ? missing.length : undefined, source: share >= 0.35 ? hits[0]?.source : undefined }));
       }
-      const n = (k) => out.filter((x) => x.found === k).length;
-      return { checked: out.length, found: n('yes'), partly: n('partly'), figureNotInSources: n('figure not in the sources'), notFound: n('no'), sentences: out,
-        rule: n('no') || n('figure not in the sources') ? 'Remove or rewrite from the sources every sentence marked "no" or "figure not in the sources", then check again.' : 'Every sentence finds its words, and every figure, in an approved passage.',
-        limits: 'This check reads words and figures. It shows where a sentence finds its words in an approved passage and whether its figures stand there. It cannot judge whether the sentence means what the source says: read the passage.' };
+      const n = (k) => out.filter((x) => x.found === k).length, bad = n('no') + n('figure not in the sources'), brief = n('too short to judge');
+      return { checked: out.length, found: n('yes'), partly: n('partly'), figureNotInSources: n('figure not in the sources'), notFound: n('no'), tooShort: brief, sentences: out,
+        rule: (bad ? 'Remove or rewrite from the sources every sentence marked "no" or "figure not in the sources", then check again.' : 'Every sentence long enough to judge finds its words, and every figure, in an approved passage.') + (brief ? ` ${brief} short ${brief === 1 ? 'sentence was' : 'sentences were'} not judged: keep ${brief === 1 ? 'it' : 'them'} only if ${brief === 1 ? 'it claims' : 'they claim'} nothing a source would have to cover.` : ''),
+        limits: 'This check reads words and figures. It shows where a sentence finds its words in an approved passage and whether its figures stand there. It cannot judge whether the sentence means what the source says: read the passage. A sentence of one or two words that carry meaning is marked "too short to judge".' };
     },
     // the first stop inside a harbour: the ways that worked here, what the sources say, what the crew noted
     async harbourThink(a = {}, ctx) {
@@ -377,7 +379,7 @@ export const HARBOUR_TOOLS = [
   { name: 'harbour', role: 'guest', verb: 'harbourAbout', read: true, title: 'Read the harbour', description: 'The harbour you are in: its name, its frame (what you are here for and what you stay inside), what it holds, and your role. Call this first in a new session.', inputSchema: S({}) },
   { name: 'think', role: 'guest', verb: 'harbourThink', read: true, title: 'Ask the harbour first', description: 'Before a task: give the task in words and get the ways that worked for this team before (with how well they held), the passages of approved sources that fit, and the notes the team kept on it.', inputSchema: S({ task: { ...T, description: 'Your task in plain words.' } }, ['task']) },
   { name: 'search_sources', role: 'guest', verb: 'harbourSearch', read: true, title: 'Search the approved sources', description: 'Find the passages that answer a question in the sources this team has approved. Every passage comes with its source (title, reference, version). In a source-bound harbour these passages are the only ground for an answer.', inputSchema: S({ q: { ...T, description: 'The question in words.' }, limit: { type: 'integer', minimum: 1, maximum: 10 } }, ['q']) },
-  { name: 'check_answer', role: 'guest', verb: 'harbourCheck', read: true, title: 'Check a draft against the sources', description: 'Before you hand over an answer from this harbour: give the draft and get, sentence by sentence, whether its words stand in an approved passage and whether every figure in it stands in a source. It reads words and figures and cannot judge meaning. Remove or rewrite what it does not find.', inputSchema: S({ text: { ...T, description: 'The draft answer.' } }, ['text']) },
+  { name: 'check_answer', role: 'guest', verb: 'harbourCheck', read: true, title: 'Check a draft against the sources', description: 'Before you hand over an answer from this harbour: give the draft and get, sentence by sentence, whether its words stand in an approved passage and whether every figure in it stands in a source. It reads words and figures and cannot judge meaning; very short sentences are named as not judged. Remove or rewrite what it does not find.', inputSchema: S({ text: { ...T, description: 'The draft answer.' } }, ['text']) },
   { name: 'read_source', role: 'guest', verb: 'harbourRead', read: true, title: 'Read one source', description: 'Read one source in full by its id (from search_sources or list_sources).', inputSchema: S({ id: T }, ['id']) },
   { name: 'list_sources', role: 'guest', verb: 'harbourSources', read: true, title: 'List the sources', description: 'The sources this harbour holds: title, reference, version, state (approved or proposed).', inputSchema: S({ status: { ...T, enum: ['approved', 'proposed'] } }) },
   { name: 'ways', role: 'guest', verb: 'harbourWays', read: true, title: 'Read the ways', description: 'The ways of this harbour: how tasks are done here, strongest first, or the ones that fit q.', inputSchema: S({ q: T, limit: { type: 'integer', minimum: 1, maximum: 100 } }) },

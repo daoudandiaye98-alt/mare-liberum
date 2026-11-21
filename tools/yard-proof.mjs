@@ -205,7 +205,7 @@ await proof('the source-bound answerer works from the harbour alone: passages wi
   assert.match(asked[0].body.system, /only ground you stand on/); assert.match(asked[0].body.system, /Answer in German/);
   assert.deepEqual(asked[0].body.tools.map((t) => t.name).sort(), ['harbour__check_answer', 'harbour__harbour', 'harbour__list_sources', 'harbour__read_source', 'harbour__search_sources']);
   const j = journal(A.dir).at(-1); assert.deepEqual(j.tools.map((t) => [t.tool, t.outcome]), [['harbour.search_sources', 'ran'], ['harbour.check_answer', 'ran'], ['sea.read_page', 'refused']]);
-  assert.match(JSON.stringify(asked[1].body.messages), /Fassung 2026/); assert.match(JSON.stringify(asked[2].body.messages), /Every sentence finds its words/);
+  assert.match(JSON.stringify(asked[1].body.messages), /Fassung 2026/); assert.match(JSON.stringify(asked[2].body.messages), /Every sentence long enough to judge finds its words/);
 });
 await proof('--tools shows what the agent may use; --check runs its test cases and never lets a tool that asks run', async () => {
   const t = await run(KEEPER.dir, ['--tools'], { wire: 'none', env: hEnv });
