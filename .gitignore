@@ -19,3 +19,7 @@ public/manifest.webmanifest
 sea.tar.gz
 release.json
 public/download
+
+# the home page: build outputs and what its tools write
+homepage/dist
+homepage/qa/out

@@ -1,0 +1,22 @@
+{
+  "name": "mare-liberum-homepage",
+  "private": true,
+  "description": "Sources and tools of the home page of Mare Liberum. The build needs nothing but Node; the tools need what is listed here.",
+  "type": "module",
+  "scripts": {
+    "build": "node build.mjs",
+    "write": "node build.mjs --write",
+    "qa": "sh qa/all.sh"
+  },
+  "devDependencies": {
+    "@fontsource-variable/anybody": "5.3.0",
+    "@fontsource-variable/eb-garamond": "5.3.0",
+    "@fontsource-variable/public-sans": "5.3.0",
+    "axe-core": "^4.14.1",
+    "d3-geo": "^3.1.1",
+    "i18n-iso-countries": "^7.14.0",
+    "playwright-core": "^1.65.1",
+    "topojson-client": "^3.1.0",
+    "world-atlas": "^2.0.2"
+  }
+}
