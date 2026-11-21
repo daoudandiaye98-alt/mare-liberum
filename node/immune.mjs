@@ -30,7 +30,9 @@ const SEARCH_PACE = { perMinute: 150, burst: 50 };
 const KEEP = 100_000;      // names a pace list holds; the one not seen for longest makes room
 const STRIKES = 5, STRIKE_MS = 10 * 60_000, REST_MIN = 60, REST_MAX_MIN = 24 * 60;
 // asked for by nobody who came for the sea: files that hold secrets, and the doors of software the sea does not run
-const HOSTILE = /(^|\/)\.(env|git|aws|ssh|svn|hg|htpasswd|htaccess|DS_Store|npmrc|docker|kube)(\.|\/|$)|\.(php\d?|phtml|aspx?|jspx?|cgi|bak|old|swp|ini|pem|key)$|^\/(wp-admin|wp-login|wp-content|wp-includes|xmlrpc|phpmyadmin|pma|adminer|cgi-bin|vendor|_ignition|telescope|actuator|solr|boaform|hnap1|owa|ecp|server-status|backup|credentials)(\.|\/|$)|etc\/passwd|\.\.\//i;
+const HOSTILE = /(^|\/)\.(?!well-known(\/|$))[^/]|\.(php\d?|phtml|aspx?|jspx?|cgi|bak|old|swp|ini|pem|key|sql|sqlite3?|log|tar|tgz|rar|7z)$|^\/(wp-admin|wp-login|wp-content|wp-includes|xmlrpc|phpmyadmin|pma|adminer|cgi-bin|vendor|_ignition|telescope|actuator|solr|boaform|hnap1|owa|ecp|server-status|backup|credentials|storage\/logs|_profiler)(\.|\/|$)|^\/(docker-compose|secrets?|credentials?|id_rsa|id_ed25519|phpinfo|dump|database|backup)\.[a-z0-9.]{2,12}$|etc\/passwd|\.\.\//i;
+// the same, for the census: only where the whole request is plainly such a probe (the sea's own doors carry free text)
+const PROBE_START = /^\/(\.(?!well-known(\/|$))|wp-|xmlrpc|phpmyadmin|pma(\/|$)|adminer|cgi-bin|vendor\/|_ignition|telescope|actuator|solr|boaform|hnap1|owa(\/|$)|ecp(\/|$)|server-status|storage\/logs|_profiler)/i;
 // the verbs through which a caller changes the sea, and the ones that make the sea call out for a caller
 const WRITES = ['enter', 'leave', 'ask', 'answer', 'withdraw', 'mark', 'say', 'note', 'vote', 'job', 'jobTake', 'jobDeliver', 'jobSettle', 'seal', 'watch', 'unwatch', 'offer', 'workTake', 'workDone', 'arenaStart', 'arenaAnswer', 'publishWork', 'rateWork', 'briefTip', 'briefOutcome', 'earnReport', 'roadmapVote', 'doorRate', 'layPath', 'ratePath', 'rate', 'mindNew', 'mindOpen', 'mindAdd', 'mindForget', 'mindWrite'];
 const READER = ['read', 'check', 'mapSite'];
@@ -174,7 +176,7 @@ export function createImmune({ now = () => Date.now() } = {}) {
     return null;
   }
   // such a request is not a visit: the census of the sea does not count it, the immune system does
-  const hostile = (path) => HOSTILE.test(String(path || ''));
+  const hostile = (path) => { const p = String(path || ''); return HOSTILE.test(p) && (PROBE_START.test(p) || /\/\.(?!well-known(\/|$))[^/]/.test(p) || p.indexOf('/', 1) < 0); };
   // a path the sea does not have: when it is one nobody asks for in good faith, the address collects a strike
   // (only programs collect strikes: a web page can make a visitor's browser ask for /.env, and an assistant can be
   //  talked into it — neither may cost the people behind that address their way into the sea)

@@ -1193,7 +1193,7 @@ export async function handle(req, db, cfg = {}) {
   // the country a caller stands in: from the node's own table when it has one (a node that stands alone), else from the platform in front of it
   const geo = cfg.geoOf ? { cc: cfg.geoOf(ip) || undefined } : { cc: (req.headers.get('x-vercel-ip-country') || '').slice(0, 2).toUpperCase() || undefined, lat: parseFloat(req.headers.get('x-vercel-ip-latitude')), lon: parseFloat(req.headers.get('x-vercel-ip-longitude')) };
   // a probe for files that hold secrets (/.env, wp-login …) is not a visit: the immune system counts it, the census does not
-  const counted = path !== '/live.json' && path !== '/badge.svg' && !path.startsWith('/check') && !(who.kind === 'browser' && (path === '/stats' || path === '/flow')) && !immune.hostile(path);
+  const counted = path !== '/live.json' && path !== '/badge.svg' && !path.startsWith('/check') && !(who.kind === 'browser' && (path === '/stats' || path === '/flow')) && !immune.hostile(door);
   // an assistant reading for a person is counted on every door, with its own client string and the site that sent it
   if (counted || who.kind === 'assistant') seen({ ...who, path: door, geo, ...(who.kind === 'assistant' ? { ua: req.headers.get('user-agent'), ref: req.headers.get('referer'), method: req.method } : {}) });
   // a node that stands alone keeps its own shelf of ready answers (the work a CDN did for it elsewhere); every caller is counted first

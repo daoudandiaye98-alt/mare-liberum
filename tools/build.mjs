@@ -228,7 +228,9 @@ const LAKES = [
   { name: 'apis-guru', pull: apisGuru },
   // lakes that follow the others (twins): they leave out what the sea already holds under another name
   { name: 'npm-mcp', pull: npmMcp, twins: true },
-  { name: '402-index', pull: index402, twins: true },
+  // 402index.io (paid endpoints over L402 and MPP) is read and understood below, but not drawn yet: the directory names no
+  // licence for its data and sells its full export. It joins when its terms are clear:
+  // { name: '402-index', pull: index402, twins: true },
 ];
 
 mkdirSync('data', { recursive: true });

@@ -61,6 +61,9 @@ await proof('five probes for files that hold secrets rest an address for an hour
   // paths that are simply not there are no probes; neither are the sea's own doors
   for (const p of ['/nothing-here', '/brain/how-to-read-a-pdf', '/site/example.com', '/skill.md', '/.well-known/security.txt', '/openapi.yaml', '/works/abc', '/admin', '/api/v1/status', '/config.json', '/r/https://example.com/a']) assert.equal(im.strike('198.51.100.21', p), false, p);
   // probes spread over a long time do not add up
+  for (const p of ['/.vscode/sftp.json', '/.npmrc', '/app/.env.production', '/database.sql', '/storage/logs/laravel.log', '/docker-compose.yml', '/secrets.json', '/actuator/heapdump', '/dump.sql', '/backup.zip', '/api/.env', '/.svn/wc.db', '/id_rsa.pub']) assert.equal(im.strike('198.51.100.23', p, false), true, p);
+  // the census does not count such a request as a visit; a door of the sea that carries free text is still counted
+  for (const [p, yes] of [['/.env', true], ['/api/.env', true], ['/wp-login.php', true], ['/phpinfo.php', true], ['/brain/fix-wp-login.php', false], ['/site/example.com', false], ['/r/…', false], ['/.well-known/agent-card.json', false], ['/check/index.php', false], ['/', false]]) assert.equal(im.hostile(p), yes, p);
   for (let i = 0; i < 12; i++) { im.strike('198.51.100.22', '/.env'); now.add(11 * 60_000); }
   assert.equal(im.meet({ ip: '198.51.100.22', path: '/' }), null);
   assert.equal(im.strike('127.0.0.1', '/.env'), false);
