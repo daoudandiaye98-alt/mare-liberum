@@ -319,7 +319,7 @@ export function normNpm(o, repo) {
     id: `urn:air:npmjs.com:package:${scope ? seg(scope) + ':' : ''}${seg(nm)}`, publisher: 'npmjs.com', display_name: clean(name, 120), type: 'application/mcp-server+json', kind: 'mcp',
     url: `https://www.npmjs.com/package/${name}`, description: clean(p.description, 600),
     tags: [...new Set(['mcp', 'npm', 'local', ...words.filter((k) => k.length <= 30)])].slice(0, 10), capabilities: [], queries: [], version: clean(p.version, 40), endpoints, pay: null,
-    source: 'npm-mcp', source_ref: name, attested_by: 'npm-listing', quality: Math.min(10, Math.round(Math.log10(1 + monthly) * 10) / 10), updated_at: typeof p.date === 'string' ? p.date : null,
+    source: 'npm-mcp', source_ref: name, attested_by: 'npm-listing', quality: Math.min(10, Math.round(Math.log10(1 + monthly) * 10) / 10), updated_at: typeof p.date === 'string' ? clean(p.date, 40) : null,
   };
 }
 // Paid resource listed by 402 Index, the open directory of endpoints that answer 402: Lightning (L402), MPP and x402. The
@@ -352,7 +352,7 @@ export function normOpenApi(name, v, spec) {
     description: clean(String(i.description || '').replace(/<[^>]{0,300}>|!\[[^\]]*\]\([^)]*\)|[#*`>|]/g, ' '), 600),
     tags: ['openapi', 'api', ...strs(i['x-apisguru-categories'], 6, 30).map((c) => c.toLowerCase().replace(/_/g, ' '))], capabilities: [], queries: [], version: clean(i.version, 40),
     endpoints: [{ transport: 'openapi', url: spec.slice(0, 500) }], pay: null,
-    source: 'apis-guru', source_ref: name.slice(0, 200), attested_by: 'apis-guru-listing', quality: 0, updated_at: typeof v.updated === 'string' ? v.updated : null,
+    source: 'apis-guru', source_ref: clean(name, 200), attested_by: 'apis-guru-listing', quality: 0, updated_at: typeof v.updated === 'string' ? clean(v.updated, 40) : null,
   };
 }
 
