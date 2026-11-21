@@ -117,7 +117,7 @@ await proof('the language of the task picks the edition (Wikipedia, news, town n
   assert.equal(readTask('Nachrichten Bundestag heute').lang, 'de');
   assert.equal(readTask('noticias economía hoy').lang, 'es');
   assert.ok(first('noticias economía hoy').to.includes('setlang=es&cc=ES&mkt=es-ES'));
-  assert.ok(first('günstige Hotels in Rom').to.includes(encodeURIComponent('"name:de"="Rom"')));
+  assert.ok(first('günstige Hotels in Rom').to.includes(encodeURIComponent('["name:de"="Rom"]')));
   assert.ok(plan('Was ist Photosynthese').doors.find((d) => d.id === 'wikipedia').to.startsWith('https://de.wikipedia.org/'));
 });
 await proof('a door that needs a value the task lacks is listed last, with its template', () => {

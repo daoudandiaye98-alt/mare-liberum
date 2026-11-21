@@ -10,7 +10,7 @@ import { BANGS } from './bangs-data.mjs';
 import { langInfo } from './lexicon.mjs';
 import { robotsGroups, robotsAllows } from './check.mjs';
 
-export const ROUTE = { halfLifeDays: 30, perHour: 240, doors: 8, tail: 3, checkMs: 9000, brands: 30000, sure: 5000 };
+export const ROUTE = { halfLifeDays: 30, perHour: 240, doors: 8, tail: 3, checkMs: 9000, slowMs: 20000, brands: 30000, sure: 5000 };
 const DAYMS = 864e5;
 const fnv = (s) => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(36); };
 const hostOf = (u) => { try { return new URL(u.replace(/\{[a-z0-9]+\}/g, 'x')).hostname.toLowerCase().replace(/^www\./, ''); } catch { return ''; } };
@@ -253,9 +253,12 @@ function fillOf(d, t, terms, base) {
     if (p.tag && p.town) {
       const [k, val] = p.tag.split('='), town = p.town.replace(/["\\]/g, '');
       const what = !p.cuisine ? `nwr["${k}"="${val}"]` : `nwr["amenity"~"^(restaurant|fast_food|cafe)$"]${/^veg/.test(p.cuisine) ? `["diet:${p.cuisine}"~"yes|only"]` : `["cuisine"~"${p.cuisine}"]`}`;
-      // the town under its own name, its English one, and the one in the language of the task ("Rom", "Lissabon")
+      // the town under its own name, its English one, and the one in the language of the task ("Rom", "Lissabon").
+      // Asked around the town's own point on the map (7 km for a city or town, 1.5 km for a village or a quarter):
+      // that answers in seconds also where a name is a city and a whole state at once ("New York").
       const names = ['name', 'name:en', ...(t.lang && t.lang !== 'en' && /^[a-z]{2}$/.test(t.lang) ? [`name:${t.lang}`] : [])];
-      v = `[out:json][timeout:25];(${names.map((n) => `area["${n}"="${town}"]["boundary"="administrative"];`).join('')})->.a;${what}(area.a);out tags center 40;`; note = `${p.word} in ${town}`;
+      const at = (kinds) => names.map((n) => `node["place"~"^(${kinds})$"]["${n}"="${town}"];`).join('');
+      v = `[out:json][timeout:20];(${at('city|town')})->.c;(${at('village|suburb|quarter|neighbourhood|borough|hamlet')})->.s;(${what}(around.c:7000);${what}(around.s:1500););out tags center 40;`; note = `${p.word} in ${town}`;
     }
   }
   if (v == null || v === '') return { template: url.replace(/&[a-z]+=\{q2\}/, '') };
@@ -456,7 +459,7 @@ export function createRoute(h) {
           } catch {}
         }
         try {
-          const r = await fetch(f.to, { signal: AbortSignal.timeout(ROUTE.checkMs), redirect: 'follow', headers: { 'user-agent': UA, accept: 'application/json, application/xml;q=0.9, text/html;q=0.8, */*;q=0.5' } });
+          const r = await fetch(f.to, { signal: AbortSignal.timeout(d.slow ? ROUTE.slowMs : ROUTE.checkMs), redirect: 'follow', headers: { 'user-agent': UA, accept: 'application/json, application/xml;q=0.9, text/html;q=0.8, */*;q=0.5' } });
           status = r.status; const body = (await r.text()).slice(0, 200000);
           ok = status === 200 && body.length > 80 && (d.kind === 'page' ? /<html/i.test(body) && !/captcha|verify you are human|not a bot/i.test(body.slice(0, 4000)) : !/^\s*<!doctype html|^\s*<html/i.test(body));
         } catch { status = 0; }
