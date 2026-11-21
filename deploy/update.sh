@@ -21,8 +21,14 @@ say() { echo "$(date -u +%FT%TZ) $*" | tee -a "$BOOT/status.txt"; }
 now() { date +%s; }
 tmp=$(mktemp -d); trap 'rm -rf "$tmp"' EXIT
 
+# where main stands, asked once per run
+HEAD_SHA=""; if [ "$SOURCE" != release ] || [ -z "${MARE_RAW_URL:-}" ]; then HEAD_SHA=$(git ls-remote "$GIT" refs/heads/main 2>/dev/null | cut -f1); [[ "$HEAD_SHA" =~ ^[0-9a-f]{40}$ ]] || HEAD_SHA=""; fi
+
 # ---- the rescue line: a file in the repository that is run once whenever its content has changed
-if curl -fsSL -m 30 -o "$tmp/rescue.sh" "$RAW/rescue.sh" 2>/dev/null; then
+# (it is read as the newest commit has it: the address of the branch may hand out a copy that is five minutes old,
+#  and then a build of the new commit starts before the mending that came with it)
+RESCUE="$RAW"; [ -z "${MARE_RAW_URL:-}" ] && [ -n "$HEAD_SHA" ] && RESCUE="https://raw.githubusercontent.com/$REPO/$HEAD_SHA/deploy"
+if curl -fsSL -m 30 -o "$tmp/rescue.sh" "$RESCUE/rescue.sh" 2>/dev/null; then
   sum=$(sha256sum "$tmp/rescue.sh" | cut -d' ' -f1)
   if [ "$(cat "$OPS/rescue.sha" 2>/dev/null)" != "$sum" ]; then
     echo "$sum" > "$OPS/rescue.sha"
@@ -88,7 +94,7 @@ as_builder() { if [ -n "$BUILDER" ] && id "$BUILDER" >/dev/null 2>&1; then runus
 clean=(env -i PATH="$PATH" HOME=/nonexistent UV_THREADPOOL_SIZE="${MARE_BUILD_THREADS:-64}"); for v in ${MARE_KEEP_ENV:-}; do [ -n "${!v:-}" ] && clean+=("$v=${!v}"); done
 fetch_build() {
   local head last tried age since why sha stamp log peak before lost
-  head=$(git ls-remote "$GIT" refs/heads/main 2>/dev/null | cut -f1); [[ "$head" =~ ^[0-9a-f]{40}$ ]] || return 1
+  head="$HEAD_SHA"; [[ "$head" =~ ^[0-9a-f]{40}$ ]] || return 1
   last=$(cat "$OPS/built-sha" 2>/dev/null); tried=$(cat "$OPS/tried-sha" 2>/dev/null)
   age=$(( $(now) - $(cat "$OPS/built-at" 2>/dev/null || echo 0) )); since=$(( $(now) - $(cat "$OPS/tried-at" 2>/dev/null || echo 0) ))
   if [ "$head" != "$last" ] && [ "$head" != "$tried" ]; then why="main moved to ${head:0:7}"
