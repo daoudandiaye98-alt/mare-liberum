@@ -19,6 +19,7 @@ import { durableKv, createMemStore, KEPT } from './node/durable.mjs';
 import { diskKv } from './node/disk.mjs';
 import { createShelf } from './node/shelf.mjs';
 import { loadGeo } from './node/geoip.mjs';
+import { carryIn } from './node/carry.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.argv[2] || process.env.PORT || 8787);
@@ -45,6 +46,9 @@ const store = createMemStore({ url: process.env.MARE_DB_URL, key: process.env.MA
 const disk = process.env.MARE_STATE ? diskKv(join(process.env.MARE_STATE, 'sea.ndjson'), { skip: store ? (k) => KEPT.test(k) : undefined, log }) : null;
 if (disk) await disk.ready;
 const kv = durableKv(disk || memoryKv(), store, { waitUntil, log });
+// what the sea counted on the node before this one (the days' census, everyone ever seen, the sightings of assistants)
+// travels with the build and is added once to what this node counts itself
+let carried = []; if (disk) { try { carried = await carryIn(kv, seed('carry')); } catch (e) { log('mare_carry', e?.message); } }
 // answers marked s-maxage are kept ready, as a CDN would
 const shelf = createShelf();
 
@@ -96,7 +100,7 @@ const server = createServer(async (req, res) => {
 });
 server.on('error', (e) => { log('mare_listen', e?.message); process.exit(1); });
 server.keepAliveTimeout = 65000; server.headersTimeout = 70000; server.requestTimeout = 120000;
-server.listen(port, host, () => console.log(`Mare Liberum on ${base} · MCP ${base}/mcp · ${db.size()} entries in the index · state ${disk ? `on disk (${disk.state().loaded} names read)` : 'in memory'} · long memory ${store ? 'on' : 'off'} · countries ${geoOf ? `by table (${geoOf.rows} rows)` : 'off'}`));
+server.listen(port, host, () => console.log(`Mare Liberum on ${base} · MCP ${base}/mcp · ${db.size()} entries in the index · state ${disk ? `on disk (${disk.state().loaded} names read)` : 'in memory'} · long memory ${store ? 'on' : 'off'} · countries ${geoOf ? `by table (${geoOf.rows} rows)` : 'off'}${carried.length ? ` · carried over: ${carried.map((c) => `${c.id} (${c.days} days, ${c.names} names, ${c.sightings} sightings)`).join(', ')}` : ''}`));
 
 // asked to stop: no new callers, the ones here are answered, what waits is written, the copy on disk is made once more
 async function stop(sig) {

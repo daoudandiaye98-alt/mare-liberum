@@ -13,6 +13,7 @@ import { createHash } from 'node:crypto';
 import { diskKv } from '../node/disk.mjs';
 import { createShelf } from '../node/shelf.mjs';
 import { packGeo, loadGeo } from '../node/geoip.mjs';
+import { carryIn } from '../node/carry.mjs';
 import { hayOf, metaOf } from '../node/mem.mjs';
 import { compare } from './release.mjs';
 import { handle } from '../node/core.mjs';
@@ -176,6 +177,57 @@ await proof('the node uses its own table for the country and does not believe a 
   await sleep(50);
   const day = await kv.get(`census:${new Date().toISOString().slice(0, 10)}`);
   assert.deepEqual(day?.cc, { DE: 1 }, JSON.stringify(day?.cc));
+});
+
+// ------------------------------------------------------------------ what the node before counted
+console.log('what the node before counted');
+await proof('counts of the old node are added once; the book keeps the earliest sight; a second part adds only what is new', async () => {
+  const kv = memoryKv(), today = new Date().toISOString().slice(0, 10), y = new Date(Date.now() - 86400000).toISOString().slice(0, 10), old = '2020-01-01';
+  await kv.set(`census:${today}`, { kinds: { 'ai-crawler': 5 }, names: { 'ai-crawler|Meta': 5 }, p: { 'training /e': 5 }, cc: { US: 5 } });
+  await kv.set('census:names', { 'ai-crawler|Meta': { kind: 'ai-crawler', name: 'Meta', first: `${today}T10:00:00.000Z` } });
+  await kv.set('sightings', [{ id: 'aaaaaaaa01', t: `${today}T11:00:00.000Z`, name: 'Claude', path: '/mcp' }]);
+  const part = { id: 'old-node-1', census: { [today]: { kinds: { 'ai-crawler': 100, search: 7 }, names: { 'ai-crawler|Meta': 90, 'search|Google': 7 }, p: { 'training /e': 100 }, cc: { US: 80, DE: 27 } }, [y]: { kinds: { 'ai-crawler': 50 }, names: { 'ai-crawler|Meta': 50 } }, [old]: { kinds: { x: 1 } }, 'not-a-day': { kinds: { x: 1 } } },
+    use: { [today]: { brief: 3 } }, book: { 'ai-crawler|Meta': { kind: 'ai-crawler', name: 'Meta', first: '2026-11-18T00:00:00.000Z' }, 'search|Google': { kind: 'search', name: 'Google', first: `${today}T09:00:00.000Z`, url: 'https://google.com/bot.html' }, 'wrong|key': { kind: 'a', name: 'b', first: `${today}T09:00:00.000Z` } },
+    sightings: [{ id: 'aaaaaaaa01', t: `${today}T11:00:00.000Z`, name: 'Claude', path: '/mcp' }, { id: 'bbbbbbbb02', t: `${y}T08:00:00.000Z`, name: 'ChatGPT', path: '/', ua: 'ChatGPT-User', junk: { a: 1 } }, { id: 'no', t: 'x' }] };
+  const first = await carryIn(kv, { parts: [part] });
+  assert.deepEqual(first, [{ id: 'old-node-1', days: 2, names: 2, sightings: 1 }]);
+  const day = await kv.get(`census:${today}`);
+  assert.deepEqual(day.kinds, { 'ai-crawler': 105, search: 7 }); assert.deepEqual(day.names, { 'ai-crawler|Meta': 95, 'search|Google': 7 }); assert.deepEqual(day.cc, { US: 85, DE: 27 }); assert.equal(day.p['training /e'], 105);
+  assert.equal((await kv.get(`census:${y}`)).kinds['ai-crawler'], 50); assert.equal(await kv.get(`census:${old}`), null, 'a day the sea no longer keeps is not brought back');
+  const book = await kv.get('census:names'); assert.equal(book['ai-crawler|Meta'].first, '2026-11-18T00:00:00.000Z'); assert.equal(book['search|Google'].url, 'https://google.com/bot.html'); assert.equal(book['wrong|key'], undefined);
+  const s = await kv.get('sightings'); assert.deepEqual(s.map((x) => x.id), ['aaaaaaaa01', 'bbbbbbbb02']); assert.equal(s[1].junk, undefined);
+  assert.deepEqual(await kv.get(`use:${today}`), { brief: 3 });
+  assert.deepEqual(await carryIn(kv, { parts: [part] }), [], 'the same part is not added twice');
+  const second = await carryIn(kv, { parts: [part, { id: 'old-node-2', census: { [today]: { kinds: { 'ai-crawler': 4 } } } }] });
+  assert.deepEqual(second.map((x) => x.id), ['old-node-2']); assert.equal((await kv.get(`census:${today}`)).kinds['ai-crawler'], 109);
+  assert.deepEqual(await carryIn(kv, null), []); assert.deepEqual(await carryIn(kv, { parts: [{ id: '../x' }, 7, {}] }), []);
+});
+await proof('the old node is read from its open pages; read again later, only the difference is written', async () => {
+  const today = new Date().toISOString().slice(0, 10), y = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+  let scale = 1;
+  const oldNode = createServer((q, s) => {
+    const u = new URL(q.url, 'http://x'), day = u.searchParams.get('day'), j = (v) => { s.writeHead(200, { 'content-type': 'application/json' }); s.end(JSON.stringify(v)); };
+    if (u.pathname === '/census' && day) return j(day === today ? { day, kinds: { 'ai-crawler': 100 * scale, search: 6 * scale }, names: [{ kind: 'ai-crawler', name: 'Meta', visits: 100 * scale }, { kind: 'search', name: 'Google', visits: 6 * scale }, { kind: 'browser', name: 'Mozilla/5.0', visits: 9 }], reads: [{ role: 'training', path: '/e', n: 100 * scale }], countries: [{ cc: 'US', n: 106 * scale }] } : day === y ? { day, kinds: { 'ai-crawler': 40 }, names: [{ kind: 'ai-crawler', name: 'Meta', visits: 40 }], reads: [], countries: [] } : { day, kinds: {}, names: [], reads: [], countries: [] });
+    if (u.pathname === '/census') return j({ today: { kinds: {}, top: [], use: { brief: 5 * scale } }, yesterday: { kinds: {}, top: [], use: { works: 2 } }, everSeen: [{ kind: 'search', name: 'Google', first: `${today}T07:30:00.000Z`, url: 'https://google.com/bot.html' }] });
+    if (u.pathname === '/flow/dump') return j({ sightings: [{ id: 'cccccccc01', t: `${today}T08:00:00.000Z`, name: 'Claude', path: '/mcp/app', ua: 'Claude-User' }, ...(scale > 1 ? [{ id: 'dddddddd02', t: `${today}T09:00:00.000Z`, name: 'ChatGPT', path: '/' }] : [])] });
+    s.writeHead(404); s.end();
+  });
+  const p = await freePort(); await new Promise((r) => oldNode.listen(p, '127.0.0.1', r));
+  const work = join(tmp, 'carry'); mkdirSync(work);
+  const read = (name) => new Promise((res) => { const c = spawn(process.execPath, [join(root, 'tools', 'carry.mjs'), `http://127.0.0.1:${p}`, name], { cwd: work, env: { ...process.env, NO_PROXY: '127.0.0.1,localhost', no_proxy: '127.0.0.1,localhost' }, stdio: ['ignore', 'pipe', 'pipe'] }); let out = ''; c.stdout.on('data', (d) => { out += d; }); c.stderr.on('data', (d) => { out += d; }); c.on('exit', (status) => res({ status, out })); });
+  const a = await read('first'); assert.equal(a.status, 0, a.out);
+  let carry = JSON.parse(readFileSync(join(work, 'flow', 'carry.json'), 'utf8')); assert.equal(carry.parts.length, 1);
+  assert.deepEqual(carry.parts[0].census[today].kinds, { 'ai-crawler': 100, search: 6 }); assert.equal(carry.parts[0].census[y].names['ai-crawler|Meta'], 40);
+  assert.deepEqual(Object.keys(carry.parts[0].book).sort(), ['ai-crawler|Meta', 'search|Google']); assert.equal(carry.parts[0].book['ai-crawler|Meta'].first, `${y}T00:00:00.000Z`); assert.equal(carry.parts[0].book['search|Google'].first, `${today}T07:30:00.000Z`);
+  assert.deepEqual(carry.parts[0].use, { [today]: { brief: 5 }, [y]: { works: 2 } }); assert.equal(carry.parts[0].sightings.length, 1);
+  scale = 1.5; const b = await read('second'); assert.equal(b.status, 0, b.out);
+  carry = JSON.parse(readFileSync(join(work, 'flow', 'carry.json'), 'utf8')); assert.equal(carry.parts.length, 2);
+  assert.deepEqual(carry.parts[1].census, { [today]: { kinds: { 'ai-crawler': 50, search: 3 }, names: { 'ai-crawler|Meta': 50, 'search|Google': 3 }, p: { 'training /e': 50 }, cc: { US: 53 } } });
+  assert.deepEqual(carry.parts[1].book, {}); assert.deepEqual(carry.parts[1].use, { [today]: { brief: 2.5 } }); assert.deepEqual(carry.parts[1].sightings.map((x) => x.id), ['dddddddd02']);
+  const kv = memoryKv(); await carryIn(kv, carry);
+  assert.equal((await kv.get(`census:${today}`)).kinds['ai-crawler'], 150, 'both parts together are what the old node counted');
+  assert.equal((await read('second')).status, 1, 'a name is used once');
+  oldNode.close();
 });
 
 // ------------------------------------------------------------------ the release check

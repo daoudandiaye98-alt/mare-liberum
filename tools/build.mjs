@@ -228,7 +228,7 @@ writeFileSync('data/build.json', JSON.stringify({ builtAt: new Date().toISOStrin
   { const k = readdirSync('public').find((f) => /^[0-9a-f]{32}\.txt$/.test(f)); if (k) writeFileSync('data/indexnow.json', JSON.stringify({ key: k.slice(0, -4) })); }
   writeFileSync('data/geo-index.json', JSON.stringify({ at: new Date().toISOString(), total: ids.length, placed, countries: Object.entries(cc).sort((a, b) => b[1] - a[1]).map(([c, n]) => ({ cc: c, n, lat: CENTROID[c][0], lon: CENTROID[c][1] })), note: 'entries of the open index whose publisher uses a country domain, placed at the centre of that country; .com, .io, .ai and other global endings are not placed' })); }
 // the open ledger of the living sea (traces, latest events) travels with the build, so the sea remembers across restarts
-for (const [from, to] of [['flow/traces.json', 'data/flow-traces.json'], ['flow/head.json', 'data/flow-head.json']]) if (existsSync(from)) cpSync(from, to);
+for (const [from, to] of [['flow/traces.json', 'data/flow-traces.json'], ['flow/head.json', 'data/flow-head.json'], ['flow/carry.json', 'data/flow-carry.json']]) if (existsSync(from)) cpSync(from, to);
 // the first pages people and agents read are served by the node
 mkdirSync('data/site', { recursive: true }); for (const f of ['index.html', 'llms.txt', 'robots.txt', 'skill.md', 'heartbeat.md', 'skill.json']) if (existsSync(`site/${f}`)) cpSync(`site/${f}`, `data/site/${f}`);
 // the fonts of the site are served as static files, from our own domain (no third-party font requests)
