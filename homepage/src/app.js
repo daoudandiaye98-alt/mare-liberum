@@ -553,17 +553,23 @@ function frame(now) {
 function start() { if (!raf) { last = performance.now(); raf = requestAnimationFrame(frame); } }
 function stop() { cancelAnimationFrame(raf); raf = 0; }
 
-if (data) apply(data, true);
-fit(); measure();
-// The sea is shown once its first frame is drawn; until then, and whenever WebGL is not there, the CSS sea stands.
+// Which sea the reader gets is decided before the page is laid out for the first time: the root's class changes the
+// style of everything below it, and set afterwards it would have the whole page styled and laid out a second time.
+// The shader's first frame is drawn in the same breath, before the browser paints, so its canvas is never shown empty.
+// Whenever WebGL is not there, the CSS sea stands.
 let noGL = false;
 function wake() { if (noGL || !initGL()) return false; sizeGL(); drawSea(scrollY, QA.time != null ? QA.time : 0, 0); H.classList.remove('nogl'); H.classList.add('gl'); return true; }
 function asCSS() { gl = null; H.classList.remove('gl'); H.classList.add('nogl'); queueLayout(); }
 function dropGL() { noGL = true; letGo(); asCSS(); }
-if (wake()) {
+const seaGL = initGL();
+H.classList.add(seaGL ? 'gl' : 'nogl');
+if (data) apply(data, true);
+fit(); measure();
+if (seaGL) {
+  sizeGL(); drawSea(scrollY, QA.time != null ? QA.time : 0, 0);
   cv.addEventListener('webglcontextlost', (e) => { e.preventDefault(); asCSS(); });
   cv.addEventListener('webglcontextrestored', () => { wake(); });
-} else { H.classList.add('nogl'); measure(); }
+}
 swarm.size(); globe.size(); strands.size();
 start();
 addEventListener('resize', queueLayout);

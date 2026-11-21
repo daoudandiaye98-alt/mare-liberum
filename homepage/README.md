@@ -55,6 +55,8 @@ stage was called `.under` once. The root took its height and its pseudo-elements
 
 `qa/all.sh` needs a node that serves the page (`L=http://localhost:8788/`, a local `node serve.mjs`, or the sea itself),
 `npm install` in this folder, a Chrome (`CHROME=/path`), and for the other engines `npx playwright install webkit firefox`.
+Certificates are always checked. Chrome and WebKit read the authorities of the system; Firefox keeps a list of its own,
+so behind a proxy that ends TLS itself it needs a profile that trusts the proxy (`FIREFOX_PROFILE`, see `qa/_browser.mjs`).
 
 | tool | what it reports |
 |---|---|

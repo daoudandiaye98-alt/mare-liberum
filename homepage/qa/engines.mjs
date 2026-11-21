@@ -1,29 +1,21 @@
 // The page in the other two engines: WebKit (what Safari is built on) and Firefox.
 // For each engine and screen: errors, WebGL, fonts, overflow, the wordmark's two lines, the header and dock, a tool,
 // and screenshots to look at. Numbers and files, no ticks.
-import { webkit, firefox, chromium } from 'playwright-core';
+import { open } from './_browser.mjs';
 import { mkdirSync } from 'node:fs';
 const a = Object.fromEntries(process.argv.slice(2).map((s) => { const [k, ...v] = s.replace(/^--/, '').split('='); return [k, v.join('=') || '1']; }));
 const out = a.out || 'qa/eng'; mkdirSync(out, { recursive: true });
 const url = a.url, live = /^https:/.test(url);
-const engines = { webkit, firefox, chromium };
 const want = (a.engines || 'webkit,firefox').split(',');
 const screens = (a.vp || '390x844,1440x900').split(',').map((s) => s.split('x').map(Number));
 const stops = (a.stops || '0,0.035,0.09,0.2,0.34,0.5,0.66,0.8,0.93,1').split(',').map(Number);
 const report = [];
 for (const name of want) {
-  let b;
-  try {
-    b = await engines[name].launch({
-      proxy: live && process.env.HTTPS_PROXY ? { server: process.env.HTTPS_PROXY } : undefined,
-      ...(name === 'firefox' ? { firefoxUserPrefs: { 'webgl.force-enabled': true, 'webgl.disabled': false, 'layers.acceleration.force-enabled': true, 'gfx.webrender.software': true } } : {}),
-      ...(name === 'chromium' ? { executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] } : {}),
-    });
-  } catch (e) { report.push({ engine: name, launch: 'FAILED: ' + String(e.message).split('\n').slice(0, 3).join(' | ') }); continue; }
   for (const [w, h] of screens) {
-    const mobile = w < 800;
-    const ctx = await b.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: mobile ? 2 : 1, ...(name !== 'firefox' && mobile ? { isMobile: true, hasTouch: true } : mobile ? { hasTouch: true } : {}), reducedMotion: a.reduce ? 'reduce' : 'no-preference', ignoreHTTPSErrors: live });
-    const p = await ctx.newPage(); const errs = [];
+    const mobile = w < 800; let win;
+    try { win = await open(name, url, { viewport: { width: w, height: h }, deviceScaleFactor: mobile ? 2 : 1, ...(name !== 'firefox' && mobile ? { isMobile: true, hasTouch: true } : mobile ? { hasTouch: true } : {}), reducedMotion: a.reduce ? 'reduce' : 'no-preference' }); }
+    catch (e) { report.push({ engine: name, vp: `${w}x${h}`, launch: 'FAILED: ' + String(e.message).split('\n').slice(0, 3).join(' | ') }); continue; }
+    const { ctx, page: p, close } = win; const errs = [];
     p.on('pageerror', (e) => errs.push('pageerror: ' + String(e.message).slice(0, 200)));
     p.on('console', (m) => { if (m.type() === 'error') errs.push('console: ' + m.text().slice(0, 200)); });
     await ctx.addInitScript(() => { window.__ML = { noGovern: true, soft: true, strict: true, q: 0.5 }; });
@@ -53,8 +45,7 @@ for (const name of want) {
       r.swAfter = await p.evaluate(() => document.documentElement.scrollWidth);
     } catch (e) { r.failed = String(e.message).split('\n')[0].slice(0, 220); }
     r.errors = errs.length ? [...new Set(errs)].slice(0, 8) : 'none';
-    report.push(r); await ctx.close();
+    report.push(r); await close();
   }
-  await b.close();
 }
 console.log(JSON.stringify(report, null, 1));
