@@ -19,32 +19,19 @@
 #   log), sets the watch (a node that hangs is started again) and hands the updater its newest script — which can
 #   carry the sea on when only the code changed ([keep-sea]) and installs only what the repository gave it. The
 #   updater is then started again in place and builds the commit that brought this.
+# 2026-11-21 (6) · the updater asked git what the newest commit says after the build had been given the tree, and git
+#   (rightly) does not answer root in a tree that belongs to someone else: [keep-sea] and [force-sea] were never seen.
+#   The commit's words are read before the tree changes hands now; the updater gets that script here and starts again.
 BOOT=/srv/mare/boot; OPS=/var/lib/mare-ops
 say() { echo "$(date -u +%FT%TZ) $*" | tee -a "$BOOT/status.txt"; }
 head=$(git ls-remote https://github.com/daoudandiaye98-alt/mare-liberum refs/heads/main 2>/dev/null | cut -f1)
 [[ "$head" =~ ^[0-9a-f]{40}$ ]] || { say "rescue: main could not be asked; nothing was done"; exit 0; }
 RAW="https://raw.githubusercontent.com/daoudandiaye98-alt/mare-liberum/$head/deploy"
 t=$(mktemp -d)
-get() { curl -fsSL --retry 3 -m 60 -o "$t/$1" "$RAW/$1"; }
-
 # what the server showed about its own making is no longer shown
-rm -f "$BOOT/writer.sha256" "$BOOT/bootstrap.log" "$BOOT/bootstrap-first.log" "$BOOT/caddy-check.txt" "$BOOT/forward-check.txt"
-
-# the armour (what it prints stays on the server; what is in force is said in the status)
-if get harden.sh && bash -n "$t/harden.sh"; then
-  sha256sum "$t/harden.sh" | cut -d' ' -f1 > "$OPS/harden.sha"
-  bash "$t/harden.sh" >> "$OPS/harden.log" 2>&1 || say "rescue: the armour ended with an error (see the server's own log)"
-else say "rescue: the armour could not be fetched"; fi
-
-# the watch
-if get watch.sh && bash -n "$t/watch.sh" && get mare-watch.service && get mare-watch.timer; then
-  install -m 755 "$t/watch.sh" /usr/local/bin/mare-watch
-  install -m 644 "$t/mare-watch.service" /etc/systemd/system/mare-watch.service; install -m 644 "$t/mare-watch.timer" /etc/systemd/system/mare-watch.timer
-  systemctl daemon-reload; systemctl enable --now mare-watch.timer >/dev/null 2>&1 && say "rescue: the watch looks at the node every half minute"
-else say "rescue: the watch could not be fetched"; fi
-
-# the updater's newest script comes last: the updater is started again in place and goes on with the newest commit
-if get update.sh && bash -n "$t/update.sh" && grep -q 'keep-sea' "$t/update.sh" && grep -q 'unchanged()' "$t/update.sh" && ! cmp -s "$t/update.sh" /usr/local/bin/mare-update; then
+rm -f "$BOOT/writer.sha256" "$BOOT/bootstrap.log" "$BOOT/bootstrap-first.log" "$BOOT/forward-check.txt"
+# the updater's newest script: the updater is started again in place and goes on with the newest commit
+if curl -fsSL --retry 3 -m 60 -o "$t/update.sh" "$RAW/update.sh" && bash -n "$t/update.sh" && grep -q 'keep-sea' "$t/update.sh" && grep -q 'msg=\$(git' "$t/update.sh" && ! cmp -s "$t/update.sh" /usr/local/bin/mare-update; then
   install -m 755 "$t/update.sh" /usr/local/bin/mare-update && say "rescue: the updater has its newest script and starts again"
   rm -rf "$t"
   systemctl restart --no-block mare-update.service

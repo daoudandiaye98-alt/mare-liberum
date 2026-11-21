@@ -100,7 +100,7 @@ unchanged() {
   return 0
 }
 fetch_build() {
-  local head last tried age since why sha stamp log peak before lost
+  local head last tried age since why sha msg stamp log peak before lost
   head="$HEAD_SHA"; [[ "$head" =~ ^[0-9a-f]{40}$ ]] || return 1
   last=$(cat "$OPS/built-sha" 2>/dev/null); tried=$(cat "$OPS/tried-sha" 2>/dev/null)
   age=$(( $(now) - $(cat "$OPS/built-at" 2>/dev/null || echo 0) )); since=$(( $(now) - $(cat "$OPS/tried-at" 2>/dev/null || echo 0) ))
@@ -120,6 +120,9 @@ fetch_build() {
   rm -rf "$dir"
   if ! git clone -q --depth 1 --branch main "$GIT" "$dir" > "$log" 2>&1; then say "build: the code could not be fetched"; rm -rf "$dir"; return 1; fi
   sha=$(git -C "$dir" rev-parse HEAD 2>/dev/null)
+  # what the commit says is read now, while the tree is still as it was fetched: once the build owns the tree, git
+  # (rightly) no longer answers root there
+  msg=$(git -C "$dir" log -1 --format=%B 2>/dev/null)
   # what the builds before learned about the stores' home pages travels on, so no store is read twice
   if [ -f "$OPS/store-pages.json" ] && [ "$(stat -c %s "$OPS/store-pages.json")" -gt "$(stat -c %s "$dir/store-pages.json" 2>/dev/null || echo 0)" ]; then cp "$OPS/store-pages.json" "$dir/store-pages.json"; fi
   # what root will install and what the node will run is noted as the repository gave it, before the build (which
@@ -133,7 +136,7 @@ fetch_build() {
   # minute instead of a quarter of an hour: a mend reaches the sea at once, and the lakes are not asked again.
   # The sea itself is drawn fresh once a day as before; how old it is stays written down.
   before=$(readlink -f "$CUR" 2>/dev/null || true)
-  if [[ "$why" != "the sea is"* ]] && [ -n "$before" ] && whole "$before" && [ -f "$before/data/sea.tsv.gz" ] && git -C "$dir" log -1 --format=%B 2>/dev/null | grep -q '\[keep-sea\]'; then
+  if [[ "$why" != "the sea is"* ]] && [ -n "$before" ] && whole "$before" && [ -f "$before/data/sea.tsv.gz" ] && grep -q '\[keep-sea\]' <<< "$msg"; then
     # (what the code itself carries — the pages read first, the ledger's memory, fonts, faces, the open source — is
     #  laid out again from the new code, the way the build does it: tools/lay.mjs)
     if [ ! -e "$dir/data" ] && [ -f "$dir/tools/lay.mjs" ] && cp -a "$before/data" "$dir/data" && { [ -z "$BUILDER" ] || ! id "$BUILDER" >/dev/null 2>&1 || chown -R "$BUILDER" "$dir/data"; } \
@@ -170,7 +173,7 @@ fetch_build() {
   [ -f "$dir/store-pages.json" ] && cp "$dir/store-pages.json" "$OPS/store-pages.json"
   # nothing large may be lost against the build that runs now
   before=$(readlink -f "$CUR" 2>/dev/null || true)
-  if [ -n "$before" ] && [ -f "$before/data/build.json" ] && ! git -C "$dir" log -1 --format=%B 2>/dev/null | grep -q '\[force-sea\]'; then
+  if [ -n "$before" ] && [ -f "$before/data/build.json" ] && ! grep -q '\[force-sea\]' <<< "$msg"; then
     local seen; seen=$(cd "$dir" && as_builder "${clean[@]}" node -e 'import("./tools/release.mjs").then(async ({ compare, tired }) => { const fs = await import("node:fs"); const j = (f) => JSON.parse(fs.readFileSync(f, "utf8")); const now = j("data/build.json"), was = j(process.argv[1]); console.log(compare(now, was).join("; ")); console.log((tired ? tired(now, was) : []).join("; ")); })' "$before/data/build.json" 2>> "$log")
     lost=$(sed -n 1p <<< "$seen")
     if [ -n "$lost" ]; then say "build: $id is held back, it lost part of the sea ($lost); the build before runs on"; rm -rf "$dir"; return 1; fi
