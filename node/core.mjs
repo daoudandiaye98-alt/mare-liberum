@@ -832,6 +832,15 @@ export function classify(ua) {
   for (const [re, kind, name] of WHO) if (re.test(u)) return { kind, name: name || (kind === 'browser' ? 'Mozilla/5.0' : botName(u)), url };
   return { kind: u ? 'unknown' : 'anonymous', name: botName(u), url };
 }
+// A browser says more than its name: it marks the requests it makes itself (Sec-Fetch-…), and a page it opens also
+// carries Upgrade-Insecure-Requests. A caller that wears a browser's name without any of these marks is a script and is
+// counted as one. On the sea's own server nothing stands in front of the node that would turn such callers away, and
+// the home page says how many of its visits came from people.
+const BROWSER_MARKS = ['sec-fetch-mode', 'sec-fetch-site', 'sec-fetch-dest', 'upgrade-insecure-requests'];
+export function callerOf(headers) {
+  const who = classify(headers.get('user-agent'));
+  return who.kind === 'browser' && !BROWSER_MARKS.some((h) => headers.get(h)) ? { ...who, kind: 'tool', name: 'Scripts named like browsers' } : who;
+}
 
 // ------------------------------------------------------------------ the agent-readable web: one page per entry
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -1093,7 +1102,7 @@ export async function handle(req, db, cfg = {}) {
   const body = async () => { try { return await req.json(); } catch { return {}; } };
   const sea = seaOf(db, cfg, base), ctx = { ip };
   const seen = (c) => { try { const p = sea.seen(c).catch(() => {}); cfg.waitUntil?.(p); } catch {} };
-  const who = classify(req.headers.get('user-agent'));
+  const who = callerOf(req.headers);
   // crawlers and search engines read; they do not write calls into the flow
   ctx.readOnly = ['ai-crawler', 'crawler', 'search', 'search-ai'].includes(who.kind);
   ctx.who = who.name; ctx.whoKind = who.kind;
