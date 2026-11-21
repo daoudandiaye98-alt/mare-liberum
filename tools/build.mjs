@@ -227,6 +227,11 @@ writeFileSync('data/build.json', JSON.stringify({ builtAt: new Date().toISOStrin
 { const cc = {}; let placed = 0; for (const r of all.values()) { const c = tldCountry(r.publisher || ''); if (c) { cc[c] = (cc[c] || 0) + 1; placed++; } }
   { const k = readdirSync('public').find((f) => /^[0-9a-f]{32}\.txt$/.test(f)); if (k) writeFileSync('data/indexnow.json', JSON.stringify({ key: k.slice(0, -4) })); }
   writeFileSync('data/geo-index.json', JSON.stringify({ at: new Date().toISOString(), total: ids.length, placed, countries: Object.entries(cc).sort((a, b) => b[1] - a[1]).map(([c, n]) => ({ cc: c, n, lat: CENTROID[c][0], lon: CENTROID[c][1] })), note: 'entries of the open index whose publisher uses a country domain, placed at the centre of that country; .com, .io, .ai and other global endings are not placed' })); }
+// The sea is written. What follows are the large lists of the Atlas (a million ranked domains, the block lists, the
+// table of addresses): they need room of their own, and a build that keeps the whole sea in memory beside them peaks
+// half a gigabyte higher, on a machine it shares with the node that answers. So the sea is let go of here.
+const built = ids.length;
+all.clear(); lakeByKey.clear(); lakeByHost.clear(); hosts.clear(); ids.length = 0; settled.length = 0;
 // the open ledger of the living sea (traces, latest events) travels with the build, so the sea remembers across restarts
 for (const [from, to] of [['flow/traces.json', 'data/flow-traces.json'], ['flow/head.json', 'data/flow-head.json'], ['flow/carry.json', 'data/flow-carry.json']]) if (existsSync(from)) cpSync(from, to);
 // the first pages people and agents read are served by the node
@@ -299,4 +304,4 @@ if (!process.env.VERCEL) try {
   else console.log('countries by address: not read; visitors are counted without a country');
 } catch (e) { console.log(`countries by address: not read (${e.message})`); }
 writeFileSync('public/build.json', readFileSync('data/build.json'));
-console.log(`sea built: ${ids.length} entries`);
+console.log(`sea built: ${built} entries`);
