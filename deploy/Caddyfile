@@ -20,6 +20,8 @@ http://127.0.0.1:8788 {
 
 (sea) {
 	encode zstd gzip
+	# a caller that came by https once keeps coming by https (the node before said the same)
+	header Strict-Transport-Security "max-age=63072000"
 	# files that travel beside the node (fonts, icons, the keys of the search engines) are served as they are
 	root * /srv/mare/current/public
 	@file {

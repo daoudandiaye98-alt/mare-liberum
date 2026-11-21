@@ -114,8 +114,10 @@ fetch_build() {
   # the build runs beside the node that answers, at a lower priority; its memory is watched and written down
   # (when memory runs short, the build is the one that gives way, never the node)
   local run=(nice -n 10); command -v choom >/dev/null 2>&1 && run+=(choom -n 800 --); [ -n "$BUILDER" ] && id "$BUILDER" >/dev/null 2>&1 && run+=(runuser -u "$BUILDER" --)
-  # the build may use half of the machine's memory, at most 3 GB
-  local heap; heap=$(awk '/MemTotal/ {h = int($2 / 2048); if (h > 3072) h = 3072; if (h < 1024) h = 1024; print h}' /proc/meminfo 2>/dev/null); heap="${MARE_BUILD_HEAP_MB:-${heap:-2048}}"
+  # the build may use half of the machine's memory less what a program needs beside its heap (at most 3 GB): the node
+  # that answers keeps its place in memory, and the two together fit without swapping
+  # (measured on 4 GB: with a heap of 1909 MB the build peaked at 2289 MB beside a node of 1109 MB)
+  local heap; heap=$(awk '/MemTotal/ {h = int($2 / 2048) - 450; if (h > 3072) h = 3072; if (h < 1024) h = 1024; print h}' /proc/meminfo 2>/dev/null); heap="${MARE_BUILD_HEAP_MB:-${heap:-2048}}"
   run+=("${clean[@]}" NODE_OPTIONS="--max-old-space-size=$heap ${MARE_NODE_OPTIONS:-}" node tools/build.mjs)
   ( cd "$dir" && exec "${run[@]}" >> "$log" 2>&1 ) &
   local pid=$! top=0 rss beat=0
