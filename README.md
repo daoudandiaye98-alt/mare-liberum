@@ -53,7 +53,7 @@ Every verb is also an MCP tool at `/mcp`, an A2A skill at `/a2a` (`message/send`
 | x402 Bazaar (CDP discovery) | paid HTTP resources with price, network and usage |
 | PayAI facilitator discovery | paid HTTP resources |
 | 402 Index (402index.io) | paid endpoints the two lakes above do not bring: Lightning (L402), MPP, and x402 sellers who registered themselves; the healthy ones, at most 50 per host, with the directory's list price |
-| Apify Store | Actors (ready-made tools run over the Apify API) that somebody besides the author used in the last 30 days, with the store's list price |
+| Apify Store | Actors (ready-made tools, run through Apify's MCP server or over the Apify API) that somebody besides the author used in the last 30 days, with the store's list price |
 | npm | packages whose authors call them MCP servers, with 500 downloads a month or more; a package the official registry lists stays with that lake |
 | APIs.guru | the open directory of OpenAPI descriptions (CC0 1.0), one entry per API |
 | First-hand prices | sellers that publish `/.well-known/x402`: every listed resource is asked once, its own 402 answer states the price. First-hand prices replace the lake listing; listings a seller no longer publishes retire |

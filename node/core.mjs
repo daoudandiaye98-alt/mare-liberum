@@ -285,11 +285,11 @@ export function normHfSpace(s) {
     source: 'hf-spaces', source_ref: s.id, attested_by: 'hf-hub-listing', quality: Math.min(10, Math.round(Math.log10(1 + likes) * 20) / 10), updated_at: s.createdAt || null,
   };
 }
-// Actor in Apify Store (public store list, no token): a ready-made tool an agent runs over the Apify API. The sea carries
-// the ones somebody besides the author used in the last 30 days.
+// Actor in Apify Store (public store list, no token): a ready-made tool an agent runs through Apify's MCP server or over
+// the Apify API. The sea carries the ones somebody besides the author used in the last 30 days.
 export function normApify(a) {
   const user = a?.username, name = a?.name, used = Number(a?.stats?.totalUsers30Days || 0);
-  if (!a?.id || !/^[\w.-]{1,80}$/.test(user || '') || !/^[\w.-]{1,80}$/.test(name || '') || used < 2) return null;
+  if (!a?.id || !/^[a-z0-9][\w.-]{0,79}$/i.test(user || '') || !/^[a-z0-9][\w.-]{0,79}$/i.test(name || '') || used < 2) return null;
   const p = a.currentPricingInfo || {}, events = Object.values(p.pricingPerEvent?.actorChargeEvents || {}), first = events.find((e) => e?.isPrimaryEvent) || events[0];
   const model = { PAY_PER_EVENT: 'per event', PRICE_PER_DATASET_ITEM: 'per result', FLAT_PRICE_PER_MONTH: 'per month' }[p.pricingModel];
   const price = Number(p.pricePerUnitUsd ?? first?.eventPriceUsd ?? first?.eventTieredPricingUsd?.FREE?.tieredEventPriceUsd), usd = Number.isFinite(price) && price >= 0 ? price : undefined;
@@ -297,7 +297,8 @@ export function normApify(a) {
   return {
     id: `urn:air:apify.com:actor:${seg(user)}:${seg(name)}`, publisher: 'apify.com', display_name: clean(a.title, 120) || name, type: 'application/vnd.apify.actor+json', kind: 'api', url: page,
     description: clean(a.description, 600), tags: ['apify', 'actor', ...strs(a.categories, 6, 30).map((c) => c.toLowerCase().replace(/_/g, ' '))], capabilities: [], queries: [], version: null,
-    endpoints: [{ transport: 'apify-api', url: `https://api.apify.com/v2/acts/${user}~${name}/run-sync-get-dataset-items`, method: 'POST' }],
+    // two doors to one Actor: as a tool of Apify's own MCP server (named user--actor there), and over the Apify API
+    endpoints: [{ transport: 'streamable-http', url: `https://mcp.apify.com/?tools=${user}/${name}` }, { transport: 'apify-api', url: `https://api.apify.com/v2/acts/${user}~${name}/run-sync-get-dataset-items`, method: 'POST' }],
     // the price is the store's list price for the first paid step; an Apify account is needed either way, FREE Actors cost platform time only
     pay: model ? { protocol: 'apify', model, priceUsd: model === 'per month' ? undefined : usd, monthlyUsd: model === 'per month' ? usd : undefined, listed: true, agentic: a.isWhiteListedForAgenticPayments === true || undefined } : null,
     source: 'apify-store', source_ref: `${user}/${name}`, attested_by: 'apify-store-listing', quality: Math.min(10, Math.round(Math.log10(1 + used) * 20) / 10), updated_at: null,
