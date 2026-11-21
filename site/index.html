@@ -763,7 +763,9 @@ footer li a:hover{color:var(--foam);text-decoration:underline}
 // Pure functions from live.json to HTML strings.
 // Everything that reaches innerHTML passes esc(); numbers pass fmt().
 const R = (() => {
-  const fmt = (n) => (n == null || isNaN(n) ? '–' : Number(n).toLocaleString('en-US'));
+  // one formatter for every number on the page (toLocaleString builds a new one on each call)
+  let nf = null; try { nf = new Intl.NumberFormat('en-US'); } catch {}
+  const fmt = (n) => (n == null || isNaN(n) ? '–' : nf ? nf.format(Number(n)) : Number(n).toLocaleString('en-US'));
   const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
   const safeUrl = (u) => (/^https?:\/\//i.test(String(u || '')) || /^\/(?!\/)/.test(String(u || '')) ? esc(u) : '#');
 
@@ -1100,27 +1102,41 @@ const ridgeAt = (x) => G.bed - (38 * Math.sin(x * 0.0045 + 1.3) + 22 * Math.sin(
 function depthAt(y) { const d = G.depth; if (y <= d[0][0]) return 0; for (let i = 1; i < d.length; i++) if (y <= d[i][0]) return d[i - 1][1] + (d[i][1] - d[i - 1][1]) * (y - d[i - 1][0]) / Math.max(1, d[i][0] - d[i - 1][0]); return d[d.length - 1][1]; }
 function yAt(m) { const d = G.depth; for (let i = 1; i < d.length; i++) if (m <= d[i][1]) return d[i - 1][0] + (d[i][0] - d[i - 1][0]) * (m - d[i - 1][1]) / Math.max(1, d[i][1] - d[i - 1][1]); return d[d.length - 1][0]; }
 
+const stage = $('#top'), say = $('.say'), hdr = $('.hdr');
 let w2s = null, fontsReady = false;
 function fit() {
   // the lockup: LIBERUM is narrowed until it is exactly as wide as MARE, then both fill the column
   const mark = $('.mark'), l1 = $('.ml-a .l1'), l2 = $('.ml-a .l2'), pin = $('.pin');
   if (mark && l1 && l2) {
     if (w2s == null && fontsReady) {
-      const w1 = l1.getBoundingClientRect().width; let lo = 60, hi = 150;
-      for (let i = 0; i < 10; i++) { const mid = (lo + hi) / 2; H.style.setProperty('--w2s', mid + '%'); if (l2.getBoundingClientRect().width > w1) hi = mid; else lo = mid; }
-      w2s = ((lo + hi) / 2).toFixed(2); H.style.setProperty('--w2s', w2s + '%');
+      // The width of a line is linear in the face's width axis on either side of 100 %: two measurements give the line,
+      // a few more steps catch a face that bends it. Everything is set on the name itself, so the page is not laid out
+      // again for every step.
+      const w1 = l1.getBoundingClientRect().width, set = (v) => mark.style.setProperty('--w2s', v.toFixed(2) + '%'), wid = () => l2.getBoundingClientRect().width;
+      let x0 = 100; set(x0); let y0 = wid(), x1 = y0 > w1 ? 70 : 140; set(x1); let y1 = wid(), s = 100;
+      if (y1 !== y0) {
+        // the secant through the last two measurements; the nearest one wins where the line can come no closer
+        // (a browser that sets every letter on a whole pixel cannot hit every width)
+        let best = Math.abs(y0 - w1) < Math.abs(y1 - w1) ? [x0, Math.abs(y0 - w1)] : [x1, Math.abs(y1 - w1)];
+        for (let i = 0; i < 6 && y1 !== y0 && best[1] > 0.2; i++) {
+          const x = clamp(x1 + (w1 - y1) * (x1 - x0) / (y1 - y0), 50, 150); set(x); const y = wid(), e = Math.abs(y - w1);
+          if (e < best[1]) best = [x, e];
+          x0 = x1; y0 = y1; x1 = x; y1 = y;
+        }
+        s = best[0];
+      }
+      set(s); w2s = s.toFixed(2);
       // a face that cannot be narrowed (the fallback, when the web font does not arrive) keeps LIBERUM too long: then it is set smaller instead
-      const w2 = l2.getBoundingClientRect().width; if (w2 > w1 * 1.01) H.style.setProperty('--l2k', (w1 / w2).toFixed(4));
+      const w2 = wid(); if (w2 > w1 * 1.01) mark.style.setProperty('--l2k', (w1 / w2).toFixed(4));
     }
     const fs = parseFloat(getComputedStyle(mark).fontSize) || 100, em = l1.getBoundingClientRect().width / fs;
-    if (em > 0) { const to = clamp(Math.min(pin.clientWidth / em, Math.min(innerHeight, 1100) * 0.21), 40, 400); if (Math.abs(to - fs) > 0.4) H.style.setProperty('--fs', to.toFixed(2) + 'px'); }
+    if (em > 0) { const to = clamp(Math.min(pin.clientWidth / em, Math.min(innerHeight, 1100) * 0.21), 40, 400); if (Math.abs(to - fs) > 0.4) (stage || H).style.setProperty('--fs', to.toFixed(2) + 'px'); }
   }
   // the ratio fills its line, whatever the number is today
   const big = $('#big');
   if (big) { const f = parseFloat(getComputedStyle(big).fontSize), w = big.firstElementChild.getBoundingClientRect().width; if (w > 0) { const to = Math.min(f * big.clientWidth / w, Math.min(innerHeight, 1100) * 0.42, 470); if (Math.abs(to - f) > 0.6) big.style.setProperty('--bigfs', to.toFixed(1) + 'px'); } }
 }
 
-const stage = $('#top'), say = $('.say'), hdr = $('.hdr');
 let veilC = NaN;
 // The opening lines dissolve as they reach the header, so they never run under the mark and the menu button.
 function veil(y) {
