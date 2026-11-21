@@ -12,11 +12,14 @@ mkdir -p "$BOOT" /srv/mare/releases /etc/mare /var/lib/mare /var/lib/mare-ops
 say() { echo "$(date -u +%FT%TZ) $*" | tee -a "$BOOT/status.txt"; }
 say "bootstrap: start on $(hostname), $(. /etc/os-release && echo "$PRETTY_NAME"), $(nproc) CPU, $(awk '/MemTotal/ {printf "%d MB", $2/1024}' /proc/meminfo)"
 
-# while the server is being made, its log can be read by address; the web server takes over afterwards
+# while the server is being made, its log can be read by address on port 8080; the web server takes over afterwards (port 80)
 if ! command -v caddy >/dev/null 2>&1 && command -v python3 >/dev/null 2>&1; then
   mkdir -p /srv/mare/early/_boot && ln -sfn "$BOOT/bootstrap.log" /srv/mare/early/_boot/bootstrap.log && ln -sfn "$BOOT/status.txt" /srv/mare/early/_boot/status.txt
-  (cd /srv/mare/early && nohup python3 -m http.server 80 >/dev/null 2>&1 & echo $! > /run/mare-early.pid) || true
+  ( cd /srv/mare/early && exec python3 -m http.server 8080 >/dev/null 2>&1 ) &
+  echo $! > /run/mare-early.pid
 fi
+# the package manager may be busy right after a server is made: wait for it, and try again when the network stumbles
+apt_do() { local i; for i in 1 2 3 4 5; do apt-get -o DPkg::Lock::Timeout=600 "$@" && return 0; sleep 15; done; return 1; }
 
 # room to breathe on a small machine
 if ! swapon --show | grep -q . ; then
@@ -24,13 +27,13 @@ if ! swapon --show | grep -q . ; then
 fi
 
 say "packages"
-apt-get update -qq
-apt-get install -y -qq ca-certificates curl jq tar gzip xz-utils openssl ufw gnupg git >/dev/null
-apt-get install -y -qq debian-keyring debian-archive-keyring apt-transport-https unattended-upgrades >/dev/null 2>&1 || true
+apt_do update -qq
+apt_do install -y -qq ca-certificates curl jq tar gzip xz-utils openssl ufw gnupg git >/dev/null
+apt-get -o DPkg::Lock::Timeout=600 install -y -qq debian-keyring debian-archive-keyring apt-transport-https unattended-upgrades >/dev/null 2>&1 || true
 
 # Node.js 22: from the NodeSource repository; when that does not work, the build from nodejs.org, checked against its list of sums
 if ! node -v 2>/dev/null | grep -q '^v2[2-9]\.'; then
-  if curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/nodesource.sh && bash /tmp/nodesource.sh >/dev/null 2>&1 && apt-get install -y -qq nodejs >/dev/null 2>&1 && node -v | grep -q '^v22\.'; then :; else
+  if curl -fsSL https://deb.nodesource.com/setup_22.x -o /tmp/nodesource.sh && bash /tmp/nodesource.sh >/dev/null 2>&1 && apt_do install -y -qq nodejs >/dev/null 2>&1 && node -v | grep -q '^v22\.'; then :; else
     say "node: taking the build from nodejs.org"
     arch=$(uname -m); case "$arch" in x86_64) a=x64 ;; aarch64) a=arm64 ;; *) say "node: unknown machine $arch"; exit 1 ;; esac
     curl -fsSL -o /tmp/SHASUMS256.txt https://nodejs.org/dist/latest-v22.x/SHASUMS256.txt
@@ -46,8 +49,8 @@ say "node: $(node -v)"
 if ! command -v caddy >/dev/null 2>&1; then
   if curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/gpg.key' | gpg --dearmor --yes -o /usr/share/keyrings/caddy-stable-archive-keyring.gpg \
      && curl -1sLf 'https://dl.cloudsmith.io/public/caddy/stable/debian.deb.txt' -o /etc/apt/sources.list.d/caddy-stable.list \
-     && apt-get update -qq && apt-get install -y -qq caddy >/dev/null 2>&1; then :; else
-    rm -f /etc/apt/sources.list.d/caddy-stable.list; apt-get update -qq; apt-get install -y -qq caddy >/dev/null
+     && apt_do update -qq && apt_do install -y -qq caddy >/dev/null 2>&1; then :; else
+    rm -f /etc/apt/sources.list.d/caddy-stable.list; apt_do update -qq; apt_do install -y -qq caddy >/dev/null
   fi
 fi
 say "caddy: $(caddy version | head -1)"
@@ -84,6 +87,7 @@ say "firewall: 22, 80, 443 open; password sign-in off"
 
 systemctl daemon-reload
 if [ -f /run/mare-early.pid ]; then kill "$(cat /run/mare-early.pid)" 2>/dev/null || true; rm -f /run/mare-early.pid; fi
+install -m 644 "$BOOT/bootstrap.log" "$BOOT/bootstrap-first.log" 2>/dev/null || true
 systemctl enable caddy >/dev/null 2>&1; systemctl restart caddy; sleep 2; say "caddy: $(systemctl is-active caddy)"
 systemctl enable --now mare-update.timer >/dev/null 2>&1
 say "bootstrap: done; the first build of the sea starts now (about a quarter of an hour; see /_boot/build.log)"

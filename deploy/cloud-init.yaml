@@ -1,6 +1,6 @@
 #cloud-config
 # Mare Liberum · a fresh server becomes a node: it fetches the bootstrap from the open repository and runs it.
-# How it is doing can be read at http://<address>/_boot/bootstrap.log while it works and at /_boot/status.txt afterwards.
+# How it is doing can be read at http://<address>:8080/_boot/bootstrap.log while it works and at http://<address>/_boot/status.txt afterwards.
 # MARE_CONFIG_URL is where the server asks for the address and the public key of the sea's database once the
 # database knows the server's secret (deploy/README.md). Leave the file out for a node without the long memory.
 write_files:
