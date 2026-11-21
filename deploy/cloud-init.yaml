@@ -1,0 +1,12 @@
+#cloud-config
+# Mare Liberum · a fresh server becomes a node: it fetches the bootstrap from the open repository and runs it.
+# How it is doing can be read at http://<address>/_boot/bootstrap.log while it works and at /_boot/status.txt afterwards.
+# MARE_CONFIG_URL is where the server asks for the address and the public key of the sea's database once the
+# database knows the server's secret (deploy/README.md). Leave the file out for a node without the long memory.
+write_files:
+  - path: /etc/mare/setup
+    permissions: '0644'
+    content: |
+      MARE_CONFIG_URL=https://<project>.supabase.co/functions/v1/mare-node-config
+runcmd:
+  - [ bash, -c, "mkdir -p /srv/mare/boot; until curl -fsSL --retry 5 -m 60 -o /root/bootstrap.sh https://raw.githubusercontent.com/daoudandiaye98-alt/mare-liberum/main/deploy/bootstrap.sh; do sleep 20; done; bash /root/bootstrap.sh >> /srv/mare/boot/bootstrap.log 2>&1" ]

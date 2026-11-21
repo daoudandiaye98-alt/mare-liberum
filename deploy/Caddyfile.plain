@@ -1,0 +1,12 @@
+# Mare Liberum · the plainest web server config: used only when the full one does not hold, so the server can still
+# say how it is doing and the node can be reached by address
+:80 {
+	handle /_boot/* {
+		uri strip_prefix /_boot
+		root * /srv/mare/boot
+		file_server
+	}
+	handle {
+		reverse_proxy 127.0.0.1:8787
+	}
+}

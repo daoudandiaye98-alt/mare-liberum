@@ -1,0 +1,84 @@
+# Mare Liberum · the web server in front of the node
+# TLS certificates are fetched the first time a name is asked for, and only for the names listed below.
+{
+	on_demand_tls {
+		ask http://127.0.0.1:8788/
+	}
+}
+
+# the names this server may hold a certificate for (asked by the server itself, from this machine only)
+http://127.0.0.1:8788 {
+	bind 127.0.0.1
+	@ours query domain=mareliberum.dev domain=www.mareliberum.dev domain=hz.mareliberum.dev
+	handle @ours {
+		respond 200
+	}
+	handle {
+		respond 403
+	}
+}
+
+(sea) {
+	encode zstd gzip
+	# files that travel beside the node (fonts, icons, the keys of the search engines) are served as they are
+	root * /srv/mare/current/public
+	@file {
+		file
+		not path */
+	}
+	handle @file {
+		header Cache-Control "public, max-age=86400"
+		header Access-Control-Allow-Origin "*"
+		file_server
+	}
+	# everything else is the node; while it restarts, callers wait a moment instead of getting an error
+	handle {
+		reverse_proxy 127.0.0.1:8787 {
+			lb_try_duration 25s
+			lb_try_interval 300ms
+			flush_interval -1
+		}
+	}
+}
+
+mareliberum.dev {
+	tls {
+		on_demand
+	}
+	import sea
+}
+
+# the same node under its working name: how the server is doing, and the sea before the main name points here
+hz.mareliberum.dev {
+	tls {
+		on_demand
+	}
+	header X-Robots-Tag "noindex, nofollow"
+	handle /_boot/* {
+		uri strip_prefix /_boot
+		root * /srv/mare/boot
+		header Cache-Control "no-store"
+		file_server
+	}
+	import sea
+}
+
+www.mareliberum.dev {
+	tls {
+		on_demand
+	}
+	redir https://mareliberum.dev{uri} 308
+}
+
+# by address, before any name points here: how the server is doing, nothing else
+:80 {
+	handle /_boot/* {
+		uri strip_prefix /_boot
+		root * /srv/mare/boot
+		header Cache-Control "no-store"
+		file_server
+	}
+	handle {
+		respond "Mare Liberum · https://mareliberum.dev" 200
+	}
+}

@@ -1,0 +1,9 @@
+[Unit]
+Description=Mare Liberum · fetch the newest build of the sea and run it
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/mare-update
+TimeoutStartSec=1800

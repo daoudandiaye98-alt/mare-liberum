@@ -1,0 +1,56 @@
+# The sea is built here, in the open, and carried to the node: every public lake is pulled once, the open index is
+# written, and the whole node (code, index, pages) is published as one file with its SHA-256 (release "sea-latest").
+# The node on its own server looks for a new file every two minutes, runs it, and takes it back if it is not healthy
+# (deploy/update.sh). A build that lost a large part of the sea is not published; the node keeps the one before.
+name: sea
+on:
+  push:
+    branches: [main]
+    paths-ignore:
+      - 'integrations/**'
+      - 'plugins/**'
+      - '.github/workflows/atlas.yml'
+      - '.github/workflows/tide.yml'
+  schedule:
+    - cron: '17 13 * * *'
+  workflow_dispatch:
+    inputs:
+      force:
+        description: 'Publish even when the build lost part of the sea'
+        type: boolean
+        default: false
+permissions:
+  contents: write
+concurrency:
+  group: sea
+  cancel-in-progress: false
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: The proofs hold
+        run: |
+          node tools/doors-proof.mjs
+          node tools/server-proof.mjs
+      - name: Pull the lakes and build the sea
+        run: node tools/build.mjs
+      - name: Nothing large was lost against the build before
+        env:
+          MARE_COMMIT_MESSAGE: ${{ github.event.head_commit.message }}
+          MARE_FORCE: ${{ inputs.force && '1' || '0' }}
+        run: node tools/release.mjs check
+      - name: Pack the node as one file
+        run: node tools/release.mjs pack
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release view sea-latest >/dev/null 2>&1 || gh release create sea-latest --latest=false --title "The sea, as the node runs it" --notes "The newest build of Mare Liberum as one file: code, the open index and the pages. Made by the workflow \"sea\" from the main branch; the node on its own server fetches it (deploy/update.sh). release.json names the build and gives the SHA-256 of sea.tar.gz."
+          gh release upload sea-latest sea.tar.gz --clobber
+          gh release upload sea-latest release.json --clobber
+          cat release.json | head -c 600

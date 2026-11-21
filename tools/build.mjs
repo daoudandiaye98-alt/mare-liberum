@@ -277,5 +277,26 @@ try {
   const lines = Object.entries(out).map(([c, x]) => `${c}\t${x.month}\t${x.top.length}\t${[...x.top, ...x.rest].join(' ')}`);
   if (lines.length > 50) { writeFileSync('data/ranks-cc.txt.gz', gzipSync(lines.join('\n') + '\n', { level: 9 })); console.log(`ranks per country: ${lines.length} countries, ${lines.reduce((a, l) => a + l.split(' ').length, 0)} sites`); }
 } catch (e) { console.log(`ranks per country: not read (${e.message})`); }
+// the country a caller stands in: the free IP to Country Lite database by DB-IP (https://db-ip.com, CC BY 4.0), packed into one small
+// table for nodes that stand alone (behind a CDN the country comes with every request)
+if (!process.env.VERCEL) try {
+  const { packGeo } = await import('../node/geoip.mjs');
+  const split = (txt) => txt.split('\n').map((l) => l.trim().replace(/"/g, '').split(',')).filter((p) => p.length >= 3);
+  const months = []; for (let i = 0; i <= 3; i++) { const d = new Date(); d.setUTCDate(1); d.setUTCMonth(d.getUTCMonth() - i); months.push(`${d.getUTCFullYear()}-${String(d.getUTCMonth() + 1).padStart(2, '0')}`); }
+  let rows = [], of = '';
+  for (const ym of months) {
+    const r = await fetch(`https://download.db-ip.com/free/dbip-country-lite-${ym}.csv.gz`, { signal: AbortSignal.timeout(120000), headers: { 'user-agent': UA } }).catch(() => null);
+    if (!r || !r.ok) { await r?.body?.cancel().catch(() => {}); continue; }
+    rows = split(gunzipSync(Buffer.from(await r.arrayBuffer())).toString('utf8')); of = ym;
+    if (rows.length > 50000) break;
+  }
+  // the same table as it is mirrored for package managers (sapics/ip-location-db), when the first address does not answer
+  if (rows.length <= 50000) {
+    rows = []; of = 'mirror';
+    for (const f of ['dbip-country-ipv4.csv', 'dbip-country-ipv6.csv']) { const r = await fetch(`https://cdn.jsdelivr.net/npm/@ip-location-db/dbip-country/${f}`, { signal: AbortSignal.timeout(120000), headers: { 'user-agent': UA } }).catch(() => null); if (r?.ok) rows.push(...split(await r.text())); }
+  }
+  if (rows.length > 50000) { writeFileSync('data/geo-ip.bin.gz', packGeo(rows, of)); console.log(`countries by address: ${rows.length} rows (${of})`); }
+  else console.log('countries by address: not read; visitors are counted without a country');
+} catch (e) { console.log(`countries by address: not read (${e.message})`); }
 writeFileSync('public/build.json', readFileSync('data/build.json'));
 console.log(`sea built: ${ids.length} entries`);
