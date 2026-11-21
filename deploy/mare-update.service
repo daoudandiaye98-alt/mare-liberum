@@ -6,4 +6,5 @@ Wants=network-online.target
 [Service]
 Type=oneshot
 ExecStart=/usr/local/bin/mare-update
-TimeoutStartSec=1800
+# a build of the sea reads some twenty thousand stores first-hand: half an hour on a small machine, more when the web is slow
+TimeoutStartSec=3h

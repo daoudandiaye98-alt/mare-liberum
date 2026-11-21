@@ -8,6 +8,8 @@ User=mare
 Group=mare
 WorkingDirectory=/srv/mare/current
 EnvironmentFile=/etc/mare/env
+# name lookups, the disk copy and unpacking share these helpers; four are too few when a tide asks many stores at once
+Environment=UV_THREADPOOL_SIZE=16
 ExecStart=/usr/bin/env node --max-old-space-size=2048 serve.mjs
 Restart=always
 RestartSec=2

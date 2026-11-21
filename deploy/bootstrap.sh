@@ -90,5 +90,5 @@ if [ -f /run/mare-early.pid ]; then kill "$(cat /run/mare-early.pid)" 2>/dev/nul
 install -m 644 "$BOOT/bootstrap.log" "$BOOT/bootstrap-first.log" 2>/dev/null || true
 systemctl enable caddy >/dev/null 2>&1; systemctl restart caddy; sleep 2; say "caddy: $(systemctl is-active caddy)"
 systemctl enable --now mare-update.timer >/dev/null 2>&1
-say "bootstrap: done; the first build of the sea starts now (about a quarter of an hour; see /_boot/build.log)"
+say "bootstrap: done; the first build of the sea starts now (about half an hour; see /_boot/build.log and /_boot/status.json)"
 systemctl start --no-block mare-update.service || true

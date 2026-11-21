@@ -56,7 +56,8 @@ status() {
         --arg free "$(awk '/MemAvailable/ {printf "%d", $2/1024}' /proc/meminfo 2>/dev/null)" --arg swap "$(awk '/SwapTotal/ {t=$2} /SwapFree/ {f=$2} END {printf "%d", (t-f)/1024}' /proc/meminfo 2>/dev/null)" \
         --arg disk "$(df -m "$ROOT" 2>/dev/null | awk 'NR==2 {print $4}')" --arg src "$SOURCE" --arg sha "$(cat "$OPS/built-sha" 2>/dev/null)" --arg peak "$(cat "$OPS/build-peak-mb" 2>/dev/null)" \
         --argjson mem "$((mem / 1048576))" --arg mem_long "$(grep -q '^MARE_DB_KEY=' "$ENVF" 2>/dev/null && echo on || echo off)" \
-        '{at:$at, release:$rel, commit:$sha, heldBack:$bad, source:$src, node:$act, nodeMemoryMB:$mem, freeMemoryMB:($free|tonumber? // null), swapUsedMB:($swap|tonumber? // null), lastBuildPeakMB:($peak|tonumber? // null), load:$load, uptimeSeconds:($up|tonumber? // null), freeDiskMB:($disk|tonumber? // null), longMemory:$mem_long}' > "$BOOT/status.json.tmp" 2>/dev/null \
+        --arg building "${building:-}" --arg bmem "${building_mb:-}" \
+        '{at:$at, release:$rel, commit:$sha, heldBack:$bad, source:$src, node:$act, nodeMemoryMB:$mem, freeMemoryMB:($free|tonumber? // null), swapUsedMB:($swap|tonumber? // null), lastBuildPeakMB:($peak|tonumber? // null), building:(if $building == "" then null else $building end), buildMemoryMB:($bmem|tonumber? // null), load:$load, uptimeSeconds:($up|tonumber? // null), freeDiskMB:($disk|tonumber? // null), longMemory:$mem_long}' > "$BOOT/status.json.tmp" 2>/dev/null \
     && mv "$BOOT/status.json.tmp" "$BOOT/status.json"
   tail -n 400 "$BOOT/status.txt" > "$BOOT/status.txt.tmp" 2>/dev/null && cat "$BOOT/status.txt.tmp" > "$BOOT/status.txt"; rm -f "$BOOT/status.txt.tmp"
 }
@@ -82,7 +83,9 @@ fetch_release() {
 # ---- a build made here (the default): when main has moved, or the sea is a day old
 as_builder() { if [ -n "$BUILDER" ] && id "$BUILDER" >/dev/null 2>&1; then runuser -u "$BUILDER" -- "$@"; else "$@"; fi; }
 # what a build is given from this script's surroundings: the path to its tools and nothing else (MARE_KEEP_ENV names more, for machines behind a proxy)
-clean=(env -i PATH="$PATH" HOME=/nonexistent); for v in ${MARE_KEEP_ENV:-}; do [ -n "${!v:-}" ] && clean+=("$v=${!v}"); done
+# (a build asks for the addresses of some twenty thousand stores: with the four helpers a program has by default, the
+#  name lookups stand in line and the whole build takes three times as long, so it gets more of them)
+clean=(env -i PATH="$PATH" HOME=/nonexistent UV_THREADPOOL_SIZE="${MARE_BUILD_THREADS:-64}"); for v in ${MARE_KEEP_ENV:-}; do [ -n "${!v:-}" ] && clean+=("$v=${!v}"); done
 fetch_build() {
   local head last tried age since why sha stamp log peak before lost
   head=$(git ls-remote "$GIT" refs/heads/main 2>/dev/null | cut -f1); [[ "$head" =~ ^[0-9a-f]{40}$ ]] || return 1
@@ -95,6 +98,12 @@ fetch_build() {
   echo "$head" > "$OPS/tried-sha"; now > "$OPS/tried-at"
   stamp=$(date -u +%Y%m%d-%H%M%S); id="$stamp-${head:0:7}"; dir="$REL/$id"; log="$BOOT/build.log"
   say "build: $id ($why)"
+  # what a build that was cut off left behind makes room (a finished build is whole and carries no .git)
+  local old; for old in "$REL"/*/; do
+    [ -d "$old" ] || continue; old="${old%/}"
+    [ "$(readlink -f "$old")" = "$(readlink -f "$CUR" 2>/dev/null)" ] && continue
+    if [ -d "$old/.git" ] || ! whole "$old"; then rm -rf "$old"; fi
+  done
   rm -rf "$dir"
   if ! git clone -q --depth 1 --branch main "$GIT" "$dir" > "$log" 2>&1; then say "build: the code could not be fetched"; rm -rf "$dir"; return 1; fi
   sha=$(git -C "$dir" rev-parse HEAD 2>/dev/null)
@@ -109,9 +118,16 @@ fetch_build() {
   local heap; heap=$(awk '/MemTotal/ {h = int($2 / 2048); if (h > 3072) h = 3072; if (h < 1024) h = 1024; print h}' /proc/meminfo 2>/dev/null); heap="${MARE_BUILD_HEAP_MB:-${heap:-2048}}"
   run+=("${clean[@]}" NODE_OPTIONS="--max-old-space-size=$heap ${MARE_NODE_OPTIONS:-}" node tools/build.mjs)
   ( cd "$dir" && exec "${run[@]}" >> "$log" 2>&1 ) &
-  local pid=$! top=0 rss
-  while kill -0 "$pid" 2>/dev/null; do rss=$(ps -o rss= --ppid "$pid" -p "$pid" 2>/dev/null | sort -n | tail -1 | tr -d ' '); [[ "$rss" =~ ^[0-9]+$ ]] && [ "$rss" -gt "$top" ] && top=$rss; sleep 3; done
+  local pid=$! top=0 rss beat=0
+  building="$id"
+  while kill -0 "$pid" 2>/dev/null; do
+    rss=$(ps -o rss= --ppid "$pid" -p "$pid" 2>/dev/null | sort -n | tail -1 | tr -d ' '); [[ "$rss" =~ ^[0-9]+$ ]] && [ "$rss" -gt "$top" ] && top=$rss
+    # how the machine is doing while it builds can be read at /_boot/status.json, once a minute
+    if [ $((beat % 20)) -eq 0 ]; then building_mb=$((top / 1024)); status; fi; beat=$((beat + 1))
+    sleep 3
+  done
   wait "$pid"; local ended=$?
+  building=""; building_mb=""
   echo $((top / 1024)) > "$OPS/build-peak-mb"
   if [ $ended -ne 0 ] || ! whole "$dir"; then say "build: $id did not finish (exit $ended, entries: $(entries_of "$dir"), peak $((top / 1024)) MB; see /_boot/build.log)"; rm -rf "$dir"; return 1; fi
   [ -f "$dir/store-pages.json" ] && cp "$dir/store-pages.json" "$OPS/store-pages.json"

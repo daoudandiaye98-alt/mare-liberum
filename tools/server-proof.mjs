@@ -383,7 +383,7 @@ else {
   // ---- a build made on the server itself, from the repository (the default)
   const repo = join(tmp, 'repo'), git = (...a) => execFileSync('git', ['-C', repo, '-c', 'user.name=proof', '-c', 'user.email=proof@mare.test', ...a], { stdio: ['ignore', 'pipe', 'pipe'] }).toString().trim();
   // the repository of the proof: the real node, and a build that writes a small sea the way tools/build.mjs writes the real one
-  const commit = (msg, { entries = 1200, proofHolds = true, crash = false } = {}) => {
+  const commit = (msg, { entries = 1200, proofHolds = true, crash = false, watch = false } = {}) => {
     mkdirSync(join(repo, 'tools'), { recursive: true });
     for (const f of ['serve.mjs', 'package.json', 'node', 'site', 'public', 'deploy']) cpSync(join(root, f), join(repo, f), { recursive: true });
     cpSync(join(root, 'tools', 'release.mjs'), join(repo, 'tools', 'release.mjs'));
@@ -399,7 +399,9 @@ for (let i = 0; i < entries; i++) { const r = { id: 'urn:air:proof' + String(i).
 mkdirSync('data/site', { recursive: true });
 const tsv = lines.sort().join('\\n') + '\\n';
 writeFileSync('data/sea.tsv', tsv); writeFileSync('data/sea.tsv.gz', gzipSync(tsv)); writeFileSync('data/proof.ndjson', 'the raw rows of a lake\\n');
-writeFileSync('data/build.json', JSON.stringify({ builtAt: new Date().toISOString(), entries, lakes: { proof: entries } }));
+// what the build can see of its surroundings while it runs: the helpers it was given, and what the server says about itself
+const seen = {}; if (${watch}) { seen.threads = process.env.UV_THREADPOOL_SIZE || null; for (let i = 0; i < 80 && !seen.building; i++) { try { seen.building = JSON.parse(readFileSync('../../boot/status.json', 'utf8')).building; } catch {} if (!seen.building) await new Promise((r) => setTimeout(r, 100)); } }
+writeFileSync('data/build.json', JSON.stringify({ builtAt: new Date().toISOString(), entries, lakes: { proof: entries }, ...seen }));
 for (const f of ['index.html', 'llms.txt', 'robots.txt']) cpSync('site/' + f, 'data/site/' + f);
 const pages = JSON.parse(readFileSync('store-pages.json', 'utf8')); pages['shop' + Object.keys(pages).length + '.example'] = { title: 'read once' }; writeFileSync('store-pages.json', JSON.stringify(pages));
 console.log('sea built: ' + entries + ' entries');
@@ -445,6 +447,18 @@ console.log('sea built: ' + entries + ' entries');
     await sleep(1100); await B.update({ MARE_REFRESH_HOURS: '0', MARE_RETRY_MINUTES: '0' });
     assert.equal(B.said().match(/ build: \d{8}-\d{6}-[0-9a-f]{7} \(/g).length, n + 1); assert.match(B.said(), /the sea is 0 hours old/);
     assert.equal(readdirSync(join(B.srv, 'releases')).length <= 3, true, 'older builds make room');
+  });
+  await proof('a build that was cut off leaves nothing behind; while a build runs the server says so, and the build has helpers enough', async () => {
+    const rels = join(B.srv, 'releases'), cut = join(rels, '20000101-000000-cut0ff1'), torn = join(rels, '20000101-000001-t0rn0ff');
+    mkdirSync(join(cut, '.git'), { recursive: true }); mkdirSync(join(cut, 'data'), { recursive: true }); writeFileSync(join(cut, 'serve.mjs'), ''); writeFileSync(join(cut, 'data', 'sea.tsv'), 'half a sea\n');
+    mkdirSync(join(torn, 'data'), { recursive: true }); writeFileSync(join(torn, 'data', 'build.json'), JSON.stringify({ entries: 3 }));
+    const before = B.live();
+    head = commit('seen from inside', { entries: 1100, watch: true });
+    const r = await B.update(); assert.equal(r.status, 0, r.out); assert.match(B.said(), /runs \(1100 entries\)/);
+    assert.ok(!existsSync(cut) && !existsSync(torn), 'what the cut-off builds left is gone'); assert.ok(existsSync(before), 'the build that ran until now stays');
+    const made = JSON.parse(readFileSync(join(B.live(), 'data', 'build.json'), 'utf8'));
+    assert.equal(made.threads, '64'); assert.match(String(made.building), /^\d{8}-\d{6}-[0-9a-f]{7}$/, 'the status named the build while it ran');
+    assert.equal(B.state().building, null, 'and names none once it is over');
   });
   B.kill();
 }
