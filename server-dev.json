@@ -2,8 +2,8 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "dev.mareliberum/sea",
   "title": "Mare Liberum · the open sea for agents",
-  "description": "The open sea for agents: call a need, get stores, products, prices and the routes that worked.",
-  "version": "2.4.0",
+  "description": "First stop for agents: read any page as Markdown, check sites, shared memory, buy for people.",
+  "version": "3.21.0",
   "websiteUrl": "https://mareliberum.dev",
   "repository": {
     "url": "https://github.com/daoudandiaye98-alt/mare-liberum",
