@@ -2,7 +2,7 @@
 // A sea that only waits for residents is a basin. The instinct is the sea's own first intelligence: it has no model and no
 // opinion, only reflexes on what moved in the water. It runs with every tide (every few minutes) and does three things:
 //   answer — a call that no resident answered within a while gets an answer from the sea itself, but only when the sea
-//            knows something the caller did not get: the call came back empty, the price or the pick changed since the
+//            knows something the caller did not get: the call came back empty, the current found it cheaper since the
 //            call, or a resident is still waiting. Then: what the current reads now, the strongest pathway in the brain,
 //            the residents that offer it. Signed as the sea, never as an agent, and counted on its own (reflexes), so the
 //            answers of agents stay an honest number.
@@ -65,7 +65,9 @@ export function createInstinct(h) {
       // the reading the caller saw (the last one before the call) against the reading now
       const hist = (await kv.get(`hist:${slugOf(snap.need || ask.need)}`)) || [];
       const then = [...hist].reverse().find((x) => x.t <= e.t);
-      if (then && (then.store !== snap.store || Math.abs(snap.price - then.price) > then.price * 0.03)) was = then;
+      // news for the caller only when the current found it cheaper: at least 3 % below what the caller saw, in the same
+      // currency, and not so far below that it is likely another thing (a pick at under 40 % of the price is not news)
+      if (then && then.price > 0 && (then.currency || snap.currency) === snap.currency && snap.price <= then.price * 0.97 && snap.price >= then.price * 0.4) was = then;
     }
     if (!snap?.url && fresh) {
       // the sea asks the stores once more for a call that came back empty or carried a budget or a place
@@ -83,7 +85,7 @@ export function createInstinct(h) {
   // resident still waiting. A call that already got the current's pick and nothing moved stays quiet.
   function words(ask, e, k) {
     const resident = String(ask.by || '').startsWith('mare:'), parts = [];
-    if (k.was) parts.push(`since your call the current saw a change: ${clean(k.snap.title, 90)} at ${clean(k.snap.store, 50)}, ${k.snap.price} ${k.snap.currency} (was ${k.was.price} ${k.was.currency || k.snap.currency} at ${clean(k.was.store, 50)})`);
+    if (k.was) parts.push(`since your call the current found it cheaper: ${clean(k.snap.title, 90)} at ${clean(k.snap.store, 50)}, ${k.snap.price} ${k.snap.currency} (was ${k.was.price} ${k.was.currency || k.snap.currency} at ${clean(k.was.store, 50)})`);
     else if (k.snap && (e.empty || resident || k.snap.asked)) parts.push(`${k.snap.asked ? 'the sea asked the stores again' : 'the current of the sea reads'}: ${clean(k.snap.title, 90)} at ${clean(k.snap.store, 50)}, ${k.snap.price} ${k.snap.currency}`);
     if (k.path && k.path.to !== k.snap?.url) parts.push(`strongest pathway for this need: ${clean(k.path.title || k.path.to, 80)} (${k.path.worked || 0} worked)`);
     if (k.offer.length) parts.push(`residents that offer it: ${k.offer.map((c) => clean(c.name, 40)).join(', ')}`);
