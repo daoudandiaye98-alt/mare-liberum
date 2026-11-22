@@ -140,6 +140,7 @@ export function checkPage(base, r, extra = '') {
 <h2>Who may read it — by robots.txt</h2><p class="muted">Assistants that ${ROLE_NAME.live}:</p><p>${ag('live')}</p><p class="muted">AI search that ${ROLE_NAME.search}:</p><p>${ag('search')}</p><p class="muted">Crawlers that ${ROLE_NAME.training} — your choice, not scored:</p><p>${ag('training')}</p>
 ${r.page ? `<h2>What an agent reads first</h2><table><tbody><tr><td>Title</td><td>${esc(r.page.title || '—')}</td></tr><tr><td>Description</td><td>${esc(r.page.description || '—')}</td></tr><tr><td>Language</td><td>${esc(r.page.lang || '—')}</td></tr><tr><td>Words without JavaScript</td><td>${n(r.page.words)}</td></tr><tr><td>Structured data</td><td>${esc(r.page.jsonld.join(', ') || '—')}</td></tr></tbody></table>` : ''}
 ${(r.offers || []).length ? `<h2>Fix it</h2><p class="muted">Residents of the sea who fix what the check found. They set their own prices; the sea takes nothing.</p>${r.offers.map((o) => `<p><a href="${esc(o.url)}${o.url.includes('?') ? '&' : '?'}site=${encodeURIComponent(r.host)}" rel="nofollow">${esc(o.title)}</a> — ${esc(o.name)}${o.price ? ` · ${esc(o.price)}` : ''}</p>`).join('')}` : ''}
+${typeof r.score === 'number' ? extra : ''}
 <p class="muted">How the most visited websites compare: <a href="/web">the state of the agent web</a></p>
 <h2>Show your score</h2><p class="muted">A live badge for your site, README or footer. It updates when the site changes; people and agents who click it land on this result.</p>
 <p><img src="/check/${esc(r.host)}/badge.svg" alt="AI agents: ${r.score}/100" height="22"></p>
@@ -257,7 +258,7 @@ ${B}/brain?q=&lt;task&gt;      pathways other agents used for the same task
 ${B}/r/&lt;address&gt;        any page as clean Markdown
 ${B}/check/&lt;domain&gt;       how AI agents see a website, scored</pre>`;
 const findBox = (q = '') => `<form action="/find" method="get" role="search" style="display:flex;gap:8px;margin:14px 0"><input type="search" name="q" value="${esc(q)}" placeholder="what do you need? e.g. train tickets germany" aria-label="Search the Atlas" style="flex:1;padding:10px 12px;border-radius:10px;border:1px solid #2a5a80;background:#0a1c2e;color:#eaf4ff;font-size:16px"><button style="padding:10px 16px;border-radius:10px;border:0;background:#4fe3c1;color:#04101c;font-weight:600">Find</button></form>`;
-export function sitePage(base, x) {
+export function sitePage(base, x, extra = '') {
   const B = esc(base);
   if (!x || x.mapped === false) return page(base, `/site/${esc(x?.site || '')}`, `${x?.site || 'Site'} for agents · Mare Liberum Atlas`, 'Not on the map yet.', `<p class="muted" style="margin:0"><a href="/sites">The Atlas</a></p><h1>${esc(x?.site || '')}</h1><p>${esc(x?.note || 'Not on the map yet.')}</p>${findBox()}`);
   const no = (x.agents || []).filter((a) => a.allowed === false), live = no.filter((a) => a.role !== 'training');
@@ -278,7 +279,7 @@ ${x.changes ? `<h2>Changes seen</h2><ul>${x.changes.map((c) => `<li>${esc(c.at)}
 ${files || x.agentCard ? `<h2>Files for machines</h2><table><tbody>${files}${x.agentCard ? `<tr><td>Agent card</td><td>${esc(x.agentCard.name || 'present')}${x.agentCard.skills ? ` · ${x.agentCard.skills} skills` : ''}</td></tr>` : ''}${x.structuredData ? `<tr><td>Structured data</td><td>${x.structuredData.map(esc).join(', ')}</td></tr>` : ''}</tbody></table>` : ''}
 ${x.score != null ? `<p>Agent-readiness <b style="color:${GRADE[x.grade]}">${x.score}/100</b> (${esc(x.grade)}) · <a href="/check/${esc(x.site)}">full check</a></p>` : ''}
 <p class="muted">Mapped ${esc(x.mapped)}${x.rank ? ` · rank ${n(x.rank)} in the Majestic Million` : ''} · <a href="/site/${esc(x.site)}.json">JSON</a> · <a href="/site/${esc(x.site)}.md">Markdown</a></p>
-<h2>The grammar of the Atlas</h2>${grammar(B)}${findBox()}
+<h2>The grammar of the Atlas</h2>${grammar(B)}${findBox()}${extra}
 <p class="muted"><small>${esc(x.source)}. The site can ask the Atlas to stay away: <code>User-agent: MareLiberum-Atlas</code> <code>Disallow: /</code> in its robots.txt. <a href="/atlas">About the Atlas</a></small></p>`;
   return page(base, `/site/${esc(x.site)}`, `${x.site} for AI agents: search link, sections, who may read it · Mare Liberum Atlas`, `${x.search ? `Search ${x.site} with one link. ` : ''}${live.length ? `robots.txt blocks ${live.map((a) => a.name).join(', ')}. ` : 'Open to AI assistants. '}How an agent uses ${x.site}: sections, feeds, sitemaps, developer pages.`, body,
     { '@context': 'https://schema.org', '@type': 'WebPage', name: `${x.site} for agents`, url: `${base}/site/${x.site}`, about: { '@type': 'WebSite', url: x.home || `https://${x.site}`, name: x.title || x.site, ...(x.search ? { potentialAction: { '@type': 'SearchAction', target: x.search.template.replace('{q}', '{search_term_string}'), 'query-input': 'required name=search_term_string' } } : {}) }, isPartOf: { '@type': 'Dataset', name: 'Mare Liberum Atlas', url: `${base}/sites`, license: 'https://creativecommons.org/licenses/by/4.0/' } });
