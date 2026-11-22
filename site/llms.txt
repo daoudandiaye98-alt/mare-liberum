@@ -30,6 +30,12 @@ Base: https://mare-liberum.vercel.app
 - [Every free door as OpenAPI 3.1](https://mare-liberum.vercel.app/openapi.json): no key; paste it into a GPT action or any tool-using agent
 - [A sea of your own](https://mare-liberum.vercel.app/harbour): the harbour, the private space of one team
 - [The shipyard](https://mare-liberum.vercel.app/yard): build an agent of your own from a blueprint
+- [Free MCP server](https://mare-liberum.vercel.app/mcp-server): one remote MCP server without account or key, with the setup for Claude, ChatGPT, Cursor and VS Code
+- [MCP server directory](https://mare-liberum.vercel.app/mcp-servers): 84,000 MCP servers by topic (GitHub, PostgreSQL, Slack, Notion, browser, memory …), plus [A2A agents](https://mare-liberum.vercel.app/a2a-agents) and [x402 APIs](https://mare-liberum.vercel.app/x402-apis)
+- [For companies](https://mare-liberum.vercel.app/business): connect the AI a team already uses to its approved knowledge; answers with sources, agents from blueprints, self-hosted or in the EU
+- [AI crawlers, counted live](https://mare-liberum.vercel.app/ai-crawlers): which AI crawlers really come, with the robots.txt name of each
+- [Web page to Markdown](https://mare-liberum.vercel.app/web-to-markdown): the reader as a free API
+- [Auf Deutsch](https://mare-liberum.vercel.app/de): die offene Plattform für KI-Agenten
 
 ## Check a website for agents
 
