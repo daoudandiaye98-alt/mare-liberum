@@ -96,6 +96,7 @@ left alone. A page written in German (`lang="de"`) gets its frame in German.
 | `src/depth.css` | the look: the colours of the seven depths, the top of a page, text, boxes, tables, forms, the foot |
 | `src/depth.js` | what moves: a told place holds its top still while its scene goes on and says its lines; what lies below the first screen rises into place; numbers count up; wide tables become cards on a narrow screen; listings are set line by line |
 | `src/scenes.js` | the scenes, drawn in lines of light on a canvas: a city on the seabed, a hull under its crane, a harbour closing, a bottle that fills, shelves of the index … one for every kind of place |
+| `../site/film/` | the painted scenes: for each of the 22 scenes one oil painting (`p.webp`, 716 px wide), and for the 15 that belong to a told place the same painting as a short film of 41 stills (`f00.webp` … `f40.webp`, 540 px wide); `index.json` names them, how many stills each has, and where each painting is looked at when only a band of it shows |
 | `../node/skin.mjs` | the chart of places (which door lies at which depth, which scene it shows, the lines a told place says) and the dressing itself |
 | `../node/skin-assets.mjs` | the three files above as the node answers them (`/depth.css`, `/depth.js`, `/depth-scenes.js`); written by the build, never by hand |
 
@@ -103,6 +104,20 @@ left alone. A page written in German (`lang="de"`) gets its frame in German.
 that is told (Atlantis, the harbour, the shipyard …) follows the reader's scroll through three lines; any other page
 tells its scene itself, once, as the reader arrives. With motion not wanted, every scene stands as its last picture and
 nothing is held back; without the script the page is complete and only the scene is missing.
+
+Where the node carries the paintings (`public/film`, laid there from `site/film` by `tools/lay.mjs`), the scene at the
+top of a page is painted: an old-master seascape of the place, in one style throughout (all were made from one first
+painting, a cut through the sea with a ship above and the sunken city below). The painting comes out of the water in
+squares that grow finer and goes back into it the same way as the page below arrives. At a told place it is a film: the
+reader's scroll moves through its 41 stills, one at a time and never blended, while the three lines are said; the stills
+are fetched after the page stands, the far-apart ones first, and a small ring says how far that is. Any other page shows
+its painting still, settling slowly toward the reader. The painting is an ordinary image in the page: without scripts,
+with motion not wanted, or where the reader saves data, it simply stands there. A node without paintings (the one to
+take home does not carry them) shows the drawn scenes; so does a page whose painting fails to arrive.
+
+The paintings were made once with an image model and a video model and are kept in the repository as they are served;
+nothing is generated when a page is read. To change one, replace its files under `site/film/<scene>/` and the count in
+`index.json` (its `v` goes into the address of every file, so change it too).
 
 Behind every one of these pages lies the sea itself (`mountSea` in `src/scenes.js`): far off the water and its light,
 computed for every point by a small shader (the surface seen from below near the top of a shallow page, shafts and a
@@ -119,7 +134,7 @@ machine (for looking at it in a headless browser).
 
     node qa/depth.mjs --base=http://127.0.0.1:8787    every kind of page at four widths against a running node
 
-It checks that each page is dressed, stays inside its screen, runs its scene, carries the foot and nothing of the old
+It checks that each page is dressed, stays inside its screen, runs its scene (shows its painting), carries the foot and nothing of the old
 look, and raises no error (`--engine=webkit|firefox`, `--calm`, `--nojs`, `--doors=/atlantis,/yard`).
 
 ## Fonts

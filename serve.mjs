@@ -68,7 +68,7 @@ const shelf = createShelf();
 
 // files that travel beside the node (fonts, icons, the key of the search engines): a web server in front serves them
 // first; a node without one serves them itself
-const TYPES = { '.txt': 'text/plain; charset=utf-8', '.html': 'text/html; charset=utf-8', '.json': 'application/json; charset=utf-8', '.md': 'text/markdown; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.sql': 'text/plain; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.ico': 'image/x-icon', '.mp4': 'video/mp4', '.woff2': 'font/woff2', '.woff': 'font/woff', '.webmanifest': 'application/manifest+json', '.xml': 'application/xml; charset=utf-8' };
+const TYPES = { '.txt': 'text/plain; charset=utf-8', '.html': 'text/html; charset=utf-8', '.json': 'application/json; charset=utf-8', '.md': 'text/markdown; charset=utf-8', '.mjs': 'text/javascript; charset=utf-8', '.sql': 'text/plain; charset=utf-8', '.svg': 'image/svg+xml', '.png': 'image/png', '.webp': 'image/webp', '.ico': 'image/x-icon', '.mp4': 'video/mp4', '.woff2': 'font/woff2', '.woff': 'font/woff', '.webmanifest': 'application/manifest+json', '.xml': 'application/xml; charset=utf-8' };
 const pub = join(root, 'public');
 function fileFor(pathname) {
   let p; try { p = decodeURIComponent(pathname); } catch { return null; }

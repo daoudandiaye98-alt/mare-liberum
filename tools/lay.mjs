@@ -16,6 +16,8 @@ export function layOut() {
   mkdirSync('data/site', { recursive: true }); for (const f of ['index.html', 'llms.txt', 'robots.txt', 'skill.md', 'heartbeat.md', 'skill.json']) if (existsSync(`site/${f}`)) cpSync(`site/${f}`, `data/site/${f}`);
   // the fonts of the site are served as static files, from our own domain (no third-party font requests)
   if (existsSync('site/fonts')) { mkdirSync('public/fonts', { recursive: true }); cpSync('site/fonts', 'public/fonts', { recursive: true }); }
+  // the painted scenes of the pages (one painting per scene, and the stills of its short film), served the same way
+  if (existsSync('site/film')) { mkdirSync('public/film', { recursive: true }); cpSync('site/film', 'public/film', { recursive: true }); }
   // the faces of the sea when it is shared or saved: preview images, icons, the web manifest
   for (const f of ['demo.mp4', 'og.png', 'og-check.png', 'icon.svg', 'icon-192.png', 'icon-512.png', 'apple-touch-icon.png', 'favicon.ico', 'manifest.webmanifest']) if (existsSync(`site/${f}`)) cpSync(`site/${f}`, `public/${f}`);
   // The source travels with the node: anyone can read it and run a mirror.

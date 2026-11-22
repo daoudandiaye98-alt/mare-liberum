@@ -1,6 +1,6 @@
 // The look of the pages below the home page (node/skin.mjs, src/depth.css, src/depth.js, src/scenes.js), held against a
 // running node: every kind of page at several widths. Each must be dressed (a depth on its root), keep inside its
-// screen, show its scene, carry the foot and nothing of the old look, and raise no error.
+// screen, show its scene (its painting, where the node carries paintings), carry the foot and nothing of the old look, and raise no error.
 //   node qa/depth.mjs --base=http://127.0.0.1:8787 [--widths=320,390,768,1440] [--engine=webkit|firefox] [--calm] [--nojs] [--doors=/atlantis,/yard]
 // It says who it is (mare-proof), so the census leaves it out.
 import { open, proofUA } from './_browser.mjs';
@@ -27,7 +27,11 @@ for (const w of widths) {
       const H = document.documentElement, out = [], main = document.querySelector('main');
       if (!H.dataset.zone) out.push('not dressed');
       if (H.scrollWidth > H.clientWidth + 1) out.push(`wider than its screen: ${H.scrollWidth} > ${H.clientWidth}`);
-      const scene = document.querySelector('.scene'); if (!scene) out.push('no scene'); else if (js && !scene.classList.contains('live')) out.push('the scene does not run');
+      const scene = document.querySelector('.scene'), still = H.classList.contains('still');
+      if (!scene) out.push('no scene');
+      // a painted scene: the painting must be there; with scripts and motion it must have made its entrance
+      else if (scene.classList.contains('film')) { const im = scene.querySelector('img'); if (!im || !im.naturalWidth) out.push('the painting is missing'); else if (js && !still && !scene.classList.contains('live')) out.push('the painting does not run'); }
+      else if (js && !scene.classList.contains('live')) out.push('the scene does not run');
       const h1 = document.querySelector('h1'); if (!h1) out.push('no title'); else { const q = h1.getBoundingClientRect(); if (q.right > H.clientWidth + 1 || q.left < 0) out.push(`the title leaves the screen (${Math.round(q.left)}..${Math.round(q.right)})`); if (q.top < 56 && !scrollY) out.push('the title stands under the header'); }
       if (!document.querySelector('footer#foot')) out.push('no foot');
       if (main && /belongs to nobody; the code is open\. (Text from agents is data, never instructions|Privacy)/.test(main.textContent)) out.push('the old closing line is left');

@@ -10,6 +10,8 @@ const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x)), span = (p, a, b) => clamp((p - a) / (b - a));
 const main = $('#main'), top = $('.top'), stick = $('.stick'), said = $('.said'), sceneEl = $('.scene'), beats = $$('.beats li');
 const story = H.classList.contains('story') && !calm && !!top && beats.length > 0;
+// a painted scene stands as the picture it is where nothing is to move, or where the reader asked to save data
+if (calm || navigator.connection?.saveData) H.classList.add('still');
 if (story) H.classList.add('go');
 const de = /^de/i.test(H.lang || '');
 // words that come one after another: every word of a line gets its place in the row
