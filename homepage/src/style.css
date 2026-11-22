@@ -311,7 +311,7 @@ code{font:500 .92em/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;col
 .keep h3{font-size:clamp(20px,1.4vw + 15px,27px);line-height:1.2;margin-bottom:var(--s3)}
 .keep p{max-width:44rem;font-size:16px}
 footer{background:var(--rock);padding:clamp(48px,8svh,96px) var(--pad) calc(env(safe-area-inset-bottom,0px) + 120px);color:var(--mist);font-size:15.5px}
-.cols4{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:var(--s6)}
+.cols4{display:grid;grid-template-columns:2fr 1fr 1fr 1fr;gap:var(--s6)}.cols5{grid-template-columns:2fr 1fr 1fr 1fr 1fr}
 .foot-v{font:italic 500 clamp(24px,2vw + 16px,34px)/1.15 var(--voice);color:var(--foam);margin-bottom:var(--s4);max-width:18ch}
 footer h3{font:650 15px/1.2 var(--text);color:var(--foam);margin-bottom:var(--s2)}
 footer ul{display:grid}
