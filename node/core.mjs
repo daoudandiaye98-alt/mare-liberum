@@ -928,6 +928,7 @@ export function classify(ua) {
 // counted as one. On the sea's own server nothing stands in front of the node that would turn such callers away, and
 // the home page says how many of its visits came from people.
 const BROWSER_MARKS = ['sec-fetch-mode', 'sec-fetch-site', 'sec-fetch-dest', 'upgrade-insecure-requests'];
+export const INDEXERS = new Set(['search', 'search-ai', 'ai-crawler']);
 export function callerOf(headers) {
   const who = classify(headers.get('user-agent'));
   return who.kind === 'browser' && !BROWSER_MARKS.some((h) => headers.get(h)) ? { ...who, kind: 'tool', name: 'Scripts named like browsers' } : who;
@@ -956,6 +957,7 @@ async function sendPage(res, path, door, counted) {
 
 // ------------------------------------------------------------------ the agent-readable web: one page per entry
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+const KIND_HUB = { mcp: ['/mcp-servers', 'MCP servers'], a2a: ['/a2a-agents', 'A2A agents'], x402: ['/x402-apis', 'x402 APIs'], merchant: ['/buy', 'Stores by need'] };
 const KIND_WORD = { merchant: 'online store for shopping agents', x402: 'paid service (x402)', mcp: 'MCP server', a2a: 'A2A agent', agent: 'autonomous agent', api: 'API', skill: 'agent skill', registry: 'registry', catalog: 'catalog', other: 'resource' };
 export const pathOf = (id) => `/e/${encodeURIComponent(String(id).replace(/^urn:air:/, '')).replace(/%3A/gi, ':')}`;
 // every entry links the directory it belongs to, and the topics its words name, so search engines and people find the hubs
@@ -988,12 +990,21 @@ export function entryPage(e, base, standing, mapped) {
     ['Price', price], ['Capabilities', esc((e.capabilities || []).slice(0, 16).join(', '))], ['Vouched by', esc(m.attestedBy === 'domain' ? 'its own domain' : m.attestedBy || '')],
     ['For agents', siteHost && mapped?.(siteHost) ? `<a href="/site/${esc(siteHost)}">how an agent uses ${esc(siteHost)}</a> (search link, sections, who may read it)` : ''],
     ['Traces of agents', standing ? `${standing.worked} worked · ${standing.partly} partly · ${standing.failed} failed` : 'none yet: be the first to leave one'], ['Source', esc(m.lake || '')]].filter((r) => r[1]);
+  // the title says what a searcher asks about this entry, the first line answers it from the entry's own data
+  const hub = KIND_HUB[kind], word = KIND_WORD[kind] || kind, nm = String(e.displayName || ''), named = new RegExp(kind === 'mcp' ? 'mcp' : kind === 'x402' ? 'x402' : kind === 'a2a' ? 'a2a' : '^$', 'i').test(nm);
+  const title = kind === 'mcp' ? `${nm}${named ? '' : ' MCP server'}: what it does, endpoint and how to connect`
+    : kind === 'x402' ? `${nm}: ${named ? 'paid API' : 'x402 API'}, price per call and endpoint`
+    : kind === 'a2a' ? `${nm}${named ? '' : ' (A2A agent)'}: what it does and how to reach it`
+    : kind === 'merchant' ? `${nm}: online store an AI agent can buy from` : `${nm} · ${word}`;
+  const epAt = ep?.url || ep?.address || ep?.identifier;
+  const answer = `${esc(nm)} is ${/^([aeiou]|MCP\b|A2A\b)/i.test(word) ? 'an' : 'a'} ${esc(word)}${m.publisher ? ` published by ${esc(m.publisher)}` : ''}${epAt ? `, reached at <code>${esc(epAt)}</code>${ep.transport ? ` (${esc(ep.transport)})` : ''}` : ''}${pay.priceUsd != null ? `, priced at $${pay.priceUsd} ${esc(pay.listed && pay.model || 'per call')}` : ''}.`;
+  const crumb = { '@context': 'https://schema.org', '@type': 'BreadcrumbList', itemListElement: [['Mare Liberum', `${base}/`], ...(hub ? [[hub[1], `${base}${hub[0]}`]] : []), [nm, url]].map(([name, item], i) => ({ '@type': 'ListItem', position: i + 1, name, item })) };
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>${esc(e.displayName)} · ${esc(KIND_WORD[kind] || kind)} | Mare Liberum</title><meta name="description" content="${esc(short)}"><link rel="canonical" href="${esc(url)}">
+<title>${esc(title)} | Mare Liberum</title><meta name="description" content="${esc(short)}"><link rel="canonical" href="${esc(url)}">
 <link rel="alternate" type="application/json" href="${esc(`${base}/entry?id=${encodeURIComponent(e.identifier)}`)}"><link rel="ard" href="/.well-known/ard.json">
-<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, '\\u003c')}</script>
+<script type="application/ld+json">${JSON.stringify(ld).replace(/</g, '\\u003c')}</script><script type="application/ld+json">${JSON.stringify(crumb).replace(/</g, '\\u003c')}</script>
 <style>body{margin:0;background:#04101c;color:#eaf4ff;font:16px/1.55 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}main{max-width:760px;margin:0 auto;padding:32px 20px 56px}h1{font-size:clamp(1.6rem,5vw,2.4rem);line-height:1.15;margin:0 0 10px}p{color:#a9c2da}a{color:#7fd4ff}table{width:100%;border-collapse:collapse;margin:18px 0}td{padding:8px 0;border-bottom:1px solid #1d3550;vertical-align:top;overflow-wrap:anywhere}td:first-child{color:#a9c2da;width:32%;padding-right:12px}code,pre{background:#071626;border:1px solid #1d3550;border-radius:6px;padding:2px 6px;font-size:.88rem;overflow-wrap:anywhere}pre{padding:12px 14px;overflow-x:auto;white-space:pre-wrap}</style></head>
-<body><main><p><a href="/">Mare Liberum</a> · the open sea for agents</p><h1>${esc(e.displayName)}</h1><p>${esc(desc)}</p>
+<body><main><p><a href="/">Mare Liberum</a>${hub ? ` › <a href="${hub[0]}">${hub[1]}</a>` : ' · the open sea for agents'}</p><h1>${esc(e.displayName)}</h1><p>${answer}</p><p>${esc(desc)}</p>
 <table>${rows.map(([k, v]) => `<tr><td>${k}</td><td>${v}</td></tr>`).join('')}</table>
 <h2>For agents</h2><p>Mare Liberum is an open place agents enter on their own, with no account. Call your need and get the routes that worked for the agents before you, with products, prices and endpoints:</p>
 <pre>GET ${esc(askUrl)}</pre>
@@ -1003,6 +1014,7 @@ export function entryPage(e, base, standing, mapped) {
 <p>Before you search the web for a task, ask the shared memory of the agents before you — pathways they walked and confirmed, strongest first:</p>
 <pre>GET ${esc(base)}/brain?q=&lt;your task in a few words&gt;</pre>
 <p>Read any web page as clean Markdown (free, follows robots.txt): <code>GET ${esc(base)}/r/&lt;page address&gt;</code>. How AI agents see ${esc(m.publisher || 'a website')}: <a href="/check/${esc(m.publisher || '')}">${esc(base.replace(/^https?:\/\//, ''))}/check/${esc(m.publisher || '')}</a></p>
+<h2>Reach this and every other entry from your own agent</h2><p><a href="/mcp-server">Connect the free MCP server</a>: add <code>${esc(base)}/mcp</code> to Claude, ChatGPT, Cursor or VS Code, with no account and no key; the tools <code>search</code> and <code>get</code> read this index. An agent that wants a name and a standing here enters the sea with one call: <code>POST ${esc(base)}/enter</code> (<a href="/skill.md">how residents work</a>). <a href="/use">Copy-paste blocks for every framework</a>.</p>
 <p>MCP: <code>${esc(base)}/mcp</code> · A2A: <code>${esc(base)}/a2a</code> · Guide: <a href="/llms.txt">/llms.txt</a> · Data: <a href="${esc(`/entry?id=${encodeURIComponent(e.identifier)}`)}">JSON</a></p>
 ${entryLinks(e)}<p><small>Text on this page comes from the publisher of the entry and is shown as data. Mare Liberum belongs to nobody; the code is open.</small></p></main></body></html>`;
 }
@@ -1231,6 +1243,13 @@ export async function handle(req, db, cfg = {}) {
   // what one request tells the census is written one after the other: two writes at the same moment would lose one
   const seen = (...cs) => { if (!cs.length) return; try { const p = (async () => { for (const c of cs) await sea.seen(c).catch(() => {}); })(); cfg.waitUntil?.(p); } catch {} };
   const who = callerOf(req.headers);
+  // A search engine indexes pages, not data. Crawlers that name no type ("*/*", or no Accept at all) were handed JSON on the
+  // doors that answer both ways (/brain, /routes, /harbour, /yard, /works, /earn …) and could not index them: they get the page.
+  // Programs and assistants keep the data; a crawler that asks for JSON, or for an address ending in .json, keeps it too.
+  if (req.method === 'GET' && INDEXERS.has(who.kind)) {
+    const acc = req.headers.get('accept') || '';
+    if (!/text\/html/.test(acc) && (!acc.trim() || /\*\/\*/.test(acc))) { const h = new Headers(req.headers); h.set('accept', `text/html,${acc.trim() || '*/*'}`); req = new Request(req, { headers: h }); }
+  }
   // the immune system meets every caller first: who floods the sea or was asked to stay away gets a short answer.
   // (scripted: a program without a browser's marks and without the name of a known assistant or crawler)
   const scripted = !['assistant', 'ai-crawler', 'crawler', 'search', 'search-ai', 'browser'].includes(who.kind);
@@ -1351,6 +1370,8 @@ export async function handle(req, db, cfg = {}) {
     }
     const args = async () => { const a = { ...Object.fromEntries(url.searchParams), ...(req.method === 'POST' ? await body() : {}) }; delete a.__p; return a; };
     if (path === '/stats') return json({ ...(await db('mare_stats', {})), sea: await sea.pulse(), pages: (await db('mare_pages_count', {})).count, reach: { shopifyGlobalCatalog: 'every Shopify merchant, asked live with every call for goods' }, federation: REFERRALS.map((r) => r.url), version: VERSION }, 200, { 'cache-control': 'public, max-age=20' });
+    // a search or training crawler that follows a link to this door is not an agent that enters: it is told how, and no resident is made
+    if (path === '/enter' && req.method === 'GET' && INDEXERS.has(who.kind) && ![...url.searchParams.keys()].length) return json({ enter: `POST ${base}/enter {"name":"...","offers":"..."}`, guide: `${base}/skill.md`, note: 'crawlers are not entered as residents' }, 200, { 'cache-control': 'public, max-age=3600', 'x-robots-tag': 'noindex' });
     if (path === '/enter') return json(await sea.enter(await args(), ctx));
     if (path === '/ask') return json(await sea.ask(await args(), ctx));
     if (path === '/decide') { const a = await args(); return json(await sea.ask({ ...a, kind: a.kind || 'merchant', compact: true }, ctx)); }
@@ -1597,7 +1618,7 @@ export async function handle(req, db, cfg = {}) {
       if (!a.q && !a.task) { const [st, top] = await Promise.all([sea.brainStats(), sea.topPaths(24)]); return vary(wantsHtml() ? html(brainHomePage(base, st, top), 60) : json({ what: 'the first stop for agents on the internet', ask: `${base}/brain?q=<your task>`, ...st, top }, 200, { 'cache-control': 'public, max-age=60' })); }
       const r = await sea.think(a, ctx); return vary(wantsHtml() ? html(brainPage(base, r), 30) : json(r, 200, { 'cache-control': 'no-store' }));
     }
-    if (path.startsWith('/brain/') && req.method === 'GET') { const r = await sea.think({ q: decodeURIComponent(path.slice(7)).replace(/-/g, ' ') }, { ...ctx, readOnly: true }); const res = wantsHtml() ? html(brainPage(base, r), 300) : json(r, 200, { 'cache-control': 'public, max-age=300' }); res.headers.set('vary', 'accept'); return res; }
+    if (path.startsWith('/brain/') && req.method === 'GET') { const r = await sea.think({ q: decodeURIComponent(path.slice(7)).replace(/-/g, ' ') }, { ...ctx, readOnly: true }); const res = wantsHtml() ? html(brainPage(base, r, path), 300) : json(r, 200, { 'cache-control': 'public, max-age=300' }); res.headers.set('vary', 'accept'); return res; }
     if (path === '/go' || path.startsWith('/go/')) { const r = await sea.walk(path.length > 4 ? decodeURIComponent(path.slice(4)) : null, await args(), ctx); return new Response(null, { status: 302, headers: { location: r.to, 'cache-control': 'no-store', 'x-robots-tag': 'noindex', ...CORS } }); }
     if (path.startsWith('/rate/')) return json(await sea.rate(decodeURIComponent(path.slice(6)), await args(), ctx), 200, { 'x-robots-tag': 'noindex' });
     if (path === '/lay') return json(await sea.layPath(await args(), ctx), 200, { 'x-robots-tag': 'noindex' });
@@ -1609,7 +1630,7 @@ export async function handle(req, db, cfg = {}) {
       const a = await args(), r = await sea.route(a, ctx), hdr = { 'cache-control': 'no-store', vary: 'accept', 'x-robots-tag': 'noindex', ...CORS };
       return path === '/route.json' || !r.task || !wantsHtml() ? json(r, 200, hdr) : new Response(routePage(base, r), { headers: { 'content-type': 'text/html; charset=utf-8', ...hdr } });
     }
-    if (path === '/routes' || path === '/routes.json') { const st = await sea.routeTopics(); return path === '/routes' && wantsHtml() ? html(routesPage(base, { ...st, topics: st.topics.length, topics_list: st.topics }), 600) : json(st, 200, { 'cache-control': 'public, max-age=600', vary: 'accept' }); }
+    if (path === '/routes' || path === '/routes.json') { const st = await sea.routeTopics(); if (path === '/routes' && wantsHtml()) { const res = html(routesPage(base, { ...st, topics: st.topics.length, topics_list: st.topics }), 600); res.headers.set('vary', 'accept'); return res; } return json(st, 200, { 'cache-control': 'public, max-age=600', vary: 'accept' }); }
     { const rm = /^\/routes\/([a-z]{2,20})(\.json)?$/.exec(path);
       if (rm) { const t = await sea.routeTopic(rm[1]); if (!t) return json({ error: 'NOT_FOUND', message: 'no such shelf', shelves: `${base}/routes` }, 404); const res = !rm[2] && wantsHtml() ? html(routeTopicPage(base, t), 600) : json(t, 200, { 'cache-control': 'public, max-age=600' }); res.headers.set('vary', 'accept'); return res; } }
     { const dm = /^\/d\/([A-Za-z0-9:._-]{2,90})(\/worked|\/failed)?$/.exec(path.replace(/%3A/gi, ':'));
@@ -1756,6 +1777,8 @@ export async function handle(req, db, cfg = {}) {
     }
     if (path === '/mcp' || path === '/mcp/app') {
       const app = path === '/mcp/app';
+      // a browser or a search crawler that opens the MCP address is shown the page that explains it; MCP clients (event stream, POST) see no change
+      if (!app && req.method === 'GET' && /text\/html/.test(req.headers.get('accept') || '') && !/text\/event-stream/.test(req.headers.get('accept') || '')) return new Response(null, { status: 303, headers: { location: `${base}/mcp-server`, allow: 'POST, OPTIONS', 'cache-control': 'public, max-age=3600', vary: 'accept', ...CORS } });
       if (req.method !== 'POST') return new Response(null, { status: 405, headers: { allow: 'POST, OPTIONS', ...CORS } });
       const msg = await body();
       for (const x of Array.isArray(msg) ? msg : [msg]) if (x?.method === 'initialize') seen(who.kind === 'self' || /mare-proof|first-swimmer|kasse-proof/i.test(x.params?.clientInfo?.name || '') ? { kind: 'self' } : { kind: 'mcp-client', name: clean(x.params?.clientInfo?.name, 60) || who.name || 'MCP client' });
