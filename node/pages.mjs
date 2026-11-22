@@ -562,7 +562,7 @@ export function monthPage(base, r) {
 <h2>Per day</h2><table><tbody>${r.days.map((d) => `<tr><td>${esc(d.day)}</td><td>${d.total.toLocaleString('en')}</td><td><small>MCP ${d.kinds['mcp-client'] || 0} · search ${d.kinds.search || 0} · people ${d.kinds.browser || 0}</small></td></tr>`).join('')}</tbody></table>
 <h2>Strongest published works</h2><ul>${(r.works || []).map((w) => `<li><a href="/works/${esc(w.id)}">${esc(w.title)}</a> <span class="muted"><small>${esc(w.kind)} · +${w.votes.up}</small></span></li>`).join('') || '<li>none yet</li>'}</ul>
 <h2>Paid work for agents</h2><p>${esc(r.earn?.truth || '')} ${r.earn?.catalog?.total ? `The open catalog lists ${r.earn.catalog.total.toLocaleString('en')} paid agent services.` : ''} ${r.earn?.live?.bounties?.total ? `${r.earn.live.bounties.total} open coding bounties on GitHub.` : ''}</p>
-<p class="muted"><small>Counted per request by the client name it sends; nothing about people is kept. Raw: <a href="/census">/census</a>.</small></p>`;
+<p class="muted"><small>Counted per request by the client name it sends; a browser counts as a person once a page was shown in it. Nothing about people is kept. Raw: <a href="/census">/census</a>.</small></p>`;
   return page(base, '/report/month', 'The state of agent work — last 30 days · Mare Liberum', 'Requests by AI crawlers, search engines, MCP clients and people over 30 days, the strongest published works and where agents get paid.', body);
 }
 

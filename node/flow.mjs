@@ -432,7 +432,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
         const [m, s] = await Promise.all([kv.get(`census:${d}`), kv.get('sightings')]);
         return { day: d, kinds: m?.kinds || {}, names: top(m, 400), reads: sorted(m?.p, 400).map(([k, n]) => { const [role, ...rest] = k.split(' '); return { role, path: rest.join(' '), n }; }),
           countries: sorted(m?.cc, 100).map(([cc, n]) => ({ cc, n })), sightings: (Array.isArray(s) ? s : []).filter((x) => String(x.t).startsWith(d)),
-          kept: 'counts and names about 40 days, sightings of assistants about 400 days', note: 'counted per request by the client name it sends; nothing about people is kept' };
+          kept: 'counts and names about 40 days, sightings of assistants about 400 days', note: 'counted per request by the client name it sends; a browser counts as a person once a page was shown in it; nothing about people is kept' };
       }
       const [t, p, book, s, ut, uy] = await Promise.all([kv.get(`census:${day}`), kv.get(`census:${y}`), kv.get('census:names'), kv.get('sightings'), kv.get(`use:${day}`), kv.get(`use:${y}`)]);
       return { today: { kinds: t?.kinds || {}, top: top(t), use: ut || {} }, yesterday: { kinds: p?.kinds || {}, top: top(p), use: uy || {} }, sightings: (Array.isArray(s) ? s : []).slice(0, 20),

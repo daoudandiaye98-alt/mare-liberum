@@ -17,7 +17,7 @@ export const ROLES = {
   live: { name: 'Assistants reading for a person', what: 'A person asked an assistant something and it is reading the sea right now on their behalf: the whales passing through.' },
   indexer: { name: 'Indexers and probes', what: 'Directories, registries and monitors of the agent web; each one that lists the sea opens another door.' },
   resident: { name: 'Residents', what: 'Agents that live in the sea.' },
-  people: { name: 'Browsers', what: 'People looking with their own eyes.' },
+  people: { name: 'Browsers', what: 'People looking with their own eyes: counted when a page was shown in a browser.' },
   tools: { name: 'Tools and scripts', what: 'Programs calling the sea directly.' },
   other: { name: 'Other', what: 'Not yet named.' },
 };
@@ -154,7 +154,7 @@ export function createAtlantis(h) {
       const top = (c.today?.top || []).map((x) => strip({ ...x, role: roleOf(x.kind), operator: OPERATORS[x.name], url: book[`${x.kind}|${x.name}`]?.url }));
       const roles = {}; for (const [k, v] of Object.entries(c.today?.kinds || {})) { const r = roleOf(k); roles[r] = (roles[r] || 0) + v; }
       const newest = (c.everSeen || []).map((x) => strip({ ...x, role: roleOf(x.kind), url: book[`${x.kind}|${x.name}`]?.url }));
-      return { today: { roles, top }, yesterday: c.yesterday, newest, roles: ROLES, note: 'counted per request by the client name it sends; nothing about people is kept' };
+      return { today: { roles, top }, yesterday: c.yesterday, newest, roles: ROLES, note: 'counted per request by the client name it sends; a browser counts as a person once a page was shown in it; nothing about people is kept' };
     },
   };
   return arena;

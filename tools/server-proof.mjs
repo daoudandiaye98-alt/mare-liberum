@@ -16,7 +16,7 @@ import { packGeo, loadGeo } from '../node/geoip.mjs';
 import { carryIn } from '../node/carry.mjs';
 import { hayOf, metaOf } from '../node/mem.mjs';
 import { compare, tired } from './release.mjs';
-import { handle, callerOf } from '../node/core.mjs';
+import { handle, callerOf, shownLine } from '../node/core.mjs';
 import { createMem } from '../node/mem.mjs';
 import { memoryKv } from '../node/flow.mjs';
 
@@ -169,7 +169,7 @@ await proof('a table of a million rows is made small and answers in microseconds
   assert.ok(performance.now() - t0 < 1500, `${Math.round(performance.now() - t0)} ms for 200,000 lookups`); assert.ok(n > 1000);
   assert.equal(of('1.0.0.1'), 'US'); assert.equal(of('1.0.16.1'), 'DE');
 });
-await proof('a browser is counted as a person by the marks a browser sets itself; a script under a browser\'s name is counted as a script', async () => {
+await proof('a caller under a browser\'s name is told from a browser by the marks a browser sets itself', async () => {
   const chrome = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36', safari = 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6 Mobile/15E148 Safari/604.1';
   const H = (o) => new Headers(o);
   assert.equal(callerOf(H({ 'user-agent': chrome, 'sec-fetch-mode': 'navigate', 'sec-fetch-dest': 'document' })).kind, 'browser');
@@ -178,14 +178,50 @@ await proof('a browser is counted as a person by the marks a browser sets itself
   assert.deepEqual(callerOf(H({ 'user-agent': chrome, accept: 'text/html', 'accept-language': 'en-US,en;q=0.9' })), { kind: 'tool', name: 'Scripts named like browsers', url: undefined });
   assert.equal(callerOf(H({ 'user-agent': 'Mozilla/5.0 (compatible; GPTBot/1.2; +https://openai.com/gptbot)' })).name, 'OpenAI GPTBot', 'a crawler that says who it is stays what it is');
   assert.equal(callerOf(H({ 'user-agent': 'curl/8.5.0' })).kind, 'tool'); assert.equal(callerOf(H({})).kind, 'anonymous');
+});
+await proof('a browser is a person once a page was shown in it; a page nobody was shown was read by a script', async () => {
+  const chrome = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/142.0.0.0 Safari/537.36', safari = 'Mozilla/5.0 (iPhone; CPU iPhone OS 15_8 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.6 Mobile/15E148 Safari/604.1';
+  const opens = { 'user-agent': chrome, accept: 'text/html', 'sec-fetch-mode': 'navigate', 'sec-fetch-site': 'none', 'sec-fetch-dest': 'document', 'upgrade-insecure-requests': '1' };
+  const calls = { 'user-agent': chrome, 'sec-fetch-mode': 'cors', 'sec-fetch-site': 'same-origin', 'sec-fetch-dest': 'empty' };
   const kv = memoryKv(), db = createMem({ file: 'data/none.tsv', base: 'https://mare.test' });
-  const ask = (headers) => handle(new Request('https://mare.test/buy', { headers: { 'x-forwarded-for': '203.0.113.5', ...headers } }), db, { kv, base: 'https://mare.test' });
-  await ask({ 'user-agent': chrome, 'sec-fetch-mode': 'navigate', 'sec-fetch-site': 'none', 'sec-fetch-dest': 'document', 'upgrade-insecure-requests': '1' });
-  for (let i = 0; i < 3; i++) await ask({ 'user-agent': chrome, accept: '*/*' });
-  await sleep(50);
-  const day = await kv.get(`census:${new Date().toISOString().slice(0, 10)}`);
-  assert.deepEqual(day?.kinds, { browser: 1, tool: 3 }, JSON.stringify(day?.kinds));
-  assert.deepEqual(day?.names, { 'browser|Mozilla/5.0': 1, 'tool|Scripts named like browsers': 3 }); assert.deepEqual(day?.p, { 'people /buy': 1, 'tools /buy': 3 });
+  let wait = 60000;
+  const ask = (path, headers, ip = '203.0.113.5') => handle(new Request(`https://mare.test${path}`, { headers: { 'x-forwarded-for': ip, ...headers } }), db, { kv, base: 'https://mare.test', shownWait: wait });
+  const day = async () => { await sleep(40); return (await kv.get(`census:${new Date().toISOString().slice(0, 10)}`)) || { kinds: {}, names: {}, p: {} }; };
+  // a page says when it was shown, with the name of its door and nothing else; it is the same page for every reader
+  const page = await (await ask('/buy', opens)).text();
+  assert.equal(page.split('/shown?p=').length, 2); assert.ok(page.includes(`encodeURIComponent("/buy")`) && page.indexOf('/shown?p=') < page.lastIndexOf('</body>'));
+  assert.equal(await (await ask('/buy', { 'user-agent': 'Mozilla/5.0 (compatible; GPTBot/1.2; +https://openai.com/gptbot)', accept: 'text/html' })).text(), page, 'a crawler reads the same page');
+  assert.equal(await (await ask('/buy', { 'user-agent': chrome, accept: 'text/html' })).text(), page, 'so does a script under a browser\'s name');
+  assert.ok(!(await (await ask('/stats', opens)).text()).includes('/shown'), 'an answer that is no page stays as it is');
+  assert.ok(shownLine('/x</script><b>').split('<').length === 3, 'a door cannot end the line');
+  // nothing was shown yet: the browser's request waits, the crawler and the script are counted at once
+  assert.deepEqual((await day()).kinds, { 'ai-crawler': 1, tool: 1 });
+  // the page is shown: one person, at the door of the page
+  const said = await ask('/shown?p=%2Fbuy', calls);
+  assert.equal(said.status, 204); assert.equal(said.headers.get('cache-control'), 'no-store');
+  assert.deepEqual((await day()).kinds, { 'ai-crawler': 1, tool: 1, browser: 1 }); assert.equal((await day()).p['people /buy'], 1);
+  // a page shown from the browser's own store of pages was asked of nobody and is a visit all the same; a browser from before the newer marks says it without them
+  await ask('/shown?p=%2Fbuy', { 'user-agent': safari });
+  assert.equal((await day()).kinds.browser, 2);
+  // what does not count: a call from another site, a door that is not named, a door the census leaves out, a caller that is no browser, and the sea's own proofs
+  await ask('/shown?p=%2Fbuy', { ...calls, 'sec-fetch-site': 'cross-site' }); await ask('/shown', calls); await ask('/shown?p=', calls); await ask('/shown?p=buy', calls);
+  await ask('/shown?p=%2Fcheck', calls); await ask('/shown?p=%2F.env', calls); await ask('/shown?p=%2Fbuy', { 'user-agent': 'curl/8.5.0' }); await ask('/shown?p=%2Fbuy', { ...calls, 'user-agent': `${chrome} mare-proof` });
+  assert.deepEqual((await day()).kinds, { 'ai-crawler': 1, tool: 1, browser: 2 });
+  // what waits is a door and a hash: never the address of the caller, never what follows the door (the address of a mind is its key)
+  await ask('/m/a-private-address-of-a-mind', opens, '203.0.113.9');
+  assert.equal(db.waits.length, 1); assert.equal(db.waits[0].door, '/m/…'); assert.ok(!/203\.0\.113|private-address/.test(JSON.stringify(db.waits)));
+  // a call one of the sea's own pages makes is no visit, and neither is a page fetched ahead of time or an answer that only sends the browser on
+  await ask('/brain.json?q=x', calls, '203.0.113.7'); await ask('/buy', { ...opens, 'sec-purpose': 'prefetch;prerender' }, '203.0.113.7');
+  const on = await ask('/site', opens, '203.0.113.7'); assert.ok(on.status >= 300 && on.status < 400 && on.headers.get('location'), `status ${on.status}`);
+  assert.equal(db.waits.length, 1);
+  // a program under a browser's full name opens three pages and no page is ever shown: after the wait it is counted as what it is
+  for (const path of ['/buy', '/buy', '/brain']) await ask(path, opens, '203.0.113.6');
+  assert.deepEqual((await day()).kinds, { 'ai-crawler': 1, tool: 1, browser: 2 }, 'nothing is counted while it waits');
+  wait = 0; await ask('/shown', calls);
+  const end = await day();
+  assert.deepEqual(end.kinds, { 'ai-crawler': 1, tool: 5, browser: 2 }, JSON.stringify(end.kinds)); assert.equal(db.waits.length, 0);
+  assert.deepEqual(end.names, { 'ai-crawler|OpenAI GPTBot': 1, 'tool|Scripts named like browsers': 5, 'browser|Mozilla/5.0': 2 }, JSON.stringify(end.names));
+  assert.deepEqual(end.p, { 'training /buy': 1, 'tools /buy': 3, 'people /buy': 2, 'tools /m': 1, 'tools /brain': 1 }, JSON.stringify(end.p));
 });
 await proof('the node uses its own table for the country and does not believe a header', async () => {
   const kv = memoryKv(), db = createMem({ file: 'data/none.tsv', base: 'https://mare.test' });

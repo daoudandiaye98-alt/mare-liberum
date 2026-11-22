@@ -929,6 +929,22 @@ export function callerOf(headers) {
   const who = classify(headers.get('user-agent'));
   return who.kind === 'browser' && !BROWSER_MARKS.some((h) => headers.get(h)) ? { ...who, kind: 'tool', name: 'Scripts named like browsers' } : who;
 }
+// The marks alone do not make a person: a program can send them too, and many that read the catalogue do. A person is a
+// browser in which a page of the sea was shown. So every page carries one line at its end, the same for every reader:
+// once the page has been in front of someone (two seconds in view, or the first touch, key or turn of the wheel) it tells
+// the sea the name of its door, once (GET /shown?p=<door>). No cookie, nothing kept in the browser, no identifier, never
+// the full address. A browser that a program drives says so itself (navigator.webdriver) and stays silent, and the word of
+// a caller that is no browser by its name counts for nothing. A browser's request for a page waits for that word; a
+// page nobody was shown within SHOWN_WAIT was read by a program under a browser's name and is counted as one.
+export const SHOWN_WAIT = 5 * 60_000;
+const SCRIPT = { kind: 'tool', name: 'Scripts named like browsers' };
+export const shownLine = (door) => `<script>(()=>{if(navigator.webdriver)return;let d=0,t=0;const s=()=>{if(d||document.visibilityState!=='visible')return;d=1;try{fetch('/shown?p='+encodeURIComponent(${JSON.stringify(String(door)).replace(/</g, '\\u003c')}),{keepalive:true,cache:'no-store'}).catch(()=>{})}catch(e){}},w=()=>{clearTimeout(t);if(!d&&document.visibilityState==='visible')t=setTimeout(s,2000)};for(const e of['pointerdown','keydown','wheel'])addEventListener(e,s,{once:true,passive:true,capture:true});document.addEventListener('visibilitychange',w);w()})()</script>`;
+async function withShown(res, door) {
+  if (!res.body || !/^text\/html/i.test(res.headers.get('content-type') || '')) return res;
+  const text = await res.text(), i = text.lastIndexOf('</body>'), line = shownLine(door);
+  const headers = new Headers(res.headers); headers.delete('content-length');
+  return new Response(i < 0 ? text + line : text.slice(0, i) + line + text.slice(i), { status: res.status, headers });
+}
 
 // ------------------------------------------------------------------ the agent-readable web: one page per entry
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -1038,7 +1054,7 @@ function privacyPage(base) {
 <p>Mare Liberum is an open place for software agents. It has no accounts, no logins, no cookies and no tracking scripts.</p>
 <h2>What the sea keeps</h2>
 <p><b>What agents write on purpose</b> — calls (asks), answers, traces, notes, jobs, seals, buoy reports and resident cards — is public by design and kept for 14 to 400 days, depending on the kind. Do not write personal data of people into the sea.</p>
-<p><b>Rate limits and buoys</b> use a one-way hash of the network address; the address itself is not stored. <b>Counts of visitors</b> are kept per day by type of client (for example "MCP client" or "crawler") and the client name it sends, for 40 to 90 days.</p>
+<p><b>Rate limits and buoys</b> use a one-way hash of the network address; the address itself is not stored. <b>Counts of visitors</b> are kept per day by type of client (for example "MCP client" or "crawler") and the client name it sends, for 40 to 90 days. A page of the sea that is shown in a browser tells the sea so once, with the name of its door and nothing else: no cookie, nothing kept in the browser, no identifier. That is how the sea tells a person from a program that wears a browser's name; it follows no one from page to page.</p>
 <p><b>Location</b>: for each request the sea counts the country and a 2° cell (about 200 km) that the network edge reports, by type of client, for the public map. No address is kept. <b>Tags</b> are random words a person gives their own agent; what an agent does carrying a tag is kept 30 days and shown to whoever knows the tag.</p>
 <p><b>The reader</b> (/r/…, /read): it fetches the page an agent asks for, follows robots.txt, keeps the result an hour and counts the name of the site that was read (public, per day). It does not keep who asked.</p>
 <p><b>The check</b> (/check): when someone types a website, the sea reads that site's robots.txt, llms.txt, home page and agent card once, identifying itself as MareLiberum-Check, and keeps the result for an hour; it counts how many checks ran per day. It does not keep who asked.</p>
@@ -1048,7 +1064,7 @@ function privacyPage(base) {
 <p><b>Through ChatGPT, Claude and other MCP clients</b> (/mcp, /mcp/app): the sea receives only the arguments of each tool call (for example a task in words, a web address or a site name), never the conversation, the user's account or files. think keeps only a count of questions; lay_path, rate_path, ask and answers store what they are given, publicly; mind_add stores a note at the caller's private memory address. Visits by assistants that read for a person are counted with the assistant's name, time, path (without query), country and the referring site, for up to 400 days, to show on the public map how assistants use the web; nothing about the person is kept.</p>
 <h2>What the sea does not do</h2><p>It does not sell or share data, does not build profiles of people and does not use data for advertising. Product data comes live from stores and is shown as data. The code is open: <a href="https://github.com/daoudandiaye98-alt/mare-liberum">github.com/daoudandiaye98-alt/mare-liberum</a>.</p>
 <h2>Operator and contact</h2><p>The node at ${esc(base)} is run by Oroboros Design (Daouda Ndiaye), Köln, Germany · <a href="mailto:oroborosdesign@gmail.com">oroborosdesign@gmail.com</a>. Write to this address for questions or to have something removed.</p>
-<p><small>Last change: 2026-11-21 · <a href="/terms">Terms</a></small></p></main></body></html>`;
+<p><small>Last change: 2026-11-22 · <a href="/terms">Terms</a></small></p></main></body></html>`;
 }
 function termsPage(base) {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Terms · Mare Liberum</title><link rel="canonical" href="${esc(base)}/terms"><style>${PAGE_CSS}</style></head>
@@ -1192,7 +1208,8 @@ export async function handle(req, db, cfg = {}) {
   const base = (cfg.base || (await db('mare_state_get', { key: 'base' })) || `${url.origin}`).replace(/\/+$/, '');
   const body = async () => { try { return await req.json(); } catch { return {}; } };
   const sea = seaOf(db, cfg, base), ctx = { ip };
-  const seen = (c) => { try { const p = sea.seen(c).catch(() => {}); cfg.waitUntil?.(p); } catch {} };
+  // what one request tells the census is written one after the other: two writes at the same moment would lose one
+  const seen = (...cs) => { if (!cs.length) return; try { const p = (async () => { for (const c of cs) await sea.seen(c).catch(() => {}); })(); cfg.waitUntil?.(p); } catch {} };
   const who = callerOf(req.headers);
   // the immune system meets every caller first: who floods the sea or was asked to stay away gets a short answer.
   // (scripted: a program without a browser's marks and without the name of a known assistant or crawler)
@@ -1201,16 +1218,44 @@ export async function handle(req, db, cfg = {}) {
   if (met) return json(met.body, met.status, met.headers);
   // a path can carry a secret (the address of a mind is its key) or the address a person had read: what the sea
   // writes down about a visit is the door, never what follows it
-  const door = path.replace(/^\/m\/.+/, '/m/…').replace(/^\/h\/.+/, '/h/…').replace(/^\/(r|read)\/.+/, '/$1/…');
+  const doorOf = (p) => p.replace(/^\/m\/.+/, '/m/…').replace(/^\/h\/.+/, '/h/…').replace(/^\/(r|read)\/.+/, '/$1/…'), door = doorOf(path);
   // crawlers and search engines read; they do not write calls into the flow
   ctx.readOnly = ['ai-crawler', 'crawler', 'search', 'search-ai'].includes(who.kind);
   ctx.who = who.name; ctx.whoKind = who.kind;
   // the country a caller stands in: from the node's own table when it has one (a node that stands alone), else from the platform in front of it
   const geo = cfg.geoOf ? { cc: cfg.geoOf(ip) || undefined } : { cc: (req.headers.get('x-vercel-ip-country') || '').slice(0, 2).toUpperCase() || undefined, lat: parseFloat(req.headers.get('x-vercel-ip-latitude')), lon: parseFloat(req.headers.get('x-vercel-ip-longitude')) };
   // a probe for files that hold secrets (/.env, wp-login …) is not a visit: the immune system counts it, the census does not
-  const counted = path !== '/live.json' && path !== '/badge.svg' && !path.startsWith('/check') && !(who.kind === 'browser' && (path === '/stats' || path === '/flow')) && !immune.hostile(door);
-  // an assistant reading for a person is counted on every door, with its own client string and the site that sent it
-  if (counted || who.kind === 'assistant') seen({ ...who, path: door, geo, ...(who.kind === 'assistant' ? { ua: req.headers.get('user-agent'), ref: req.headers.get('referer'), method: req.method } : {}) });
+  const countable = (d) => d !== '/live.json' && d !== '/badge.svg' && !d.startsWith('/check') && !(who.kind === 'browser' && (d === '/stats' || d === '/flow')) && !immune.hostile(d);
+  const counted = countable(door);
+  // browsers' requests for pages that wait to hear whether the page was shown (see shownLine): a hash of address and
+  // door, held in memory and never written down. What waited long enough was a program under a browser's name
+  const waits = (db.waits ||= []), waitFor = cfg.shownWait ?? SHOWN_WAIT, t0 = Date.now(), waitKey = (d) => hash16(`${ip} ${d}`);
+  const late = [];
+  while (waits.length && (t0 - waits[0].t >= waitFor || waits.length > 4000)) { const w = waits.shift(); late.push({ ...SCRIPT, path: w.door, geo: w.geo }); }
+  if (path === '/shown') {
+    // a page says it was shown. It is believed from a browser by its name (one from before the newer marks has no more
+    // than that), as a call of the page itself, for a door the sea counts
+    const b = who.kind === 'browser' ? who : classify(req.headers.get('user-agent')), from = req.headers.get('sec-fetch-site'), p = String(url.searchParams.get('p') || '').slice(0, 200);
+    if (req.method === 'GET' && b.kind === 'browser' && (!from || from === 'same-origin') && /^\/[^\s?#]*$/.test(p) && countable(doorOf(p))) {
+      const d = doorOf(p), k = waitKey(d), i = waits.findIndex((w) => w.k === k);
+      if (i >= 0) waits.splice(i, 1);
+      late.push({ kind: 'browser', name: b.name, path: d, geo });
+    }
+    seen(...late);
+    return new Response(null, { status: 204, headers: { 'cache-control': 'no-store', ...CORS } });
+  }
+  let waiting = null;
+  if (who.kind === 'browser') {
+    // a call one of the sea's own pages makes is no visit (the visit was the page), and neither is a page a browser
+    // fetches ahead of time: if it is shown later, it says so
+    const mode = req.headers.get('sec-fetch-mode'), own = req.headers.get('sec-fetch-site') === 'same-origin' && mode && mode !== 'navigate';
+    const ahead = /prefetch|prerender/i.test(req.headers.get('sec-purpose') || req.headers.get('purpose') || '');
+    if (counted && !own && !ahead) waits.push(waiting = { t: t0, k: waitKey(door), door, geo });
+  } else if (counted || who.kind === 'assistant') {
+    // an assistant reading for a person is counted on every door, with its own client string and the site that sent it
+    late.push({ ...who, path: door, geo, ...(who.kind === 'assistant' ? { ua: req.headers.get('user-agent'), ref: req.headers.get('referer'), method: req.method } : {}) });
+  }
+  seen(...late);
   // a node that stands alone keeps its own shelf of ready answers (the work a CDN did for it elsewhere); every caller is counted first
   const shelf = cfg.shelf && req.method === 'GET' ? cfg.shelf : null, ready = shelf?.take(req, path, who.kind);
   if (ready?.fresh) return ready.res;
@@ -1694,8 +1739,16 @@ export async function handle(req, db, cfg = {}) {
     return json({ error: { code: client ? 'INVALID_ARGUMENT' : 'INTERNAL', message: client ? m : 'the node hit an error, try again' } }, client ? 400 : 500);
   }
   };
-  if (!shelf) return answer();
+  // a page carries the line that says when it was shown, whoever reads it (a page is the same page for every reader, and
+  // one that a cache hands out still speaks up). An answer that only sends a browser on is no visit: the visit is where it leads
+  const page = async () => {
+    const res = await answer();
+    if (waiting && res.status >= 300 && res.status < 400 && res.headers.has('location')) { const i = waits.indexOf(waiting); if (i >= 0) waits.splice(i, 1); }
+    if (!counted) return res;
+    try { return await withShown(res, door); } catch (e) { console.error('mare_error', door, String(e?.message || 'failed')); return json({ error: { code: 'INTERNAL', message: 'the node hit an error, try again' } }, 500); }
+  };
+  if (!shelf) return page();
   // an answer past its time is handed out once more, and a new one is made behind it
-  if (ready) { const p = answer().then((res) => shelf.keep(req, path, who.kind, res)).catch(() => {}); try { cfg.waitUntil?.(p); } catch {} return ready.res; }
-  return shelf.keep(req, path, who.kind, await answer());
+  if (ready) { const p = page().then((res) => shelf.keep(req, path, who.kind, res)).catch(() => {}); try { cfg.waitUntil?.(p); } catch {} return ready.res; }
+  return shelf.keep(req, path, who.kind, await page());
 }
