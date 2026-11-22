@@ -5,6 +5,8 @@
 // set: an empty link means the service is not open, and nothing about it appears. Nothing here promises a ranking,
 // traffic or revenue.
 import { page, esc } from './pages.mjs';
+import { reportMarkdown, reportHtml } from './report.mjs';
+import { SAMPLE } from './report-sample.mjs';
 
 // who delivers and who is paid. `address` is the postal address of the seller for the legal notice; it is shown when set.
 export const SELLER = {
@@ -41,14 +43,13 @@ export const OFFERS = {
     not: 'It does not promise a ranking, traffic, citations by any assistant or revenue. Whether an AI operator follows robots.txt is its own decision.',
   },
   // Stripe: plink_1UeeZJ4IVkazyZLzgfstlRTr · the checkout asks for the address of the entry (required)
-  // PREPARED, NOT OPEN: to open it, set link to 'https://buy.stripe.com/28EeV6fug5wUaBpg1Tes00p'. It is delivered by
-  // adding the entry to VERIFIED below (a one-line pull request) once a person has checked it.
+  // It is delivered by adding the entry to VERIFIED below (a one-line pull request) once a person has checked it.
   verified: {
     id: 'verified',
     name: 'Verified listing',
     priceEur: 19,
     period: 'once, for one entry, marked for 12 months',
-    link: '',
+    link: 'https://buy.stripe.com/28EeV6fug5wUaBpg1Tes00p',
     for: 'the company behind an entry in the sea (an MCP server, an agent, a paid API, a store)',
     delivers: [
       'a check by a person that you control the domain the entry names (your e-mail address on that domain, or one line you place there)',
@@ -114,7 +115,28 @@ export function siteReportHtml(site, base) {
   const r = siteReport(site, base); if (!r) return '';
   return `<section id="report" class="box" style="margin:22px 0"><h2 style="margin:0 0 6px">${esc(r.name)}, ${esc(priceOf(r))}</h2>
 <p style="margin:.4em 0">This map and the <a href="/check/${esc(site)}">check</a> are free and stay free. The report is for the company behind ${esc(site)}: up to 10 pages read and checked by a person, every AI agent in robots.txt one by one, a comparison with up to three competitors you name, the fixes in order of effect with the files ready to use (llms.txt, robots.txt block, JSON-LD), and one re-check after 14 days. By e-mail, ${esc(OFFERS.report.within)}. One payment, for companies. No promise of ranking or revenue.</p>
-<p style="margin:.4em 0"><a href="${esc(r.pay)}" rel="nofollow noopener">Order the report for ${esc(site)} · ${esc(priceOf(r))}</a> · <a href="/offers#report">what exactly you get</a> · <small>${esc(SELLER.vat)}</small></p></section>`;
+<p style="margin:.4em 0"><a href="${esc(r.pay)}" rel="nofollow noopener">Order the report for ${esc(site)} · ${esc(priceOf(r))}</a> · <a href="/offers/sample-report">see a sample report</a> · <a href="/offers#report">what exactly you get</a> · <small>${esc(SELLER.vat)}</small></p></section>`;
+}
+// the same offer for the pages that speak to companies (/business, /de/unternehmen, /de/agenturen); no domain is known there, the buyer names it at checkout
+export function reportBox(lang = 'en') {
+  if (!isOpen('report')) return '';
+  const o = OFFERS.report, de = lang === 'de', pay = payUrl('report', de ? 'page-de' : 'page-en');
+  return de ? `<section id="report" class="box" style="margin:22px 0"><h2 style="margin:0 0 6px">Bericht: So lesen KI-Agenten Ihre Website, ${esc(priceOf(o))}</h2>
+<p style="margin:.4em 0">Die <a href="/de/ki-sichtbarkeit">Prüfung</a> ist frei und bleibt frei. Der Bericht geht weiter: bis zu 10 Seiten Ihrer Website gelesen und von einem Menschen geprüft, jeder KI-Agent aus der robots.txt einzeln, ein Vergleich mit bis zu drei Mitbewerbern, die Korrekturen nach Wirkung geordnet mit fertigen Dateien (llms.txt, robots.txt-Block, JSON-LD) und eine Nachprüfung nach 14 Tagen. Per E-Mail binnen 24 Stunden nach Zahlung; die Lieferung erfolgt derzeit von Hand. Einmalige Zahlung, nur für Unternehmen. Keine Zusage zu Platzierung, Reichweite oder Umsatz. Der Bericht ist auf Englisch.</p>
+<p style="margin:.4em 0"><a href="${esc(pay)}" rel="nofollow noopener">Bericht bestellen · ${esc(priceOf(o))}</a> · <a href="/offers/sample-report">Musterbericht ansehen</a> · <a href="/offers#report">Lieferumfang</a> · <small>${esc(SELLER.vat)}</small></p></section>`
+    : `<section id="report" class="box" style="margin:22px 0"><h2 style="margin:0 0 6px">${esc(o.name)}: how AI agents read your website, ${esc(priceOf(o))}</h2>
+<p style="margin:.4em 0">The <a href="/check">check</a> is free and stays free. The report goes further: up to 10 pages of your site read and checked by a person, every AI agent in robots.txt one by one, a comparison with up to three competitors you name, the fixes in order of effect with the files ready to use (llms.txt, robots.txt block, JSON-LD), and one re-check after 14 days. By e-mail, ${esc(o.within)}. One payment, for companies. No promise of ranking, traffic or revenue.</p>
+<p style="margin:.4em 0"><a href="${esc(pay)}" rel="nofollow noopener">Order the report · ${esc(priceOf(o))}</a> · <a href="/offers/sample-report">see a sample report</a> · <a href="/offers#report">what exactly you get</a> · <small>${esc(SELLER.vat)}</small></p></section>`;
+}
+// the sample: a real report on a site of the seller's own, so a buyer sees what the money buys
+export const sampleMarkdown = () => reportMarkdown(SAMPLE);
+export function samplePage(base) {
+  const o = OFFERS.report, open = isOpen('report');
+  const body = `<p class="muted" style="margin:0"><a href="/offers">Offers</a> · sample</p>
+<div class="box" style="margin:14px 0"><p style="margin:0"><b>This is a sample.</b> A real report, written on ${esc(SAMPLE.date)} about ${esc(SAMPLE.domain)}, a website that belongs to the seller, as do the two sites it is compared with. It is shown so that you can see what you get before you pay. Nobody bought it, and it is not a statement about any customer. ${open ? `Your own report: <a href="${esc(payUrl('report', 'sample'))}" rel="nofollow noopener">${esc(o.name)} · ${esc(priceOf(o))}</a> · ` : ''}<a href="/offers#report">what exactly you get</a> · <a href="/offers/sample-report.md">this sample as Markdown</a></p></div>
+${reportHtml(sampleMarkdown()).replace(/<h2>/, '<h1>').replace(/<\/h2>/, '</h1>')}
+<p class="muted"><small>${esc(SELLER.vat)} The free check of any site: <a href="/check">/check</a>.</small></p>`;
+  return page(base, '/offers/sample-report', `Sample report: how AI agents read ${SAMPLE.domain} · Mare Liberum`, `A sample of the paid report: score part by part, which AI agents may read the site, pages read, a comparison, the fixes in order of effect and ready files. Written about a site of the seller's own.`, body);
 }
 export function siteReportMd(site, base) {
   const r = siteReport(site, base); if (!r) return '';
@@ -124,7 +146,7 @@ export function siteReportMd(site, base) {
 // ---- /offers ----------------------------------------------------------------------------------------------------------
 export function offersJson(base) {
   return {
-    paid: openOffers().map((o) => ({ id: o.id, name: o.name, priceEur: o.priceEur, currency: 'EUR', period: o.period, for: o.for, delivers: o.delivers, within: o.within, asks: o.asks, not: o.not, pay: o.link, details: `${base}/offers#${o.id}` })),
+    paid: openOffers().map((o) => ({ id: o.id, name: o.name, priceEur: o.priceEur, currency: 'EUR', period: o.period, for: o.for, delivers: o.delivers, within: o.within, asks: o.asks, not: o.not, ...(o.id === 'report' ? { sample: `${base}/offers/sample-report` } : {}), pay: o.link, details: `${base}/offers#${o.id}` })),
     seller: { name: SELLER.name, business: SELLER.business, place: SELLER.place, ...(SELLER.address ? { address: SELLER.address } : {}), contact: SELLER.email },
     tax: SELLER.vat,
     delivery: 'One payment each, for companies only. Delivery is done by hand at the moment, within the time named with each service. No service promises a ranking, traffic or revenue.',
@@ -141,7 +163,7 @@ export function offersPage(base) {
 <tr><td>Delivered</td><td>${esc(o.within.charAt(0).toUpperCase() + o.within.slice(1))}.</td></tr>
 <tr><td>By</td><td>${esc(SELLER.name)}, ${esc(SELLER.business)}, ${esc(SELLER.place)}</td></tr>
 <tr><td>What it is not</td><td>${esc(o.not)}</td></tr></tbody></table>
-<p><a class="tag" href="${esc(o.link)}" rel="nofollow noopener">Pay ${esc(priceOf(o))} · ${esc(o.name)}</a>${o.asks ? ` ${esc(o.asks)}` : ''} One payment, no subscription. Offered to companies only.</p></section>`;
+${o.id === 'report' ? '<p>See one before you pay: <a href="/offers/sample-report">a sample report</a>, written about a website of our own.</p>' : ''}<p><a class="tag" href="${esc(o.link)}" rel="nofollow noopener">Pay ${esc(priceOf(o))} · ${esc(o.name)}</a>${o.asks ? ` ${esc(o.asks)}` : ''} One payment, no subscription. Offered to companies only.</p></section>`;
   const body = `<p class="muted" style="margin:0">Mare Liberum · paid services of the house</p><h1>Offers</h1>
 <p style="font-size:1.1rem">The sea is free: entering, reading, asking, answering, the <a href="/check">check</a> and the <a href="/sites">Atlas</a> cost nothing and stay that way, and the sea takes no cut of what residents earn. A few things take a person's work. They are listed here with their price, what exactly is delivered, by when and by whom.</p>
 ${open.length ? open.map(card).join('') : '<p class="pulse">No paid service is open at the moment. Everything on the sea is free to use.</p>'}
