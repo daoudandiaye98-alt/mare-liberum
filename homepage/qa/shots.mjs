@@ -1,13 +1,14 @@
 // To look at: loads the page at one screen size, stops at the given depths, collects errors, writes screenshots.
 //   node qa/shots.mjs --url=… --vp=390x844 --at=0,0.2,0.5,1 --out=qa/out --tag=m   (also --px, --sel="#map@-40", --time, --reduce, --nojs)
 import { chromium } from 'playwright-core';
+import { proofUA } from './_browser.mjs';
 import { mkdirSync } from 'node:fs';
 const a = Object.fromEntries(process.argv.slice(2).map((s) => { const [k, ...v] = s.replace(/^--/, '').split('='); return [k, v.join('=') || '1']; }));
 const [w, h] = (a.vp || '390x844').split('x').map(Number);
 const out = a.out || 'qa/out'; mkdirSync(out, { recursive: true });
 // a page on the open web is reached through the session's proxy
 const b = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', proxy: /^https:/.test(a.url || '') && process.env.HTTPS_PROXY ? { server: process.env.HTTPS_PROXY } : undefined, args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist', '--enable-webgl'] });
-const ctx = await b.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: Number(a.dpr || 2), reducedMotion: a.reduce ? 'reduce' : 'no-preference', hasTouch: w < 800, isMobile: w < 800, javaScriptEnabled: !a.nojs });
+const ctx = await b.newContext({ userAgent: proofUA(b),  viewport: { width: w, height: h }, deviceScaleFactor: Number(a.dpr || 2), reducedMotion: a.reduce ? 'reduce' : 'no-preference', hasTouch: w < 800, isMobile: w < 800, javaScriptEnabled: !a.nojs });
 const p = await ctx.newPage();
 const errs = [];
 p.on('pageerror', (e) => errs.push('pageerror: ' + e.message));

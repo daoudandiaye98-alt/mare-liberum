@@ -2,11 +2,12 @@
 //   node qa/contrast.mjs --url=… --vp=390x844 --wait=1900
 // Schwelle: 4.5:1, ab 24 px (oder 18.66 px fett) 3:1. Gibt je Selektor den schlechtesten gemessenen Wert aus.
 import { chromium } from 'playwright-core';
+import { proofUA } from './_browser.mjs';
 import { PNG } from 'pngjs';
 const a = Object.fromEntries(process.argv.slice(2).map((s) => { const [k, ...v] = s.replace(/^--/, '').split('='); return [k, v.join('=') || '1']; }));
 const [w, h] = (a.vp || '390x844').split('x').map(Number);
 const b = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-const ctx = await b.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1, hasTouch: w < 800, isMobile: w < 800 });
+const ctx = await b.newContext({ userAgent: proofUA(b),  viewport: { width: w, height: h }, deviceScaleFactor: 1, hasTouch: w < 800, isMobile: w < 800 });
 const p = await ctx.newPage();
 const times = (a.times || '4,11.3').split(',').map(Number); let ti = 0;
 await p.addInitScript(() => { window.__ML = { noGovern: true, soft: true, strict: true, time: 4, q: 0.5 }; });

@@ -1,11 +1,12 @@
 // Use: the menu, the tools, the keyboard. Clicks for real, reads the state, writes what it found.
 //   node qa/act.mjs --url=… --vp=390x844 --out=qa/out/act
 import { chromium } from 'playwright-core';
+import { proofUA } from './_browser.mjs';
 import { mkdirSync } from 'node:fs';
 const a = Object.fromEntries(process.argv.slice(2).map((s) => { const [k, ...v] = s.replace(/^--/, '').split('='); return [k, v.join('=') || '1']; }));
 const [w, h] = (a.vp || '390x844').split('x').map(Number); const out = a.out || 'qa/act'; mkdirSync(out, { recursive: true });
 const b = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-const ctx = await b.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 2, hasTouch: w < 800, isMobile: w < 800 });
+const ctx = await b.newContext({ userAgent: proofUA(b),  viewport: { width: w, height: h }, deviceScaleFactor: 2, hasTouch: w < 800, isMobile: w < 800 });
 const p = await ctx.newPage(); const errs = [];
 p.on('pageerror', (e) => errs.push('pageerror: ' + e.message)); p.on('console', (m) => { if (m.type() === 'error' && !/GL Driver/.test(m.text())) errs.push('console: ' + m.text()); });
 await p.addInitScript(() => { window.__ML = { noGovern: true, soft: true, strict: true, time: 4 }; });

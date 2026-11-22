@@ -71,10 +71,15 @@ so behind a proxy that ends TLS itself it needs a profile that trusts the proxy 
 | `ovf` | no JavaScript and no web fonts: nothing reaches past the edge |
 | `startup` | where the first second goes, on a four times slower processor |
 | `shots` | screenshots at chosen depths, to look at |
+| `shown` | how the node tells a person from a program: a page read, a key pressed, a tab in the background, a driven browser; the census before and after (a node of one's own only) |
 
 The scripts set `window.__ML` before the page loads. The page reads it once: `soft` (draw the shader also on a
 software renderer), `noGovern` (leave the picture's size alone), `time` (a fixed moment of the sea), `q` (the size of
 the picture), `strict` (a shader that does not compile is an error). A reader never has it.
+
+Every tool says who it is: its browser's name ends in `mare-proof`. The sea knows its own proofs by that word and leaves
+them out of the census; without it a test run reads as a crowd of people, and the page says how many people came.
+`shown` is the one tool that has to be counted, so it refuses any address but a local one.
 
 ## Fonts
 

@@ -1,9 +1,10 @@
 // which elements reach past the right edge (JS off, web fonts unavailable)
 import { chromium } from 'playwright-core';
+import { proofUA } from './_browser.mjs';
 const a = Object.fromEntries(process.argv.slice(2).map((s) => { const [k, ...v] = s.replace(/^--/, '').split('='); return [k, v.join('=') || '1']; }));
 const [w, h] = (a.vp || '390x844').split('x').map(Number);
 const b = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox'] });
-const ctx = await b.newContext({ viewport: { width: w, height: h }, javaScriptEnabled: !a.nojs });
+const ctx = await b.newContext({ userAgent: proofUA(b),  viewport: { width: w, height: h }, javaScriptEnabled: !a.nojs });
 const p = await ctx.newPage();
 if (a.nofonts) await p.route(/\.woff2(\?|$)/, (r) => r.abort());
 await p.goto(a.url, { waitUntil: 'load' }); await p.waitForTimeout(600);

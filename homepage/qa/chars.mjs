@@ -1,9 +1,10 @@
 // Which characters does the page set in which typeface? Walks every text node (after the tools have answered and the menu
 // has been opened), honours text-transform, and prints the set per family: the list a font subset must contain.
 import { chromium } from 'playwright-core';
+import { proofUA } from './_browser.mjs';
 const url = process.argv[2];
 const b = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-const p = await (await b.newContext({ viewport: { width: 1440, height: 900 } })).newPage();
+const p = await (await b.newContext({ userAgent: proofUA(b),  viewport: { width: 1440, height: 900 } })).newPage();
 await p.addInitScript(() => { window.__ML = { noGovern: true, soft: true, time: 4 }; });
 await p.goto(url, { waitUntil: 'load' }); await p.waitForTimeout(2500);
 try { await p.fill('#cq', 'wikipedia.org'); await p.press('#cq', 'Enter'); await p.waitForTimeout(2500); await p.fill('#aq', 'running shoes'); await p.press('#aq', 'Enter'); await p.waitForTimeout(2500); } catch {}

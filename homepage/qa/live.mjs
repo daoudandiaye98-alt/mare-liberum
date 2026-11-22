@@ -1,12 +1,13 @@
 // The page as the node serves it: live mode, the tools, the empty state, and the count after a second poll.
 //   node qa/live.mjs --url=http://localhost:8788/ --tag=node --tools=1 --out=qa/out/live
 import { chromium } from 'playwright-core';
+import { proofUA } from './_browser.mjs';
 import { mkdirSync } from 'node:fs';
 const a = Object.fromEntries(process.argv.slice(2).map((s) => { const [k, ...v] = s.replace(/^--/, '').split('='); return [k, v.join('=') || '1']; }));
 const out = a.out || 'qa/live'; mkdirSync(out, { recursive: true });
 // a page on the open web is reached through the session's proxy
 const b = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', proxy: /^https:/.test(a.url || '') && process.env.HTTPS_PROXY ? { server: process.env.HTTPS_PROXY } : undefined, args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-const ctx = await b.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
+const ctx = await b.newContext({ userAgent: proofUA(b),  viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, hasTouch: true, isMobile: true });
 const p = await ctx.newPage(); const errs = [], reqs = [];
 p.on('pageerror', (e) => errs.push('pageerror: ' + e.message));
 p.on('console', (m) => { if (m.type() === 'error' && !/GL Driver/.test(m.text())) errs.push('console: ' + m.text()); });

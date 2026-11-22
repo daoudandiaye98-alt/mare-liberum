@@ -1,6 +1,7 @@
 // The preview the way a host of artifacts runs it: in a sandboxed iframe (a foreign, opaque origin: localStorage
 // throws, the clipboard is refused) and under a strict Content-Security-Policy. Prints numbers and places, no ticks.
 import { chromium } from 'playwright-core';
+import { proofUA } from './_browser.mjs';
 import { createServer } from 'node:http';
 import { readFileSync, mkdirSync } from 'node:fs';
 const a = Object.fromEntries(process.argv.slice(2).map((s) => { const [k, ...v] = s.replace(/^--/, '').split('='); return [k, v.join('=') || '1']; }));
@@ -27,7 +28,7 @@ const port = srv.address().port;
 const [w, h] = (a.vp || '390x844').split('x').map(Number);
 const b = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
 // DPR 1: at DPR 2 Playwright miscalculates the hit coordinates inside a foreign (out-of-process) frame, a fault of the tool, not of the page
-const ctx = await b.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: Number(a.dpr || 1), hasTouch: w < 800, isMobile: w < 800 });
+const ctx = await b.newContext({ userAgent: proofUA(b),  viewport: { width: w, height: h }, deviceScaleFactor: Number(a.dpr || 1), hasTouch: w < 800, isMobile: w < 800 });
 const p = await ctx.newPage(); const errs = [], blocked = [];
 p.on('pageerror', (e) => errs.push('pageerror: ' + e.message));
 p.on('console', (m) => { const t = m.text(); if (/Content Security Policy|Refused to/i.test(t)) blocked.push(t.slice(0, 220)); else if (m.type() === 'error' && !/GL Driver/.test(t)) errs.push('console: ' + t.slice(0, 220)); });

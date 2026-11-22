@@ -3,12 +3,13 @@
 // Reports the classes, errors, how long the main thread was held (long tasks), and writes screenshots to look at.
 // --force=1 sets the hook that makes the page draw the shader anyway, to measure what that costs on the same machine.
 import { chromium } from 'playwright-core';
+import { proofUA } from './_browser.mjs';
 import { mkdirSync } from 'node:fs';
 const a = Object.fromEntries(process.argv.slice(2).map((s) => { const [k, ...v] = s.replace(/^--/, '').split('='); return [k, v.join('=') || '1']; }));
 const [w, h] = (a.vp || '390x844').split('x').map(Number);
 const out = a.out || 'qa/soft'; mkdirSync(out, { recursive: true });
 const b = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', proxy: /^https:/.test(a.url || '') && process.env.HTTPS_PROXY ? { server: process.env.HTTPS_PROXY } : undefined, args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-const ctx = await b.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: w < 800 ? 2 : 1, hasTouch: w < 800, isMobile: w < 800, reducedMotion: a.reduce ? 'reduce' : 'no-preference', javaScriptEnabled: !a.nojs });
+const ctx = await b.newContext({ userAgent: proofUA(b),  viewport: { width: w, height: h }, deviceScaleFactor: w < 800 ? 2 : 1, hasTouch: w < 800, isMobile: w < 800, reducedMotion: a.reduce ? 'reduce' : 'no-preference', javaScriptEnabled: !a.nojs });
 const p = await ctx.newPage(); const errs = [];
 p.on('pageerror', (e) => errs.push('pageerror: ' + e.message));
 p.on('console', (m) => { if (m.type() === 'error' && !/GL Driver Message/.test(m.text())) errs.push('console: ' + m.text().slice(0, 200)); });

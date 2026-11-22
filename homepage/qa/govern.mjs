@@ -2,10 +2,11 @@
 // Expected: the canvas shrinks step by step; if frames stay slow at the smallest size, the page lets the shader go
 // and shows the CSS sea (class "nogl"). Samples class, canvas size and frame pace over time.
 import { chromium } from 'playwright-core';
+import { proofUA } from './_browser.mjs';
 const a = Object.fromEntries(process.argv.slice(2).map((s) => { const [k, ...v] = s.replace(/^--/, '').split('='); return [k, v.join('=') || '1']; }));
 const [w, h] = (a.vp || '1440x900').split('x').map(Number);
 const b = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-const ctx = await b.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: Number(a.dpr || 1) });
+const ctx = await b.newContext({ userAgent: proofUA(b),  viewport: { width: w, height: h }, deviceScaleFactor: Number(a.dpr || 1) });
 const p = await ctx.newPage(); const errs = []; p.on('pageerror', (e) => errs.push(e.message));
 await p.addInitScript(() => { window.__ML = { soft: true }; window.__f = []; let l = performance.now(); const t = (n) => { window.__f.push(n - l); l = n; requestAnimationFrame(t); }; requestAnimationFrame(t); });
 await p.goto(a.url, { waitUntil: 'load' });

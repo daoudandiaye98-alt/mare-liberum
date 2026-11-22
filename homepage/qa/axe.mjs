@@ -1,11 +1,12 @@
 // axe-core on the page: at the top, with the menu open and after a tool answered. Violations and "needs review", by rule.
 import { chromium } from 'playwright-core';
+import { proofUA } from './_browser.mjs';
 import { readFileSync } from 'node:fs';
 const a = Object.fromEntries(process.argv.slice(2).map((s) => { const [k, ...v] = s.replace(/^--/, '').split('='); return [k, v.join('=') || '1']; }));
 const axe = readFileSync('node_modules/axe-core/axe.min.js', 'utf8');
 const [w, h] = (a.vp || '390x844').split('x').map(Number);
 const b = await chromium.launch({ executablePath: process.env.CHROME || '/usr/bin/google-chrome', proxy: /^https:/.test(a.url || '') && process.env.HTTPS_PROXY ? { server: process.env.HTTPS_PROXY } : undefined, args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader', '--ignore-gpu-blocklist'] });
-const ctx = await b.newContext({ viewport: { width: w, height: h }, deviceScaleFactor: 1, hasTouch: w < 800, isMobile: w < 800 });
+const ctx = await b.newContext({ userAgent: proofUA(b),  viewport: { width: w, height: h }, deviceScaleFactor: 1, hasTouch: w < 800, isMobile: w < 800 });
 const p = await ctx.newPage();
 await ctx.addInitScript(() => { window.__ML = { noGovern: true, soft: true, strict: true, q: 0.5, soft: true }; });
 if (a.css) await ctx.addInitScript((css) => { addEventListener('DOMContentLoaded', () => { const s = document.createElement('style'); s.textContent = css; document.head.appendChild(s); }); }, a.css);
