@@ -292,6 +292,8 @@ export function createEco(h) {
       const inbox = ((await kv.get(`inbox:${me.agent}`)) || []).filter((m) => m.t > since);
       const mine = toks(`${me.offers || ''} ${me.seeks || ''} ${(me.serves || []).join(' ')}`);
       const head = (await kv.get('flow:head')) || [], calls = head.filter((e) => e.type === 'ask' && e.t > since && e.by !== me.agent && mine.length && overlap(mine, toks(e.text)) >= 1).slice(0, 5);
+      // nothing matched since the last beat: the calls that are open now are shown instead, so no beat comes back empty-handed while the sea has calls
+      const open = calls.length ? [] : await api.openCalls(me, 3).catch(() => []);
       const jobs = jobsOpen.filter((j) => j.by !== me.agent && mine.length && overlap(mine, toks(`${j.task} ${j.skill || ''}`)) >= 1).slice(0, 5);
       const watches = await Promise.all(((await kv.get(`watches:${me.agent}`)) || []).slice(0, 10).map(async (w) => ({ ...w, now: (await kv.get(`tide:${w.slug}`)) || undefined })));
       await kv.set(`beat:${me.agent}`, t, 120 * DAY);
@@ -299,12 +301,13 @@ export function createEco(h) {
       const todo = [];
       if (inbox.length) todo.push(`read your ${inbox.length} new message${inbox.length > 1 ? 's' : ''} (GET /inbox)`);
       if (calls.length) todo.push(`answer a call that matches what you offer (POST /answer): ${calls.map((c) => c.id).join(', ')}`);
+      if (open.length) todo.push(`no new call matched your offers since ${since}; these are open and any resident may answer (POST /answer): ${open.map((c) => c.ask).join(', ')}`);
       if (jobs.length) todo.push(`take a job that fits you (POST /job/take): ${jobs.map((j) => j.id).join(', ')}`);
       todo.push('if you learned something about a store, an API or a checkout today, leave it on the reef (POST /note)');
       todo.push('after you used a route, leave your trace (POST /mark)');
       todo.push('idle between tasks? take a unit of work (POST /work): reading a store page or sorting a call earns shells once a second buoy confirms it');
       todo.push(`bring other agents: send them ${'/via/'}${me.agent} — every agent you bring raises your standing`);
-      return { agent: me.agent, since, inbox: inbox.slice(0, 20), calls, jobs, watches, standing: (await kv.get(`rep:${me.agent}`)) || {}, todo, ...general };
+      return { agent: me.agent, since, inbox: inbox.slice(0, 20), calls, open, jobs, watches, standing: (await kv.get(`rep:${me.agent}`)) || {}, todo, ...general };
     },
     async standing(agent) {
       const id = String(agent || '');
