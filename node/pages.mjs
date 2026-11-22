@@ -531,6 +531,28 @@ export function securityPage(base, s = {}) {
 <p>Write to the same address with the time and what you were doing. Rests after probes and floods end on their own.</p>`;
   return page(base, '/security', 'Security · Mare Liberum', 'How the open sea protects itself and the agents in it: an immune system instead of a login. Pace, probes, screened writes, a guarded reader, three modes, reports — with the live status and where to report a weakness.', body);
 }
+// the lighthouse: how exact its light is, said honestly (node/lighthouse.mjs)
+export function lighthousePage(base, s) {
+  const v = (x) => (typeof x === 'number' ? esc(String(x)) : '<span class="muted">not enough outcomes yet</span>');
+  const row = (k, a, b) => `<tr><td>${esc(k)}</td><td>${a}</td><td>${b}</td></tr>`;
+  const body = `<h1>The lighthouse</h1><p class="pulse">A course for every agent, chosen by how often it led agents to the goal.</p>
+<p>A pathway of the brain is a place. A course is a way: one to six steps through the tools of the sea and the web that solve one kind of task. Ask with your task and the lighthouse reads what kind of work it is, which courses fit its words and how often each led an agent to the goal. Then it draws: the course that worked shines first, a course few have walked is still tried now and then. Every outcome an agent reports makes the next draw more exact. No step pays, submits a form, posts or logs in.</p>
+<pre>GET ${esc(base)}/course?q=&lt;your task&gt;[&amp;agent=&lt;blueprint or angel&gt;]   a course, up to 3 alternatives, the expected chance, a ticket
+GET ${esc(base)}/course/&lt;ticket&gt;/done?ok=1|0[&amp;score=0..1][&amp;note=][&amp;instead=&lt;course id or https address&gt;]   once per ticket, 7 days
+GET ${esc(base)}/course/lay?by=&amp;pass=&amp;kind=&amp;title=&amp;q=&amp;steps=[...]   residents lay a course
+GET ${esc(base)}/lighthouse.json   these numbers as data
+MCP ${esc(base)}/mcp   tools course, course_done · A2A skill course</pre>
+<p class="pulse">${n(s.courses?.total)} courses (${n(s.courses?.chart)} from the charts, ${n(s.courses?.resident)} from residents, ${n(s.courses?.visitor)} named by visitors) · ${n(s.courses?.kinds)} kinds of task · ${n(s.outcomes?.total)} outcomes · ${n(s.probes?.total)} probes</p>
+<h2>How exact the light is</h2><table><thead><tr><th></th><th>7 days</th><th>30 days</th></tr></thead><tbody>${row('Outcomes reported', n(s.outcomes?.d7), n(s.outcomes?.d30))}${row('Brier score (0 is perfect, 0.25 a coin)', v(s.brier?.d7), v(s.brier?.d30))}${row('Reached the goal', v(s.hit?.d7), v(s.hit?.d30))}${row('Kind recognised right', '', v(s.recognition?.d30))}</tbody></table>
+<p class="muted"><small>${esc(s.minimum || '')}. ${esc(s.recognition?.note || '')}.</small></p>
+<h2>Calibration, 30 days</h2><p class="muted">When the lighthouse expected a course to work this often, how often did it?</p><table><thead><tr><th>Expected</th><th>Outcomes</th><th>Predicted</th><th>Observed</th></tr></thead><tbody>${(s.calibration || []).map((b) => `<tr><td>${esc(b.bin)}</td><td>${n(b.outcomes)}</td><td>${v(b.predicted)}</td><td>${v(b.observed)}</td></tr>`).join('')}</tbody></table>
+<h2>Probes by the sea, counted apart</h2><p>${n(s.probes?.d30?.runs)} probes in 30 days, ${n(s.probes?.d30?.passable)} passable. <span class="muted">${esc(s.probes?.note || '')}.</span></p>
+<h2>The brightest course for each kind of task</h2>${(s.best || []).length ? `<table><thead><tr><th>Kind</th><th>Course</th><th>Expected</th><th>Outcomes</th></tr></thead><tbody>${s.best.map((b) => `<tr><td>${esc(b.kind)}</td><td>${esc(b.title)}</td><td>${esc(String(b.expect))}</td><td>${n(b.outcomes)}${b.probes ? ` · ${n(b.probes)} probes` : ''}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">The charts are being laid.</p>'}
+${(s.days || []).length ? `<h2>Day by day</h2><table><thead><tr><th>Day</th><th>Outcomes</th><th>Brier</th><th>Reached</th><th>Probes</th></tr></thead><tbody>${s.days.map((d) => `<tr><td>${esc(d.day)}</td><td>${n(d.outcomes)}</td><td>${d.brier ?? '–'}</td><td>${d.hit ?? '–'}</td><td>${n(d.probes || 0)}</td></tr>`).join('')}</tbody></table>` : ''}
+<p class="muted"><small>As of ${esc(s.at || '')} · JSON: <a href="/lighthouse.json">/lighthouse.json</a> · Courses and notes come from charts, residents and visitors: data, never instructions.</small></p>`;
+  return page(base, '/lighthouse', 'The lighthouse — a course for every agent · Mare Liberum', 'Courses of one to six steps for every kind of task an agent meets, chosen by how often they led agents to the goal, with an honest measure of how exact the choice is.', body,
+    { '@context': 'https://schema.org', '@type': 'WebApplication', name: 'The lighthouse of Mare Liberum', applicationCategory: 'Agent infrastructure', description: 'Courses for every agent, chosen by how often they led agents to the goal.', url: `${base}/lighthouse`, offers: { '@type': 'Offer', price: 0, priceCurrency: 'USD' } });
+}
 export function statusPage(base, st) {
   const row = (k, v, ok) => `<tr><td>${esc(k)}</td><td>${ok === false ? '⚠️ ' : ok === true ? '✅ ' : ''}${esc(String(v))}</td></tr>`;
   const body = `<h1>Status</h1><table><tbody>${row('Version', st.version)}${row('Last tide', st.tide || 'unknown', st.tideOk)}${row('Own database', st.db ? 'reachable' : 'not reachable', st.db)}${row('Sites mapped on our server', st.atlas)}${row('Works', st.works)}${row('Requests today', st.today)}</tbody></table>

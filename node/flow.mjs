@@ -22,6 +22,8 @@ import { createRoadmap } from './roadmap.mjs';
 import { createRoute } from './route.mjs';
 import { createHarbour, harbourLimits } from './harbour.mjs';
 import { createInstinct } from './instinct.mjs';
+import { createLighthouse } from './lighthouse.mjs';
+import * as charts from './charts.mjs';
 import { netKey } from './guard.mjs';
 import { readFileSync as readFileSyncAtlas } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
@@ -101,6 +103,8 @@ async function sha(s) { const d = await crypto.subtle.digest('SHA-256', new Text
 const refHost = (u) => { try { const h = new URL(String(u)).hostname.toLowerCase(); return /^[a-z0-9.-]{1,100}$/.test(h) ? h : undefined; } catch { return undefined; } };
 const strip = (o) => { for (const k of Object.keys(o)) if (o[k] == null || o[k] === '') delete o[k]; return o; };
 
+// the small tools every part of the sea shares, for parts and proofs built beside a flow (node/lighthouse.mjs)
+export const seaKit = { clean, strip, https, toks, sha, overlap: (a, b) => { let n = 0; for (const t of a) if (b.some((x) => x === t || (t.length > 4 && x.startsWith(t.slice(0, t.length - 1))) || (x.length > 4 && t.startsWith(x.slice(0, x.length - 1))))) n++; return n; }, DAY };
 export class SeaError extends Error { constructor(code, message, status = 400) { super(message); this.code = code; this.status = status; } }
 
 export function memoryKv() {
@@ -515,5 +519,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
   // the instinct: the sea answers calls no resident took and learns needs from calls, every tide (node/instinct.mjs)
   Object.assign(api, createInstinct({ kv, update, emit, push, api, clean, strip, now, DAY }));
   Object.assign(api, createBrain({ kv, update, emit, resident, allow, api, SeaError, clean, strip, now, https, toks, sha, overlap, DAY, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
+  // the lighthouse: courses for every agent, chosen by how often they led to the goal, and its own probe (node/lighthouse.mjs)
+  Object.assign(api, createLighthouse({ kv, update, emit, resident, allow, api, SeaError, clean, strip, now, https, toks, sha, overlap, DAY, base: String(profile || '').replace(/\/ucp\/agent\.json$/, ''), charts: charts.CHARTS, kinds: charts.CHART_KINDS }));
   return api;
 }

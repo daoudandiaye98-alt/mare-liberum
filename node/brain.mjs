@@ -89,7 +89,9 @@ export function createBrain(h) {
       // the missing half of the prompt: what the task left out, and what good work of this kind looks like
       const bf = briefFor(q, { base: base() });
       const brief = { kind: bf.kind, title: bf.title, assume: bf.missing.map((m) => `${m.slot}: ${m.assume}`), bar: bf.bar.slice(0, 4), deliver: bf.deliver, full: `${base()}/brief.json?q=${encodeURIComponent(q)}` };
-      return strip({ task: q, tag: tag || undefined, brief, paths: paths.map((p) => view(p, q, tag)),
+      // the beacon: the course of the lighthouse that shines brightest for this task, when one fits (node/lighthouse.mjs)
+      const course = (await api.courseFor?.(q, a.agent).catch(() => null)) || undefined;
+      return strip({ course, task: q, tag: tag || undefined, brief, paths: paths.map((p) => view(p, q, tag)),
         topics: routed?.topics?.length ? routed.topics : undefined, terms: doors ? routed.terms : undefined, doors: doors || undefined, web: routed?.general?.length ? routed.general : undefined, note: routed?.note,
         places: cand.length ? cand : undefined,
         how: 'Follow a path with its go link: the walk strengthens it. After you used the place, open worked_it or failed_it — that is how the brain learns. Lay a new path for a place that helped you: /lay?q=<task>&to=<https address>&note=<what helped>.',

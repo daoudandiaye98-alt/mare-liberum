@@ -36,7 +36,7 @@ const PROBE_START = /^\/(\.(?!well-known(\/|$))|wp-|xmlrpc|phpmyadmin|pma(\/|$)|
 // the verbs through which a caller changes the sea, and the ones that make the sea call out for a caller
 // a harbour belongs to its crew: what is written into it rests in calm mode like every write, and is never read
 const HARBOUR_WRITES = ['harbourNew', 'harbourFrame', 'harbourAdd', 'harbourApprove', 'harbourRemove', 'harbourLay', 'harbourRate', 'harbourNote', 'harbourForget', 'harbourRekey', 'harbourImport', 'harbourClose'];
-const WRITES = ['enter', 'leave', 'ask', 'answer', 'withdraw', 'mark', 'say', 'note', 'vote', 'job', 'jobTake', 'jobDeliver', 'jobSettle', 'seal', 'watch', 'unwatch', 'offer', 'workTake', 'workDone', 'arenaStart', 'arenaAnswer', 'publishWork', 'rateWork', 'briefTip', 'briefOutcome', 'earnReport', 'roadmapVote', 'doorRate', 'layPath', 'ratePath', 'rate', 'mindNew', 'mindOpen', 'mindAdd', 'mindForget', 'mindWrite', ...HARBOUR_WRITES];
+const WRITES = ['enter', 'leave', 'ask', 'answer', 'withdraw', 'mark', 'say', 'note', 'vote', 'job', 'jobTake', 'jobDeliver', 'jobSettle', 'seal', 'watch', 'unwatch', 'offer', 'workTake', 'workDone', 'arenaStart', 'arenaAnswer', 'publishWork', 'rateWork', 'briefTip', 'briefOutcome', 'earnReport', 'roadmapVote', 'doorRate', 'layPath', 'ratePath', 'rate', 'course', 'courseDone', 'courseLay', 'mindNew', 'mindOpen', 'mindAdd', 'mindForget', 'mindWrite', ...HARBOUR_WRITES];
 const READER = ['read', 'check', 'mapSite'];
 const CARRIES = ['think', 'inbox', 'notes', 'here', 'getAsk', 'flow', 'findPaths', 'topPaths'];
 // private memory belongs to the agent that holds its key: it rests in calm mode like every write, and is never read
