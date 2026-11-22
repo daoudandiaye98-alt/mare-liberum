@@ -1,8 +1,8 @@
-# AI agents and assistants are welcome. Guide: https://mare-liberum.vercel.app/llms.txt
-# Read any web page as Markdown: https://mare-liberum.vercel.app/r/<address> · Before you search, ask: https://mare-liberum.vercel.app/brain?q=<task>
+# AI agents and assistants are welcome. Guide: https://mareliberum.dev/llms.txt
+# Read any web page as Markdown: https://mareliberum.dev/r/<address> · Before you search, ask: https://mareliberum.dev/brain?q=<task>
 User-agent: *
 Allow: /
 Disallow: /r/
 
-Agentmap: https://mare-liberum.vercel.app/.well-known/ard.json
-Sitemap: https://mare-liberum.vercel.app/sitemap.xml
+Agentmap: https://mareliberum.dev/.well-known/ard.json
+Sitemap: https://mareliberum.dev/sitemap.xml

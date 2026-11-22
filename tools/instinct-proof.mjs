@@ -80,12 +80,23 @@ await proof('a call that got the pick and nothing moved stays quiet; a change si
   assert.equal(p.answered, 1);
   const ans = (await kv.get('ans:moved1'))[0];
   assert.equal(ans.by, 'sea'); assert.equal(ans.instinct, true); assert.equal(ans.price, 39);
-  assert.match(ans.text, /since your call the current saw a change: Thing B at New Store, 39 EUR \(was 50 EUR at Old Store\)/);
+  assert.match(ans.text, /since your call the current found it cheaper: Thing B at New Store, 39 EUR \(was 50 EUR at Old Store\)/);
   assert.equal((await sea.getAsk('moved1')).answers.length, 1, 'the caller reads it with its answers');
 
   p = await sea.instinctPulse();
   assert.equal(p.answered, 0, 'a call is answered once');
   assert.equal((await kv.get('ans:moved1')).length, 1);
+});
+
+await proof('a pick that got dearer, or so cheap it is likely another thing, is no news: the sea stays quiet', async () => {
+  for (const [id, price] of [['dearer', 61], ['absurd', 1.35], ['same', 49.5]]) {
+    const { kv, sea } = fresh();
+    const need = NEEDS[1], slug = slugOf(need);
+    await kv.set(`hist:${slug}`, [{ t: ago(120), price: 50, currency: 'EUR', store: 'Old Store' }, { t: ago(10), price, currency: 'EUR', store: 'New Store' }], 86400);
+    await kv.set(`tide:${slug}`, { t: ago(10), need, title: 'Other thing', store: 'New Store', price, currency: 'EUR', url: 'https://new.example/x' }, 86400);
+    await call(kv, { type: 'ask', id, by: 'visitor', text: need, fast: true, t: ago(60) });
+    assert.equal((await sea.instinctPulse()).answered, 0, id);
+  }
 });
 
 await proof('a reflex is counted as the sea, never as an answer of an agent', async () => {

@@ -170,7 +170,7 @@ export function kindHubPage(base, kind, results, count) {
 <table><tbody>${results.map(entryRow).join('')}</tbody></table>
 ${faqHtml(qa)}
 <p class="muted"><small>For agents: <code>GET ${esc(base)}/search?q=&lt;words&gt;&amp;kind=${a2a ? 'a2a' : 'x402'}</code> · <a href="/mcp-servers">MCP servers</a> · <a href="${a2a ? '/x402-apis' : '/a2a-agents'}">${a2a ? 'x402 APIs' : 'A2A agents'}</a></small></p>`;
-  return page(base, path, `${name} directory — ${fmt(count)} ${a2a ? 'agents with agent cards' : 'pay-per-call APIs'} · Mare Liberum`, `${fmt(count)} ${name} in an open, free directory, updated daily: ${a2a ? 'agent cards, skills and endpoints of Agent2Agent agents' : 'pay-per-call APIs with x402, price and endpoint'}.`, body,
+  return page(base, path, `${a2a ? 'A2A agents directory' : 'x402 services directory'} — ${fmt(count)} ${a2a ? 'agents with agent cards' : 'pay-per-call APIs'} · Mare Liberum`, `${fmt(count)} ${a2a ? 'A2A agents' : 'x402 services and APIs'} in an open, free directory, updated daily: ${a2a ? 'agent cards, skills and endpoints of Agent2Agent agents' : 'what each paid service does, its price per call and its endpoint. No account'}.`, body,
     graph(ORG(base), crumbs(base, [['Mare Liberum', '/'], [name, path]]), faqLd(qa)));
 }
 
