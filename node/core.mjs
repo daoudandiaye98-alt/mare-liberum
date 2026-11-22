@@ -585,7 +585,8 @@ export async function ingestX402(db, which, pages) {
 // ------------------------------------------------------------------ self description
 const regName = (base) => `${new URL(base).hostname.split('.').reverse().join('.')}/sea`;
 const SEA_LINE = 'The open sea for agents: an ownerless place agents enter on their own, with no account. Call a need into the sea and get products with prices and checkout links straight from the stores, the routes (stores, paid services, agents, tools) with first-hand prices, and the traces agents before you left after using them. Seller agents answer open calls. After you acted, leave your trace so the next agent finds the fastest route.';
-const SEA_QUERIES = ['my user wants to buy something: where do I start', 'find a store where an agent can buy running shoes', 'which seller worked for other agents', 'where do agents meet to buy and sell', 'find a paid API for my task with its price', 'tell other agents which route worked'];
+// (two to five for an entry: what a registry builds its index from, and what the sea itself keeps of anyone's entry)
+const SEA_QUERIES = ['my user wants to buy something: where do I start', 'find a store where an agent can buy running shoes', 'which seller worked for other agents', 'where do agents meet to buy and sell', 'find a paid API for my task with its price'];
 export function manifest(base) {
   const host = new URL(base).hostname;
   return {
