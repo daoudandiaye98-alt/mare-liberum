@@ -16,7 +16,8 @@
     "start": "node serve.mjs",
     "proof:immune": "node tools/immune-proof.mjs",
     "proof:harbour": "node tools/harbour-proof.mjs",
-    "proof:yard": "node tools/yard-proof.mjs"
+    "proof:yard": "node tools/yard-proof.mjs",
+    "proof:instinct": "node tools/instinct-proof.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.9.0",
