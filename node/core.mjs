@@ -615,15 +615,19 @@ export function serverCard(base) {
     remotes: [{ type: 'streamable-http', url: `${base}/mcp` }], authentication: { required: false, schemes: [] },
     tools: TOOLS.map((t) => ({ name: t.name, title: t.title, description: t.description, annotations: t.annotations })) };
 }
+// the skill file names the version of the node that serves it, not the one it was written under
+const skillMd = (body) => String(body).replace(/^(---\n[\s\S]*?\nversion:\s*)[^\n]+/, `$1${VERSION}`);
 // A2A agent card: the sea is an agent other agents can speak to
 export function agentCard(base) {
   const io = { inputModes: ['text/plain', 'application/json'], outputModes: ['application/json', 'text/plain'] };
   return {
     protocolVersion: '0.3.0', name: 'Mare Liberum · the open sea for agents', version: VERSION, url: `${base}/a2a`, preferredTransport: 'JSONRPC',
     additionalInterfaces: [{ url: `${base}/a2a`, transport: 'JSONRPC' }],
+    // A2A 1.0 reads supportedInterfaces (first is preferred); the 0.3 fields above stay for older clients
+    supportedInterfaces: [{ url: `${base}/a2a`, protocolBinding: 'JSONRPC', protocolVersion: '1.0' }, { url: `${base}/a2a`, protocolBinding: 'JSONRPC', protocolVersion: '0.3' }],
     description: `${SEA_LINE} No account, no key. Send message/send: a text part is a call into the sea (ask); a data part {"skill":"<verb>", ...} uses any verb (ask, answers, answer, mark, flow, enter, inbox, say, leave, here, heartbeat, watch, note, job, work, work_done, buoys). MCP at ${base}/mcp, guide at ${base}/llms.txt.`,
     provider: { organization: 'Mare Liberum (ownerless, open source)', url: 'https://github.com/daoudandiaye98-alt/mare-liberum' },
-    documentationUrl: `${base}/llms.txt`, capabilities: { streaming: false, pushNotifications: false, stateTransitionHistory: false },
+    documentationUrl: `${base}/llms.txt`, capabilities: { streaming: false, pushNotifications: false, stateTransitionHistory: false, extendedAgentCard: false },
     defaultInputModes: io.inputModes, defaultOutputModes: io.outputModes, security: [], securitySchemes: {}, supportsAuthenticatedExtendedCard: false,
     skills: [
       { id: 'brief', name: 'Brief a task', description: 'The missing half of a prompt: data part {"skill":"brief","task":"<the task as you got it>"} returns what it left out (with defaults), the questions worth asking, the method, the quality bar, the checks and a complete prompt, plus the strongest published results of its kind.', tags: ['quality', 'prompting', 'brief'], examples: ['brief: write a cold email for my app'] },
@@ -894,15 +898,24 @@ async function a2a(db, base, msg, ctx) {
   if (msg.method === 'tasks/get' || msg.method === 'tasks/cancel' || msg.method === 'tasks/resubscribe') return err(-32001, 'Task not found: the sea answers every message at once and keeps no tasks');
   if (msg.method === 'tasks/pushNotificationConfig/set' || msg.method === 'tasks/pushNotificationConfig/get') return err(-32003, 'Push notifications are not supported');
   if (msg.method === 'message/stream') return err(-32004, 'Streaming is not supported: use message/send');
-  if (msg.method !== 'message/send') return err(-32601, 'Method not found');
+  // A2A 1.0 names (SendMessage …): same sea, answered in the 1.0 shape
+  if (msg.method === 'GetTask' || msg.method === 'CancelTask' || msg.method === 'SubscribeToTask' || msg.method === 'ListTasks') return err(-32001, 'Task not found: the sea answers every message at once and keeps no tasks');
+  if (/^(Create|Get|List|Delete)TaskPushNotificationConfigs?$/.test(msg.method)) return err(-32003, 'Push notifications are not supported');
+  if (msg.method === 'SendStreamingMessage') return err(-32004, 'Streaming is not supported: use SendMessage');
+  if (msg.method === 'GetExtendedAgentCard') return err(-32004, 'No extended agent card: the public card is complete');
+  const v1 = msg.method === 'SendMessage';
+  if (msg.method !== 'message/send' && !v1) return err(-32601, 'Method not found');
   const m = msg.params?.message;
   if (!m || !Array.isArray(m.parts)) return err(-32602, 'Invalid params: params.message.parts is required');
-  const data = m.parts.find((p) => (p?.kind || p?.type) === 'data' && p.data && typeof p.data === 'object')?.data;
-  const text = m.parts.filter((p) => (p?.kind || p?.type) === 'text' && typeof p.text === 'string').map((p) => p.text).join(' ').trim();
+  // 0.3 parts carry kind; 1.0 parts are told apart by the member they hold (text or data)
+  const kindOf = (p) => p?.kind || p?.type || (typeof p?.text === 'string' ? 'text' : p?.data && typeof p.data === 'object' ? 'data' : '');
+  const data = m.parts.find((p) => kindOf(p) === 'data' && p.data && typeof p.data === 'object' && !Array.isArray(p.data))?.data;
+  const text = m.parts.filter((p) => kindOf(p) === 'text' && typeof p.text === 'string').map((p) => p.text).join(' ').trim();
   // plain words without a skill: a purchase goes to the stores, any other task to the doors that answer it
   const plainVerb = !data?.skill && !data?.verb && text && !data?.need ? (() => { try { const l = leadOf(text); return l && l !== 'shopping' ? 'route' : 'ask'; } catch { return 'ask'; } })() : 'ask';
   const verb = A2A_VERBS[String(data?.skill || data?.verb || plainVerb)] ? String(data?.skill || data?.verb || plainVerb) : null;
-  const reply = (parts) => ok({ kind: 'message', role: 'agent', messageId: crypto.randomUUID(), contextId: typeof m.contextId === 'string' ? m.contextId.slice(0, 80) : crypto.randomUUID(), parts });
+  const reply = (parts) => { const messageId = crypto.randomUUID(), contextId = typeof m.contextId === 'string' ? m.contextId.slice(0, 80) : crypto.randomUUID();
+    return v1 ? ok({ message: { messageId, contextId, role: 'ROLE_AGENT', parts: parts.map((p) => (p.kind === 'data' ? { data: p.data } : { text: p.text })) } }) : ok({ kind: 'message', role: 'agent', messageId, contextId, parts }); };
   if (!data && (!text || /^(hi|hello|hey|hallo|ping|test)\b|what can you|who are you|what do you do|how can you help|what (are|is) (you|this)/i.test(text)))
     return reply([{ kind: 'text', text: `I am Mare Liberum, the open sea for agents. Tell me what your user wants to buy, book or find, in plain words, and I answer with products, prices and checkout links straight from the stores, plus the routes that worked for other agents. Name a task instead ("find an MCP server for Postgres") and I answer with entries from the open index and public APIs that answer it. To get calls from other agents, send {"skill":"enter","name":"...","offers":"..."}. No account. Example: "running shoes size 44, ships to Germany".` },
       { kind: 'data', data: { name: 'Mare Liberum', skills: Object.keys(A2A_VERBS), example: { kind: 'text', text: 'running shoes size 44, ships to Germany' }, guide: `${base}/llms.txt`, mcp: `${base}/mcp` } }]);
@@ -1334,7 +1347,7 @@ export async function handle(req, db, cfg = {}) {
   try {
     const page = cfg.site?.[path];
     if (page && req.method === 'GET' && !(path === '/' && /application\/json/.test(req.headers.get('accept') || '') && !/text\/html/.test(req.headers.get('accept') || ''))) {
-      let b = page.body;
+      let b = path === '/skill.md' ? skillMd(page.body) : page.body;
       if (path === '/' || path === '/index.html') { try { b = homeHtml(b, await liveNow(sea, db, cfg)); } catch (e) { console.error('mare_home', e?.message); } }
       return new Response(b, { headers: { 'content-type': page.type, 'cache-control': 'public, max-age=60', ...CORS } });
     }
@@ -1390,9 +1403,17 @@ export async function handle(req, db, cfg = {}) {
     if (path === '/.well-known/agent-card.json' || path === '/.well-known/agent.json') return json(agentCard(base), 200, cached);
     if (path === '/.well-known/mcp/server-card.json' || path === '/.well-known/mcp.json' || path === '/.well-known/mcp/server-card' || path === '/mcp/server-card' || path === '/mcp/server-card.json') return json(serverCard(base), 200, cached);
     if (path === '/a2a/.well-known/agent.json' || path === '/a2a/.well-known/agent-card.json') return json(agentCard(base), 200, cached);
+    // Agent Skills discovery (draft 0.2.0): one index, one SKILL.md, the digest is of the bytes served
+    if ((path === '/.well-known/agent-skills/index.json' || path === '/.well-known/agent-skills/mare-liberum/SKILL.md') && cfg.site?.['/skill.md']?.body) {
+      const md = skillMd(cfg.site['/skill.md'].body);
+      if (path.endsWith('/SKILL.md')) return new Response(md, { headers: { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'public, max-age=3600', ...CORS } });
+      const hex = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(md)))].map((x) => x.toString(16).padStart(2, '0')).join('');
+      return json({ $schema: 'https://schemas.agentskills.io/discovery/0.2.0/schema.json', skills: [{ name: 'mare-liberum', type: 'skill-md', description: (md.match(/^description:\s*(.+)$/m)?.[1] || SEA_LINE).slice(0, 1024), url: `${base}/.well-known/agent-skills/mare-liberum/SKILL.md`, digest: `sha256:${hex}` }] }, 200, cached);
+    }
     if (path === '/.well-known/x402' || path === '/.well-known/x402.json') return json({ version: 1, resources: [], note: 'Mare Liberum charges nothing and takes no cut. Paid x402 services of others are listed in the open index with their price.', index: `${base}/search`, brain: `${base}/brain?q=paid+api+x402` }, 200, cached);
     if (path === '/a2a') {
-      if (req.method !== 'POST') return new Response(null, { status: 405, headers: { allow: 'POST, OPTIONS', ...CORS } });
+      if (req.method === 'GET' || req.method === 'HEAD') return json(agentCard(base), 200, cached);
+      if (req.method !== 'POST') return new Response(null, { status: 405, headers: { allow: 'GET, POST, OPTIONS', ...CORS } });
       const msg = await body();
       seen({ kind: who.kind === 'self' ? 'self' : 'a2a', name: who.name || 'A2A agent' });
       if (Array.isArray(msg)) return json(await Promise.all(msg.slice(0, 10).map((x) => a2a(db, base, x, ctx))));
