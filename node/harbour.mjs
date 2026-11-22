@@ -88,6 +88,23 @@ export function createHarbour(h) {
   let hour = '', made = 0;
   // the operator of the node can rest or close one harbour (a report of unlawful content, a danger to the node): h.bars() gives id -> { do, why }
   const barOf = (id) => { try { return h.bars?.()?.get(id) || null; } catch { return null; } };
+  // room: the operator can give one harbour more of it (a team that pays for the node's upkeep); 1 is what everyone has
+  const roomOf = (id) => Math.max(1, Math.min(100, barOf(id)?.room || 1));
+  // use: how often a harbour is called and which kinds of program call it. Counted, never read: no question, no text, no address.
+  const uK = (id) => `harbour:u:${id}`, usage = new Map();
+  const clientOf = (ctx) => (clean(ctx?.client, 60).split(/[\/\s(]/)[0].slice(0, 40) || 'unnamed').toLowerCase();
+  async function count(hid, ctx) {
+    try {
+      let u = usage.get(hid); if (!u) { u = { rec: (await kv.get(uK(hid))) || {}, at: 0, dirty: false }; usage.set(hid, u); if (usage.size > 2000) usage.delete(usage.keys().next().value); }
+      const r = u.rec, day = now().slice(0, 10), mon = day.slice(0, 7);
+      if (r.day !== day) { r.day = day; r.d = 0; } if (r.mon !== mon) { r.mon = mon; r.m = 0; }
+      r.d = (r.d || 0) + 1; r.m = (r.m || 0) + 1; r.all = (r.all || 0) + 1; r.clients = r.clients || {}; r.clients[clientOf(ctx)] = day;
+      const names = Object.keys(r.clients); if (names.length > 12) delete r.clients[names.sort((a, b) => (r.clients[a] < r.clients[b] ? -1 : 1))[0]];
+      u.dirty = true; if (Date.now() - u.at > 60000) { u.at = Date.now(); u.dirty = false; await kv.set(uK(hid), r, L.keep); }
+    } catch {}
+  }
+  const flush = async () => { for (const [hid, u] of usage) if (u.dirty) { u.dirty = false; u.at = Date.now(); try { await kv.set(uK(hid), u.rec, L.keep); } catch {} } };
+  const useOf = async (hid) => { const r = usage.get(hid)?.rec || (await kv.get(uK(hid))) || {}, day = now().slice(0, 10); return { today: r.day === day ? r.d || 0 : 0, month: r.mon === day.slice(0, 7) ? r.m || 0 : 0, all: r.all || 0, clients: Object.keys(r.clients || {}).sort() }; };
 
   // who holds this key, and may they do this?
   async function open(a, need, ctx) {
@@ -97,12 +114,13 @@ export function createHarbour(h) {
     if (!rec?.h) { await allow(ctx, 'harbour key', 30, 600); throw new SeaError('UNAUTHENTICATED', 'no harbour answers to this key', 401); }
     const bar = barOf(rec.h);
     if (bar?.do === 'close') { await erase(rec.h); throw new SeaError('NOT_FOUND', `this harbour was closed by the operator of this node${bar.why ? ` (${bar.why})` : ''}. What it held is gone; the contact is on ${base()}/security`, 410); }
-    if (bar) throw new SeaError('UNAVAILABLE', `this harbour rests by decision of the operator of this node${bar.why ? ` (${bar.why})` : ''}. What it holds is kept; write to the contact on ${base()}/security`, 503);
+    if (bar?.do) throw new SeaError('UNAVAILABLE', `this harbour rests by decision of the operator of this node${bar.why ? ` (${bar.why})` : ''}. What it holds is kept; write to the contact on ${base()}/security`, 503);
     if (RANK[rec.role] < RANK[need]) throw new SeaError('PERMISSION_DENIED', `this needs the ${need} key of the harbour; yours is a ${rec.role} key`, 403);
     const meta = await kv.get(mK(rec.h));
     if (!meta) throw new SeaError('NOT_FOUND', 'this harbour was closed', 404);
     // a harbour in use stays: its name is renewed once a day
     const today = now().slice(0, 10); if (meta.seen !== today && !ctx?.readOnly) { meta.seen = today; await kv.set(mK(rec.h), meta, L.keep); await kv.set(await kOf(key), rec, L.keep); }
+    if (!ctx?.readOnly) await count(rec.h, ctx);
     return { meta, role: rec.role, hid: rec.h };
   }
   const listOf = async (hid) => { const x = await kv.get(iK(hid)); return x && Array.isArray(x.items) ? x : { v: 0, items: [] }; };
@@ -120,7 +138,8 @@ export function createHarbour(h) {
     const meta = known || (await kv.get(mK(hid))); if (!meta) return null;
     const list = await listOf(hid); let chars = 0;
     for (const s of list.items) { chars += s.n || 0; await kv.set(sK(hid, s.id), null); }
-    for (const k of [iK(hid), wK(hid), nK(hid), ...Object.values(meta.roles || {}), mK(hid)]) await kv.set(k, null);
+    for (const k of [iK(hid), wK(hid), nK(hid), uK(hid), ...Object.values(meta.roles || {}), mK(hid)]) await kv.set(k, null);
+    usage.delete(hid);
     ready.delete(hid); await tally({ n: -1, chars: -chars });
     return { closed: meta.name, sources: list.items.length };
   }
@@ -181,7 +200,8 @@ export function createHarbour(h) {
     async harbourAbout(a = {}, ctx) {
       const { meta, role, hid } = await open(a, 'guest', ctx), list = await listOf(hid), ok = list.items.filter((s) => s.status === 'approved');
       return strip({ harbour: { id: meta.id, name: meta.name, since: meta.at }, role, frame: meta.frame, instructions: frameText(meta, role),
-        holds: { sources: ok.length, proposed: role === 'guest' ? undefined : list.items.length - ok.length, ways: (await waysOf(hid)).length, notes: (await notesOf(hid)).length, characters: list.items.reduce((n, s) => n + (s.n || 0), 0), room: L.chars },
+        holds: { sources: ok.length, proposed: role === 'guest' ? undefined : list.items.length - ok.length, ways: (await waysOf(hid)).length, notes: (await notesOf(hid)).length, characters: list.items.reduce((n, s) => n + (s.n || 0), 0), room: L.chars * roomOf(hid), plan: barOf(hid)?.plan },
+        use: role === 'guest' ? undefined : await useOf(hid),
         how: 'think {task} first. search_sources {q} for what the crew has released. check_answer {text} before a draft with figures goes out. lay_way and rate_way after the work. note what the crew should remember.', connect: role === 'owner' ? connect() : undefined });
     },
     async harbourFrame(a = {}, ctx) {
@@ -205,8 +225,8 @@ export function createHarbour(h) {
       title ||= clean(text.split('\n')[0].replace(/^#+\s*/, ''), 80);
       const list = await listOf(hid), same = list.items.find((s) => s.status === 'approved' && s.title.toLowerCase() === title.toLowerCase());
       const used = list.items.reduce((n, s) => n + (s.n || 0), 0) - (same && role === 'owner' ? same.n || 0 : 0);
-      if (!same && list.items.length >= L.sources) throw new SeaError('RESOURCE_EXHAUSTED', `a harbour here holds ${L.sources} sources; remove one, or run your own node with more room: ${base()}/download`, 429);
-      if (used + text.length > L.chars) throw new SeaError('RESOURCE_EXHAUSTED', `a harbour here holds ${L.chars.toLocaleString('en-US')} characters of sources and this one would not fit; run your own node with more room: ${base()}/download`, 429);
+      if (!same && list.items.length >= L.sources * roomOf(hid)) throw new SeaError('RESOURCE_EXHAUSTED', `this harbour holds ${L.sources * roomOf(hid)} sources; remove one, or run your own node with more room: ${base()}/download`, 429);
+      if (used + text.length > L.chars * roomOf(hid)) throw new SeaError('RESOURCE_EXHAUSTED', `this harbour holds ${(L.chars * roomOf(hid)).toLocaleString('en-US')} characters of sources and this one would not fit; run your own node with more room: ${base()}/download`, 429);
       const at = now(), by = clean(a.by, 60) || role, approved = role === 'owner';
       const sid = approved && same ? same.id : (await sha(`${hid}|${title}|${at}|${text.length}|${hex(4)}`)).slice(0, 10);
       const old = approved && same ? await kv.get(sK(hid, sid)) : null;
@@ -365,7 +385,7 @@ export function createHarbour(h) {
       if (clean(a.confirm, 80) !== meta.name) throw new SeaError('INVALID_ARGUMENT', `closing takes everything away and cannot be undone. Send confirm with the exact name of the harbour: "${meta.name}"`);
       return erase(hid, meta);
     },
-    async harbourStats() { await sweep(); const s = (await kv.get('harbour:stats')) || {}; return { harbours: s.n || 0, characters: s.chars || 0, room: { harbours: L.harbours, perHarbour: L.chars, sources: L.sources } }; },
+    async harbourStats() { await sweep(); await flush(); const s = (await kv.get('harbour:stats')) || {}; return { harbours: s.n || 0, characters: s.chars || 0, room: { harbours: L.harbours, perHarbour: L.chars, sources: L.sources } }; },
     // who holds this key (for the doors that need the answer before a verb runs)
     async harbourOpen(a = {}, ctx) { const { meta, role } = await open(a, 'guest', ctx); return { meta, role }; },
   };

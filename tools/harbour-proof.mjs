@@ -282,6 +282,26 @@ await proof('the operator can rest one harbour or close it; the harbour next doo
   assert.equal((await call('/harbour')).json.harbours, before - 1);
   assert.equal((await call('/harbour/about', { key: K.guest })).status, 200);
 });
+await proof('a harbour counts its use and the kinds of program that call, never what was asked; the operator can give one harbour more room', async () => {
+  const f = await post('/harbour/new', { name: 'Zählwerk' }, null, { ip: '198.51.100.90' }), ko = f.json.keys.owner, kg = f.json.keys.guest, id = f.json.harbour.id;
+  const as = (ua, path, key) => call(path, { key, ip: '198.51.100.90', headers: { 'user-agent': ua } });
+  await as('Claude-User/1.0', '/harbour/about', kg); await as('Cursor/1.2.3', '/harbour/sources', kg); await as('Cursor/1.2.3', '/harbour/search?q=geheime+frage', kg);
+  await call('/harbour/mcp', { key: kg, method: 'POST', headers: { 'user-agent': 'python-httpx/0.27' }, body: { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', clientInfo: { name: 'ChatGPT', version: '1' }, capabilities: {} } } });
+  const about = (await call('/harbour/about', { key: ko })).json;
+  assert.ok(about.use.today >= 5 && about.use.month === about.use.today && about.use.all === about.use.today, JSON.stringify(about.use));
+  for (const c of ['claude', 'cursor', 'chatgpt']) assert.ok(about.use.clients.includes(c), `${c} in ${about.use.clients}`);
+  assert.equal((await call('/harbour/about', { key: kg })).json.use, undefined, 'a guest does not see the count');
+  await call('/harbour');   // the count is written with the next look at the harbours
+  const kept = await kv.get(`harbour:u:${id}`); assert.ok(kept.all >= 5); assert.ok(!JSON.stringify(kept).includes('geheime') && !JSON.stringify(kept).includes('198.51'), 'no question and no address in the count');
+  // more room for one harbour, by the operator's word; the others keep theirs
+  assert.equal(about.holds.room, HARBOUR.chars); assert.equal(about.holds.plan, undefined);
+  immune.set({ harbours: [{ id, room: 10, plan: 'team' }] });
+  const roomy = (await call('/harbour/about', { key: ko })).json; assert.equal(roomy.holds.room, HARBOUR.chars * 10); assert.equal(roomy.holds.plan, 'team');
+  assert.equal((await call('/immune.json')).json.harboursHeld.atRest, 0, 'room alone does not rest a harbour');
+  assert.equal((await call('/harbour/about', { key: K.owner })).json.holds.room, HARBOUR.chars);
+  immune.set({});
+  assert.equal((await post('/harbour/close', { confirm: 'Zählwerk' }, ko)).status, 200); assert.equal(await kv.get(`harbour:u:${id}`), null, 'closing takes the count away too');
+});
 await proof('room has an end: per harbour, per network, and for the node as a whole', async () => {
   // per network: three new harbours a day
   const ip = '198.51.100.50'; for (let i = 0; i < 3; i++) assert.equal((await post('/harbour/new', { name: `Hafen ${i}` }, null, { ip })).status, 200);

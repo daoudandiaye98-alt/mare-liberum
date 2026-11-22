@@ -77,6 +77,7 @@ const v4 = (ip) => { const p = String(ip).split('.'); if (p.length !== 4) return
 const hostOf = (x) => { const s = text(x, 2000); if (!s) return ''; try { return new URL(/^[a-z][a-z0-9+.-]*:\/\//i.test(s) ? s : `https://${s}`).hostname.toLowerCase().replace(/\.$/, ''); } catch { return ''; } };
 const under = (host, domain) => host === domain || host.endsWith(`.${domain}`);
 
+const strip0 = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !== undefined));
 export function createImmune({ now = () => Date.now() } = {}) {
   let policy = tidy(null), loaded = null, failed = null, store = null, kv = null, log = () => {}, timer = null, base = '';
   const since = new Date(now()).toISOString();
@@ -102,7 +103,7 @@ export function createImmune({ now = () => Date.now() } = {}) {
       out.banned++;
     }
     // one harbour at rest (what it holds is kept) or closed (what it holds is taken away): { id, do: 'rest' | 'close', why }
-    for (const x of Array.isArray(o.harbours) ? o.harbours.slice(0, 500) : []) { if (x && typeof x === 'object' && /^[a-f0-9]{12}$/.test(String(x.id || ''))) out.harbours.set(x.id, { do: x.do === 'close' ? 'close' : 'rest', why: text(x.why, 200) }); }
+    for (const x of Array.isArray(o.harbours) ? o.harbours.slice(0, 500) : []) { if (x && typeof x === 'object' && /^[a-f0-9]{12}$/.test(String(x.id || ''))) { const room = Math.floor(Number(x.room)); out.harbours.set(x.id, strip0({ do: x.do === 'close' ? 'close' : x.do === 'rest' || !(room >= 1) ? 'rest' : undefined, why: text(x.why, 200), room: room >= 1 ? Math.min(100, room) : undefined, plan: text(x.plan, 40) || undefined })); } }
     const pm = Number(o.pace?.perMinute), bu = Number(o.pace?.burst);
     if (pm >= 30 && pm <= 1_000_000) out.pace = { perMinute: pm, burst: bu >= 10 && bu <= 1_000_000 ? bu : Math.max(10, Math.round(pm / 3)) };
     return out;

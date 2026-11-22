@@ -260,12 +260,12 @@ export function businessPage(base, lang) {
     ['Müssen wir eine eigene KI bauen?', 'Nein. Ihr Team arbeitet weiter mit Claude, ChatGPT, Cursor oder eigenen Agenten. Der Hafen wird als Connector hinzugefügt; jedes Modell bekommt dann Ihren Rahmen, Ihre Quellen und Ihre Wege.'],
     ['Welche Modelle gehen?', 'Jedes, das MCP oder HTTPS spricht. Die Agenten aus der Werft laufen mit Claude, einem OpenAI-kompatiblen Dienst oder lokal über Ollama.'],
     ['Wo liegen unsere Daten?', 'Beim eigenen Knoten auf Ihrem Rechner oder Server, im Ordner state/. Der öffentliche Knoten läuft in der EU (Hetzner, Helsinki); was ein Hafen enthält, geht nicht ins offene Meer, nicht in den Zensus und nicht in den Index.'],
-    ['Was kostet es?', 'Heute nichts. Der Code steht unter MIT-Lizenz; den eigenen Knoten betreiben Sie ohne Gebühr. Für Einrichtung und Begleitung: oroborosdesign@gmail.com.'],
+    ['Was kostet es?', 'Der Code steht unter MIT-Lizenz; den eigenen Knoten betreiben Sie ohne Gebühr, und ein Hafen mit 200 Quellen ist hier frei. Mehr Raum und Einrichtung für ein Team gibt es als Pilot ab 49 € im Monat: /de/agenturen und /teams. Kanzleien: /de/kanzleien.'],
   ] : [
     ['Do we have to build our own AI?', 'No. Your team keeps using Claude, ChatGPT, Cursor or its own agents. The harbour is added as a connector; every model then gets your frame, your sources and your ways.'],
     ['Which models work?', 'Any that speaks MCP or HTTPS. Agents from the shipyard run with Claude, an OpenAI-compatible service, or locally through Ollama.'],
     ['Where is our data?', 'With your own node, on your machine or server, in the folder state/. The public node runs in the EU (Hetzner, Helsinki); what a harbour holds never enters the open sea, the census or the index.'],
-    ['What does it cost?', 'Nothing today. The code is MIT licensed; you run your own node without a fee. For setup and support: oroborosdesign@gmail.com.'],
+    ['What does it cost?', 'The code is MIT licensed; you run your own node without a fee, and a harbour with 200 sources is free here. More room and setup for a team is a pilot from 49 € a month: /teams, and in German /de/agenturen.'],
   ];
   const parts = de ? [
     ['Der Hafen', '/harbour', 'Ein privater Raum für ein Team: ein Rahmen, an den sich jedes Modell hält, freigegebene Quellen, aus denen Antworten mit Quellenangabe kommen, und ein Entwurf, der Satz für Satz gegen die Quellen gehalten wird. Drei Schlüssel: Inhaber, Crew, Gast.'],
@@ -412,4 +412,114 @@ ${faqHtml(qa, 'Fragen')}`;
 }
 
 // every page here, for the sitemap and IndexNow
-export const SEO_PATHS = ['/mcp-server', '/de/mcp-server', '/mcp-servers', ...MCP_TOPICS.map((t) => `/mcp-servers/${t[0]}`), '/a2a-agents', '/x402-apis', '/web-to-markdown', '/de/webseite-als-markdown', '/business', '/de/unternehmen', '/ai-crawlers', '/de/ki-crawler', '/de/ki-sichtbarkeit', '/de', '/check'];
+export const SEO_PATHS = ['/mcp-server', '/de/mcp-server', '/mcp-servers', ...MCP_TOPICS.map((t) => `/mcp-servers/${t[0]}`), '/a2a-agents', '/x402-apis', '/web-to-markdown', '/de/webseite-als-markdown', '/business', '/de/unternehmen', '/ai-crawlers', '/de/ki-crawler', '/de/ki-sichtbarkeit', '/de', '/check', '/de/agenturen', '/teams', '/de/kanzleien'];
+
+// ── Three audiences, three offers. The prices are a pilot: what a team pays for is room on this node and help, never the code. ──
+export const OFFER = {
+  agency: 'https://buy.stripe.com/9B63co3Ly7F2fVJdTLes00m',   // Team-Hafen (Pilot), 79 € a month, first month free
+  teams: 'https://buy.stripe.com/5kQ00ceqc0cA38X4jbes00n',    // team harbour for coding agents, 49 € a month, first month free
+  mail: 'oroborosdesign@gmail.com',
+};
+const cta = (href, label, sub) => `<p style="margin:1.4rem 0"><a href="${esc(href)}" style="display:inline-block;padding:.85rem 1.3rem;border-radius:10px;background:#0b5cad;color:#fff;font-weight:600;text-decoration:none">${esc(label)}</a>${sub ? `<br><small class="muted">${esc(sub)}</small>` : ''}</p>`;
+const thanks = (text) => `<div class="box" role="status" style="border-color:#0b5cad"><p style="margin:0"><b>${esc(text)}</b></p></div>`;
+
+export function agencyPage(base, paid) {
+  const path = '/de/agenturen';
+  const qa = [
+    ['Müssen wir unser Werkzeug wechseln?', 'Nein. Ihr Team arbeitet weiter in ChatGPT, Claude oder Cursor. Der Hafen kommt als ein Connector dazu, in jedem dieser Programme mit derselben Adresse.'],
+    ['Was ist im Pilotpreis enthalten?', 'Zehnfacher Raum für Ihr Team (2.000 Quellen und 10 Millionen Zeichen statt 200 Quellen und 1 Million), gemeinsame Einrichtung des ersten Hafens und ein direkter Draht zu uns. Der erste Monat ist frei, danach 79 € im Monat, monatlich kündbar.'],
+    ['Geht es auch ohne zu zahlen?', 'Ja. Ein Hafen mit 200 Quellen ist frei. Öffnen Sie ihn selbst unter /harbour; der Pilot lohnt sich, sobald mehrere Kunden oder viel Material dazukommen.'],
+    ['Halten sich die Modelle wirklich an unsere Quellen?', 'Der Hafen liefert nur freigegebene Stellen, wörtlich und mit Quellenangabe, gibt Ihren Rahmen mit und prüft einen Entwurf Satz für Satz gegen die Quellen. Die Antwort selbst schreibt Ihr Modell; die Prüfung liest Wörter und Zahlen und kann Bedeutung nicht beurteilen.'],
+    ['Wo liegen die Daten, und was dürfen wir hineinlegen?', 'Auf einem Server in Helsinki und in einer Datenbank in Irland, beide in der EU. Der Hafen ist durch Schlüssel geschützt, nicht Ende zu Ende verschlüsselt. Einen Vertrag zur Auftragsverarbeitung gibt es im Pilot noch nicht: Legen Sie deshalb keine personenbezogenen Daten Dritter hinein. Für solches Material gibt es den eigenen Knoten zum Herunterladen.'],
+    ['Wie wird der Raum freigeschaltet?', 'Nach der Buchung tragen wir Ihren Hafen von Hand ein, in der Regel am selben Werktag. Die Kennung Ihres Hafens steht in seiner Übersicht; geben Sie sie bei der Buchung an oder schicken Sie sie per Mail.'],
+  ];
+  const body = `${paid ? thanks('Danke, die Buchung ist angekommen. Wir schalten den Raum für Ihren Hafen frei und melden uns per Mail. Noch keinen Hafen? Öffnen Sie ihn unter /harbour und schicken Sie uns seine Kennung.') : ''}
+<h1>Ein Gedächtnis für ChatGPT und Claude zugleich</h1>
+<p style="font-size:1.15rem">Für Agenturen und Beratungen: Je Kunde ein Hafen mit Ihren Regeln, freigegebenen Unterlagen und erprobten Arbeitswegen. Das ganze Team nutzt ihn aus ChatGPT, Claude und Cursor über einen einzigen Anschluss, und er bleibt, wenn Sie den Anbieter wechseln.</p>
+${cta(OFFER.agency, 'Pilot starten: erster Monat frei', 'Danach 79 € je Team im Monat, monatlich kündbar. Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.')}
+<p><a href="/harbour">Oder erst frei ausprobieren: einen Hafen öffnen</a></p>
+<h2>Was sich ändert</h2>
+<div class="grid">
+<div class="box"><h3>Heute</h3><p style="margin:0">Kundenwissen steckt in einzelnen Chats, GPTs und Projekten. Ein Teil des Teams nutzt ChatGPT, ein Teil Claude. Jede Person erklärt der KI den Kunden neu.</p></div>
+<div class="box"><h3>Mit einem Hafen je Kunde</h3><p style="margin:0">Markenregeln, Briefings und freigegebene Aussagen liegen an einem Ort. Jedes Modell bekommt denselben Rahmen und nennt die Quelle. Was funktioniert hat, wird als Weg festgehalten und vom Team bewertet.</p></div>
+<div class="box"><h3>Vor der Abgabe</h3><p style="margin:0">Ein Entwurf wird Satz für Satz gegen die freigegebenen Unterlagen gehalten. Eine Zahl, die in keiner Quelle steht, fällt auf.</p></div>
+</div>
+<h2>In einer Stunde eingerichtet</h2>
+<ol><li>Hafen öffnen und dem Kunden einen Rahmen geben: wofür die KI da ist und woran sie sich hält.</li><li>Freigegebene Unterlagen hineinlegen: Markenhandbuch, Tonalität, Leistungsbeschreibung, Preisliste.</li><li>Die Adresse des Hafens in ChatGPT, Claude oder Cursor als Connector eintragen. Der Crew-Schlüssel schreibt, der Gast-Schlüssel liest nur.</li></ol>
+${connectDe('https://mareliberum.dev/harbour/mcp')}
+<p class="muted"><small>Der Schlüssel des Hafens wird als Kopfzeile „Authorization: Bearer“ mitgegeben. Für Apps, die nur eine Adresse annehmen: https://mareliberum.dev/h/&lt;Schlüssel&gt;/mcp.</small></p>
+${faqHtml(qa, 'Fragen')}
+<p>Fragen vor dem Start: <a href="mailto:${OFFER.mail}?subject=Team-Hafen%20Pilot">${OFFER.mail}</a> · Weiter: <a href="/de/unternehmen">Für Unternehmen</a> · <a href="/de/kanzleien">Für Kanzleien</a> · <a href="/teams">For developer teams</a> · <a href="/security">Sicherheit</a> · <a href="/terms">Bedingungen</a> · <a href="/privacy">Datenschutz</a></p>`;
+  return page(base, path, 'Ein KI-Gedächtnis für ChatGPT und Claude zugleich · Mare Liberum',
+    'Kundenwissen, Markenregeln und erprobte Arbeitswege an einem Ort, nutzbar aus ChatGPT, Claude und Cursor über einen Anschluss. Antworten mit Quellenangabe. Pilot: erster Monat frei, dann 79 € je Team.',
+    body, graph(ORG(base), crumbs(base, [['Mare Liberum', '/de'], ['Agenturen', path]]), faqLd(qa)), '/og.png', { lang: 'de' });
+}
+
+export function teamsPage(base, paid) {
+  const path = '/teams', url = 'https://mareliberum.dev/harbour/mcp';
+  const qa = [
+    ['How is this different from a rules file in the repo?', 'A rules file grows and nobody knows which line still helps. In a harbour, a way is laid for one task, every agent that used it says whether it worked, and the ways that keep working rise. It is the same store for every agent and every developer.'],
+    ['Which agents can use it?', 'Any client that speaks MCP over HTTP with a header: Claude Code, Cursor, VS Code, Codex and others. Agents built in the shipyard use it too.'],
+    ['Can we host it ourselves?', 'Yes, free. The node is one program without dependencies under the MIT licence; download it and the same harbour runs on your machine or server.'],
+    ['What does the paid team harbour add?', 'Ten times the room on this node (2,000 sources and 10 million characters instead of 200 and 1 million) and a direct line to us. First month free, then 49 € a month per team, cancel monthly. The free harbour stays free.'],
+    ['What does the harbour know about our use?', 'It counts calls per day and month and the kinds of client that call (the program name only), so your crew sees whether it is used. It never stores what was asked.'],
+    ['Where does it run, and what should stay out?', 'On a server in Helsinki with a database in Ireland. A hosted harbour is protected by its keys, not encrypted end to end, and there is no data-processing agreement yet: keep personal data of third parties and secrets out. For those, run your own node.'],
+  ];
+  const body = `${paid ? thanks('Thank you, the booking has arrived. We give your harbour its room, usually the same working day, and write to you. No harbour yet? Open one at /harbour and send us its id.') : ''}
+<h1>One shared memory for all your coding agents</h1>
+<p style="font-size:1.15rem">Claude Code, Cursor and Codex each learn the traps of your repository on their own, and so does every developer. A harbour is one place they all read and write: your rules, your approved docs, and the ways that worked, rated by the agents that used them.</p>
+${cta('/harbour', 'Open a harbour, free', 'No account. Three keys: owner, crew, guest.')}
+<h2>Connect every agent to the same harbour</h2>
+<pre>Claude Code
+claude mcp add --transport http harbour ${url} --header "Authorization: Bearer $HARBOUR_KEY"
+
+Cursor · .cursor/mcp.json
+{ "mcpServers": { "harbour": { "url": "${url}", "headers": { "Authorization": "Bearer \${env:HARBOUR_KEY}" } } } }
+
+VS Code · .vscode/mcp.json
+{ "servers": { "harbour": { "type": "http", "url": "${url}", "headers": { "Authorization": "Bearer \${input:harbour-key}" } } } }
+
+AGENTS.md · one line for every agent
+Before a task: call think with the task. After it: lay_way with what worked, or rate_way for the way you used.</pre>
+<div class="grid">
+<div class="box"><h3>think</h3><p style="margin:0">Before a task, the agent asks the harbour: has anyone here done this, and what worked? It gets the team's ways first, ranked by confirmations.</p></div>
+<div class="box"><h3>lay_way · rate_way</h3><p style="margin:0">After the work, the agent records the way in a sentence and the next one says whether it held. Wrong ways sink, they are not copied forever.</p></div>
+<div class="box"><h3>search_sources · check_answer</h3><p style="margin:0">Architecture notes, conventions and runbooks the owner approved, returned as passages with their source. A draft can be held against them.</p></div>
+</div>
+<h2>Free to self-host, a small fee for room here</h2>
+<p>Run the node yourself for nothing: <a href="/download">download it</a>. On this node a harbour with 200 sources is free. A team that wants ten times the room and a direct line pays 49 € a month, first month free.</p>
+${cta(OFFER.teams, 'Start the team harbour: first month free', 'Then 49 € a month per team, cancel monthly. No VAT is charged (§ 19 UStG, German small-business rule).')}
+${faqHtml(qa)}
+<p>Questions: <a href="mailto:${OFFER.mail}?subject=Team%20harbour">${OFFER.mail}</a> · More: <a href="/harbour">The harbour</a> · <a href="/yard">Build an agent</a> · <a href="/download">Download the node</a> · <a href="/business">For companies</a> · <a href="/security">Security</a> · <a href="/terms">Terms</a></p>`;
+  return page(base, path, 'Shared memory for coding agents over MCP · Mare Liberum',
+    'One shared, rated memory for every coding agent on your team: rules, approved docs and the ways that worked, over one MCP connection. Free to self-host; hosted team harbour 49 € a month, first month free.',
+    body, graph(ORG(base), APP(base), crumbs(base, [['Mare Liberum', '/'], ['Teams', path]]), faqLd(qa)), '/og.png', { lang: 'en' });
+}
+
+export function lawPage(base) {
+  const path = '/de/kanzleien', mail = `mailto:${OFFER.mail}?subject=Kanzlei-Hafen%20Pilot`;
+  const qa = [
+    ['Verlässt wirklich nichts das Haus?', 'Quellen, Wege und Notizen liegen auf Ihrem Rechner oder Server. Was ein Assistent aus dem Hafen abruft, sieht allerdings der Anbieter dieses Assistenten. Arbeiten Sie mit einem lokalen Modell, bleibt auch das im Haus; arbeiten Sie mit einem Cloud-Assistenten, gelten dessen Bedingungen für die abgerufenen Stellen.'],
+    ['Mit welchen Programmen arbeitet der Kanzlei-Hafen?', 'Mit jedem Programm, das MCP im eigenen Netz spricht: Agenten aus unserer Werft mit einem lokalen Modell über Ollama, Claude Code, Cursor und VS Code. Assistenten, die nur aus der Cloud zugreifen, erreichen einen Hafen im Kanzleinetz nicht ohne Freigabe nach außen.'],
+    ['Was kostet es?', 'Die Software ist frei (MIT-Lizenz) und bleibt es. Geplant ist für Kanzleien ein Jahrespaket mit Updates, Rollen, Protokoll und Sicherung für 990 € je Standort sowie eine Einrichtung zum Festpreis von 750 €. Beides bieten wir erst an, wenn die Verträge dafür stehen.'],
+    ['Warum kann ich noch nicht buchen?', 'Weil für Berufsgeheimnisträger zuerst die Verschwiegenheitsverpflichtung und die Vertragsunterlagen stehen müssen. Bis dahin nehmen wir Anfragen für den Pilot an und installieren nichts aus der Ferne.'],
+    ['Ersetzt das eine juristische Datenbank?', 'Nein. Fachinhalte bringen wir nicht mit. Der Hafen ist der Ort für Ihr eigenes freigegebenes Wissen: Muster, Vermerke, Abläufe, Kanzleihandbuch.'],
+  ];
+  const body = `<h1>Der Kanzlei-Hafen: Ihr Wissen bleibt im Haus</h1>
+<p style="font-size:1.15rem">Für Steuer- und Anwaltskanzleien: ein Wissensspeicher auf Ihrem eigenen Rechner oder Server. Er gibt nur heraus, was Sie freigegeben haben, wörtlich und mit Fundstelle, und hält jeden Entwurf Satz für Satz gegen Ihre Unterlagen.</p>
+${cta(mail, 'Pilot anfragen', 'Wir suchen drei Kanzleien und ein Systemhaus für den Pilot. Noch kein Verkauf.')}
+<p><a href="/download">Die Software selbst ansehen: Knoten herunterladen (frei, MIT-Lizenz)</a></p>
+<div class="grid">
+<div class="box"><h3>Nur freigegebenes Wissen</h3><p style="margin:0">Muster, Vermerke und Abläufe werden vorgeschlagen und von einer berechtigten Person freigegeben. Erst dann gibt der Hafen sie heraus, mit Titel, Abschnitt und Stand.</p></div>
+<div class="box"><h3>Auf Ihrer Technik</h3><p style="margin:0">Ein Programm ohne Abhängigkeiten: Node.js oder Docker, der Zustand liegt in einem Ordner auf Ihrer Platte. Kein Konto bei uns, kein Zugriff von uns.</p></div>
+<div class="box"><h3>Geprüfte Entwürfe</h3><p style="margin:0">Die Prüfung zeigt, welcher Satz sich auf welche Stelle stützt und welche Zahl in keiner Quelle steht. Sie liest Wörter und Zahlen; die fachliche Bewertung bleibt bei Ihnen.</p></div>
+</div>
+<h2>Für Systemhäuser</h2>
+<p>Sie betreuen Kanzleien und möchten den Hafen mit ausliefern? Die Installation ist ein Archiv und ein Startskript. Schreiben Sie uns: <a href="${mail}">${OFFER.mail}</a>.</p>
+${faqHtml(qa, 'Fragen')}
+<p class="muted"><small>Diese Seite ist keine Rechtsberatung. Ob und wie Sie Mandatswissen mit KI-Werkzeugen verarbeiten dürfen, klären Sie nach Ihrem Berufsrecht.</small></p>
+<p>Weiter: <a href="/de/unternehmen">Für Unternehmen</a> · <a href="/de/agenturen">Für Agenturen</a> · <a href="/security">Sicherheit</a> · <a href="/privacy">Datenschutz</a></p>`;
+  return page(base, path, 'KI-Wissensspeicher für Kanzleien, auf eigenem Server · Mare Liberum',
+    'Für Steuer- und Anwaltskanzleien: freigegebene Muster, Vermerke und Abläufe auf dem eigenen Server, Antworten mit Fundstelle, Entwürfe gegen die Quellen geprüft. Freie Software, Pilot auf Anfrage.',
+    body, graph(ORG(base), crumbs(base, [['Mare Liberum', '/de'], ['Kanzleien', path]]), faqLd(qa)), '/og.png', { lang: 'de' });
+}

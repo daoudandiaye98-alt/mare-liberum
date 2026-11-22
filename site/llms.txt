@@ -33,6 +33,9 @@ Base: https://mare-liberum.vercel.app
 - [Free MCP server](https://mare-liberum.vercel.app/mcp-server): one remote MCP server without account or key, with the setup for Claude, ChatGPT, Cursor and VS Code
 - [MCP server directory](https://mare-liberum.vercel.app/mcp-servers): 84,000 MCP servers by topic (GitHub, PostgreSQL, Slack, Notion, browser, memory …), plus [A2A agents](https://mare-liberum.vercel.app/a2a-agents) and [x402 APIs](https://mare-liberum.vercel.app/x402-apis)
 - [For companies](https://mare-liberum.vercel.app/business): connect the AI a team already uses to its approved knowledge; answers with sources, agents from blueprints, self-hosted or in the EU
+- [For developer teams](https://mare-liberum.vercel.app/teams): one shared, rated memory for Claude Code, Cursor and Codex over one MCP connection; free to self-host, hosted team harbour 49 EUR a month
+- [Für Agenturen](https://mare-liberum.vercel.app/de/agenturen): one memory for ChatGPT and Claude at once, a harbour per client; pilot 79 EUR a month per team, first month free (German)
+- [Für Kanzleien](https://mare-liberum.vercel.app/de/kanzleien): approved knowledge of a tax or law firm on its own server; pilot on request (German)
 - [AI crawlers, counted live](https://mare-liberum.vercel.app/ai-crawlers): which AI crawlers really come, with the robots.txt name of each
 - [Web page to Markdown](https://mare-liberum.vercel.app/web-to-markdown): the reader as a free API
 - [Auf Deutsch](https://mare-liberum.vercel.app/de): die offene Plattform für KI-Agenten
