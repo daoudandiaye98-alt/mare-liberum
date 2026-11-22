@@ -18,7 +18,7 @@ import { grab } from './check.mjs';
 export const LIGHT = {
   halfLifeDays: 30, prior: { chart: [2, 1], resident: [1, 1], visitor: [1, 1], probe: [1, 1] },
   weight: { resident: 1, visitor: 0.5, probe: 1 }, dayCap: 1, proofDays: 2,
-  k1: 1.5, b: 0.75, minFit: 0.3, kindFloor: 0.4, forAny: 0.3, forOther: 0.2, learnN: 20, learnUp: 1, learnDown: 0.5,
+  k1: 1.5, b: 0.75, minFit: 0.3, kindOnly: 0.5, kindFloor: 0.4, forAny: 0.3, forOther: 0.2, learnN: 20, learnUp: 1, learnDown: 0.5,
   alternatives: 3, candidates: 24, maxSteps: 6, ticketDays: 7, minOutcomes: 30, bins: 5, keepDays: 400,
   probePerHour: 20, probeMs: 8000, probeCourses: 3, probeHostGapS: 30,
   coursePerHour: 300, donePerHour: 300, layPerHour: 20,
@@ -136,6 +136,7 @@ export function createLighthouse(h) {
     const raw = s.to ?? s.url, given = raw != null && raw !== '', to = given ? https(raw) : undefined;
     if (given && (!to || PRIVATE(to))) throw bad(`step ${i + 1}: to is a public https address`);
     if (d === 'go' && !to) throw bad(`step ${i + 1}: a go step names its https address (to)`);
+    if (to && d !== 'go') throw bad(`step ${i + 1}: only a go step names an address (to); the other steps work through the sea`);
     if (to && NO_GO.test(to)) throw bad(`step ${i + 1}: a course never leads to a till, a cart or a login`);
     const act = acts(say) || acts(check);
     if (act) throw bad(`step ${i + 1} says "${act}": a course reads and compares; it never pays, orders, submits, posts or logs in`);
@@ -160,14 +161,16 @@ export function createLighthouse(h) {
   const docOf = (c) => { const tf = {}; for (const t of [...(c.tasks || []), c.title, c.kind.replace(/-/g, ' ')]) for (const w of wordsOf(t)) tf[w] = (tf[w] || 0) + 1; return tf; };
 
   // the index of words: one name, read once per question
-  async function index() { const x = await kv.get('light:index'); return x && x.n && x.w ? x : { n: {}, w: {} }; }
+  async function index() { const x = await kv.get('light:index'); return x && x.n && x.w ? { k: {}, ...x } : { n: {}, w: {}, k: {} }; }
   async function indexPut(cs, gone = []) {
     const out = new Set([...gone, ...cs.map((c) => c.id)]), docs = cs.map((c) => [c.id, docOf(c)]);
     await update('light:index', LIGHT.keepDays * DAY, (cur) => {
-      const x = cur && cur.n && cur.w ? cur : { n: {}, w: {} };
+      const x = cur && cur.n && cur.w ? { k: {}, ...cur } : { n: {}, w: {}, k: {} };
       for (const id of out) delete x.n[id];
+      for (const [k, ids] of Object.entries(x.k)) { for (const id of out) delete ids[id]; if (!Object.keys(ids).length) delete x.k[k]; }
       for (const [w, post] of Object.entries(x.w)) { for (const id of out) delete post[id]; if (!Object.keys(post).length) delete x.w[w]; }
       for (const [id, tf] of docs) { x.n[id] = Object.values(tf).reduce((s, v) => s + v, 0) || 1; for (const [w, n] of Object.entries(tf)) (x.w[w] ||= {})[id] = n; }
+      for (const c of cs) if (c.kind) (x.k[c.kind] ||= {})[c.id] = 1;
       return x;
     }, (seen) => cs.every((c) => seen?.n?.[c.id] != null) && gone.every((id) => seen?.n?.[id] == null));
   }
@@ -222,13 +225,11 @@ export function createLighthouse(h) {
     if (!words.length) return { words, kd, list: [] };
     const idx = await index(), t = nowMs();
     const hits = bm25(words, idx).sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)).slice(0, LIGHT.candidates * 2);
-    const rows = await Promise.all(hits.map(async ([id, wf]) => { const [c, st] = await Promise.all([kv.get(`light:c:${id}`), kv.get(`light:s:${id}`)]); return c && !c.retired ? { c, st: st || {}, wf } : null; }));
-    const list = [];
-    for (const x of rows) {
-      if (!x || !open(x.c, x.st)) continue;
-      const fit = kindFit(kd, x.c.kind) * x.wf; if (fit < LIGHT.minFit) continue;
-      const [a, b] = betaOf(x.c, x.st, t); list.push({ ...x, fit, a, b, expect: a / (a + b) });
-    }
+    const rowsOf = (hs, byKind) => Promise.all(hs.map(async ([id, wf]) => { const [c, st] = await Promise.all([kv.get(`light:c:${id}`), kv.get(`light:s:${id}`)]); return c && !c.retired ? { c, st: st || {}, wf, byKind } : null; }));
+    const listOf = (rows) => { const l = []; for (const x of rows) { if (!x || !open(x.c, x.st)) continue; const fit = kindFit(kd, x.c.kind) * x.wf; if (fit < LIGHT.minFit) continue; const [a, b] = betaOf(x.c, x.st, t); l.push({ ...x, fit, a, b, expect: a / (a + b) }); } return l; };
+    let list = listOf(await rowsOf(hits));
+    // no course fits the words of the task, yet its kind is plain: the courses of that kind light up, at half the fit
+    if (!list.length && kd.top && kd.top !== 'general') list = listOf(await rowsOf(Object.keys(idx.k?.[kd.top] || {}).sort().slice(0, LIGHT.candidates * 2).map((id) => [id, LIGHT.kindOnly]), true));
     const known = agent && list.some((x) => (x.c.for || []).includes(agent));
     for (const x of list) x.rank = x.fit * (known ? forFit(x.c, agent) : 1);
     return { words, kd, list: list.sort((x, y) => y.rank - x.rank || (x.c.id < y.c.id ? -1 : 1)).slice(0, LIGHT.candidates) };
@@ -239,7 +240,7 @@ export function createLighthouse(h) {
     notes: (x.st.notes || []).length ? x.st.notes.slice(0, 3) : undefined });
   function whyOf(x, kd, drawn) {
     const n = x.st.n || 0, lo = qbeta(0.05, x.a, x.b), hi = qbeta(0.95, x.a, x.b);
-    const kind = !kd.top ? `the words of the task fit "${x.c.title}"` : x.c.kind === kd.top ? `the task reads as ${kd.top}${kd.learned ? ` (${pct(kd.learned)} of that reading learned from outcomes)` : ''} and its words fit "${x.c.title}"` : `the task reads as ${kd.top}; "${x.c.title}" (${x.c.kind}) fits its words best`;
+    const kind = x.byKind ? `the task reads as ${kd.top}; no course shares its words yet, so the courses of that kind light up: "${x.c.title}"` : !kd.top ? `the words of the task fit "${x.c.title}"` : x.c.kind === kd.top ? `the task reads as ${kd.top}${kd.learned ? ` (${pct(kd.learned)} of that reading learned from outcomes)` : ''} and its words fit "${x.c.title}"` : `the task reads as ${kd.top}; "${x.c.title}" (${x.c.kind}) fits its words best`;
     return `${kind} (fit ${r3(x.fit)}); it is expected to lead to the goal ${pct(x.expect)} of the time (90 % between ${pct(lo)} and ${pct(hi)}) after ${n ? `${n} outcome${n === 1 ? '' : 's'} from agents` : 'no outcome from agents yet'}${x.st.pn ? ` and ${x.st.pn} probe${x.st.pn === 1 ? '' : 's'} by the sea` : ''}${drawn ? '; chosen by a draw that favours what worked and still tries what few have walked' : ''}.`;
   }
 
@@ -276,8 +277,9 @@ export function createLighthouse(h) {
   }, () => true);
 
   // seeding the charts: the same course named for several tasks is one course with all its tasks; a chart that left the
-  // list is retired (kept with its outcomes, never shown); a list that did not change writes nothing
-  async function seedCharts(list) {
+  // list is retired (kept with its outcomes, never shown) — only when the list is the whole chart file (full); a list
+  // that did not change writes nothing. Without full, seeding only adds
+  async function seedCharts(list, { full = false } = {}) {
     const items = new Map(), skipped = [];
     for (const raw of Array.isArray(list) ? list : []) {
       try { const c = await courseOf(raw, 'chart'), o = items.get(c.id); if (o) o.tasks = [...new Set([...o.tasks, ...c.tasks])].slice(0, 24); else items.set(c.id, c); }
@@ -292,14 +294,14 @@ export function createLighthouse(h) {
       if (cur && cur.laidBy !== 'chart' && !cur.retired) { kept++; continue; }   // a course a resident or visitor laid stays theirs
       await kv.set(`light:c:${c.id}`, { ...c, at: cur?.at || now(), last: now() }, LIGHT.keepDays * DAY); changed.push(c); laid++;
     }
-    const gone = (was.ids || []).filter((id) => !items.has(id));
+    const gone = full ? (was.ids || []).filter((id) => !items.has(id)) : [];
     for (const id of gone) { const c = await kv.get(`light:c:${id}`); if (c && c.laidBy === 'chart') await kv.set(`light:c:${id}`, { ...c, retired: now() }, LIGHT.keepDays * DAY); }
     if (changed.length || gone.length) await indexPut(changed, gone);
-    await kv.set('light:charts', { sum, ids: [...items.keys()], at: now() }, LIGHT.keepDays * DAY);
+    await kv.set('light:charts', { sum, ids: full ? [...items.keys()] : [...new Set([...(was.ids || []), ...items.keys()])], at: now() }, LIGHT.keepDays * DAY);
     if (laid) await count({ laid });
     return { laid, kept, retired: gone.length, skipped };
   }
-  const seeding = h.charts ? seedCharts(h.charts).catch((e) => ({ failed: String(e?.message || e).slice(0, 120) })) : null;
+  const seeding = h.charts ? seedCharts(h.charts, { full: true }).catch((e) => ({ failed: String(e?.message || e).slice(0, 120) })) : null;
   const ready = () => seeding || Promise.resolve();
 
   // ---------------------------------------------------------------- the probe: the sea walks its own courses, reading only
@@ -398,7 +400,8 @@ export function createLighthouse(h) {
       if (!(await kv.get(`light:em:${pick.c.id}:${ipd}`))) { await kv.set(`light:em:${pick.c.id}:${ipd}`, 1, 2 * DAY); await emit({ type: 'course', by: me?.agent, name: me?.name || 'an agent', kind: pick.c.kind, course: pick.c.id, text: `asked the lighthouse and got a course for ${pick.c.kind}: ${pick.c.title}` }); }
       const done = `${base()}/course/${ticket}/done`;
       return strip({ course: view(pick), alternatives: alts.map(view), ticket, confidence: r3(pick.expect), why: whyOf(pick, kd, true),
-        done: { ok: `${done}?ok=1`, failed: `${done}?ok=0`, instead: `${done}?ok=0&instead=<course id or https address that led there>`, until: new Date(nowMs() + LIGHT.ticketDays * 864e5).toISOString() },
+        done: `${done}?ok=<1 when you reached the goal, 0 when not>`,
+        report: { ok: `${done}?ok=1`, failed: `${done}?ok=0`, instead: `${done}?ok=0&instead=<course id or https address that led there>`, until: new Date(nowMs() + LIGHT.ticketDays * 864e5).toISOString() },
         task: q, kind: kd.top || undefined, notice: NOTICE });
     },
     // ---------------------------------------------------------------- one outcome per ticket
@@ -547,7 +550,7 @@ export function createLighthouse(h) {
         at: now(), courses: { total, ...laid, kinds: best.size },
         outcomes: { total: stats?.outcomes || 0, d7: w7.outcomes, d30: w30.outcomes, tickets: stats?.tickets || 0 },
         brier: { d7: w7.brier, d30: w30.brier, note: 'mean of (expected − outcome)² for each ticket; 0 is perfect, 0.25 is a coin' },
-        hit: { d7: w7.hit, d30: w30.hit }, recognition: { d30: w30.recognition, note: 'share of outcomes where the chosen course was of the kind that finally led to the goal' },
+        hitRate: typeof w30.hit === 'number' ? w30.hit : null, hit: { d7: w7.hit, d30: w30.hit }, recognition: { d30: w30.recognition, note: 'share of outcomes where the chosen course was of the kind that finally led to the goal' },
         // the same numbers flat; null where fewer than 30 outcomes stand behind them
         brier7: typeof w7.brier === 'number' ? w7.brier : null, brier30: typeof w30.brier === 'number' ? w30.brier : null, hit7: typeof w7.hit === 'number' ? w7.hit : null, hit30: typeof w30.hit === 'number' ? w30.hit : null,
         recognition30: typeof w30.recognition === 'number' ? w30.recognition : null, outcomes7: w7.outcomes, outcomes30: w30.outcomes, probes30: sum('pn', 30), probesPassable30: sum('pok', 30),

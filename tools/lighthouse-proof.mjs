@@ -84,8 +84,8 @@ await proof('seeding is idempotent: laidBy chart, the same list writes nothing, 
   const c = await kv.get(`light:c:${(await L.courseFor('read the reviews')).id}`);
   assert.equal(c.laidBy, 'chart'); assert.equal(c.steps[1].on, 'harbour', 'a harbour step is kept as it is');
   assert.deepEqual(await L.seedCharts([...bad, ok]), { laid: 0, kept: 1, retired: 0, skipped: r.skipped });
-  // a chart that leaves the list is retired: kept with its outcomes, never shown
-  await L.seedCharts([C('x-new', ['any'], ['plan a garden'])]);
+  // a chart that leaves the whole chart file (full) is retired: kept with its outcomes, never shown; a partial list only adds
+  await L.seedCharts([C('x-new', ['any'], ['plan a garden'])], { full: true });
   assert.equal(await L.courseFor('read the reviews'), null); assert.ok(await L.courseFor('plan a garden'));
 });
 await proof(`the charts of node/charts.mjs${process.env.LIGHT_CHARTS ? ` (${process.env.LIGHT_CHARTS})` : ''} load without an error, and every agent they name gets a course for one of its own tasks`, async () => {
@@ -114,7 +114,7 @@ await proof('a plain task of each blueprint and of Angel gets its own course, wi
     if (r.course?.kind === kind) right++;
     assert.match(r.ticket, /^[a-f0-9]{16}$/); assert.ok(r.confidence > 0 && r.confidence < 1); assert.match(r.why, /expected to lead to the goal \d+ %/);
     assert.ok(r.alternatives.length <= LIGHT.alternatives); assert.ok(r.course.interval[0] < r.course.expect && r.course.expect < r.course.interval[1]);
-    assert.match(r.done.ok, /^https:\/\/sea\.test\/course\/[a-f0-9]{16}\/done\?ok=1$/);
+    assert.match(r.report.ok, /^https:\/\/sea\.test\/course\/[a-f0-9]{16}\/done\?ok=1$/);
   }
   assert.ok(right >= cases.length - 2, `${right} of ${cases.length} drawn right (a draw may try another fitting course now and then)`);
   const none = await L.course({ q: 'zxqvplmk flurbnax gadgetry' }, { ip: '203.0.113.2' });
@@ -256,7 +256,7 @@ await proof('the probe only reads: no till, no form, no post, no login; it never
   });
   const { calls, api } = seaVerbs();
   const charts = [
-    C('kettle', ['buyer'], ['buy a kettle'], [step('go', 'Open the product page.', 'has-price: the page shows a price', { to: 'https://shop.example/p/kettle' }), step('read_page', 'See the way to the till; do not use it.', 'checkout-link: a checkout link is on the page', { to: 'https://shop.example/p/kettle' }), step('decide', 'Compare offers; a person pays.', 'checkout-link: the pick has a checkout link')]),
+    C('kettle', ['buyer'], ['buy a kettle'], [step('go', 'Open the product page.', 'has-price: the page shows a price', { to: 'https://shop.example/p/kettle' }), step('go', 'See the way to the till; do not use it.', 'checkout-link: a checkout link is on the page', { to: 'https://shop.example/p/kettle' }), step('decide', 'Compare offers; a person pays.', 'checkout-link: the pick has a checkout link')]),
     C('agentcard', ['any'], ['find an a2a agent'], [step('go', 'Read the card.', 'a2a-card: the card names skills', { to: 'https://agent.example/' }), step('search', 'Search for an MCP server.', 'mcp-alive: the first entry answers')]),
     C('harbour', ['support-desk'], ['answer from the harbour'], [step('think', 'Ask the harbour.', 'answers: ways come back', { on: 'harbour' }), step('ask', 'Ask the sea quietly.', 'answers: offers come back')]),
   ];
