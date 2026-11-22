@@ -203,9 +203,10 @@ await proof('a browser is a person once a page was shown in it; a page nobody wa
   // a page shown from the browser's own store of pages was asked of nobody and is a visit all the same; a browser from before the newer marks says it without them
   await ask('/shown?p=%2Fbuy', { 'user-agent': safari });
   assert.equal((await day()).kinds.browser, 2);
-  // what does not count: a call from another site, a door that is not named, a door the census leaves out, a caller that is no browser, and the sea's own proofs
+  // what does not count: a call from another site, a door that is not named, a door the census leaves out, a caller that is no browser, a browser that names its driver, and the sea's own proofs
   await ask('/shown?p=%2Fbuy', { ...calls, 'sec-fetch-site': 'cross-site' }); await ask('/shown', calls); await ask('/shown?p=', calls); await ask('/shown?p=buy', calls);
   await ask('/shown?p=%2Fcheck', calls); await ask('/shown?p=%2F.env', calls); await ask('/shown?p=%2Fbuy', { 'user-agent': 'curl/8.5.0' }); await ask('/shown?p=%2Fbuy', { ...calls, 'user-agent': `${chrome} mare-proof` });
+  await ask('/shown?p=%2Fbuy', { ...calls, 'user-agent': chrome.replace('Chrome/', 'HeadlessChrome/') }); await ask('/shown?p=%2Fbuy', { ...calls, 'user-agent': `${chrome} (compatible; Chrome-Lighthouse)` });
   assert.deepEqual((await day()).kinds, { 'ai-crawler': 1, tool: 1, browser: 2 });
   // what waits is a door and a hash: never the address of the caller, never what follows the door (the address of a mind is its key)
   await ask('/m/a-private-address-of-a-mind', opens, '203.0.113.9');

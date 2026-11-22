@@ -934,10 +934,11 @@ export function callerOf(headers) {
 // once the page has been in front of someone (two seconds in view, or the first touch, key or turn of the wheel) it tells
 // the sea the name of its door, once (GET /shown?p=<door>). No cookie, nothing kept in the browser, no identifier, never
 // the full address. A browser that a program drives says so itself (navigator.webdriver) and stays silent, and the word of
-// a caller that is no browser by its name counts for nothing. A browser's request for a page waits for that word; a
-// page nobody was shown within SHOWN_WAIT was read by a program under a browser's name and is counted as one.
+// a caller that is no browser by its name, or of a browser that names its driver (HeadlessChrome, Lighthouse), counts
+// for nothing. A browser's request for a page waits for that word; a page nobody was shown within SHOWN_WAIT was read
+// by a program under a browser's name and is counted as one.
 export const SHOWN_WAIT = 5 * 60_000;
-const SCRIPT = { kind: 'tool', name: 'Scripts named like browsers' };
+const SCRIPT = { kind: 'tool', name: 'Scripts named like browsers' }, DRIVEN = /headless|lighthouse|phantomjs|puppeteer|playwright|selenium|webdriver|cypress/i;
 export const shownLine = (door) => `<script>(()=>{if(navigator.webdriver)return;let d=0,t=0;const s=()=>{if(d||document.visibilityState!=='visible')return;d=1;try{fetch('/shown?p='+encodeURIComponent(${JSON.stringify(String(door)).replace(/</g, '\\u003c')}),{keepalive:true,cache:'no-store'}).catch(()=>{})}catch(e){}},w=()=>{clearTimeout(t);if(!d&&document.visibilityState==='visible')t=setTimeout(s,2000)};for(const e of['pointerdown','keydown','wheel'])addEventListener(e,s,{once:true,passive:true,capture:true});document.addEventListener('visibilitychange',w);w()})()</script>`;
 async function withShown(res, door) {
   if (!res.body || !/^text\/html/i.test(res.headers.get('content-type') || '')) return res;
@@ -1234,9 +1235,9 @@ export async function handle(req, db, cfg = {}) {
   while (waits.length && (t0 - waits[0].t >= waitFor || waits.length > 4000)) { const w = waits.shift(); late.push({ ...SCRIPT, path: w.door, geo: w.geo }); }
   if (path === '/shown') {
     // a page says it was shown. It is believed from a browser by its name (one from before the newer marks has no more
-    // than that), as a call of the page itself, for a door the sea counts
-    const b = who.kind === 'browser' ? who : classify(req.headers.get('user-agent')), from = req.headers.get('sec-fetch-site'), p = String(url.searchParams.get('p') || '').slice(0, 200);
-    if (req.method === 'GET' && b.kind === 'browser' && (!from || from === 'same-origin') && /^\/[^\s?#]*$/.test(p) && countable(doorOf(p))) {
+    // than that) that names no driver, as a call of the page itself, for a door the sea counts
+    const ua = req.headers.get('user-agent') || '', b = who.kind === 'browser' ? who : classify(ua), from = req.headers.get('sec-fetch-site'), p = String(url.searchParams.get('p') || '').slice(0, 200);
+    if (req.method === 'GET' && b.kind === 'browser' && !DRIVEN.test(ua) && (!from || from === 'same-origin') && /^\/[^\s?#]*$/.test(p) && countable(doorOf(p))) {
       const d = doorOf(p), k = waitKey(d), i = waits.findIndex((w) => w.k === k);
       if (i >= 0) waits.splice(i, 1);
       late.push({ kind: 'browser', name: b.name, path: d, geo });
