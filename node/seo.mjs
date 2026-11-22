@@ -2,6 +2,7 @@
 // Every page here answers one real search: a free MCP server, a directory of MCP servers by topic, how AI agents see a website,
 // a web page as Markdown, which AI crawlers come, how a company puts agents to work. English and German, with hreflang.
 import { page, esc } from './pages.mjs';
+import { reportBox } from './offers.mjs';
 
 const pathOf = (id) => `/e/${encodeURIComponent(String(id).replace(/^urn:air:/, '')).replace(/%3A/gi, ':')}`;
 const fmt = (n) => Number(n || 0).toLocaleString('en-US');
@@ -286,6 +287,7 @@ export function businessPage(base, lang) {
 <div class="grid">${parts.map(([h, href, t]) => `<div class="box"><h3><a href="${href}">${esc(h)}</a></h3><p style="margin:0">${esc(t)}</p></div>`).join('')}</div>
 <h2>${de ? 'In drei Schritten' : 'In three steps'}</h2><ol>${steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>
 ${de ? connectDe('https://mareliberum.dev/harbour/mcp') : connect('https://mareliberum.dev/harbour/mcp')}
+${reportBox(lang)}
 ${faqHtml(qa, de ? 'Fragen' : 'Questions')}
 <p>${de ? 'Weiter:' : 'More:'} <a href="/harbour">${de ? 'Hafen öffnen' : 'Open a harbour'}</a> · <a href="/download">${de ? 'Knoten herunterladen' : 'Download the node'}</a> · <a href="/yard">${de ? 'Agenten bauen' : 'Build an agent'}</a> · <a href="${de ? '/de/mcp-server' : '/mcp-server'}">${de ? 'Kostenloser MCP-Server' : 'Free MCP server'}</a></p>`;
   return page(base, path, de ? 'KI-Agenten im Unternehmen einsetzen — MCP-Plattform mit freigegebenem Wissen · Mare Liberum' : 'AI Agents for Business — MCP platform on your approved knowledge · Mare Liberum',
@@ -448,6 +450,7 @@ ${cta(OFFER.agency, 'Pilot starten: erster Monat frei', 'Danach 79 € je Team i
 <ol><li>Hafen öffnen und dem Kunden einen Rahmen geben: wofür die KI da ist und woran sie sich hält.</li><li>Freigegebene Unterlagen hineinlegen: Markenhandbuch, Tonalität, Leistungsbeschreibung, Preisliste.</li><li>Die Adresse des Hafens in ChatGPT, Claude oder Cursor als Connector eintragen. Der Crew-Schlüssel schreibt, der Gast-Schlüssel liest nur.</li></ol>
 ${connectDe('https://mareliberum.dev/harbour/mcp')}
 <p class="muted"><small>Der Schlüssel des Hafens wird als Kopfzeile „Authorization: Bearer“ mitgegeben. Für Apps, die nur eine Adresse annehmen: https://mareliberum.dev/h/&lt;Schlüssel&gt;/mcp.</small></p>
+${reportBox('de')}
 ${faqHtml(qa, 'Fragen')}
 <p>Fragen vor dem Start: <a href="mailto:${OFFER.mail}?subject=Team-Hafen%20Pilot">${OFFER.mail}</a> · Weiter: <a href="/de/unternehmen">Für Unternehmen</a> · <a href="/de/kanzleien">Für Kanzleien</a> · <a href="/teams">For developer teams</a> · <a href="/security">Sicherheit</a> · <a href="/terms">Bedingungen</a> · <a href="/privacy">Datenschutz</a></p>`;
   return page(base, path, 'Ein KI-Gedächtnis für ChatGPT und Claude zugleich · Mare Liberum',

@@ -5,7 +5,9 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { handle } from '../node/core.mjs';
 import { createMem } from '../node/mem.mjs';
-import { OFFERS, VERIFIED, SELLER, isOpen, payUrl, verifiedOf } from '../node/offers.mjs';
+import { OFFERS, VERIFIED, SELLER, isOpen, payUrl, verifiedOf, reportBox } from '../node/offers.mjs';
+import { reportMarkdown, reportHtml, draftRobots, draftLlms, draftJsonLd } from '../node/report.mjs';
+import { SAMPLE } from '../node/report-sample.mjs';
 import { sitePage } from '../node/pages.mjs';
 
 let passed = 0, failed = 0;
@@ -34,11 +36,12 @@ const EP = `/e/${ID.replace('urn:air:', '')}`, EJ = `/entry?id=${encodeURICompon
 
 console.log('the rule: shown only while link and price are set');
 await proof('as shipped, a service without a payment link is closed', () => {
-  for (const o of Object.values(was)) if (!o.link) assert.equal(isOpen(o.id), false, o.id);
+  for (const o of Object.values(was)) assert.equal(isOpen(o.id), !!o.link && o.priceEur > 0, o.id);
+  close(); for (const o of Object.values(OFFERS)) assert.equal(isOpen(o.id), false, o.id);
 });
-await proof('as shipped: the report is open at the price its payment link charges; the verified listing is prepared and closed', () => {
+await proof('as shipped: both services are open at the prices their payment links charge', () => {
   assert.equal(was.report.priceEur, 29); assert.match(was.report.link, /^https:\/\/buy\.stripe\.com\/[A-Za-z0-9]+$/);
-  assert.equal(was.verified.priceEur, 19); assert.equal(was.verified.link, '');
+  assert.equal(was.verified.priceEur, 19); assert.equal(was.verified.link, 'https://buy.stripe.com/28EeV6fug5wUaBpg1Tes00p'); assert.equal(was.report.link, 'https://buy.stripe.com/fZu3co4PC2kIcJx3f7es00o');
   for (const o of Object.values(was)) { assert.ok(o.delivers.length >= 3 && o.within && o.not && o.asks, o.id); assert.match(o.within, /by hand/); }
 });
 await proof('a link without a price, a price without a link, and a link that is not https stay closed', () => {
@@ -153,6 +156,51 @@ await proof('for a program /offers answers as before (residents’ offers), with
 await proof('/offers is in the sitemap and in llms.txt', async () => {
   const sm = await call('/sitemaps/site.xml'); assert.ok(sm.txt.includes(`<loc>${BASE}/offers</loc>`));
   const l = await call('/llms.txt', { accept: 'text/plain' }); assert.match(l.txt, /\/offers\)/); assert.match(l.txt, /GET \/offers\.json/);
+});
+
+console.log('the sample report, the report tool and the pages for companies');
+await proof('the sample is public, marked as a sample of the house, and carries every part the offer names', async () => {
+  open(); const h = await call('/offers/sample-report'), m = await call('/offers/sample-report.md', { accept: 'text/markdown' }), o = await call('/offers'), s = await call('/site/harbourshop.com'); close();
+  assert.equal(h.status, 200); assert.match(h.type, /text\/html/); assert.match(h.txt, /This is a sample\./); assert.match(h.txt, /belongs to the seller/); assert.match(h.txt, /Nobody bought it/);
+  assert.match(m.type, /text\/markdown/); assert.match(m.txt, /\*\*Sample of the house\.\*\*/);
+  for (const w of ['## 2. The score, part by part', '## 3. Who may read the site', '## 5. Pages read', '## 7. Compared with others', '## 8. What to fix, in order of effect', '## 9. Files ready to use', '### /llms.txt', '### robots.txt', '### Structured data (JSON-LD)', '## 10. Re-check', SAMPLE.domain]) assert.ok(m.txt.includes(w), `missing: ${w}`);
+  assert.ok(h.txt.includes('<table>') && h.txt.includes('<pre>') && !/<script type="application\/ld\+json">\s*\{\s*"@context": "https:\/\/schema\.org",\s*"@graph"/.test(h.txt.split('<main')[1] || ''), 'the draft JSON-LD is shown as text, not run');
+  assert.ok(o.txt.includes('href="/offers/sample-report"')); assert.ok(s.txt.includes('href="/offers/sample-report"'));
+  assert.doesNotMatch(m.txt, /guarante|will rank|more sales/i);
+  const sm = await call('/sitemaps/site.xml'); assert.ok(sm.txt.includes(`<loc>${BASE}/offers/sample-report</loc>`));
+  close(); const c = await call('/offers/sample-report'); assert.equal(c.status, 200); assert.doesNotMatch(c.txt, /buy\.stripe\.com\/test_/);
+});
+await proof('the report says only what the data says: blocked agents get a robots.txt block, files that exist get no draft, an unread site gets no report', () => {
+  const agents = [{ name: 'GPTBot', op: 'OpenAI', role: 'training', allowed: false }, { name: 'Claude-User', op: 'Anthropic', role: 'live', allowed: false }, { name: 'PerplexityBot', op: 'Perplexity', role: 'search', allowed: true }];
+  const check = { host: 'shop.example', reachable: true, score: 40, grade: 'D', llms: true, agentCard: null, sitemap: false, agents, page: { title: 'Shop | Ropes', description: 'Ropes.', lang: 'en', words: 300, jsonld: ['Organization'] }, parts: [{ key: 'access', max: 25, got: 10, ok: false, title: 'robots.txt blocks Claude-User', fix: 'let it in', from: 'robots.txt' }, { key: 'sitemap', max: 5, got: 0, ok: false, title: 'No sitemap', fix: 'add one', from: 'robots.txt' }, { key: 'https', max: 5, got: 5, ok: true, title: 'HTTPS', fix: null, from: 'home page' }] };
+  const md = reportMarkdown({ domain: 'shop.example', date: '2026-11-22', base: BASE, check, site: { site: 'shop.example', llmsTxt: 'https://shop.example/llms.txt', search: { template: 'https://shop.example/s?q={q}', from: 'the form' } }, pages: [{ url: 'https://shop.example/', ok: true, words: 300, title: 'Shop' }, { url: 'https://shop.example/a|b', ok: false, note: 'the reader answered 403' }], competitors: [{ domain: 'other.example', check: { error: 'no answer' }, site: {} }] });
+  assert.match(md, /scores 40 of 100 \(grade D\)/); assert.match(md, /turns away 1 assistant or AI search crawler: Claude-User\./);
+  assert.ok(md.indexOf('robots.txt blocks Claude-User') < md.indexOf('No sitemap', md.indexOf('## 8.')) && md.indexOf('## 8.') < md.indexOf('1. **robots.txt blocks Claude-User**'), 'the largest gap first');
+  assert.match(md, /User-agent: Claude-User\nAllow: \//); assert.match(md, /Training crawlers: your choice/); assert.match(md, /Already there: https:\/\/shop\.example\/llms\.txt\. No draft needed\./); assert.match(md, /Already there: Organization\. No draft needed\./);
+  assert.match(md, /\| other\.example \| not readable \|/); assert.match(md, /a\\\|b/); assert.match(md, /read again on \*\*2026-12-06\*\*/); assert.doesNotMatch(md, /Sample of the house/);
+  assert.equal(draftRobots({ agents: agents.map((a) => ({ ...a, allowed: true })) }), null);
+  assert.match(draftLlms({ host: 'x.example', page: {} }, {}), /TODO/); assert.match(draftJsonLd(check, { search: { template: 'https://shop.example/s?q={q}' } }), /search_term_string/);
+  const none = reportMarkdown({ domain: 'gone.example', date: '2026-11-22', check: { error: 'no answer' }, site: {} }); assert.match(none, /could not be read/); assert.doesNotMatch(none, /## 9\./);
+  assert.doesNotMatch(reportHtml('| a | <script>x</script> |\n| --- | --- |\n| [l](javascript:alert(1)) | `c` |'), /<script>|href="javascript/);
+});
+await proof('the tool writes the report from kept data without the network and sends nothing', async () => {
+  const { spawnSync } = await import('node:child_process'); const { mkdtempSync, writeFileSync: w, readFileSync: r, readdirSync } = await import('node:fs'); const { tmpdir } = await import('node:os'); const { join } = await import('node:path');
+  const dir = mkdtempSync(join(tmpdir(), 'report-')), data = join(dir, 'd.json'), out = join(dir, 'r.md'); w(data, JSON.stringify(SAMPLE));
+  const run = spawnSync(process.execPath, [new URL('./report.mjs', import.meta.url).pathname, SAMPLE.domain, '--offline', '--json', data, '--out', out], { encoding: 'utf8', env: { ...process.env, HTTPS_PROXY: 'http://127.0.0.1:9', https_proxy: 'http://127.0.0.1:9' } });
+  assert.equal(run.status, 0, run.stderr); assert.match(run.stdout, /Nothing was sent/); assert.equal(r(out, 'utf8'), reportMarkdown(SAMPLE)); assert.deepEqual(readdirSync(dir).sort(), ['d.json', 'r.md']);
+  const bad = spawnSync(process.execPath, [new URL('./report.mjs', import.meta.url).pathname, 'not a domain'], { encoding: 'utf8' }); assert.equal(bad.status, 2);
+  const src = r(new URL('./report.mjs', import.meta.url), 'utf8'); assert.doesNotMatch(src, /method:\s*'POST'|smtp|sendMail|gmail\.com\/|api\.stripe/i);
+});
+await proof('/business, /de/unternehmen and /de/agenturen carry the report while it is open, in their language, and are as they were without it', async () => {
+  const cut = (t) => t.replace(/<section id="report"[\s\S]*?<\/section>/, '');
+  for (const [p, re] of [['/business', /Order the report · 29 €/], ['/de/unternehmen', /Bericht bestellen · 29 €/], ['/de/agenturen', /Bericht bestellen · 29 €/]]) {
+    close(); const b = await call(p); assert.equal(b.status, 200, p); assert.doesNotMatch(b.txt, /id="report"/, p);
+    open(); const o = await call(p); close();
+    assert.match(o.txt, re, p); assert.ok(o.txt.includes('Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.'), p); assert.ok(o.txt.includes('/offers/sample-report'), p); assert.ok(o.txt.includes(`${LINKS.report}?client_reference_id=report-page-`), p);
+    assert.equal(cut(o.txt), b.txt, `${p} without the block`);
+    const box = o.txt.match(/<section id="report"[\s\S]*?<\/section>/)[0]; assert.doesNotMatch(box, /garantier|guarante/i); assert.match(box, p.startsWith('/de') ? /Keine Zusage zu Platzierung, Reichweite oder Umsatz/ : /No promise of ranking, traffic or revenue/);
+  }
+  close(); assert.equal(reportBox('de'), '');
 });
 
 console.log('the free doors');
