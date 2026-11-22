@@ -5,6 +5,7 @@ H.classList.add('js');
 const $ = (s, r = D) => r.querySelector(s), $$ = (s, r = D) => [...r.querySelectorAll(s)];
 const { fmt, esc } = R;
 const LIVE = /*@LIVE*/false, B = '/*@B*/', PUBLIC = 'https://mareliberum.dev';
+const SV = '/*@SV*/';
 const EX = /*@EX*/null;
 const LAND = '/*@LAND*/';
 const CC = '/*@CC*/';
@@ -592,4 +593,32 @@ const poll = () => { clearInterval(timer); if (LIVE && !D.hidden) { pull(); time
 D.addEventListener('visibilitychange', () => { if (D.hidden) stop(); else start(); poll(); });
 poll();
 if (!LIVE) setInterval(since, 30000);
+
+/* ---------- the paintings: the sea at the top, and each zone as the place it is ---------- */
+// The page opens on an oil painting of this cut through the sea: a ship at the horizon, the sun, the light going down
+// into the water. Its water surface lies on the waterline of the page (the stylesheet puts it there), so the name is cut
+// where the painted sea begins. Scrolling down to the waterline moves the painting through its short film. Further down,
+// every zone has its painting at its top; it comes out of the water when it is reached, and the ones that are films move
+// as they pass through the screen. The painting itself comes from the look of the pages below (paint in scenes.js), so
+// every place of the sea is painted the same way. Without the script, with motion not wanted, or where the reader saves
+// data, the paintings simply stand.
+{
+  const top = $('.paint'), arts = $$('.art');
+  if ((top || arts.length) && !still && !navigator.connection?.saveData && SV.length === 10) {
+    // after the page has opened (the name has risen, the lines have arrived): then the painting comes out of the water
+    const go = () => import(`${B}/depth-scenes.js?v=${SV}`).then((m) => {
+      if (top) m.paint(top, { n: Number(top.dataset.film) || 0, p: () => clamp(scrollY / Math.max(1, G.wl - G.vh * 0.3), 0, 1), fail: () => stage && stage.classList.remove('painted') });
+      for (const el of arts) {
+        const pass = () => { const r = el.getBoundingClientRect(), vh = innerHeight; return clamp((vh - r.top) / (vh + r.height), 0, 1); };
+        m.paint(el, {
+          n: Number(el.dataset.film) || 0, p: pass, enter: 'seen', ring: false, settle: true,
+          out: () => { const r = el.getBoundingClientRect(); return clamp((-r.top - r.height * 0.12) / (r.height * 0.6), 0, 1); },
+          fail: () => el.remove(),
+        });
+      }
+    }).catch(() => {});
+    const later = () => setTimeout(() => ('requestIdleCallback' in window ? requestIdleCallback(go, { timeout: 900 }) : go()), 450);
+    if (D.readyState === 'complete') later(); else addEventListener('load', later, { once: true });
+  }
+}
 })();

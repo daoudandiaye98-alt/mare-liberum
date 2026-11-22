@@ -6,7 +6,13 @@
 // stylesheet and scripts that move it (homepage/src/depth.css, depth.js, scenes.js; built into skin-assets.mjs by
 // homepage/build.mjs). Nothing a page says is changed: words, links, numbers, forms and scripts stay as they were written.
 // A page that brings a look of its own says so on its root (<html data-look="own">, the home page) and is left alone.
+import { readFileSync } from 'node:fs';
 import { CSS, JS, SCENES, V } from './skin-assets.mjs';
+
+// The painted scenes (public/film, laid there from site/film): one oil painting for every scene of the chart, and for a
+// place that is told the same painting as a short film, a few dozen stills that the reader's scroll moves through. A
+// node that carries no paintings (the one to take home) shows the drawn scenes instead.
+const FILM = (() => { try { const f = JSON.parse(readFileSync(new URL('../public/film/index.json', import.meta.url), 'utf8')); return f && f.films ? f : null; } catch { return null; } })();
 
 export const SKIN_V = V;
 // the three files of the look, answered by the node itself so that they travel with it (a mirror, the node to take home)
@@ -143,7 +149,10 @@ export function dress(html, path = '/') {
 
   // the top: the scene, the depth, the name, and the lines that open the page
   const h = /<h1\b([^>]*)>([\s\S]*?)<\/h1>/.exec(body);
-  const scene = `<div class="scene" data-scene="${place.scene}" aria-hidden="true"></div>`;
+  const film = FILM?.films[place.scene];
+  const scene = film
+    ? `<div class="scene film" data-scene="${place.scene}" data-film="${story ? film.n : 0}" data-fv="${FILM.v}" style="--fy:${film.fy}%" aria-hidden="true"><img src="/film/${place.scene}/p.webp?v=${FILM.v}" alt="" width="716" height="1284" decoding="async" fetchpriority="high"></div>`
+    : `<div class="scene" data-scene="${place.scene}" aria-hidden="true"></div>`;
   const depth = `<p class="depth"><span class="snd">${lang === 'de' ? deDepth(place.depth) : place.depth}</span><span>${lang === 'de' ? DE[place.zname] || place.zname : place.zname}</span></p>`;
   if (h) {
     const after = body.slice(h.index + h[0].length);

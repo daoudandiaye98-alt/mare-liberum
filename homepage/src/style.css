@@ -81,7 +81,7 @@ html.js:not(.past) .brand span{opacity:0}
    there is where WebGL is not (a machine without a graphics chip, a lost context, no JavaScript). Its waterline is the
    shader's own wave at its first moment, so the hand-over does not move it; the sun stands only where no shader will
    come to raise one (.nogl, or the noscript rule in the head). */
-.stage{position:relative;overflow-x:clip;display:flex;flex-direction:column;padding:var(--top) var(--pad) 0;color:var(--ink);background:linear-gradient(to bottom,var(--air) 0,#edf1f2 calc(46*var(--u)),var(--dawn) calc(58*var(--u)))}
+.stage{--deep:calc(46*var(--u));position:relative;overflow-x:clip;display:flex;flex-direction:column;padding:var(--top) var(--pad) 0;color:var(--ink);background:linear-gradient(to bottom,var(--air) 0,#edf1f2 calc(46*var(--u)),var(--dawn) calc(58*var(--u)))}
 .gl .stage{background:var(--air)}
 .band::before,.band::after,.deep::before,.deep::after,#mk-hz::before{content:"";position:absolute;left:calc(-1*var(--pad));right:calc(-1*var(--pad))}
 .gl .band::before,.gl .band::after,.gl .deep::before,.gl .deep::after,.gl #mk-hz::before{content:none}
@@ -113,7 +113,7 @@ html.js:not(.past) .brand span{opacity:0}
 .cue a{display:inline-flex;align-items:center;gap:6px;min-height:44px;font-weight:600}
 .mk#mk-wl{order:5}
 /* not ".under": that is the state the page takes below the waterline, set on the root */
-.deep{order:6;height:calc(46*var(--u))}
+.deep{order:6;height:var(--deep)}
 
 /* water: every zone hangs on the ruler */
 .zone{position:relative;padding:clamp(88px,15svh,190px) var(--pad) clamp(64px,10svh,140px);background:linear-gradient(var(--a,var(--w3)),var(--b,var(--w3)))}
@@ -373,7 +373,7 @@ footer li a:hover{color:var(--foam);text-decoration:underline}
 @media (orientation:landscape) and (max-height:520px){
   .say{min-height:0;padding-top:4px;gap:6px;padding-bottom:12px;max-width:none}
   .thesis{font-size:30px}.lede{font-size:15.5px;max-width:60ch}
-  .band{height:calc(34*var(--u))}.deep{height:calc(70*var(--u))}
+  .band{height:calc(34*var(--u))}.stage{--deep:calc(70*var(--u))}
   .swarm-w canvas{height:max(380px,92svh)}
 }
 /* one moment on arrival: the sun comes up, the name rises out of the sea, the rest follows */
@@ -393,4 +393,40 @@ footer li a:hover{color:var(--foam);text-decoration:underline}
 @media (prefers-reduced-motion:reduce){
   *,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}
 }
-@media print{#sea,.dock,.hdr,.ruler{display:none!important}body,html{background:#fff!important;color:#000}.say{-webkit-mask-image:none!important;mask-image:none!important}.zone,.stage,footer{background:none!important;color:#000}}
+/* The paintings. At the top the sea is an oil painting: its box is set so that the painting's water surface (38.5 % of
+   its height) lies on the waterline of the page, wherever that is; the name is cut where the painted sea begins. With
+   the painting there the stated sky and far water step aside; below the waterline the painting fades into the water of
+   the page. Each zone carries the painting of its place at its top (full width on a phone, beside the words on a wide
+   screen), fading at its edges into the zone's own water. */
+.paint{position:absolute;z-index:2;left:0;right:0;top:0;bottom:0;overflow:hidden;pointer-events:none;-webkit-mask-image:linear-gradient(to bottom,#000 calc(100% - .62*var(--deep)),transparent);mask-image:linear-gradient(to bottom,#000 calc(100% - .62*var(--deep)),transparent)}
+.paint img,.paint canvas{position:absolute;left:0;top:0;width:100%;height:calc((100% - var(--deep))/.385);object-fit:cover;object-position:var(--fy,36%) 38.5%;display:block}
+.paint.live img{visibility:hidden}
+.painted .band::before,.painted .band::after,.painted #mk-hz::before,.painted .deep::before,.painted .deep::after{content:none}
+/* where the shader does not draw the water, the stage states it behind the painting: sky down to the waterline, then the sea */
+.nogl .stage.painted{background:linear-gradient(to bottom,var(--air) 0,#edf1f2 calc(46*var(--u)),var(--dawn) calc(100% - var(--deep)),var(--w0) calc(100% - var(--deep)),var(--w1))}
+/* with the script the painting waits for its entrance (it comes out of the water in squares); should that never come, it shows itself */
+@media (scripting:enabled) and (prefers-reduced-motion:no-preference){.paint img,.art img{animation:paintshow .6s 2.8s both}}
+@keyframes paintshow{from{opacity:0}to{opacity:1}}
+.painted .thesis{text-shadow:0 0 14px rgba(237,241,242,.75),0 0 3px rgba(237,241,242,.6)}
+.painted .kicker,.painted .lede{color:var(--ink)}
+/* the way down stands on the painted sea: a small dark float carries it */
+.painted .cue{color:var(--foam);background:rgba(2,9,22,.58);-webkit-backdrop-filter:blur(8px);backdrop-filter:blur(8px);border-radius:99px;padding:0 6px 0 16px;gap:var(--s3)}
+.painted .cue a{color:inherit}
+/* under the painted surface the water is darker, as it is in the sea below it, and the name in white stays readable there */
+.paint::after{content:"";position:absolute;inset:0;background:linear-gradient(to bottom,rgba(4,18,40,0) calc(100% - var(--deep)),rgba(4,18,40,.42) calc(100% - var(--deep) + 10px),rgba(4,18,40,.5))}
+.art{position:relative;z-index:2;height:clamp(270px,50svh,480px);margin:calc(-1*clamp(88px,15svh,190px)) calc(-1*var(--pad)) calc(-1*clamp(40px,7svh,90px));overflow:hidden;pointer-events:none;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 18%,#000 58%,transparent 100%);mask-image:linear-gradient(to bottom,transparent 0,#000 18%,#000 58%,transparent 100%)}
+.art img,.art canvas{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;object-position:50% var(--fy,40%);display:block}
+.art canvas{transform-origin:50% var(--fy,40%)}
+.art.live img{visibility:hidden}
+.city .art{position:absolute;inset:0;height:auto;margin:0;-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 22%,#000 72%,transparent 100%);mask-image:linear-gradient(to bottom,transparent 0,#000 22%,#000 72%,transparent 100%)}
+.art::after{content:"";position:absolute;inset:0;background:linear-gradient(to bottom,rgba(2,9,22,0) 38%,rgba(2,9,22,.5) 72%,rgba(2,9,22,.78))}
+.city .art::after{background:linear-gradient(to bottom,rgba(2,9,22,.74) 0,rgba(2,9,22,.58) 46%,rgba(2,9,22,.22) 76%,rgba(2,9,22,0))}
+.city .art img,.city .art canvas{object-position:50% 60%}
+/* connecting is lines let down from a boat: below the surface, the lines and what hangs on them */
+#connect .art img,#connect .art canvas{object-position:50% 82%;transform-origin:50% 82%}
+@media (min-width:900px){
+  .paint{left:auto;width:min(64%,calc(100% - 420px));-webkit-mask-image:linear-gradient(to right,transparent 0,#000 34%),linear-gradient(to bottom,#000 calc(100% - .62*var(--deep)),transparent);mask-image:linear-gradient(to right,transparent 0,#000 34%),linear-gradient(to bottom,#000 calc(100% - .62*var(--deep)),transparent);-webkit-mask-composite:source-in;mask-composite:intersect}
+  .art{position:absolute;top:0;right:0;width:min(50%,760px);height:min(110svh,1000px);margin:0;-webkit-mask-image:linear-gradient(to right,transparent 0,rgba(0,0,0,.35) 30%,#000 56%),linear-gradient(to bottom,transparent 0,#000 16%,#000 50%,transparent 92%);mask-image:linear-gradient(to right,transparent 0,rgba(0,0,0,.35) 30%,#000 56%),linear-gradient(to bottom,transparent 0,#000 16%,#000 50%,transparent 92%);-webkit-mask-composite:source-in;mask-composite:intersect}
+  .city .art{left:auto;width:min(64%,980px)}
+}
+@media print{#sea,.dock,.hdr,.ruler,.paint,.art{display:none!important}body,html{background:#fff!important;color:#000}.say{-webkit-mask-image:none!important;mask-image:none!important}.zone,.stage,footer{background:none!important;color:#000}}
