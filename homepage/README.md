@@ -71,6 +71,7 @@ so behind a proxy that ends TLS itself it needs a profile that trusts the proxy 
 | `ovf` | no JavaScript and no web fonts: nothing reaches past the edge |
 | `startup` | where the first second goes, on a four times slower processor |
 | `shots` | screenshots at chosen depths, to look at |
+| `webmcp` | the page's forms as tools for an agent: what Chrome lists (names, schemas), what it objects to, one call of each tool and what it hands back |
 | `shown` | how the node tells a person from a program: a page read, a key pressed, a tab in the background, a driven browser; the census before and after (a node of one's own only) |
 
 The scripts set `window.__ML` before the page loads. The page reads it once: `soft` (draw the shader also on a

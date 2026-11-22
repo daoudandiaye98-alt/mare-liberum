@@ -478,30 +478,39 @@ for (const b of $$('[data-copy]')) { const label = b.textContent; b.addEventList
 // with LIVE off (a copy of the page that stands alone) there is no sea behind it: the examples carry real answers, anything else opens on the live address
 const away = (what, url) => `<p class="muted">This preview is not connected to the sea. ${what}</p><p><a class="ghost" href="${esc(url)}" rel="noopener" target="_blank">Open it on mareliberum.dev</a></p>`;
 const getJson = async (url) => (await fetch(url, { headers: { accept: 'application/json' } })).json();
+// each tool answers twice: on the page, for the person looking, and as data, for an agent that used the form as a tool
+// (WebMCP: toolname and tooldescription on the form; the browser fills the field, submits, and hands back what
+// respondWith is given)
 async function ask(qs) {
-  const out = $('#askr'); if (!qs) return; askTouched = true;
-  if (!LIVE) { const d = EX && EX.brain && EX.brain[qs]; out.innerHTML = d ? R.brainHtml(qs, d) + '<p class="muted small">A real answer of the brain, kept with this preview.</p>' : away('The three examples above carry real answers.', `${PUBLIC}/brain?q=${encodeURIComponent(qs)}`); queueLayout(); return; }
+  const out = $('#askr'); if (!qs) return null; askTouched = true;
+  if (!LIVE) { const d = EX && EX.brain && EX.brain[qs]; out.innerHTML = d ? R.brainHtml(qs, d) + '<p class="muted small">A real answer of the brain, kept with this preview.</p>' : away('The three examples above carry real answers.', `${PUBLIC}/brain?q=${encodeURIComponent(qs)}`); queueLayout(); return d || null; }
   out.innerHTML = '<p class="muted">Asking the brain…</p>';
-  try { out.innerHTML = R.brainHtml(qs, await getJson(`/brain?format=json&q=${encodeURIComponent(qs)}`)); } catch { out.innerHTML = '<p class="muted">The brain did not answer. Try again in a moment.</p>'; }
-  queueLayout();
+  let d = null;
+  try { d = await getJson(`/brain?format=json&q=${encodeURIComponent(qs)}`); out.innerHTML = R.brainHtml(qs, d); } catch { d = null; out.innerHTML = '<p class="muted">The brain did not answer. Try again in a moment.</p>'; }
+  queueLayout(); return d;
 }
 async function check(site) {
-  const out = $('#checkr'); if (!site) return;
-  if (!LIVE) { const d = EX && EX.check && EX.check[site.toLowerCase()]; out.innerHTML = d ? R.checkHtml(d, PUBLIC) + '<p class="muted small">A real result of the check, kept with this preview.</p>' : away('The first two examples above carry real results.', `${PUBLIC}/check?site=${encodeURIComponent(site)}`); queueLayout(); return; }
+  const out = $('#checkr'); if (!site) return null;
+  if (!LIVE) { const d = EX && EX.check && EX.check[site.toLowerCase()]; out.innerHTML = d ? R.checkHtml(d, PUBLIC) + '<p class="muted small">A real result of the check, kept with this preview.</p>' : away('The first two examples above carry real results.', `${PUBLIC}/check?site=${encodeURIComponent(site)}`); queueLayout(); return d || null; }
   out.innerHTML = '<p class="muted">Reading the site’s robots.txt, llms.txt, home page and agent card…</p>';
-  try { out.innerHTML = R.checkHtml(await getJson(`/check?format=json&site=${encodeURIComponent(site)}`), ''); } catch { out.innerHTML = '<p class="muted">The check did not answer. Try again in a moment.</p>'; }
-  queueLayout();
+  let d = null;
+  try { d = await getJson(`/check?format=json&site=${encodeURIComponent(site)}`); out.innerHTML = R.checkHtml(d, ''); } catch { d = null; out.innerHTML = '<p class="muted">The check did not answer. Try again in a moment.</p>'; }
+  queueLayout(); return d;
 }
 async function find(qs) {
-  const out = $('#findr'); if (!qs) return;
-  if (!LIVE) { out.innerHTML = away('The finder needs the live sea.', `${PUBLIC}/lookup?q=${encodeURIComponent(qs)}`); queueLayout(); return; }
+  const out = $('#findr'); if (!qs) return null;
+  if (!LIVE) { out.innerHTML = away('The finder needs the live sea.', `${PUBLIC}/lookup?q=${encodeURIComponent(qs)}`); queueLayout(); return null; }
   out.innerHTML = '<p class="muted">Looking…</p>';
-  try { out.innerHTML = R.findHtml(await getJson(`/lookup?q=${encodeURIComponent(qs)}`), Date.now(), ''); } catch { out.innerHTML = '<p class="muted">The finder did not answer. Try again in a moment.</p>'; }
-  queueLayout();
+  let d = null;
+  try { d = await getJson(`/lookup?q=${encodeURIComponent(qs)}`); out.innerHTML = R.findHtml(d, Date.now(), ''); } catch { d = null; out.innerHTML = '<p class="muted">The finder did not answer. Try again in a moment.</p>'; }
+  queueLayout(); return d;
 }
-$('#askf').addEventListener('submit', (e) => { e.preventDefault(); ask($('#q').value.trim()); });
-$('#checkf').addEventListener('submit', (e) => { e.preventDefault(); check($('#cq').value.trim()); });
-$('#findf').addEventListener('submit', (e) => { e.preventDefault(); find($('#fq').value.trim()); });
+const tool = (form, field, run) => form.addEventListener('submit', (e) => {
+  e.preventDefault();
+  const answer = run(field.value.trim());
+  if (e.agentInvoked && typeof e.respondWith === 'function') e.respondWith(answer.then((d) => d || { error: 'The sea gave no answer for this. Say it in other words, or try again in a moment.' }));
+});
+tool($('#askf'), $('#q'), ask); tool($('#checkf'), $('#cq'), check); tool($('#findf'), $('#fq'), find);
 for (const b of $$('[data-q]')) b.addEventListener('click', () => { $('#q').value = b.dataset.q; ask(b.dataset.q); });
 for (const b of $$('[data-c]')) b.addEventListener('click', () => { $('#cq').value = b.dataset.c; check(b.dataset.c); });
 
