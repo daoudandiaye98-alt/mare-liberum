@@ -82,6 +82,33 @@ Every tool says who it is: its browser's name ends in `mare-proof`. The sea know
 them out of the census; without it a test run reads as a crowd of people, and the page says how many people came.
 `shown` is the one tool that has to be counted, so it refuses any address but a local one.
 
+## The pages below the home page
+
+Every other page of the sea (Atlantis, the shipyard, an entry, a legal page, the pages people search for) is written as
+plain HTML by its builder in `node/`. On its way out the node dresses it once, the same for every reader: `node/skin.mjs`
+gives it the header, the dive plan and the foot of the home page, a place in the sea (a depth, which sets its colour and
+the width of its type), a scene at its top that shows what the place is, and the stylesheet and scripts that move it.
+Nothing a page says is changed. The home page says on its root that it has a look of its own (`data-look="own"`) and is
+left alone. A page written in German (`lang="de"`) gets its frame in German.
+
+| | |
+|---|---|
+| `src/depth.css` | the look: the colours of the seven depths, the top of a page, text, boxes, tables, forms, the foot |
+| `src/depth.js` | what moves: a told place holds its top still while its scene goes on and says its lines; what lies below the first screen rises into place; numbers count up; wide tables become cards on a narrow screen; listings are set line by line |
+| `src/scenes.js` | the scenes, drawn in lines of light on a canvas: a city on the seabed, a hull under its crane, a harbour closing, a bottle that fills, shelves of the index … one for every kind of place |
+| `../node/skin.mjs` | the chart of places (which door lies at which depth, which scene it shows, the lines a told place says) and the dressing itself |
+| `../node/skin-assets.mjs` | the three files above as the node answers them (`/depth.css`, `/depth.js`, `/depth-scenes.js`); written by the build, never by hand |
+
+`node homepage/build.mjs` says whether `node/skin-assets.mjs` is what the sources give; `--write` writes it. A place
+that is told (Atlantis, the harbour, the shipyard …) follows the reader's scroll through three lines; any other page
+tells its scene itself, once, as the reader arrives. With motion not wanted, every scene stands as its last picture and
+nothing is held back; without the script the page is complete and only the scene is missing.
+
+    node qa/depth.mjs --base=http://127.0.0.1:8787    every kind of page at four widths against a running node
+
+It checks that each page is dressed, stays inside its screen, runs its scene, carries the foot and nothing of the old
+look, and raises no error (`--engine=webkit|firefox`, `--calm`, `--nojs`, `--doors=/atlantis,/yard`).
+
 ## Fonts
 
 Public Sans sets everything a visitor or an agent may bring and is the whole Latin file. Anybody (headings, the big

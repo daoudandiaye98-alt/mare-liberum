@@ -244,7 +244,7 @@ const door = async (path, { body } = {}) => { const r = await fetch(BASE + path,
 await proof('a page for people, the same as data for agents, a build over HTTPS, the program as a download', async () => {
   const page = await fetch(`${BASE}/yard`, { headers: { accept: 'text/html', 'user-agent': 'Mozilla/5.0 proof' } }), html = await page.text();
   assert.equal(page.status, 200); assert.match(html, /<h1[^>]*>[^<]*[Ss]hipyard/); for (const k of YARD_KINDS) assert.ok(html.includes(k.id), `${k.id} is on the page`);
-  assert.ok(!/<script[^>]+src=/.test(html), 'the page loads no script from elsewhere');
+  assert.ok(!/<script[^>]+src=["']?(?:[a-z][a-z0-9+.-]*:|\/\/)/i.test(html), 'the page loads no script from elsewhere (the look of the node, /depth.js, is the node\'s own)');
   const about = await door('/yard'); assert.equal(about.status, 200); assert.equal(about.json.kinds.length, YARD_KINDS.length); assert.deepEqual((await door('/yard.json')).json.kinds, about.json.kinds);
   const b = await door('/yard/build', { body: { name: 'Praxis Antworter', kind: 'source-bound-answerer', purpose: 'Fragen des Teams aus dem Handbuch beantworten', rules: ['Antworte auf Deutsch.'], language: 'de' } });
   assert.equal(b.status, 200, b.text); assert.deepEqual(Object.keys(b.json.files).sort(), ['AGENT.md', 'README.md', 'agent.json', 'agent.mjs', 'mcp.json']);

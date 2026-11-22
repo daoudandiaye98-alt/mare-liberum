@@ -32,7 +32,9 @@ for (const name of want) {
   const r = { engine: name }, before = await census();
   try {
     // 1 · a driven browser opens a page and looks at nothing
-    { const w = await win(name, { driven: true }); await w.page.goto(`${base}/buy`, { waitUntil: 'load' }); await sleep(3200); r.driven = { webdriver: await w.page.evaluate(() => navigator.webdriver), said: w.said.length, errors: w.errs }; await w.close(); }
+    { const w = await win(name, { driven: true }); await w.page.goto(`${base}/buy`, { waitUntil: 'load' }); await sleep(3200); r.driven = { webdriver: await w.page.evaluate(() => navigator.webdriver), said: w.said.length, errors: w.errs };
+      // a browser that names its driver in its own name (a headless Chrome does) is never taken for a person, whatever its pages say
+      r.namesDriver = /headless|lighthouse|phantomjs|puppeteer|playwright|selenium|webdriver|cypress/i.test(await w.page.evaluate(() => navigator.userAgent)); await w.close(); }
     // 2 · a person's browser opens a page and reads: the page says so once, after two seconds in view
     { const w = await win(name); const t = Date.now(); await w.page.goto(`${base}/buy`, { waitUntil: 'load' }); const loaded = Date.now() - t; await sleep(1500); const early = w.said.length; await sleep(3000);
       r.reading = { saidBefore2s: early, said: w.said.length, afterLoadMs: w.said[0] ? w.said[0].at - t - loaded : null, door: w.said[0]?.p, site: w.said[0]?.site, errors: w.errs }; await w.close(); }
@@ -56,4 +58,4 @@ for (const name of want) {
 console.error(`waiting ${wait + 2} s for the node to count the pages nobody was shown`);
 await sleep((wait + 2) * 1000); await census(); await sleep(400);
 const end = await census();
-console.log(JSON.stringify({ node: base, engines: report, people: end.people - first.people, scriptsAfterTheWait: end.tools - first.tools, expected: { people: 4 * report.length, scripts: report.filter((r) => r.driven).length } }, null, 1));
+console.log(JSON.stringify({ node: base, engines: report, people: end.people - first.people, scriptsAfterTheWait: end.tools - first.tools, expected: { people: 4 * report.filter((r) => !r.namesDriver).length, scripts: report.filter((r) => r.driven).length + 4 * report.filter((r) => r.namesDriver).length } }, null, 1));

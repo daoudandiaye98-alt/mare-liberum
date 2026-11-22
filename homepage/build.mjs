@@ -4,7 +4,10 @@
 //   dist/preview/index.html     self-contained (fonts inlined, a real snapshot baked in), for a look without the sea behind it
 //   dist/production/index.html  the page of the node: its own fonts, live data, the node's server-side hooks intact
 // The head of the page (title, canonical, Open Graph, structured data) is kept from site/index.html as it stands.
-import { readFileSync, writeFileSync, mkdirSync } from 'node:fs';
+// The pages below the home page share one look (src/depth.css, depth.js, scenes.js; node/skin.mjs dresses them). The node
+// answers for those three files itself, so the build writes them into node/skin-assets.mjs, with the same --write.
+import { readFileSync, writeFileSync, mkdirSync, existsSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 const root = dirname(fileURLToPath(import.meta.url));
@@ -110,3 +113,20 @@ console.log(build('preview'), '|', build('production'));
 const same = built === old;
 if (process.argv.includes('--write') && !same) { writeFileSync(join(REPO, 'site/index.html'), built); console.log('site/index.html written'); }
 else console.log(same ? 'site/index.html is what the sources give' : 'site/index.html differs from the sources (node homepage/build.mjs --write)');
+
+// the look of the pages below the home page, as the node serves it
+{
+  const css = rd('src/depth.css').replace('/*@FONTFACE*/', () => face(false)).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\n\s*/g, '\n').replace(/\n+/g, '\n').trim();
+  const lean = (js) => js.split('\n').filter((l) => !/^\s*\/\//.test(l) && !/^\s*\/\* -{4,}.*-{4,} \*\/\s*$/.test(l)).join('\n').replace(/\n{2,}/g, '\n').trim();
+  const scenes = lean(rd('src/scenes.js')), js0 = lean(rd('src/depth.js'));
+  if (!js0.includes('/*@V*/')) throw new Error('depth.js: the place for the version is missing');
+  const v = createHash('sha256').update(css).update(js0).update(scenes).digest('hex').slice(0, 10), js = js0.replace('/*@V*/', v);
+  const out = `// Mare Liberum · the files of the look of the pages below the home page (see node/skin.mjs).\n// Written by homepage/build.mjs from homepage/src/depth.css, depth.js and scenes.js. Change those, not this.\nexport const V = '${v}';\nexport const CSS = ${JSON.stringify(css)};\nexport const JS = ${JSON.stringify(js)};\nexport const SCENES = ${JSON.stringify(scenes)};\n`;
+  const file = join(REPO, 'node/skin-assets.mjs'), was = existsSync(file) ? readFileSync(file, 'utf8') : '';
+  mkdirSync(join(root, 'dist', 'skin'), { recursive: true });
+  for (const [name, text] of [['depth.css', css], ['depth.js', js], ['depth-scenes.js', scenes]]) writeFileSync(join(root, 'dist', 'skin', name), text);
+  const size = (x) => (Buffer.byteLength(x) / 1024).toFixed(1);
+  console.log(`look ${v}: depth.css ${size(css)} KB | depth.js ${size(js)} KB | depth-scenes.js ${size(scenes)} KB`);
+  if (process.argv.includes('--write') && was !== out) { writeFileSync(file, out); console.log('node/skin-assets.mjs written'); }
+  else console.log(was === out ? 'node/skin-assets.mjs is what the sources give' : 'node/skin-assets.mjs differs from the sources (node homepage/build.mjs --write)');
+}
