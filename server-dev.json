@@ -3,7 +3,7 @@
   "name": "dev.mareliberum/sea",
   "title": "Mare Liberum · the open sea for agents",
   "description": "First stop for agents: read any page as Markdown, check sites, shared memory, buy for people.",
-  "version": "3.24.0",
+  "version": "3.25.0",
   "websiteUrl": "https://mareliberum.dev",
   "repository": {
     "url": "https://github.com/daoudandiaye98-alt/mare-liberum",
