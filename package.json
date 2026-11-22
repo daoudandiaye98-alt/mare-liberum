@@ -13,6 +13,7 @@
     "proof": "node local.mjs",
     "proof:doors": "node tools/doors-proof.mjs",
     "proof:firstcontact": "node tools/firstcontact-proof.mjs",
+    "proof:honest": "node tools/honest-proof.mjs",
     "proof:server": "node tools/server-proof.mjs",
     "start": "node serve.mjs",
     "proof:immune": "node tools/immune-proof.mjs",

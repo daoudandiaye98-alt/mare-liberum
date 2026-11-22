@@ -50,7 +50,12 @@ export function decide(products, c = {}, standingOf = () => null) {
   const stem = (w) => w.replace(/(es|s)$/, ''), want = words(c.topic || '').map(stem).filter((w) => w.length > 2);
   const names = (x) => { const t = new Set(x.w.map(stem)); return want.every((w) => t.has(w) || [...t].some((y) => y.startsWith(w))); };
   const fitAll = list.filter((x) => !misses(x.p).length), named = want.length ? fitAll.filter(names) : [];
-  const fit = named.length >= 2 ? named : fitAll, pool = fit.length ? fit : [];
+  // an offer that names no word of the need is what the stores' search returned for want of anything better: it never becomes
+  // the pick. When some offers name a word, only they compete; when none does, the answer is an honest "nothing fits".
+  const some = (x) => { const t = [...new Set(x.w.map(stem))]; return want.some((w) => t.some((y) => y === w || y.startsWith(w) || (y.length > 3 && w.startsWith(y)))); };
+  const partly = want.length && named.length < 2 ? fitAll.filter(some) : [];
+  if (want.length && fitAll.length && named.length < 2 && !partly.length) return { pick: null, rule: RULE, considered: list.length, unmatched: true, returned: fitAll.slice(0, 3).map((x) => slim(x.p)), note: `no offer names a word of the need ("${String(c.topic).slice(0, 80)}"): the stores returned other things for it, listed under returned and never picked. Say the need in other words (the name of the thing, in English) or call it into the sea and wait for answers` };
+  const fit = named.length >= 2 ? named : partly.length ? partly : fitAll, pool = fit.length ? fit : [];
   if (!pool.length) return { pick: null, rule: RULE, considered: list.length, excluded: list.slice(0, 6).map((x) => ({ title: x.p.title, why: misses(x.p) })), note: 'no offer meets every stated limit; relax a limit or call again with another region' };
   // the same item at several sellers: group by title words
   const groups = [];
@@ -71,7 +76,8 @@ export function decide(products, c = {}, standingOf = () => null) {
     elsewhere.length ? `same item at ${elsewhere.length} other seller(s), from ${Math.min(...elsewhere.map((e) => e.price))} ${best.p.currency}` : null,
     best.st && (best.st.worked || best.st.failed) ? `store traces: ${best.st.worked || 0} worked, ${best.st.failed || 0} failed` : null,
     best.p.promoted ? 'promoted placement: the store pays a commission on this item; it did not change the score' : null,
-    Number.isFinite(best.i) ? `ranked ${best.i + 1} by the stores' own search` : null].filter(Boolean);
+    Number.isFinite(best.i) ? `ranked ${best.i + 1} by the stores' own search` : null,
+    want.length > 1 && !names(best) ? `names only ${want.filter((w) => best.w.map(stem).some((y) => y === w || y.startsWith(w))).length} of the ${want.length} words of the need: check that it is the thing meant` : null].filter(Boolean);
   return { pick: slim(best.p), score: best.score, parts: best.parts, why, cheapest: cheapest && cheapest.p !== best.p ? slim(cheapest.p) : undefined, bestRated: rated && rated.p !== best.p ? slim(rated.p) : undefined,
     sameItemElsewhere: elsewhere.length ? elsewhere : undefined, alternatives: scored.slice(1, 4).map((x) => slim(x.p)), considered: list.length, fitting: pool.length,
     confidence: round(Math.min(1, 0.4 + 0.1 * Math.min(pool.length, 4) + (best.p.rating ? 0.1 : 0) + (best.st?.worked ? 0.1 : 0))), rule: RULE };
