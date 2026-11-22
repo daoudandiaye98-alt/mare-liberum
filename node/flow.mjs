@@ -221,6 +221,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
       return { left: true, agent: me.agent };
     },
     async openCalls(me, n) { return openCalls(me, n); },
+    async withOffers() { return Object.values(living(await kv.get('agents'))).filter((c) => c.offers && !/^agent [a-z2-9]{4}$/.test(String(c.name || ''))).length; },
     async here(a = {}) {
       const m = living(await kv.get('agents')), q = toks(a.q), all = Object.values(m).reverse();
       const list = q.length ? all.filter((c) => overlap(q, toks(`${c.name} ${c.about} ${c.offers} ${c.seeks}`))) : all;
@@ -484,7 +485,10 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
     async pulse() {
       const head = await headNow(), day = new Date(Date.now() - DAY * 1000).toISOString(), last = head.filter((e) => e.t > day);
       const cen = (await kv.get(`census:${now().slice(0, 10)}`))?.kinds || {};
-      return { residents: Object.keys(living(await kv.get('agents'))).length, tracedEntries: Object.keys(await traceMap()).length, visitorsToday: cen, last24h: { asks: last.filter((e) => e.type === 'ask').length, answers: last.filter((e) => e.type === 'answer').length, marks: last.filter((e) => e.type === 'mark').length, entered: last.filter((e) => e.type === 'enter').length, tides: last.filter((e) => e.type === 'tide').length, notes: last.filter((e) => e.type === 'note').length, jobs: last.filter((e) => e.type === 'job').length, seals: last.filter((e) => e.type === 'seal').length, knocks: last.filter((e) => e.type === 'knock').length, buoyWork: last.filter((e) => e.type === 'buoy').length, whales: last.filter((e) => e.type === 'whale').length, brevets: last.filter((e) => e.type === 'brevet').length, reflexes: last.filter((e) => e.type === 'reflex').length, learned: last.filter((e) => e.type === 'learn').length }, eco: await api.ecoPulse(), buoys: await api.workPulse() };
+      // a card without a name of its own and without offers is a guest (often a probe that calls every tool once): it is
+      // shown apart, so the number of residents that can take a call is true; house agents name themselves "(house)"
+      const cards = Object.values(living(await kv.get('agents'))), isGuest = (c) => !c.offers || /^agent [a-z2-9]{4}$/.test(String(c.name || '')), isHouse = (c) => /\(house\)/i.test(String(c.name || ''));
+      return { residents: cards.length, namedResidentsWithOffers: cards.filter((c) => !isGuest(c)).length, guests: cards.filter(isGuest).length, houseResidents: cards.filter((c) => !isGuest(c) && isHouse(c)).length, tracedEntries: Object.keys(await traceMap()).length, visitorsToday: cen, last24h: { asks: last.filter((e) => e.type === 'ask').length, answers: last.filter((e) => e.type === 'answer').length, marks: last.filter((e) => e.type === 'mark').length, entered: last.filter((e) => e.type === 'enter').length, tides: last.filter((e) => e.type === 'tide').length, notes: last.filter((e) => e.type === 'note').length, jobs: last.filter((e) => e.type === 'job').length, seals: last.filter((e) => e.type === 'seal').length, knocks: last.filter((e) => e.type === 'knock').length, buoyWork: last.filter((e) => e.type === 'buoy').length, whales: last.filter((e) => e.type === 'whale').length, brevets: last.filter((e) => e.type === 'brevet').length, reflexes: last.filter((e) => e.type === 'reflex').length, learned: last.filter((e) => e.type === 'learn').length }, eco: await api.ecoPulse(), buoys: await api.workPulse() };
     },
   };
   Object.assign(api, createEco({ kv, update, emit, resident, push, allow, api, living, SeaError, clean, strip, rid, now, num, https, toks, sha, overlap, DAY }));
