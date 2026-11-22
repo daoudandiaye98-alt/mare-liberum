@@ -56,6 +56,9 @@ export function createEco(h) {
       const pick = [], t0 = Date.now(), within = (ms) => Date.now() - t0 < ms;
       for (let i = 0; i < Math.min(2, watched.length); i++) pick.push(watched[(wcur + i) % watched.length]);
       if (called.length) { const n = called[ccur % called.length]; if (!pick.includes(n)) pick.push(n); await kv.set('tide:ccursor', (ccur + 1) % called.length, 120 * DAY); }
+      // needs the instinct learned from calls ride along too, one per run
+      const learned = (await kv.get('tide:learned')) || [], lcur = Number(await kv.get('tide:lcursor')) || 0;
+      if (learned.length) { const n = learned[lcur % learned.length]; if (!pick.includes(n)) pick.push(n); await kv.set('tide:lcursor', (lcur + 1) % learned.length, 120 * DAY); }
       const ahead = pick.length; // watched and called needs ride first; the needs of the sea follow in turn
       for (let i = 0; pick.length < TIDE.needs && i < NEEDS.length; i++) { const n = NEEDS[(cur + i) % NEEDS.length]; if (!pick.includes(n)) pick.push(n); }
       if (watched.length) await kv.set('tide:wcursor', (wcur + 2) % watched.length, 120 * DAY);
@@ -67,6 +70,8 @@ export function createEco(h) {
       // the brain is seeded from everything the current has read so far, thirty needs per tide
       if (within(TIDE.budgetMs + 2000)) { const rec = (await kv.get('tide:recent')) || [], c0 = Number(await kv.get('brain:seedcursor')) || 0;
         if (c0 < rec.length) { for (const sl of rec.slice(c0, c0 + 30)) { const sn = await kv.get(`tide:${sl}`); if (sn) await api.layFromCurrent?.(sn); } await kv.set('brain:seedcursor', Math.min(rec.length, c0 + 30), 400 * DAY); } }
+      // the instinct: after the current moved, the sea answers the calls nobody took and learns new needs (node/instinct.mjs)
+      let instinct = null; try { instinct = await Promise.race([api.instinctPulse?.(at), new Promise((r) => setTimeout(() => r({ late: true }), 8000))]); } catch (f) { instinct = { failed: String(f?.message || f).slice(0, 120) }; }
       // the state of the agent web: three of the most visited websites are read again with every tide
       let web = []; if (within(TIDE.budgetMs)) { try { web = (await Promise.race([api.webStep?.(3), new Promise((r) => setTimeout(() => r([]), 6000))])) || []; } catch {} }
       // the Atlas reads on its own clock (POST /atlas/step, every few minutes); the tide leaves that work to it
@@ -75,7 +80,7 @@ export function createEco(h) {
       await kv.set('tide:last', last, 60 * DAY);
       await update('tide:count', 365 * DAY, (c) => (Number(c) || 0) + 1, () => true);
       await listPut('tide:recent', 60 * DAY, (l) => [...out.filter((x) => x.slug && !x.empty).map((x) => x.slug), ...l.filter((s) => !out.some((x) => x.slug === s))].slice(0, 400), () => true);
-      return { tide: last, refreshed: out, web, atlas };
+      return { tide: last, refreshed: out, web, atlas, instinct };
     },
     // one need, asked again: the sea compares with what it saw last time and says what changed
     async flowOver(need, at) {

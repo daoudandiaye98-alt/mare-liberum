@@ -21,6 +21,7 @@ import { createEarn } from './earn.mjs';
 import { createRoadmap } from './roadmap.mjs';
 import { createRoute } from './route.mjs';
 import { createHarbour, harbourLimits } from './harbour.mjs';
+import { createInstinct } from './instinct.mjs';
 import { netKey } from './guard.mjs';
 import { readFileSync as readFileSyncAtlas } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
@@ -232,7 +233,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
       // crawlers get the routes, not live store calls: the stores' catalogs stay free for agents that buy
       // crawlers get the page without asking the stores; a quiet resident still gets the live offers
       const products = readOnly ? [] : await api.products(routes, topic, ask);
-      if (!quiet) await emit({ type: 'ask', id, by: ask.by, name: ask.name, text: need, budget: ask.budget, currency: ask.currency, region: ask.region });
+      if (!quiet) await emit({ type: 'ask', id, by: ask.by, name: ask.name, text: need, budget: ask.budget, currency: ask.currency, region: ask.region, empty: readOnly || products.length ? undefined : true });
       const understood = strip({ budget: ask.budget, currency: ask.currency, region: ask.region, size: c.size, colour: c.colour, for: c.for, topic });
       const traces = products.length ? await traceMap() : {};
       const decision0 = products.length ? decide(products, { ...understood }, (p) => { const t = traces[p.entry || (p.storeHost ? `urn:air:${p.storeHost}:ucp:store` : '')]; return t ? { worked: t.w || 0, partly: t.p || 0, failed: t.f || 0 } : null; }) : undefined;
@@ -444,7 +445,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
     async pulse() {
       const head = await headNow(), day = new Date(Date.now() - DAY * 1000).toISOString(), last = head.filter((e) => e.t > day);
       const cen = (await kv.get(`census:${now().slice(0, 10)}`))?.kinds || {};
-      return { residents: Object.keys(living(await kv.get('agents'))).length, tracedEntries: Object.keys(await traceMap()).length, visitorsToday: cen, last24h: { asks: last.filter((e) => e.type === 'ask').length, answers: last.filter((e) => e.type === 'answer').length, marks: last.filter((e) => e.type === 'mark').length, entered: last.filter((e) => e.type === 'enter').length, tides: last.filter((e) => e.type === 'tide').length, notes: last.filter((e) => e.type === 'note').length, jobs: last.filter((e) => e.type === 'job').length, seals: last.filter((e) => e.type === 'seal').length, knocks: last.filter((e) => e.type === 'knock').length, buoyWork: last.filter((e) => e.type === 'buoy').length, whales: last.filter((e) => e.type === 'whale').length, brevets: last.filter((e) => e.type === 'brevet').length }, eco: await api.ecoPulse(), buoys: await api.workPulse() };
+      return { residents: Object.keys(living(await kv.get('agents'))).length, tracedEntries: Object.keys(await traceMap()).length, visitorsToday: cen, last24h: { asks: last.filter((e) => e.type === 'ask').length, answers: last.filter((e) => e.type === 'answer').length, marks: last.filter((e) => e.type === 'mark').length, entered: last.filter((e) => e.type === 'enter').length, tides: last.filter((e) => e.type === 'tide').length, notes: last.filter((e) => e.type === 'note').length, jobs: last.filter((e) => e.type === 'job').length, seals: last.filter((e) => e.type === 'seal').length, knocks: last.filter((e) => e.type === 'knock').length, buoyWork: last.filter((e) => e.type === 'buoy').length, whales: last.filter((e) => e.type === 'whale').length, brevets: last.filter((e) => e.type === 'brevet').length, reflexes: last.filter((e) => e.type === 'reflex').length, learned: last.filter((e) => e.type === 'learn').length }, eco: await api.ecoPulse(), buoys: await api.workPulse() };
     },
   };
   Object.assign(api, createEco({ kv, update, emit, resident, push, allow, api, living, SeaError, clean, strip, rid, now, num, https, toks, sha, overlap, DAY }));
@@ -468,6 +469,8 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
     const f = api[name]; if (typeof f !== 'function') continue;
     api[name] = async function (...args) { const out = await f.apply(this, args); const d = now().slice(0, 10); update(`use:${d}`, 45 * DAY, (cur) => { const c = cur && typeof cur === 'object' ? cur : {}; c[what] = (c[what] || 0) + 1; return c; }, () => true).catch(() => {}); return out; };
   }
+  // the instinct: the sea answers calls no resident took and learns needs from calls, every tide (node/instinct.mjs)
+  Object.assign(api, createInstinct({ kv, update, emit, push, api, clean, strip, now, DAY }));
   Object.assign(api, createBrain({ kv, update, emit, resident, allow, api, SeaError, clean, strip, now, https, toks, sha, overlap, DAY, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
   return api;
 }

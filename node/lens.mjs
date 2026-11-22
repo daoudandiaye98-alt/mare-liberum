@@ -5,7 +5,7 @@ import { roleOf, OPERATORS } from './atlantis.mjs';
 import { checkSite, safeHost, grab } from './check.mjs';
 import { readUrl, READER_UA } from './reader.mjs';
 
-const FEED = new Set(['read', 'whale', 'brevet', 'seal', 'buoy', 'path', 'knock', 'enter', 'answer', 'ask', 'tide', 'job', 'job_done', 'note', 'mark']);
+const FEED = new Set(['read', 'whale', 'brevet', 'seal', 'buoy', 'path', 'knock', 'enter', 'answer', 'ask', 'tide', 'job', 'job_done', 'note', 'mark', 'reflex', 'learn']);
 export const TAG = /^[a-z0-9]{4,12}$/;
 
 export function createLens(h) {
