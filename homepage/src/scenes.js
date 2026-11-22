@@ -602,15 +602,22 @@ const SCENES = {
 // squares that grow finer, from the top down, and goes back into it from the bottom up as the page below arrives. Its
 // stills are fetched once the page stands, the far-apart ones first, so that scrolling early shows the film in large
 // steps that fill in; a small ring says how far that is.
-function film(el, state, drawn) {
-  const img = el.querySelector('img'), n = Number(el.dataset.film) || 0, base = `/film/${el.dataset.scene}/`, q = el.dataset.fv ? `?v=${el.dataset.fv}` : '';
+//   paint(el, o) is the painting itself, for any page (the home page uses it too). el holds the poster <img> and says its
+//   scene and the version of the files (data-scene, data-fv). o: n stills to move through (0: the painting stands), p()
+//   how far through them (0–1), out() how far it has gone back into the water (0–1), shade (darker where words stand),
+//   lean (a state with px, py, v: it leans with the hand and the dive), settle (it comes slowly toward the reader),
+//   enter 'seen' (it comes out of the water when it first comes into view, not when the page opens), ring (the ring that
+//   counts the stills), fail() (what stands instead when the painting does not arrive).
+export function paint(el, o) {
+  const img = el.querySelector('img'), n = o.n > 1 ? o.n : 0, base = `/film/${el.dataset.scene}/`, q = el.dataset.fv ? `?v=${el.dataset.fv}` : '';
+  const fail = () => { el.classList.remove('film'); if (img) img.remove(); if (o.fail) o.fail(); };
   const cv = document.createElement('canvas'), c = cv.getContext('2d');
-  if (!c || !img) return drawn();
+  if (!c || !img) return fail();
   const W = 716, HH = 1284, B = 20, COLS = Math.ceil(W / B), ROWS = Math.ceil(HH / B), noise = new Float32Array(COLS * ROWS), r = rng(11);
   for (let i = 0; i < noise.length; i++) noise[i] = r();
   cv.width = W; cv.height = HH;
-  const low = document.createElement('canvas'), lc = low.getContext('2d'), told = state.story && n > 1, frames = new Array(n).fill(null), top = el.closest('.top');
-  let L = state.p || 0, raf = 0, seen = true, t0 = 0, was = null, wasIn = -1, wasOut = -1, tx = 0, ty = 0, got = 0, ring = null;
+  const low = document.createElement('canvas'), lc = low.getContext('2d'), frames = new Array(n).fill(null), P = o.p || (() => 0);
+  let L = P(), raf = 0, seen = o.enter !== 'seen', t0 = 0, was = null, wasIn = -1, wasOut = -1, tx = 0, ty = 0, got = 0, ring = null, asked = false;
   const pick = (i) => { for (let d = 0; d < n; d++) { if (frames[i - d]) return frames[i - d]; if (frames[i + d]) return frames[i + d]; } return img; };
   let shadeW = null, shadeG = null;
   const shade = () => {
@@ -619,13 +626,13 @@ function film(el, state, drawn) {
     for (const [at, a] of stops) g.addColorStop(at, `rgba(2,10,24,${a})`);
     shadeW = wide; was = null; return (shadeG = g);
   };
-  function paint(src, kin, kout) {
+  function draw(src, kin, kout) {
     c.clearRect(0, 0, W, HH);
     const S = kin < 0.3 ? 40 : kin < 0.5 ? 20 : kin < 0.7 ? 10 : kin < 0.88 ? 5 : 1;
     if (S > 1) { low.width = Math.ceil(W / S); low.height = Math.ceil(HH / S); lc.drawImage(src, 0, 0, low.width, low.height); c.imageSmoothingEnabled = false; c.drawImage(low, 0, 0, low.width * S, low.height * S); c.imageSmoothingEnabled = true; }
     else c.drawImage(src, 0, 0, W, HH);
     // where the words stand the painting is darker; the shade is part of the picture, so it comes and goes with it
-    if (told) { c.fillStyle = shade(); c.fillRect(0, 0, W, HH); }
+    if (o.shade) { c.fillStyle = shade(); c.fillRect(0, 0, W, HH); }
     if (kin >= 1 && kout <= 0) return;
     for (let y = 0; y < ROWS; y++) {
       const g = y / (ROWS - 1);
@@ -634,49 +641,67 @@ function film(el, state, drawn) {
         let k = 0;
         if (kin < 1) k = clamp((g * 0.62 + nz * 0.38 - kin * 1.16 + 0.16) / 0.16);
         if (kout > 0) k = Math.max(k, clamp((kout * 1.16 - (1 - g) * 0.62 - nz * 0.38) / 0.16));
-        if (k > 0) { const d = Math.round(B * k), o = (B - d) >> 1; c.clearRect(x * B + o, y * B + o, d, d); }
+        if (k > 0) { const d = Math.round(B * k), off = (B - d) >> 1; c.clearRect(x * B + off, y * B + off, d, d); }
       }
     }
   }
   function frame(now) {
     raf = 0;
-    const t = (now - t0) / 1000, kin = ease(clamp(t / 1.5)), vh = innerHeight;
-    let src = img, kout = 0;
-    if (told) {
-      L += (state.p - L) * 0.16; if (Math.abs(state.p - L) < 0.0005) L = state.p;
+    if (!t0) { if (seen) t0 = now; else return; }
+    // the entrance moves in twenty steps, square by square, not at every frame: it reads as the grain of the water,
+    // and it leaves the reader's processor to the page
+    const t = (now - t0) / 1000, kin = Math.round(ease(clamp(t / 1.5)) * 20) / 20;
+    let src = img;
+    if (n) {
+      const p = P(); L += (p - L) * 0.16; if (Math.abs(p - L) < 0.0005) L = p;
       const i = Math.round(clamp((L - 0.03) / 0.9) * (n - 1)); src = i ? pick(i) : img;
-      if (top) kout = clamp((vh * 1.04 - top.getBoundingClientRect().bottom) / (vh * 0.6));
-    } else { const b = el.getBoundingClientRect(); kout = clamp((-b.top - b.height * 0.08) / (b.height * 0.7)); }
-    kout = Math.round(kout * 200) / 200;
-    if (src !== was || kin !== wasIn || kout !== wasOut) { paint(src, kin, kout); was = src; wasIn = kin; wasOut = kout; }
+    }
+    const kout = Math.round((o.out ? o.out() : 0) * 40) / 40;
+    if (src !== was || kin !== wasIn || kout !== wasOut) { draw(src, kin, kout); was = src; wasIn = kin; wasOut = kout; }
     // the painting has depth: it leans a little with the reader's hand and with the speed of the dive, and where nothing
     // is told it settles slowly toward the reader
-    const gx = (state.px || 0) * 0.8, gy = (state.py || 0) * 0.6 - clamp((state.v || 0) / 40, -1, 1) * 0.9;
-    tx += (gx - tx) * 0.06; ty += (gy - ty) * 0.06;
-    const z = told ? 1.045 : 1.11 - 0.07 * out(clamp(t / 16));
-    cv.style.transform = `translate3d(${(-tx * 7).toFixed(2)}px,${(-ty * 9).toFixed(2)}px,0) scale(${z.toFixed(4)})`;
+    if (o.lean || o.settle) {
+      const s = o.lean || {}, gx = (s.px || 0) * 0.8, gy = (s.py || 0) * 0.6 - clamp((s.v || 0) / 40, -1, 1) * 0.9;
+      if (o.lean) { tx += (gx - tx) * 0.06; ty += (gy - ty) * 0.06; }
+      const z = o.settle ? 1.11 - 0.07 * out(clamp(t / 16)) : 1.045;
+      cv.style.transform = `translate3d(${(-tx * 7).toFixed(2)}px,${(-ty * 9).toFixed(2)}px,0) scale(${z.toFixed(4)})`;
+    }
     if (seen && !document.hidden) raf = requestAnimationFrame(frame);
   }
-  const go = () => { if (!raf && t0) raf = requestAnimationFrame(frame); };
+  const go = () => { if (!raf) raf = requestAnimationFrame(frame); };
   function fetchAll() {
+    if (asked || !n) return; asked = true;
     const order = []; for (let s = n - 1; s >= 1; s >>= 1) for (let i = 0; i < n; i += s) if (!order.includes(i)) order.push(i);
     if (!order.includes(n - 1)) order.push(n - 1);
-    ring = document.createElement('div'); ring.className = 'ld'; ring.innerHTML = '<i></i><b>0 %</b>'; el.appendChild(ring);
-    const b = ring.lastChild; let next = 0;
-    const done = () => { got++; const v = Math.round(got / n * 100); ring.style.setProperty('--v', v); b.textContent = `${v} %`; if (got >= n) { ring.classList.add('ok'); setTimeout(() => ring.remove(), 900); } was = null; pump(); };
+    let b = null;
+    if (o.ring !== false) { ring = document.createElement('div'); ring.className = 'ld'; ring.innerHTML = '<i></i><b>0 %</b>'; el.appendChild(ring); b = ring.lastChild; }
+    let next = 0;
+    const done = () => { got++; if (ring) { const v = Math.round(got / n * 100); ring.style.setProperty('--v', v); b.textContent = `${v} %`; if (got >= n) { ring.classList.add('ok'); setTimeout(() => ring.remove(), 900); } } was = null; pump(); };
     const pump = () => { if (next >= order.length) return; const i = order[next++], im = new Image(); im.decoding = 'async'; im.onload = () => { (im.decode ? im.decode().catch(() => {}) : Promise.resolve()).then(() => { frames[i] = im; done(); }); }; im.onerror = done; im.src = `${base}f${String(i).padStart(2, '0')}.webp${q}`; };
     for (let k = 0; k < 4; k++) pump();
   }
   function start() {
     if (!img.naturalWidth) return fail();
-    el.appendChild(cv); t0 = performance.now(); paint(img, 0, 0); el.classList.add('live'); go();
+    el.appendChild(cv); el.classList.add('live');
+    if (o.enter !== 'seen') { draw(img, 0, 0); wasIn = 0; was = img; }
+    go();
     if ('IntersectionObserver' in window) new IntersectionObserver((es) => { seen = es[0].isIntersecting; if (seen) go(); }, { rootMargin: '80px' }).observe(el);
+    else seen = true;
+    // the stills: once the page stands where the painting opens the page, as it comes near where it lies further down
+    if (n && o.enter === 'seen' && 'IntersectionObserver' in window) { const io = new IntersectionObserver((es) => { if (es[0].isIntersecting) { io.disconnect(); fetchAll(); } }, { rootMargin: '120% 0px' }); io.observe(el); }
+    else if (n) { const begin = () => setTimeout(fetchAll, 120); if (document.readyState === 'complete') begin(); else addEventListener('load', begin, { once: true }); }
     document.addEventListener('visibilitychange', () => { if (!document.hidden) go(); });
-    if (told) { const begin = () => setTimeout(fetchAll, 120); if (document.readyState === 'complete') begin(); else addEventListener('load', begin, { once: true }); }
   }
-  function fail() { el.classList.remove('film'); img.remove(); drawn(); }
   const ready = () => (img.decode ? img.decode().then(start, () => (img.naturalWidth ? start() : fail())) : start());
-  if (img.complete) ready(); else { img.addEventListener('load', ready, { once: true }); img.addEventListener('error', fail, { once: true }); }
+  if (img.complete && img.naturalWidth) ready(); else if (img.complete) fail(); else { img.addEventListener('load', ready, { once: true }); img.addEventListener('error', fail, { once: true }); }
+}
+function film(el, state, drawn) {
+  const n = Number(el.dataset.film) || 0, told = state.story && n > 1, top = el.closest('.top');
+  paint(el, {
+    n: told ? n : 0, p: () => state.p, shade: told, lean: state, settle: !told, fail: drawn,
+    out: told ? () => (top ? clamp((innerHeight * 1.04 - top.getBoundingClientRect().bottom) / (innerHeight * 0.6)) : 0)
+      : () => { const b = el.getBoundingClientRect(); return clamp((-b.top - b.height * 0.08) / (b.height * 0.7)); },
+  });
 }
 export function mount(el, state) {
   if (el.classList.contains('film')) { if (!state.calm) film(el, state, () => drawn(el, state)); return; }

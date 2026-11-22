@@ -17,6 +17,9 @@ const PUBLIC = 'https://mareliberum.dev';
 const R = new Function(rd('src/render.js') + '\nreturn R;')();
 const snap = JSON.parse(rd('input/live.json'));
 const old = readFileSync(join(REPO, 'site/index.html'), 'utf8');
+// the paintings (site/film, laid out as public/film): the home page opens with one and paints its zones with others
+const FILM = (() => { try { return JSON.parse(readFileSync(join(REPO, 'site/film/index.json'), 'utf8')); } catch { return null; } })();
+const art = (scene, cls, lazy) => { const f = FILM?.films?.[scene]; if (!f) return ''; return `<div class="${cls} film" data-scene="${scene}" data-film="${f.n}" data-fv="${FILM.v}" style="--fy:${f.fy}%" aria-hidden="true"><img src="/film/${scene}/p.webp?v=${FILM.v}" alt="" width="716" height="1284"${lazy ? ' loading="lazy"' : ' fetchpriority="low"'} decoding="async"></div>`; };
 const LAND = (old.match(/const LAND = '([0-9a-f]+)'/) || [])[1] || rd('input/land.txt').trim();
 if (LAND.length !== 70 * 45) throw new Error('land grid: unexpected size ' + LAND.length);
 
@@ -31,6 +34,15 @@ const FONTS = [
 ];
 const fontPath = (name) => join(REPO, 'site/fonts', name);
 const face = (inline) => FONTS.map(([fam, name, d]) => `@font-face{font-family:"${fam}";src:url(${inline ? `data:font/woff2;base64,${readFileSync(fontPath(name)).toString('base64')}` : `/fonts/${name}`}) format("woff2");${d};font-display:swap}`).join('\n')
+function look() {
+  const css = rd('src/depth.css').replace('/*@FONTFACE*/', () => face(false)).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\n\s*/g, '\n').replace(/\n+/g, '\n').trim();
+  const lean = (js) => js.split('\n').filter((l) => !/^\s*\/\//.test(l) && !/^\s*\/\* -{4,}.*-{4,} \*\/\s*$/.test(l)).join('\n').replace(/\n{2,}/g, '\n').trim();
+  const scenes = lean(rd('src/scenes.js')), js0 = lean(rd('src/depth.js'));
+  if (!js0.includes('/*@V*/')) throw new Error('depth.js: the place for the version is missing');
+  const v = createHash('sha256').update(css).update(js0).update(scenes).digest('hex').slice(0, 10);
+  return { css, scenes, js: js0.replace('/*@V*/', v), v };
+}
+const LOOK = look();
 
 const safe = (o) => JSON.stringify(o).replace(/</g, '\\u003c');
 // what the preview carries of the sea: only what the page shows
@@ -94,14 +106,17 @@ function build(mode) {
     tDay: live ? 'day –' : `day ${d.clock?.day}`, geoSpan: live ? 'in the last 30 days' : R.geoSpan(d),
   };
   for (const k of ['ai', 'people', 'ratio', 'one', 'residents', 'index', 'paths', 'walks', 'ratings', 'memories', 'countries', 'webChecked', 'webBlock', 'webAssist', 'webLlms', 'webAvg']) v[k] = num(k);
+  v.painted = live && FILM?.films?.home ? ' painted' : '';
   const js = (rd('src/render.js') + '\n' + rd('src/app.js'))
     .replace('/*@LIVE*/false', String(live)).replace("'/*@B*/'", JSON.stringify(B)).replace('/*@EX*/null', live ? 'null' : safe(examples()))
-    .replace("'/*@LAND*/'", JSON.stringify(LAND)).replace("'/*@CC*/'", JSON.stringify(CC)).replace('`/*@FRAG*/`', () => '`' + rd('src/sea.frag').replace(/^\s*\/\/.*$/gm, '').replace(/\n{2,}/g, '\n').trim() + '`');
+    .replace("'/*@LAND*/'", JSON.stringify(LAND)).replace("'/*@CC*/'", JSON.stringify(CC)).replace("'/*@SV*/'", JSON.stringify(LOOK.v)).replace('`/*@FRAG*/`', () => '`' + rd('src/sea.frag').replace(/^\s*\/\/.*$/gm, '').replace(/\n{2,}/g, '\n').trim() + '`');
   if (/<\/script/i.test(js)) throw new Error('script would close early');
   let out = rd('src/page.html')
     .replace('<!--@HEAD-->', () => head(mode)).replace('/*@FONTFACE*/', () => face(!live)).replace('/*@CSS*/', () => rd('src/style.css').replace('/*@WAVE*/', WAVE))
     .replace('<!--@SNAP-->', () => (live ? '' : `<script type="application/json" id="snap">${safe(slim(d))}</script>`))
-    .replace('/*@JS*/', () => js);
+    .replace('/*@JS*/', () => js)
+    // the paintings are the node's files: the page of the node shows them, the preview (no node behind it) does without
+    .replace('<!--@PAINT-->', () => (live ? art('home', 'paint', false) : '')).replace(/<!--@ART:(\w+)-->/g, (m, k) => (live ? art(k, 'art', true) : ''));
   out = out.replace(/\{\{(\w+)\}\}/g, (m, k) => { if (!(k in v)) throw new Error('no value for ' + m); return v[k]; });
   const dir = join(root, 'dist', mode); mkdirSync(dir, { recursive: true });
   writeFileSync(join(dir, 'index.html'), out);
@@ -116,11 +131,7 @@ else console.log(same ? 'site/index.html is what the sources give' : 'site/index
 
 // the look of the pages below the home page, as the node serves it
 {
-  const css = rd('src/depth.css').replace('/*@FONTFACE*/', () => face(false)).replace(/\/\*[\s\S]*?\*\//g, '').replace(/\n\s*/g, '\n').replace(/\n+/g, '\n').trim();
-  const lean = (js) => js.split('\n').filter((l) => !/^\s*\/\//.test(l) && !/^\s*\/\* -{4,}.*-{4,} \*\/\s*$/.test(l)).join('\n').replace(/\n{2,}/g, '\n').trim();
-  const scenes = lean(rd('src/scenes.js')), js0 = lean(rd('src/depth.js'));
-  if (!js0.includes('/*@V*/')) throw new Error('depth.js: the place for the version is missing');
-  const v = createHash('sha256').update(css).update(js0).update(scenes).digest('hex').slice(0, 10), js = js0.replace('/*@V*/', v);
+  const { css, js, scenes, v } = LOOK;
   const out = `// Mare Liberum · the files of the look of the pages below the home page (see node/skin.mjs).\n// Written by homepage/build.mjs from homepage/src/depth.css, depth.js and scenes.js. Change those, not this.\nexport const V = '${v}';\nexport const CSS = ${JSON.stringify(css)};\nexport const JS = ${JSON.stringify(js)};\nexport const SCENES = ${JSON.stringify(scenes)};\n`;
   const file = join(REPO, 'node/skin-assets.mjs'), was = existsSync(file) ? readFileSync(file, 'utf8') : '';
   mkdirSync(join(root, 'dist', 'skin'), { recursive: true });
@@ -129,4 +140,5 @@ else console.log(same ? 'site/index.html is what the sources give' : 'site/index
   console.log(`look ${v}: depth.css ${size(css)} KB | depth.js ${size(js)} KB | depth-scenes.js ${size(scenes)} KB`);
   if (process.argv.includes('--write') && was !== out) { writeFileSync(file, out); console.log('node/skin-assets.mjs written'); }
   else console.log(was === out ? 'node/skin-assets.mjs is what the sources give' : 'node/skin-assets.mjs differs from the sources (node homepage/build.mjs --write)');
+
 }

@@ -25,6 +25,20 @@ The head of the page (title, canonical address, Open Graph, structured data) is 
 | `tools/centres.mjs` | country centres from Natural Earth (writes `input/centres.txt`) |
 | `qa/` | the tools the page is measured with; `sh qa/all.sh` runs all of them |
 
+## The paintings on this page
+
+The page of the node opens on an oil painting of the same cut through the sea the page is (`site/film/home`: a ship at
+the horizon, the sun, light going down into the water; the first painting all the others were made from). Its box is
+set in CSS so that the painting's water surface (38.5 % of its height) lies on the waterline of the page, wherever that
+is at any width (`--deep`, the water below the waterline, is named once on `.stage` for this); the name is cut where
+the painted sea begins. While it is there (`.stage.painted`) the stated far water and sun step aside. Scrolling down to
+the waterline moves the painting through its short film of 41 stills. Each zone carries the painting of its place at
+its top (`<!--@ART:scene-->` in `page.html`): it comes out of the water when it is reached, and the films move as they
+pass through the screen. The painting itself is `paint` from `src/scenes.js` (the look of the pages below), loaded from
+the node after the page has opened, so every place of the sea is painted the same way. The build writes the paintings
+only into the page of the node (`site/index.html`); the preview, with no node behind it, does without them. Without
+the script, with motion not wanted, or where the reader saves data, the paintings simply stand.
+
 ## What the node fills in
 
 `homeHtml()` in `node/core.mjs` replaces these exact strings before it sends the page, so a reader without JavaScript
