@@ -11,7 +11,7 @@ export const SELLER = {
   name: 'Daouda Ndiaye',
   business: 'Oroboros Design',
   place: 'Cologne, Germany',
-  address: '',
+  address: 'Eulenbergstraße 22, 51065 Köln, Germany',
   email: 'oroborosdesign@gmail.com',
   vat: 'Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.',
   vatEn: 'No VAT is charged (small business under § 19 of the German VAT Act).',
