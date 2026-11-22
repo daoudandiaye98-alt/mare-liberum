@@ -600,10 +600,15 @@ export function mount(el, state) {
   const make = SCENES[el.dataset.scene] || SCENES.snow, cv = document.createElement('canvas'), c = cv.getContext('2d');
   if (!c) return;
   el.appendChild(cv);
-  let draw = null, w = 0, h = 0, seen = true, raf = 0, last = -1;
+  // a line is drawn twice: wide and faint under itself, so that it glows like something lit in water
+  const stroke0 = c.stroke.bind(c), rect0 = c.strokeRect.bind(c);
+  const halo = (go) => { const lw = c.lineWidth, a = c.globalAlpha; if (lw <= 3.2 && !state.lite) { c.lineWidth = lw * 4 + 2.5; c.globalAlpha = a * 0.14; go(); c.lineWidth = lw; c.globalAlpha = a; } go(); };
+  c.stroke = (path) => halo(() => (path ? stroke0(path) : stroke0()));
+  c.strokeRect = (x, y, ww, hh) => halo(() => rect0(x, y, ww, hh));
+  let draw = null, w = 0, h = 0, seen = true, raf = 0, last = -1, tx = 0, ty = 0;
   const zone = Number(document.documentElement.dataset.zone || 3);
   function size() {
-    const r = el.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const r = el.getBoundingClientRect(), dpr = Math.min(window.devicePixelRatio || 1, 2, Math.max(1, Math.sqrt(2.2e6 / Math.max(1, r.width * r.height))));
     if (!r.width || !r.height || (Math.abs(r.width - w) < 1 && Math.abs(r.height - h) < 1 && draw)) return;
     w = r.width; h = r.height; cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); c.setTransform(dpr, 0, 0, dpr, 0, 0);
     // where the picture stands: beside the words on a wide screen; on a narrow one above them, down to where they begin
@@ -621,6 +626,8 @@ export function mount(el, state) {
     c.clearRect(0, 0, w, h); c.lineJoin = 'round';
     try { draw(t, p); } catch (e) { console.error('scene', el.dataset.scene, e); draw = null; return; }
     if (!el.classList.contains('live')) el.classList.add('live');
+    // the picture has depth: it leans a little with the reader's hand, and with the speed of the dive
+    if (!state.calm) { const gx = (state.px || 0) + Math.sin(t * 0.23) * 0.12, gy = (state.py || 0) + Math.cos(t * 0.19) * 0.1 - clamp((state.v || 0) / 40, -1, 1) * 0.9; tx += (gx - tx) * 0.06; ty += (gy - ty) * 0.06; cv.style.transform = `perspective(1100px) translate3d(${(-tx * 10).toFixed(2)}px,${(-ty * 7).toFixed(2)}px,0) rotateY(${(tx * 3.2).toFixed(3)}deg) rotateX(${(-ty * 2.6).toFixed(3)}deg) scale(1.05)`; }
     if (!state.calm && seen && !document.hidden) raf = requestAnimationFrame(frame);
   }
   const go = () => { if (!raf && draw) raf = requestAnimationFrame(frame); };
@@ -630,3 +637,98 @@ export function mount(el, state) {
   document.addEventListener('visibilitychange', () => { if (!document.hidden) go(); });
 }
 export const names = Object.keys(SCENES);
+
+// The sea itself, behind the whole page. Far: the water and its light, computed for every point (shafts and a net of
+// light where the sun still reaches, clouds of living light in the deep), darker the further down the page the reader
+// is. Nearer: what drifts in the water at many distances, each passing at the speed of its distance, so that scrolling
+// is diving. When a new part of the page comes into view a school crosses along its heading, the way the eye should go.
+const FRAG = `precision mediump float;uniform vec2 r;uniform float t,d,z;uniform vec3 a,b;uniform vec2 m;
+float h(vec2 p){return fract(sin(dot(p,vec2(127.1,311.7)))*43758.5453);}
+float n(vec2 p){vec2 i=floor(p),f=fract(p);f=f*f*(3.-2.*f);return mix(mix(h(i),h(i+vec2(1,0)),f.x),mix(h(i+vec2(0,1)),h(i+vec2(1,1)),f.x),f.y);}
+float fbm(vec2 p){float v=0.,k=.5;for(int i=0;i<4;i++){v+=k*n(p);p=p*2.03+7.1;k*=.5;}return v;}
+void main(){vec2 uv=gl_FragCoord.xy/r;uv.y=1.-uv.y;float asp=r.x/r.y;vec2 q=vec2(uv.x*asp,uv.y);
+float k=clamp(uv.y*.7+d*.95,0.,1.);vec3 c=mix(a,b,smoothstep(0.,1.,k));
+float light=clamp(1.-z/4.2,0.,1.)*(1.-smoothstep(0.,.45,d)*.78);
+float ang=(q.x-.64*asp-m.x*.06)/(uv.y+.5);
+float rays=fbm(vec2(ang*3.1+t*.035,t*.05))*fbm(vec2(ang*8.5-t*.02,3.));
+c+=vec3(.46,.76,1.)*rays*light*.42*pow(1.-uv.y*.9,1.5);
+vec2 w=q*5.2+vec2(t*.05,t*.03);float ca=abs(sin(w.x+fbm(w)*4.+t*.3)*sin(w.y*1.2+fbm(w+3.)*4.-t*.25));ca=pow(1.-ca,7.);
+c+=vec3(.55,.85,1.)*ca*light*.05*(1.-uv.y*.9);
+float deep=clamp((z-1.5)/3.,0.,1.);float neb=smoothstep(.5,.92,fbm(q*1.5+vec2(t*.012+m.x*.03,-t*.02+d*1.6)));
+c+=mix(vec3(.08,.50,.46),vec3(.36,.28,.72),fbm(q*.8+9.))*neb*deep*.3;
+float sh=.36*(1.-smoothstep(0.,.3,d))*light;float yy=sh-uv.y;
+if(yy>0.){float pz=.1/(yy+.012);vec2 pl=vec2((uv.x-.5)*asp*pz*2.2,pz);float rp=fbm(vec2(pl.x*1.4+t*.08,pl.y*1.4-t*.22));float rp2=fbm(pl*3.1+vec2(-t*.1,t*.3));
+c+=vec3(.62,.86,1.)*(pow(rp,3.)*1.5+pow(rp2,5.)*1.2)*smoothstep(0.,.07,yy)*exp(-pz*.11)*.75;}
+float gh=1.-.34*smoothstep(.5,1.,d)*clamp((z-3.5)/1.5,0.,1.);float gy=uv.y-gh;
+if(gy>0.){float pz=.1/(gy+.012);vec2 pl=vec2((uv.x-.5)*asp*pz*2.2+m.x*.2,pz+d*3.);float du=fbm(pl*1.1);float gl=step(.972,h(floor(pl*7.)))*(.5+.5*sin(t*1.7+pl.x*9.));
+c=mix(c,c*.55+vec3(.06,.16,.2)*du,smoothstep(0.,.05,gy)*.8);c+=vec3(.2,.85,.72)*gl*exp(-pz*.16)*.5*smoothstep(0.,.04,gy);c+=vec3(.25,.5,.6)*smoothstep(.012,0.,abs(gy))*.25;}
+c*=1.-.34*pow(length((uv-.5)*vec2(1.,1.1)),2.2);c+=(h(gl_FragCoord.xy+fract(t))-.5)*.014;
+gl_FragColor=vec4(c,1.);}`;
+export function mountSea(state) {
+  const H = document.documentElement, zone = Number(H.dataset.zone || 3), host = document.createElement('div');
+  host.className = 'sea'; host.setAttribute('aria-hidden', 'true'); document.body.prepend(host);
+  const hex = (v, d) => { const m = /#([0-9a-f]{6})/i.exec(v || ''); const n = m ? parseInt(m[1], 16) : d; return [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255]; };
+  const css = getComputedStyle(H), ca = hex(css.getPropertyValue('--a'), 0x0b3a66), cb = hex(css.getPropertyValue('--b'), 0x041428);
+  // (?sea=full shows the whole sea whatever the machine: for looking at it on one that has no graphics chip)
+  const full = /[?&]sea=full\b/.test(location.search);
+  // far: the water
+  let gl = null, u = null; const wc = document.createElement('canvas'); wc.className = 'water';
+  try {
+    gl = wc.getContext('webgl', { antialias: false, alpha: false, powerPreference: 'low-power', failIfMajorPerformanceCaveat: !full });
+    // a machine that would compute the water on its processor (no graphics chip at work) keeps the still water of the page
+    if (gl) { const dbg = gl.getExtension('WEBGL_debug_renderer_info'), name = dbg ? String(gl.getParameter(dbg.UNMASKED_RENDERER_WEBGL)) : ''; if (!full && /swiftshader|llvmpipe|software|basic render/i.test(name)) gl = null; }
+    if (gl) {
+      const sh = (type, src) => { const o = gl.createShader(type); gl.shaderSource(o, src); gl.compileShader(o); if (!gl.getShaderParameter(o, gl.COMPILE_STATUS)) throw new Error(gl.getShaderInfoLog(o)); return o; };
+      const pr = gl.createProgram(); gl.attachShader(pr, sh(gl.VERTEX_SHADER, 'attribute vec2 p;void main(){gl_Position=vec4(p,0.,1.);}')); gl.attachShader(pr, sh(gl.FRAGMENT_SHADER, FRAG)); gl.linkProgram(pr);
+      if (!gl.getProgramParameter(pr, gl.LINK_STATUS)) throw new Error('link'); gl.useProgram(pr);
+      gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer()); gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+      const loc = gl.getAttribLocation(pr, 'p'); gl.enableVertexAttribArray(loc); gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+      u = Object.fromEntries(['r', 't', 'd', 'z', 'a', 'b', 'm'].map((k) => [k, gl.getUniformLocation(pr, k)]));
+      gl.uniform3fv(u.a, ca); gl.uniform3fv(u.b, cb); gl.uniform1f(u.z, zone); host.appendChild(wc);
+      wc.addEventListener('webglcontextlost', (e) => { e.preventDefault(); gl = null; wc.remove(); });
+    }
+  } catch (e) { gl = null; }
+  // nearer: what drifts in it
+  const cv = document.createElement('canvas'), c = cv.getContext('2d'); if (!c) return; host.appendChild(cv);
+  const sprite = (rgb) => { const o = document.createElement('canvas'); o.width = o.height = 64; const g = o.getContext('2d'), q = g.createRadialGradient(32, 32, 0, 32, 32, 32); q.addColorStop(0, `rgba(${rgb},1)`); q.addColorStop(0.25, `rgba(${rgb},.55)`); q.addColorStop(1, `rgba(${rgb},0)`); g.fillStyle = q; g.fillRect(0, 0, 64, 64); return o; };
+  const SP = [sprite(FOAM), sprite(zone >= 3 ? TEAL : SEA), sprite(zone >= 4 ? VIOLET : FOAM)];
+  let w = 0, h = 0, dpr = 1, ly = scrollY, v = 0, mx = 0, my = 0, sx = 0, sy = 0, n = 0;
+  const r = rng(7), S = Array.from({ length: 110 }, () => ({ x: r(), y: r(), z: 0.1 + Math.pow(r(), 1.7) * 0.9, ph: r() * TAU, k: r() }));
+  const schools = [];
+  state.pulse = (y, de) => { if (state.calm || schools.length > 2) return; const q = rng(Math.round(y + scrollY) + 3), dir = de ? -1 : 1; schools.push({ y: y + scrollY, t0: performance.now(), dir, F: Array.from({ length: w < 700 ? 9 : 14 }, (_, i) => ({ dx: q() * 0.34, dy: (q() - 0.5) * 58, s: 0.8 + q() * 0.9, ph: q() * TAU })) }); };
+  const size = () => { w = innerWidth; h = innerHeight; dpr = 1; cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr); c.setTransform(dpr, 0, 0, dpr, 0, 0); if (gl) { const k = w < 700 ? 0.5 : 0.4; wc.width = Math.max(2, Math.round(w * k)); wc.height = Math.max(2, Math.round(h * k)); gl.viewport(0, 0, wc.width, wc.height); gl.uniform2f(u.r, wc.width, wc.height); } };
+  addEventListener('pointermove', (e) => { if (e.pointerType === 'mouse') { mx = e.clientX / w * 2 - 1; my = e.clientY / h * 2 - 1; } }, { passive: true });
+  // a machine that cannot keep up gets a quieter sea: first the water moves more slowly and less drifts, then the water stands
+  // (it starts quiet and grows richer while the machine keeps up: level 2 quiet, 1 moving, 0 full)
+  const t0 = performance.now(); let raf = 0, prev = 0, slow = 16, level = full ? 0 : 2, since = 0, fell = 0; state.lite = !full;
+  function frame(now) {
+    raf = 0; n++; if (prev && !full) { const dt = now - prev; if (dt < 250) { slow += (dt - slow) * 0.06; since++; if (since > 36 && slow > 25 && level < 2) { level++; since = 0; fell++; } else if (since > 45 && slow < 19.5 && level > 0 && fell < 2) { level--; since = 0; } state.lite = level === 2; } } prev = now;
+    const t = state.calm ? 30 : (now - t0) / 1000, y = scrollY, max = Math.max(1, H.scrollHeight - h), d = clamp(y / max);
+    v += ((y - ly) - v) * 0.22; ly = y; sx += (mx - sx) * 0.05; sy += (my - sy) * 0.05; state.v = v; state.px = sx; state.py = sy;
+    if (gl && (state.calm || n === 1 || (level < 2 && n % (level ? 4 : 2) === 0))) { gl.uniform1f(u.t, t); gl.uniform1f(u.d, d); gl.uniform2f(u.m, sx, sy); gl.drawArrays(gl.TRIANGLES, 0, 3); }
+    if (level && n % 2 && !schools.length) { if (!document.hidden) raf = requestAnimationFrame(frame); return; }
+    c.clearRect(0, 0, w, h);
+    const count = Math.round((w < 700 ? 48 : S.length) * (level === 2 ? 0.45 : level ? 0.7 : 1)), stretch = Math.min(Math.abs(v), 60);
+    for (let i = 0; i < count; i++) {
+      const q = S[i], f = 1 / q.z, near = q.z < 0.26, size = near ? 9 + (0.26 - q.z) * 150 : Math.max(1.6, 2.6 * f * 0.55);
+      const X = ((q.x * (w + 120) + Math.sin(t * 0.21 + q.ph) * 9 * f * 0.3 - sx * 14 * f) % (w + 120) + (w + 120)) % (w + 120) - 60;
+      const Y = ((q.y * (h + 160) - y * 0.07 * f + t * (3 + q.k * 6) * f * 0.3 - sy * 9 * f) % (h + 160) + (h + 160)) % (h + 160) - 80;
+      c.globalAlpha = near ? 0.06 + q.k * 0.07 : Math.min(0.75, 0.16 + q.k * 0.3 + (1 - q.z) * 0.2);
+      const hh = size * (1 + stretch * 0.05 * Math.min(f, 5));
+      c.drawImage(SP[near ? 2 : q.k > 0.62 ? 1 : 0], X - size / 2, Y - hh / 2, size, hh);
+    }
+    c.globalAlpha = 1;
+    // a school crosses along a heading that has just come into view
+    for (let i = schools.length - 1; i >= 0; i--) {
+      const s = schools[i], k = (now - s.t0) / 3100; if (k >= 1) { schools.splice(i, 1); continue; }
+      for (const f of s.F) { const kk = k * 1.34 - f.dx, x = s.dir > 0 ? lerp(-40, w + 40, kk) : lerp(w + 40, -40, kk), yy = s.y - y - 34 + f.dy * 0.5 + Math.sin(kk * 9 + f.ph) * 7, a = Math.sin(clamp(kk) * Math.PI) * 0.75; if (a <= 0.01) continue;
+        c.save(); c.translate(x, yy); c.scale(s.dir * f.s, f.s); c.fillStyle = col(zone >= 3 ? TEAL : FOAM, a); c.beginPath(); c.ellipse(0, 0, 7.5, 2.6, 0, 0, TAU); c.fill(); const wag = Math.sin(now / 90 + f.ph) * 1.8; c.beginPath(); c.moveTo(-6, 0); c.lineTo(-12, -3 + wag); c.lineTo(-12, 3 + wag); c.closePath(); c.fill(); c.restore();
+        if (zone >= 3) { c.globalAlpha = a * 0.5; c.drawImage(SP[1], x - 9, yy - 9, 18, 18); c.globalAlpha = 1; } }
+    }
+    if (!host.classList.contains('live')) host.classList.add('live');
+    if (!state.calm && !document.hidden) raf = requestAnimationFrame(frame);
+  }
+  const go = () => { if (!raf) raf = requestAnimationFrame(frame); };
+  size(); go(); addEventListener('resize', () => { size(); go(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) go(); });
+}

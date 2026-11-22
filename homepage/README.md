@@ -104,6 +104,19 @@ that is told (Atlantis, the harbour, the shipyard …) follows the reader's scro
 tells its scene itself, once, as the reader arrives. With motion not wanted, every scene stands as its last picture and
 nothing is held back; without the script the page is complete and only the scene is missing.
 
+Behind every one of these pages lies the sea itself (`mountSea` in `src/scenes.js`): far off the water and its light,
+computed for every point by a small shader (the surface seen from below near the top of a shallow page, shafts and a
+net of light, clouds of living light in the deep, the seabed in perspective where a deep page ends), nearer what drifts
+in it at many distances, each passing at the speed of its distance, so that scrolling is diving. Motion says what is
+expected of the reader: a heading and the lines of a told place arrive word by word (read this now), text comes into
+the light as it rises to where the eye reads, a school crosses along a heading that has just come into view, a field
+pulses once when its form is reached (your turn), a pill says "Scroll" at the top and then how deep the reader is, and
+the last thing on every page is the way on to the next place (`wayOn` in `node/skin.mjs`).
+
+The sea starts quiet and grows richer while the machine keeps up; a machine without a graphics chip at work keeps the
+still water of the stylesheet and loses nothing it needs. `?sea=full` on any page shows the whole sea whatever the
+machine (for looking at it in a headless browser).
+
     node qa/depth.mjs --base=http://127.0.0.1:8787    every kind of page at four widths against a running node
 
 It checks that each page is dressed, stays inside its screen, runs its scene, carries the foot and nothing of the old

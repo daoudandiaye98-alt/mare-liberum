@@ -64,6 +64,15 @@ export const placeOf = (path) => { for (const [re, p] of CHART) if (re.test(path
 // the dive plan of the pages: the places of the sea, by depth
 const PLAN = [['/', '0 m', 'The surface'], ['/harbour', 'The shore', 'Harbours'], ['/yard', 'The shore', 'Shipyard'], ['/visitors', '0–200 m', 'Census'], ['/sites', '200–1,000 m', 'Atlas'], ['/routes', '200–1,000 m', 'Doors'],
   ['/check', '1,000–4,000 m', 'Check your site'], ['/brain', '4,000–6,000 m', 'Unibrain'], ['/briefs', '4,000–6,000 m', 'Briefs'], ['/works', '4,000–6,000 m', 'Works'], ['/atlantis', '6,000 m', 'Atlantis'], ['/current', '6,000 m', 'The current'], ['/arena', '6,000 m', 'The Arena']];
+// the way on: the last thing on a page is the next place of the dive, with the first line that place says. From the deepest
+// place and from the ground the way leads back to the surface.
+const TEASE = { '/': 'The whole dive, from the surface to the seabed.', '/check': 'See your website the way an AI agent sees it.' };
+const wayOn = (path, place, lang) => {
+  const i = PLAN.findIndex(([href]) => href === path);
+  const to = i >= 0 ? PLAN[(i + 1) % PLAN.length] : PLAN.find(([href]) => href !== '/' && href !== path && placeOf(href).zone > place.zone) || (place.zone >= 5 ? PLAN[0] : PLAN[1]);
+  const [href, d, name] = to, de = lang === 'de', tease = de ? '' : TEASE[href] || placeOf(href).beats?.[0] || '';
+  return `<a class="next" href="${href}"><span class="next-k">${href === '/' ? (de ? 'Zurück nach oben' : 'Back up') : (de ? 'Nächster Tauchgang' : 'Next dive')} · ${de ? (DE[d] || deDepth(d)) : d}</span><span class="next-n">${name}</span>${tease ? `<span class="next-t">${esc(tease)}</span>` : ''}</a>`;
+};
 const PLAN_S = [['/mining', 'Buoys'], ['/earn', 'Earn'], ['/use', 'Use the sea in your agent'], ['/download', 'Take it home'], ['/why', 'Why come'], ['/manifesto', 'Manifesto'], ['/learn', 'Lessons']];
 const START = [['/mcp-server', 'Free MCP server'], ['/mcp-servers', 'MCP server directory'], ['/check', 'AI visibility check'], ['/web-to-markdown', 'Web page to Markdown'], ['/ai-crawlers', 'AI crawlers, live'], ['/business', 'For companies']];
 const START_DE = [['/de/mcp-server', 'Kostenloser MCP-Server'], ['/mcp-servers', 'Verzeichnis der MCP-Server'], ['/de/ki-sichtbarkeit', 'KI-Sichtbarkeit prüfen'], ['/de/webseite-als-markdown', 'Webseite als Markdown'], ['/de/ki-crawler', 'KI-Crawler, live gezählt'], ['/de/unternehmen', 'Für Unternehmen']];
@@ -153,5 +162,5 @@ export function dress(html, path = '/') {
     body = `<div class="top"><div class="stick">${scene}<div class="said${plain ? ' t-s' : ''}"${plain ? '' : ` style="--k:${k.toFixed(1)}"`}>${depth}${crumb}${h[0]}${intro}</div>${beats}</div></div>${one ? '' : lead}${after.slice(intro.length)}`;
   } else body = `<div class="top"><div class="stick">${scene}<div class="said">${depth}</div></div></div>${body}`;
 
-  return `${head}<main id="main">${body}</main>${foot(lang)}${tail}`;
+  return `${head}<main id="main">${body}${wayOn(path, place, lang)}</main>${foot(lang)}${tail}`;
 }

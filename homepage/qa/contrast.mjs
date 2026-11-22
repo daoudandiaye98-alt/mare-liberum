@@ -21,6 +21,8 @@ const step = Math.round(h * 0.82);
 for (let y = 0; y < H; y += step) {
   await p.evaluate(([yy, t]) => { window.__ML.time = t; scrollTo(0, yy); }, [y, times[ti++ % times.length]]);
   await p.waitForTimeout(Number(a.wait || 750));
+  // --hide=.a,.b: things that float over the page and would be taken for its ground
+  if (a.hide) await p.addStyleTag({ content: `${a.hide}{visibility:hidden!important}` });
   const els = await p.evaluate(() => {
     const out = [], vh = innerHeight, vw = innerWidth;
     const fixed = [...document.querySelectorAll('.dock,.hdr')].map((f) => [f, f.getBoundingClientRect()]);

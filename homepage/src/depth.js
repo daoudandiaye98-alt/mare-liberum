@@ -1,13 +1,23 @@
 // Mare Liberum · what moves on the pages below the home page (the look is depth.css; node/skin.mjs dresses the pages).
 // Nothing here adds words. It leads the eye once down the page: the top of a told place holds still while its scene
 // moves on and says its lines; what lies below the first screen rises into place as it is reached; numbers count up to
-// what the page says; a ruler at the left shows where the reader is. With motion not wanted, everything simply stands.
+// what the page says; a ruler at the left shows where the reader is. The sea itself moves behind the page, and scrolling
+// is diving through it. Motion is the grammar here: what rises word by word is to be read now, what comes into the light
+// is next, what pulses once is the reader's turn, and the last thing on a page is the way on. With motion not wanted,
+// everything simply stands.
 const H = document.documentElement, $ = (s, r = document) => r.querySelector(s), $$ = (s, r = document) => [...r.querySelectorAll(s)];
 const calm = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const clamp = (x, a = 0, b = 1) => Math.min(b, Math.max(a, x)), span = (p, a, b) => clamp((p - a) / (b - a));
 const main = $('#main'), top = $('.top'), stick = $('.stick'), said = $('.said'), sceneEl = $('.scene'), beats = $$('.beats li');
 const story = H.classList.contains('story') && !calm && !!top && beats.length > 0;
 if (story) H.classList.add('go');
+const de = /^de/i.test(H.lang || '');
+// words that come one after another: every word of a line gets its place in the row
+function words(el) {
+  let i = 0; const tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT), nodes = []; while (tw.nextNode()) nodes.push(tw.currentNode);
+  for (const n of nodes) { if (!n.nodeValue.trim()) continue; const f = document.createDocumentFragment(); for (const part of n.nodeValue.split(/(\s+)/)) { if (!part) continue; if (/^\s+$/.test(part)) f.appendChild(document.createTextNode(' ')); else { const w = document.createElement('span'); w.className = 'w'; w.style.setProperty('--i', i++); w.textContent = part; f.appendChild(w); } } n.replaceWith(f); }
+  return i;
+}
 
 /* ---------- the dive plan where the browser has no popover of its own ---------- */
 const plan = $('#plan'), planb = $('.planb');
@@ -21,6 +31,9 @@ if (plan && planb && !('popover' in HTMLElement.prototype)) {
 /* ---------- where the reader is ---------- */
 // p: how far the top of the page has been passed (0 at the surface of the page, 1 where its content begins)
 let p = 0, lastY = scrollY, wasPast = null, wasDown = false, beat = -2, run = 1, vh = innerHeight, max = 1, dirty = true;
+const state = { get p() { return p; }, calm, story, v: 0, px: 0, py: 0, pulse: null };
+const lit = new Set();   // the lines of text now in view: each stands the brighter the nearer it is to where the eye reads
+let dots = [], meter = null, hair = null, base = 0;
 const ruler = { el: null, dot: null, len: 0 };
 function measure() {
   vh = innerHeight; max = Math.max(1, H.scrollHeight - vh);
@@ -45,8 +58,12 @@ function frame() {
     said.style.opacity = (1 - out).toFixed(3); said.style.transform = out ? `translate3d(0,${(-out * 46).toFixed(1)}px,0)` : '';
     said.style.visibility = out >= 1 ? 'hidden' : '';
     const n = beats.length, b = p < 0.17 ? -1 : Math.min(n - 1, Math.floor((p - 0.17) / (0.83 / n)));
-    if (b !== beat) { beats.forEach((li, i) => { li.classList.toggle('on', i === b); li.classList.toggle('off', i < b); }); beat = b; }
+    if (b !== beat) { beats.forEach((li, i) => { li.classList.toggle('on', i === b); li.classList.toggle('off', i < b); }); dots.forEach((d, i) => d.classList.toggle('on', i <= b)); beat = b; }
   }
+  // text comes into the light as it rises towards where the eye reads; at the end of the page everything is lit
+  if (lit.size) { const end = clamp(1 - (max - y) / (vh * 0.32)); for (const el of lit) { const r = Math.max(end, clamp((vh * 0.95 - el.getBoundingClientRect().top) / (vh * 0.3))); if (r !== el._r) { el._r = r; el.style.setProperty('--r', r.toFixed(3)); } } }
+  if (hair) hair.style.transform = `scaleX(${clamp(y / max).toFixed(4)})`;
+  if (meter) { const m = Math.round(base + y / 14); if (m !== meter._m) { meter._m = m; meter.firstChild.nodeValue = `${m.toLocaleString(de ? 'de-DE' : 'en-US')} m`; } }
   if (ruler.dot) ruler.dot.style.transform = `translate3d(0,${(clamp(y / max) * ruler.len).toFixed(1)}px,0)`;
   dirty = false;
 }
@@ -71,6 +88,8 @@ function countUp(el) {
   requestAnimationFrame(step);
 }
 if (!calm && main && 'IntersectionObserver' in window) {
+  // a new part of the page: a school crosses along its heading, the way the eye should go
+  const heads = new IntersectionObserver((es) => { for (const e of es) if (e.isIntersecting) { heads.unobserve(e.target); if (scrollY > 40) state.pulse?.(e.boundingClientRect.top + e.boundingClientRect.height / 2, false); } }, { rootMargin: '0px 0px -22% 0px' });
   const io = new IntersectionObserver((es) => {
     let k = 0;
     for (const e of es) if (e.isIntersecting) {
@@ -81,8 +100,13 @@ if (!calm && main && 'IntersectionObserver' in window) {
     }
   }, { rootMargin: '0px 0px -7% 0px' });
   const hold = (el, d) => { if (el.getBoundingClientRect().top < innerHeight * 0.96) return false; el.classList.add('rv'); if (d != null) el.style.setProperty('--d', `${d}ms`); io.observe(el); return true; };
+  const near = new IntersectionObserver((es) => { for (const e of es) { if (e.isIntersecting) lit.add(e.target); else { lit.delete(e.target); if (e.boundingClientRect.top < 0) e.target.style.setProperty('--r', '1'); } } ask(); }, { rootMargin: '10% 0px 10% 0px' });
+  const read = (el) => { el.classList.add('rd'); near.observe(el); };
   for (const el of main.children) {
     if (el === top || el.tagName === 'SCRIPT' || el.tagName === 'STYLE') continue;
+    if (/^(P|H3|DL|BLOCKQUOTE)$/.test(el.tagName) && !el.classList.contains('next')) { read(el); continue; }
+    if (/^(UL|OL)$/.test(el.tagName) && !el.className) { for (const li of el.children) read(li); continue; }
+    if (el.tagName === 'H2') { if (el.getBoundingClientRect().top >= innerHeight * 0.96) { el.classList.add('wd'); words(el); } heads.observe(el); }
     if (el.classList.contains('grid')) {
       // the boxes of a group follow one another, row by row
       let row = -1, col = 0, y0 = null;
@@ -137,9 +161,31 @@ const wide = () => { for (const t of $$('.tw')) {
   more(t);
 } };
 
-/* ---------- the scene at the top ---------- */
-const state = { get p() { return p; }, calm, story };
-if (sceneEl) import('/depth-scenes.js?v=/*@V*/').then((m) => m.mount(sceneEl, state)).catch(() => {});
+/* ---------- the grammar of the page: what is expected of the reader, said by motion ---------- */
+if (!calm && main) {
+  // a told place says its lines word by word, and shows how many there are: the reader knows there is more
+  if (story) { beats.forEach(words); const ol = $('.beats'), dl = document.createElement('div'); dl.className = 'dots'; dl.setAttribute('aria-hidden', 'true'); dots = beats.map(() => dl.appendChild(document.createElement('i'))); ol.after(dl); }
+  // at the top: go down
+  if (top && stick && H.scrollHeight > innerHeight * 1.3) { const cue = document.createElement('div'); cue.className = 'cue'; cue.setAttribute('aria-hidden', 'true'); cue.innerHTML = `<span>${de ? (story ? 'Scrollen · die Szene geht weiter' : 'Scrollen') : (story ? 'Scroll · the scene goes on' : 'Scroll')}</span><i></i>`; stick.appendChild(cue); }
+  // how deep the reader is, and how far through the page
+  hair = document.createElement('div'); hair.className = 'hair'; hair.setAttribute('aria-hidden', 'true'); document.body.appendChild(hair);
+  const dm = /([\d.,]+)\s*m/.exec($('.depth .snd')?.textContent || ''); base = dm ? Number(dm[1].replace(/[.,]/g, '')) : 0;
+  if (H.scrollHeight > innerHeight * 1.6) { meter = document.createElement('div'); meter.className = 'meter'; meter.setAttribute('aria-hidden', 'true'); meter.appendChild(document.createTextNode('')); document.body.appendChild(meter); }
+  if ('IntersectionObserver' in window) {
+    // a form is the reader's turn: its field asks once, its button answers the eye
+    const turn = new IntersectionObserver((es) => { for (const e of es) if (e.isIntersecting) { turn.unobserve(e.target); e.target.classList.add('turn'); const f = $('input:not([type=hidden]):not([type=checkbox]):not([type=radio]),textarea', e.target); if (f && !f.value) f.classList.add('ask'); } }, { threshold: 0.6 });
+    for (const f of $$('main form')) if ($('input:not([type=hidden]):not([type=checkbox]),textarea', f)) turn.observe(f);
+    const nx = $('main .next'); if (nx) { turn.observe(nx); new IntersectionObserver((es) => H.classList.toggle('end', es[0].isIntersecting || es[0].boundingClientRect.top < 0)).observe(nx); }
+  }
+  // a box has a body: it leans towards the hand that is over it
+  if (matchMedia('(hover:hover) and (pointer:fine)').matches) for (const b of $$('.grid>.box,ol.offers>li,main .next')) {
+    b.addEventListener('pointermove', (e) => { const r = b.getBoundingClientRect(), x = (e.clientX - r.left) / r.width - 0.5, y = (e.clientY - r.top) / r.height - 0.5; b.style.setProperty('--ry', `${(x * 7).toFixed(2)}deg`); b.style.setProperty('--rx', `${(-y * 6).toFixed(2)}deg`); b.style.setProperty('--gx', `${((x + 0.5) * 100).toFixed(1)}%`); b.style.setProperty('--gy', `${((y + 0.5) * 100).toFixed(1)}%`); });
+    b.addEventListener('pointerleave', () => { b.style.removeProperty('--rx'); b.style.removeProperty('--ry'); });
+  }
+}
+
+/* ---------- the sea behind the page, and the scene at the top ---------- */
+if (!navigator.connection?.saveData) import('/depth-scenes.js?v=/*@V*/').then((m) => { try { m.mountSea(state); } catch {} if (sceneEl) m.mount(sceneEl, state); }).catch(() => {});
 
 measure(); wide(); frame();
 addEventListener('load', () => { measure(); wide(); ask(); });
