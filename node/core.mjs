@@ -907,7 +907,7 @@ const WHO = [
   [/Claude-User.*claude-code/i, 'assistant', 'Claude Code'], [/Claude-User/i, 'assistant', 'Claude'], [/Claude-SearchBot/i, 'search-ai', 'Claude search'], [/ClaudeBot|anthropic-ai/i, 'ai-crawler', 'Anthropic ClaudeBot'],
   [/Perplexity-User/i, 'assistant', 'Perplexity'], [/PerplexityBot/i, 'search-ai', 'Perplexity'], [/MistralAI-User/i, 'assistant', 'Mistral'],
   [/DuckAssistBot/i, 'assistant', 'DuckDuckGo Assist'], [/Google-Agent|GoogleAgent|Gemini-User/i, 'assistant', 'Google agent'], [/Googlebot/i, 'search', 'Google'],
-  [/Google-Extended|GoogleOther|Google-CloudVertexBot/i, 'ai-crawler', 'Google'], [/bingbot|BingPreview|adidxbot/i, 'search', 'Bing'], [/DuckDuckBot/i, 'search', 'DuckDuckGo'],
+  [/Google-Extended|GoogleOther|Google-CloudVertexBot/i, 'ai-crawler', 'Google'], [/bingbot|BingPreview|adidxbot/i, 'search', 'Bing'], [/DuckDuckBot/i, 'search', 'DuckDuckGo'], [/Bravebot/i, 'search', 'Brave'],
   [/YouBot/i, 'search-ai', 'You.com'], [/Amazonbot/i, 'ai-crawler', 'Amazon'], [/Applebot/i, 'search', 'Apple'], [/meta-external|FacebookBot/i, 'ai-crawler', 'Meta'],
   [/Bytespider/i, 'ai-crawler', 'ByteDance'], [/CCBot/i, 'ai-crawler', 'Common Crawl'], [/YandexBot/i, 'search', 'Yandex'], [/Baiduspider/i, 'search', 'Baidu'],
   [/Neuronto/i, 'registry', 'Neuronto'], [/a2aregistry|A2A[- ]?Registry/i, 'registry', 'A2A Registry'], [/mcp-registry|modelcontextprotocol/i, 'registry', 'MCP Registry'],
