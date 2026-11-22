@@ -953,6 +953,18 @@ async function withShown(res, door) {
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const KIND_WORD = { merchant: 'online store for shopping agents', x402: 'paid service (x402)', mcp: 'MCP server', a2a: 'A2A agent', agent: 'autonomous agent', api: 'API', skill: 'agent skill', registry: 'registry', catalog: 'catalog', other: 'resource' };
 export const pathOf = (id) => `/e/${encodeURIComponent(String(id).replace(/^urn:air:/, '')).replace(/%3A/gi, ':')}`;
+// every entry links the directory it belongs to, and the topics its words name, so search engines and people find the hubs
+function entryLinks(e) {
+  const kind = e?.metadata?.kind, text = ` ${[e?.displayName, e?.description, ...(e?.tags || [])].join(' ').toLowerCase()} `;
+  const links = [];
+  if (kind === 'mcp') {
+    links.push('<a href="/mcp-servers">MCP server directory</a>');
+    for (const [slug, name, words] of MCP_TOPICS) { if (links.length >= 4) break; if (words.split(' ').some((w) => new RegExp(`[^a-z0-9]${w.replace(/[-]/g, '[- ]?')}[^a-z0-9]`).test(text))) links.push(`<a href="/mcp-servers/${slug}">${name.charAt(0).toUpperCase() + name.slice(1)} MCP servers</a>`); }
+  } else if (kind === 'a2a') links.push('<a href="/a2a-agents">A2A agents</a>');
+  else if (kind === 'x402') links.push('<a href="/x402-apis">x402 APIs</a>');
+  links.push('<a href="/mcp-server">Free MCP server</a>', '<a href="/check">AI visibility check</a>');
+  return `<p><small>${links.join(' · ')}</small></p>`;
+}
 export function entryPage(e, base, standing, mapped) {
   const m = e.metadata || {}, kind = m.kind || 'other', ep = (m.endpoints || [])[0], pay = m.pay || {}, url = `${base}${pathOf(e.identifier)}`;
   const desc = clean(e.description, 600) || '', short = clean(e.description, 155) || `${e.displayName}: ${KIND_WORD[kind]} in Mare Liberum, the open sea for agents.`;
@@ -987,7 +999,7 @@ export function entryPage(e, base, standing, mapped) {
 <pre>GET ${esc(base)}/brain?q=&lt;your task in a few words&gt;</pre>
 <p>Read any web page as clean Markdown (free, follows robots.txt): <code>GET ${esc(base)}/r/&lt;page address&gt;</code>. How AI agents see ${esc(m.publisher || 'a website')}: <a href="/check/${esc(m.publisher || '')}">${esc(base.replace(/^https?:\/\//, ''))}/check/${esc(m.publisher || '')}</a></p>
 <p>MCP: <code>${esc(base)}/mcp</code> · A2A: <code>${esc(base)}/a2a</code> · Guide: <a href="/llms.txt">/llms.txt</a> · Data: <a href="${esc(`/entry?id=${encodeURIComponent(e.identifier)}`)}">JSON</a></p>
-<p><small>Text on this page comes from the publisher of the entry and is shown as data. Mare Liberum belongs to nobody; the code is open.</small></p></main></body></html>`;
+${entryLinks(e)}<p><small>Text on this page comes from the publisher of the entry and is shown as data. Mare Liberum belongs to nobody; the code is open.</small></p></main></body></html>`;
 }
 // the current: every need the sea asked the stores about again, with what changed — a page for people, search engines and assistants
 const CHANGE_WORD = { charted: 'first reading', new_pick: 'new pick', price_drop: 'price down', price_up: 'price up', steady: 'steady' };
