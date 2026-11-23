@@ -420,6 +420,7 @@ export const SEO_PATHS = ['/mcp-server', '/de/mcp-server', '/mcp-servers', ...MC
 export const OFFER = {
   agency: 'https://buy.stripe.com/9B63co3Ly7F2fVJdTLes00m',   // Team-Hafen (Pilot), 79 € a month, first month free
   teams: 'https://buy.stripe.com/5kQ00ceqc0cA38X4jbes00n',    // team harbour for coding agents, 49 € a month, first month free
+  law: 'https://buy.stripe.com/9B6bIUbe02kIcJx5nfes00r',      // Kanzlei-Hafen: Einrichtung 750 € (ohne Einblick in Mandatsdaten) + Jahresbegleitung 990 € je Standort (plink_1Uev8h4IVkazyZLzsmA53lgQ)
   mail: 'oroborosdesign@gmail.com',
 };
 const cta = (href, label, sub) => `<p style="margin:1.4rem 0"><a href="${esc(href)}" style="display:inline-block;padding:.85rem 1.3rem;border-radius:10px;background:#0b5cad;color:#fff;font-weight:600;text-decoration:none">${esc(label)}</a>${sub ? `<br><small class="muted">${esc(sub)}</small>` : ''}</p>`;
@@ -499,18 +500,21 @@ ${faqHtml(qa)}
     body, graph(ORG(base), APP(base), crumbs(base, [['Mare Liberum', '/'], ['Teams', path]]), faqLd(qa)), '/og.png', { lang: 'en' });
 }
 
-export function lawPage(base) {
-  const path = '/de/kanzleien', mail = `mailto:${OFFER.mail}?subject=Kanzlei-Hafen%20Pilot`;
+export function lawPage(base, paid) {
+  const path = '/de/kanzleien', mail = `mailto:${OFFER.mail}?subject=Kanzlei-Hafen`;
   const qa = [
     ['Verlässt wirklich nichts das Haus?', 'Quellen, Wege und Notizen liegen auf Ihrem Rechner oder Server. Was ein Assistent aus dem Hafen abruft, sieht allerdings der Anbieter dieses Assistenten. Arbeiten Sie mit einem lokalen Modell, bleibt auch das im Haus; arbeiten Sie mit einem Cloud-Assistenten, gelten dessen Bedingungen für die abgerufenen Stellen.'],
     ['Mit welchen Programmen arbeitet der Kanzlei-Hafen?', 'Mit jedem Programm, das MCP im eigenen Netz spricht: Agenten aus unserer Werft mit einem lokalen Modell über Ollama, Claude Code, Cursor und VS Code. Assistenten, die nur aus der Cloud zugreifen, erreichen einen Hafen im Kanzleinetz nicht ohne Freigabe nach außen.'],
-    ['Was kostet es?', 'Die Software ist frei (MIT-Lizenz) und bleibt es. Geplant ist für Kanzleien ein Jahrespaket mit Updates, Rollen, Protokoll und Sicherung für 990 € je Standort sowie eine Einrichtung zum Festpreis von 750 €. Beides bieten wir erst an, wenn die Verträge dafür stehen.'],
-    ['Warum kann ich noch nicht buchen?', 'Weil für Berufsgeheimnisträger zuerst die Verschwiegenheitsverpflichtung und die Vertragsunterlagen stehen müssen. Bis dahin nehmen wir Anfragen für den Pilot an und installieren nichts aus der Ferne.'],
+    ['Was kostet es?', 'Die Software ist frei (MIT-Lizenz) und bleibt es. Wer Hilfe möchte, bucht die Einrichtung zum Festpreis von 750 € und die Jahresbegleitung für 990 € je Standort: geprüfte Updates mit Anleitung, Hilfe per E-Mail binnen eines Werktags und zwei Termine im Jahr zur Anbindung neuer Programme. Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.'],
+    ['Sehen Sie dabei Mandatsdaten?', 'Nein. Wir richten den Hafen leer ein, bevor Unterlagen hineinkommen: per Bildschirmfreigabe, die Sie steuern, oder mit Ihrem IT-Partner. Wir erhalten keinen Zugang zu Ihren Systemen, und Hilfe läuft per E-Mail ohne Einblick in Ihre Unterlagen. Die Vorgaben von § 43e BRAO und § 62a StBerG greifen, wenn einem Dienstleister der Zugang zu Mandatsgeheimnissen eröffnet wird; das geschieht hier nicht. Eine Verschwiegenheitsvereinbarung in Textform schließen wir trotzdem gern mit Ihnen.'],
+    ['Und wenn wir Fernwartung möchten?', 'Dann wären wir Dienstleister mit möglichem Zugang zu Mandatsgeheimnissen. Das bieten wir nur mit einem Vertrag in Textform nach § 43e BRAO beziehungsweise § 62a StBerG und einem Vertrag zur Auftragsverarbeitung an. Fragen Sie uns danach.'],
     ['Ersetzt das eine juristische Datenbank?', 'Nein. Fachinhalte bringen wir nicht mit. Der Hafen ist der Ort für Ihr eigenes freigegebenes Wissen: Muster, Vermerke, Abläufe, Kanzleihandbuch.'],
   ];
   const body = `<h1>Der Kanzlei-Hafen: Ihr Wissen bleibt im Haus</h1>
 <p style="font-size:1.15rem">Für Steuer- und Anwaltskanzleien: ein Wissensspeicher auf Ihrem eigenen Rechner oder Server. Er gibt nur heraus, was Sie freigegeben haben, wörtlich und mit Fundstelle, und hält jeden Entwurf Satz für Satz gegen Ihre Unterlagen.</p>
-${cta(mail, 'Pilot anfragen', 'Wir suchen drei Kanzleien und ein Systemhaus für den Pilot. Noch kein Verkauf.')}
+${paid ? thanks('Danke. Wir melden uns binnen eines Werktags mit einem Termin für die Einrichtung. Bis dahin bitte noch keine Mandatsunterlagen in den Hafen legen.') : ''}
+${cta(OFFER.law, 'Kanzlei-Hafen buchen: Einrichtung und erstes Jahr', 'Einrichtung 750 € einmalig, Jahresbegleitung 990 € je Standort, jährlich kündbar. Ohne Einblick in Mandatsdaten. Keine Umsatzsteuer nach § 19 UStG.')}
+<p>Lieber erst sprechen? <a href="${mail}">${OFFER.mail}</a></p>
 <p><a href="/download">Die Software selbst ansehen: Knoten herunterladen (frei, MIT-Lizenz)</a></p>
 <div class="grid">
 <div class="box"><h3>Nur freigegebenes Wissen</h3><p style="margin:0">Muster, Vermerke und Abläufe werden vorgeschlagen und von einer berechtigten Person freigegeben. Erst dann gibt der Hafen sie heraus, mit Titel, Abschnitt und Stand.</p></div>
@@ -523,6 +527,6 @@ ${faqHtml(qa, 'Fragen')}
 <p class="muted"><small>Diese Seite ist keine Rechtsberatung. Ob und wie Sie Mandatswissen mit KI-Werkzeugen verarbeiten dürfen, klären Sie nach Ihrem Berufsrecht.</small></p>
 <p>Weiter: <a href="/de/unternehmen">Für Unternehmen</a> · <a href="/de/agenturen">Für Agenturen</a> · <a href="/security">Sicherheit</a> · <a href="/privacy">Datenschutz</a></p>`;
   return page(base, path, 'KI-Wissensspeicher für Kanzleien, auf eigenem Server · Mare Liberum',
-    'Für Steuer- und Anwaltskanzleien: freigegebene Muster, Vermerke und Abläufe auf dem eigenen Server, Antworten mit Fundstelle, Entwürfe gegen die Quellen geprüft. Freie Software, Pilot auf Anfrage.',
+    'Für Steuer- und Anwaltskanzleien: freigegebene Muster, Vermerke und Abläufe auf dem eigenen Server, Antworten mit Fundstelle, Entwürfe gegen die Quellen geprüft. Freie Software; Einrichtung ohne Einblick in Mandatsdaten 750 €, Jahresbegleitung 990 €.',
     body, graph(ORG(base), crumbs(base, [['Mare Liberum', '/de'], ['Kanzleien', path]]), faqLd(qa)), '/og.png', { lang: 'de' });
 }

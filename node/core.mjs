@@ -1763,7 +1763,7 @@ export async function handle(req, db, cfg = {}) {
       if (path === '/web-to-markdown' || path === '/de/webseite-als-markdown') return seoHtml(markdownPage(base, path.startsWith('/de') ? 'de' : 'en'));
       if (path === '/de/agenturen') return seoHtml(agencyPage(base, url.searchParams.has('danke')));
       if (path === '/teams') return seoHtml(teamsPage(base, url.searchParams.has('thanks')));
-      if (path === '/de/kanzleien') return seoHtml(lawPage(base));
+      if (path === '/de/kanzleien') return seoHtml(lawPage(base, url.searchParams.has('danke')));
       if (path === '/business' || path === '/de/unternehmen') return seoHtml(businessPage(base, path.startsWith('/de') ? 'de' : 'en'));
       if (path === '/ai-crawlers' || path === '/de/ki-crawler') { const y = new Date(Date.now() - 86400000).toISOString().slice(0, 10); return seoHtml(crawlersPage(base, path.startsWith('/de') ? 'de' : 'en', await sea.census(y).catch(() => null), y), 1800); }
       if (path === '/de/ki-sichtbarkeit') return seoHtml(deCheckPage(base));
