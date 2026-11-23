@@ -4,7 +4,7 @@
 -- opens them. The node writes and reads only through the functions below, and every function first checks the node's
 -- writer secret against the 'writer' row of mare.keys (its SHA-256), like mare_mem_put does.
 -- Applied as migrations mare_till_sales (sales, treasury) and mare_via_hits (via record, pulse); since 3.28.0
--- mare_till_free_sample (free samples beside the sales).
+-- mare_till_free_sample (free samples beside the sales) and mare_via_kinds (what passed through, by kind).
 
 -- ---------------------------------------------------------------- sales: one line for every sale of the paid move
 create table if not exists mare.sales (
@@ -88,9 +88,11 @@ begin
 end $$;
 
 -- ---------------------------------------------------------------- via_hits: one line for every walk through /via/
+-- (since 3.28.0 for every step through the sea toward a site or a task, by kind)
 create table if not exists mare.via_hits (
   id            bigint generated always as identity primary key,
   ts            timestamptz not null default now(),
+  kind          text,        -- walk (/via/), read (the reader), door (/d/…), go (a go link), site (/site/<domain> as data), ask (the brain); empty before 3.28.0: a walk
   target_domain text,        -- the site the walk went to (its registrable name); empty for walks out of a private memory
   q             text,        -- the task the address was handed out for, when it carried one
   ua_hash       text,        -- program and network of the caller, salted per day with the node's key; no address
@@ -102,6 +104,7 @@ create index if not exists via_hits_domain_ts on mare.via_hits (target_domain, t
 create index if not exists via_hits_q_ts on mare.via_hits (q, ts);
 create index if not exists via_hits_ts on mare.via_hits (ts);
 create index if not exists via_hits_ua_ts on mare.via_hits (ua_hash, ts);
+create index if not exists via_hits_kind_ts on mare.via_hits (kind, ts);
 alter table mare.via_hits enable row level security;
 revoke all on table mare.via_hits from anon, authenticated;
 
@@ -114,10 +117,11 @@ begin
     raise exception 'not allowed';
   end if;
   if jsonb_typeof(rows) <> 'array' or jsonb_array_length(rows) > 500 then raise exception 'rows: an array of at most 500'; end if;
-  insert into mare.via_hits (ts, target_domain, q, ua_hash, token_host, outcome, status)
-  select coalesce(r.ts, now()), left(r.target_domain, 200), left(r.q, 300), left(r.ua_hash, 32), left(r.token_host, 200), left(r.outcome, 20),
+  insert into mare.via_hits (ts, kind, target_domain, q, ua_hash, token_host, outcome, status)
+  select coalesce(r.ts, now()), case when r.kind in ('walk', 'read', 'door', 'go', 'site', 'ask') then r.kind else 'walk' end,
+         left(r.target_domain, 200), left(r.q, 300), left(r.ua_hash, 32), left(r.token_host, 200), left(r.outcome, 20),
          case when r.status between 100 and 599 then r.status else null end
-  from jsonb_to_recordset(rows) as r(ts timestamptz, target_domain text, q text, ua_hash text, token_host text, outcome text, status int);
+  from jsonb_to_recordset(rows) as r(ts timestamptz, kind text, target_domain text, q text, ua_hash text, token_host text, outcome text, status int);
   get diagnostics n = row_count;
   if random() < 0.01 then delete from mare.via_hits where ts < now() - interval '90 days'; end if;
   return n;

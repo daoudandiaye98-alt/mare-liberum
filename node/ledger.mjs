@@ -4,7 +4,8 @@
 //              and whether the money was seen to arrive (settled) or only claimed (unverified)
 //   via_hits   one line for every walk through a /via/ address: when, to which site, for which task, a hash of the
 //              caller (its program and network, salted per day; no address is kept) and, once the agent says so,
-//              whether the place worked
+//              whether the place worked. Since 3.28.0 also what else passed through toward a site or a task
+//              (kind: read, door, go, site, ask), so the pulse counts the whole of it
 // Nothing here stands in the way of an answer: lines are handed over and written behind it, a few at a time. A
 // database that does not answer is left alone for a while and the lines wait. The node keeps its own copy of the last
 // day in memory; /treasury and /pulse answer from that copy, and say so, when the database cannot.
@@ -14,6 +15,8 @@ export const ARRIVED = new Set(['settled']);
 export const OPEN = new Set(['pending', 'unverified', 'unsettled']);
 // a sale of the paid move (whatever became of its money); a test and a free sample are no sales
 export const PAID = new Set([...ARRIVED, ...OPEN]);
+// what passed through the sea, line by line in via_hits (since 3.28.0; lines from before are walks)
+export const KINDS = new Set(['walk', 'read', 'door', 'go', 'site', 'ask']);
 const usd = (cents) => Math.round(Number(cents) || 0) / 100;
 const dayOf = (t) => new Date(t).toISOString().slice(0, 10);
 const short = (tx) => (typeof tx === 'string' && tx.length > 16 ? `${tx.slice(0, 10)}…${tx.slice(-6)}` : tx || undefined);
@@ -122,7 +125,8 @@ export function createLedger({ url, key, secret, fetch: get = (...a) => fetch(..
     },
     // one walk through a /via/ address; never awaited by the one who walks
     hit(row) {
-      const h = { ts: new Date(now()).toISOString(), target_domain: row.target_domain ?? null, q: row.q ?? null, ua_hash: row.ua_hash ?? null, token_host: row.token_host ?? null, outcome: row.outcome ?? null, status: Number.isInteger(row.status) ? row.status : null };
+      // kind: walk (through /via/), read (the reader), door (/d/…), go (a pathway's go link), site (/site/<domain> as data), ask (a question to the brain)
+      const h = { ts: new Date(now()).toISOString(), kind: KINDS.has(row.kind) ? row.kind : 'walk', target_domain: row.target_domain ?? null, q: row.q ?? null, ua_hash: row.ua_hash ?? null, token_host: row.token_host ?? null, outcome: row.outcome ?? null, status: Number.isInteger(row.status) ? row.status : null };
       mem.hits.push(h); if (mem.hits.length % 500 === 0) prune();
       if (on) { queue.hits.push(h); if (queue.hits.length > 5000) { queue.hits.splice(0, queue.hits.length - 5000); dropped++; } if (queue.hits.length >= 200) soon(5); else soon(1000); }
     },
