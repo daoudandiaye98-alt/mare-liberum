@@ -3,7 +3,8 @@
 -- mare.keys, mare.works and mare.atlas. Nothing reaches them from outside: row level security is on and no policy
 -- opens them. The node writes and reads only through the functions below, and every function first checks the node's
 -- writer secret against the 'writer' row of mare.keys (its SHA-256), like mare_mem_put does.
--- Applied as migrations mare_till_sales (sales, treasury) and mare_via_hits (via record, pulse).
+-- Applied as migrations mare_till_sales (sales, treasury) and mare_via_hits (via record, pulse); since 3.28.0
+-- mare_till_free_sample (free samples beside the sales).
 
 -- ---------------------------------------------------------------- sales: one line for every sale of the paid move
 create table if not exists mare.sales (
@@ -11,7 +12,7 @@ create table if not exists mare.sales (
   ts            timestamptz not null default now(),
   q             text,                                 -- the task the route was bought for
   amount_cents  integer not null check (amount_cents between 0 and 100000),
-  status        text not null check (status in ('settled', 'pending', 'unverified', 'unsettled', 'test')),
+  status        text not null check (status in ('settled', 'pending', 'unverified', 'unsettled', 'test', 'free_sample')),  -- free_sample: POST /route?free=true, never money
   agent_ua_hash text,                                 -- program and network of the buyer, salted per day; no address
   settled_at    timestamptz,                          -- when the money was seen to arrive on chain
   method        text,                                 -- x402-v1, x402-v2, transfer, receipt, test
@@ -58,7 +59,8 @@ begin
   return n;
 end $$;
 
--- the numbers of the till: money seen to arrive (settled) apart from what is only claimed or still on its way
+-- the numbers of the till: money seen to arrive (settled) apart from what is only claimed or still on its way;
+-- sales of the paid move (today_paid) apart from free samples (today_free), which are never money and never sales
 create or replace function public.mare_treasury(secret text) returns jsonb
 language plpgsql stable security definer set search_path = '' as $$
 declare d0 timestamptz := date_trunc('day', now() at time zone 'utc') at time zone 'utc'; r jsonb;
@@ -68,18 +70,20 @@ begin
   end if;
   select jsonb_build_object(
     'today', to_char(now() at time zone 'utc', 'YYYY-MM-DD'),
-    'today_count', count(*) filter (where ts >= d0 and status <> 'test'),
+    'today_count', count(*) filter (where ts >= d0 and status in ('settled', 'pending', 'unverified', 'unsettled')),
+    'today_paid', count(*) filter (where ts >= d0 and status in ('settled', 'pending', 'unverified', 'unsettled')),
+    'today_free', count(*) filter (where ts >= d0 and status = 'free_sample'),
     'today_usd', round(coalesce(sum(amount_cents) filter (where ts >= d0 and status = 'settled'), 0) / 100.0, 2),
     'today_usd_unconfirmed', round(coalesce(sum(amount_cents) filter (where ts >= d0 and status in ('pending', 'unverified', 'unsettled')), 0) / 100.0, 2),
     'tests_today', count(*) filter (where ts >= d0 and status = 'test'),
-    'total_count', count(*) filter (where status <> 'test'),
+    'total_count', count(*) filter (where status in ('settled', 'pending', 'unverified', 'unsettled')),
     'total_usd', round(coalesce(sum(amount_cents) filter (where status = 'settled'), 0) / 100.0, 2),
     'total_usd_unconfirmed', round(coalesce(sum(amount_cents) filter (where status in ('pending', 'unverified', 'unsettled')), 0) / 100.0, 2)
   ) into r from mare.sales;
-  r := r || jsonb_build_object('today_by_status', coalesce((select jsonb_object_agg(status, n) from (select status, count(*) as n from mare.sales where ts >= d0 and status <> 'test' group by status) x), '{}'::jsonb));
+  r := r || jsonb_build_object('today_by_status', coalesce((select jsonb_object_agg(status, n) from (select status, count(*) as n from mare.sales where ts >= d0 and status in ('settled', 'pending', 'unverified', 'unsettled') group by status) x), '{}'::jsonb));
   r := r || jsonb_build_object('last_5', coalesce((select jsonb_agg(jsonb_build_object('id', y.id, 'ts', y.ts, 'q', left(y.q, 80), 'amount_usd', round(y.amount_cents / 100.0, 2), 'status', y.status, 'method', y.method,
                  'tx', case when length(y.tx) > 16 then left(y.tx, 10) || '…' || right(y.tx, 6) else y.tx end) order by y.ts desc)
-               from (select * from mare.sales order by ts desc limit 5) y), '[]'::jsonb));
+               from (select * from mare.sales where status <> 'free_sample' order by ts desc limit 5) y), '[]'::jsonb));
   return r;
 end $$;
 

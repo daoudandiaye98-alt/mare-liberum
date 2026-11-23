@@ -270,5 +270,38 @@ await proof('/pay/howto: plain text under 60 lines, the three commands in their 
   const g = await call('/settle'); assert.ok(!JSON.stringify(g.j).includes('"test"'), 'the public guide to /settle names the free sample, not the test'); assert.match(g.j.try_free, /free=true/);
 });
 
+console.log('the free sample before the wall (3.28.0)');
+await proof('POST /route?free=true: 200 with exactly the first 3 paths, all /via/ addresses, a hint with the price and how to pay; written down as a free sample', async () => {
+  const ledger = createLedger({});
+  const r = await call('/route?q=find+usdc+price&free=true', { method: 'POST', ledger });
+  assert.equal(r.status, 200); assert.equal(r.j.sample, true); assert.equal(r.j.paths.length, 3); assert.equal(r.j.count, 3); assert.ok(r.j.of >= 3);
+  for (const p of r.j.paths) { assert.match(p.to, /^https:\/\/mare\.test\/via\/[A-Za-z0-9_-]+\?q=find\+usdc\+price$/); assert.equal(decodeVia(p.to.split('/via/')[1].split('?')[0]).ok, true); }
+  assert.deepEqual(r.j.paths.map((p) => p.rank), [1, 2, 3]);
+  assert.match(r.j.hint, /free sample: the first 3 of the \d+ best paths/); assert.match(r.j.hint, /0\.02 USDC \(2 cents\) on Base/); assert.match(r.j.hint, /\/pay\/howto/); assert.match(r.j.hint, /no account/);
+  assert.equal(r.j.full_list.url, `${BASE}/route?q=find%20usdc%20price`); assert.equal(r.j.full_list.amount_usd, '0.02'); assert.equal(r.j.full_list.payTo, HOUSE_WALLET);
+  assert.equal(ledger.mem.sales[0].status, 'free_sample'); assert.equal(ledger.mem.sales[0].amount_cents, 0); assert.equal(ledger.mem.sales[0].q, 'find usdc price');
+  const t = await ledger.treasury(); assert.equal(t.today_free, 1); assert.equal(t.today_paid, 0); assert.equal(t.today_count, 0); assert.equal(t.total_count, 0); assert.equal(t.last_5.length, 0, 'a sample is no sale');
+  const pl = await ledger.pulse(); assert.equal(pl.paid_today.count, 0);
+  assert.equal((await call('/route?q=find+usdc+price', { method: 'POST', ledger })).status, 402, 'without free the 402 stays exactly as it was');
+  assert.equal((await call('/route?q=find+usdc+price&free=1', { method: 'POST', ledger })).status, 200);
+  assert.equal((await call('/route', { method: 'POST', body: { q: 'find usdc price', free: true }, ledger })).status, 200, 'free in the body');
+  assert.equal((await call('/route?free=true', { method: 'POST', ledger })).status, 400, 'no task, no sample');
+});
+await proof('a sale and a sample stand apart in the treasury: today_paid counts the sale, today_free the samples, last_5 only sales', async () => {
+  const ledger = createLedger({});
+  await call('/route?q=one&free=true', { method: 'POST', ledger }); await call('/route?q=two&free=true', { method: 'POST', ledger });
+  await call('/settle', { method: 'POST', body: { q: 'three', tx: '0x' + '9c'.repeat(32) }, ledger });
+  const t = await ledger.treasury(); assert.equal(t.today_free, 2); assert.equal(t.today_paid, 1); assert.equal(t.today_usd_unconfirmed, 0.02); assert.equal(t.today_usd, 0); assert.deepEqual(t.last_5.map((x) => x.q), ['three']);
+  const tr = await call('/treasury', { ledger }); assert.equal(tr.j.today_free, 2); assert.equal(tr.j.today_paid, 1); assert.match(tr.j.read, /today_free the free samples/);
+});
+await proof('samples are paced (60 an hour per address, then 429 with Retry-After and the free brain) and rest with the till', async () => {
+  const ledger = createLedger({}), ip = { 'x-forwarded-for': '198.51.100.77' };
+  const at = async () => (await handle(new Request(`${BASE}/route?q=pace&free=true`, { method: 'POST', headers: { accept: 'application/json', 'user-agent': 'proof-agent/1.0', ...ip } }), db, { base: BASE, pay: PAY, ledger, waitUntil: () => {} }));
+  let last; for (let i = 0; i < 61; i++) last = await at();
+  assert.equal(last.status, 429); assert.ok(Number(last.headers.get('retry-after')) > 0); assert.match((await last.json()).brain, /\/brain\?q=pace/);
+  const { immune } = await import('../node/immune.mjs');
+  immune.set({ mode: 'normal', rest: ['till'] }); try { assert.equal((await call('/route?q=x&free=true', { method: 'POST' })).status, 503); } finally { immune.set({ mode: 'normal', rest: [] }); }
+});
+
 console.log(`\n${passed} held, ${failed} failed`);
 process.exit(failed ? 1 : 0);

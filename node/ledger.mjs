@@ -12,20 +12,24 @@ const READ_MS = 2500, WRITE_MS = 5000, REST_MS = 30_000, DAYMS = 864e5;
 // what counts as money that arrived, and what is claimed or still on its way
 export const ARRIVED = new Set(['settled']);
 export const OPEN = new Set(['pending', 'unverified', 'unsettled']);
+// a sale of the paid move (whatever became of its money); a test and a free sample are no sales
+export const PAID = new Set([...ARRIVED, ...OPEN]);
 const usd = (cents) => Math.round(Number(cents) || 0) / 100;
 const dayOf = (t) => new Date(t).toISOString().slice(0, 10);
 const short = (tx) => (typeof tx === 'string' && tx.length > 16 ? `${tx.slice(0, 10)}…${tx.slice(-6)}` : tx || undefined);
 
 // the same numbers the database gives (mare_treasury), from a list of sales, newest first
 export function summarize(sales, t = Date.now()) {
-  const today = dayOf(t), real = sales.filter((s) => s.status !== 'test'), now1 = real.filter((s) => dayOf(s.ts) === today);
+  const today = dayOf(t), real = sales.filter((s) => PAID.has(s.status)), now1 = real.filter((s) => dayOf(s.ts) === today);
   const sum = (list, set) => usd(list.filter((s) => set.has(s.status)).reduce((n, s) => n + (Number(s.amount_cents) || 0), 0));
   const by = {}; for (const s of now1) by[s.status] = (by[s.status] || 0) + 1;
+  const todayOf = (status) => sales.filter((s) => s.status === status && dayOf(s.ts) === today).length;
   return {
-    today, today_count: now1.length, today_usd: sum(now1, ARRIVED), today_usd_unconfirmed: sum(now1, OPEN), today_by_status: by,
-    tests_today: sales.filter((s) => s.status === 'test' && dayOf(s.ts) === today).length,
+    // today_paid: sales of the paid move today; today_free: free samples today (POST /route?free=true), never money
+    today, today_count: now1.length, today_paid: now1.length, today_free: todayOf('free_sample'), today_usd: sum(now1, ARRIVED), today_usd_unconfirmed: sum(now1, OPEN), today_by_status: by,
+    tests_today: todayOf('test'),
     total_count: real.length, total_usd: sum(real, ARRIVED), total_usd_unconfirmed: sum(real, OPEN),
-    last_5: sales.slice(0, 5).map((s) => ({ id: s.id, ts: s.ts, q: s.q ? String(s.q).slice(0, 80) : null, amount_usd: usd(s.amount_cents), status: s.status, method: s.method || undefined, tx: short(s.tx) })),
+    last_5: sales.filter((s) => s.status !== 'free_sample').slice(0, 5).map((s) => ({ id: s.id, ts: s.ts, q: s.q ? String(s.q).slice(0, 80) : null, amount_usd: usd(s.amount_cents), status: s.status, method: s.method || undefined, tx: short(s.tx) })),
   };
 }
 
