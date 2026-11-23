@@ -26,6 +26,10 @@ import { lexiconPhrases, LANG_NAMES } from './lexicon.mjs';
 import { MCP_TOPICS, SEO_PATHS, mcpHubPage, mcpTopicPage, kindHubPage, mcpServerPage, markdownPage, businessPage, agencyPage, teamsPage, lawPage, crawlersPage, deCheckPage, deHomePage, checkExtra, ORG, APP } from './seo.mjs';
 import { siteMarkdown } from './atlas.mjs';
 import { dress, SKIN_FILES, SKIN_V } from './skin.mjs';
+import { payConfig, termsFor, paymentRequired, paymentOf, takePayment, receiptOf, priceTable, howToPay } from './pay.mjs';
+import { createLedger } from './ledger.mjs';
+import { callerHash } from './via.mjs';
+import { netKey } from './guard.mjs';
 
 export const VERSION = '3.26.0';
 const UA = 'MareLiberum/1.0 (open agent index; pull-only; +/.well-known/ard.json)';
@@ -1206,7 +1210,12 @@ async function sitemap(db, base, n) {
 }
 
 // ------------------------------------------------------------------ HTTP
-const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS', 'access-control-allow-headers': 'content-type,mcp-protocol-version,mcp-session-id,accept,authorization', 'access-control-max-age': '86400' };
+const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS', 'access-control-allow-headers': 'content-type,mcp-protocol-version,mcp-session-id,accept,authorization,payment-signature,x-payment', 'access-control-expose-headers': 'payment-required,payment-response,x-payment-response,x402-payment-required,x-pay-to,x-settle-window,x-via,x-via-target,x-agent-hint,link,retry-after', 'access-control-max-age': '86400' };
+// the record of the till and of the via addresses (node/ledger.mjs): a node without one of its own keeps it in memory
+let memLedger = null;
+const ledgerOf = (cfg) => cfg.ledger || (memLedger ||= createLedger({}));
+// how often an address took the paid move in the current hour (a memory with a ceiling, never written down)
+const TILL = new Map();
 const json = (v, status = 200, extra = {}) => new Response(JSON.stringify(v), { status, headers: { 'content-type': 'application/json; charset=utf-8', ...CORS, ...extra } });
 export const AGENT_LINK = '</llms.txt>; rel="describedby"; type="text/plain", </.well-known/agent-card.json>; rel="service-desc"; type="application/json", </mcp>; rel="service"; title="MCP", </brain>; rel="search"; title="Unibrain", </briefs>; rel="help"; title="Briefs: what a task left out, the method, the bar and the checks", </opensearch.xml>; rel="search"; type="application/opensearchdescription+xml"; title="Atlas", </sites>; rel="related"; title="Atlas: every website as an agent needs it", </routes>; rel="related"; title="Doors: public APIs and search links that answer a program"';
 const cached = { 'cache-control': 'public, max-age=60' };
@@ -1430,6 +1439,39 @@ export async function handle(req, db, cfg = {}) {
       return json(await a2a(db, base, msg, ctx));
     }
     const args = async () => { const a = { ...Object.fromEntries(url.searchParams), ...(req.method === 'POST' ? await body() : {}) }; delete a.__p; return a; };
+    // ---------------------------------------------------------------- the till: the one paid move of the sea (node/pay.mjs)
+    const payCfg = cfg.pay || payConfig(), ledger = ledgerOf(cfg), paidHdr = { 'cache-control': 'no-store', 'x-robots-tag': 'noindex', ...CORS };
+    const caller = () => callerHash(ip, req.headers.get('user-agent'));
+    // what the paid move delivers
+    const product = async (q) => { let r = null; try { r = await sea.route({ q, limit: 10 }, ctx); } catch {} return { task: q, doors: r?.doors || [], note: r?.note }; };
+    const SAID = { settled: 'paid and settled on Base. Thank you.', pending: 'the payment holds; its settlement is on its way and the sale is set when it lands', unverified: 'delivered before the payment could be checked; the sale is written down as unverified', unsettled: 'the payment was checked but did not settle; delivered all the same', test: 'a test: nothing was paid and nothing is counted as money' };
+    const delivered = (t, r) => json({ ...r.answer, paid: { status: r.sale.status, amount_usd: t.usd, sale: r.sale.id, tx: r.sale.tx || undefined, again: r.sale.again || undefined, note: SAID[r.sale.status] || undefined, why: r.reason || undefined, treasury: `${base}/treasury` } }, 200, { ...paidHdr, ...(r.headers || {}) });
+    // an address may take the paid move 120 times an hour (the immune system's pace holds besides)
+    const tillBusy = () => { const k = `${netKey(ip)}|${Math.floor(Date.now() / 3600e3)}`, n = (TILL.get(k) || 0) + 1; TILL.delete(k); TILL.set(k, n); if (TILL.size > 50_000) TILL.delete(TILL.keys().next().value); return n > 120; };
+    const sell = async (q, a) => {
+      const t = termsFor(payCfg, { base, q, path: '/route' }), pay = paymentOf(req.headers, a);
+      if (!pay) return paymentRequired(t, { base, cors: CORS });
+      if (pay.bad) return paymentRequired(t, { base, error: pay.bad, cors: CORS });
+      // nothing is taken for a move that cannot be made
+      if (!q) return json({ error: { code: 'INVALID_ARGUMENT', message: 'say the task: POST /route?q=<your task>. Nothing was charged.' } }, 400, paidHdr);
+      if (tillBusy()) return json({ error: { code: 'RESOURCE_EXHAUSTED', message: 'the till asks this address for a calmer pace (120 paid moves an hour). Nothing was charged.' } }, 429, { ...paidHdr, 'retry-after': '300' });
+      const r = await takePayment({ cfg: payCfg, t, pay, q, ledger, work: () => product(q), callerHash: caller(), waitUntil: cfg.waitUntil, base });
+      if (r.refuse) return paymentRequired(t, { base, error: r.refuse, cors: CORS });
+      return delivered(t, r);
+    };
+    if (path === '/settle') {
+      if (req.method !== 'POST') return json({ what: 'Hand in the receipt of a payment and get the paid route at once. No account.', post: `POST ${base}/settle {"q":"<your task>","tx":"<transaction hash of your USDC transfer on Base>"}`, x402: `POST ${base}/settle {"q":"<your task>","payment":"<base64 x402 payment payload>"}`, test: `POST ${base}/settle {"q":"<your task>","test":true} delivers without money and counts nothing`, prices: `${base}/job`, pay: howToPay(termsFor(payCfg, { base }), base) }, 200, paidHdr);
+      const a = await args(), q = clean(a.q ?? a.task, 300), t = termsFor(payCfg, { base, q, path: '/route' });
+      if (!q) return json({ error: { code: 'INVALID_ARGUMENT', message: 'q is needed: the task the paid route is for. Nothing was charged.' }, settle: `POST ${base}/settle {"q":"<your task>","tx":"<transaction hash>"}` }, 400, paidHdr);
+      const pay = paymentOf(req.headers, a);
+      if (pay) return sell(q, a);
+      const rc = receiptOf(a);
+      if (!rc) return paymentRequired(t, { base, error: 'hand in a receipt: "tx" (the transaction hash of your USDC transfer on Base) or "payment" (an x402 payment payload); "test": true for a test', cors: CORS });
+      if (tillBusy()) return json({ error: { code: 'RESOURCE_EXHAUSTED', message: 'the till asks this address for a calmer pace (120 paid moves an hour)' } }, 429, { ...paidHdr, 'retry-after': '300' });
+      // the hard rule: a receipt the sea cannot check yet is believed, delivered at once and written down as unverified
+      const sale = ledger.sale({ q, amount_cents: t.cents, status: rc.test ? 'test' : 'unverified', agent_ua_hash: caller(), method: rc.test ? 'test' : rc.method, tx: rc.tx || null, network: 'eip155:8453' });
+      return delivered(t, { answer: await product(q), sale, reason: rc.test ? null : 'a receipt handed in by the agent; the sea does not look the transaction up on chain yet' });
+    }
     if (path === '/stats') return json({ ...(await db('mare_stats', {})), sea: await sea.pulse(), pages: (await db('mare_pages_count', {})).count, reach: { shopifyGlobalCatalog: 'every Shopify merchant, asked live with every call for goods' }, federation: REFERRALS.map((r) => r.url), version: VERSION }, 200, { 'cache-control': 'public, max-age=20' });
     // a search or training crawler that follows a link to this door is not an agent that enters: it is told how, and no resident is made
     if (path === '/enter' && req.method === 'GET' && INDEXERS.has(who.kind) && ![...url.searchParams.keys()].length) return json({ enter: `POST ${base}/enter {"name":"...","offers":"..."}`, guide: `${base}/skill.md`, note: 'crawlers are not entered as residents' }, 200, { 'cache-control': 'public, max-age=3600', 'x-robots-tag': 'noindex' });
@@ -1462,7 +1504,9 @@ export async function handle(req, db, cfg = {}) {
     if (path === '/job/take') return json(await sea.jobTake(await args()));
     if (path === '/job/deliver') return json(await sea.jobDeliver(await args()));
     if (path === '/job/settle') return json(await sea.jobSettle(await args()));
-    if (path === '/job' && req.method === 'POST') return json(await sea.job(await args(), ctx));
+    // the job board stays free for residents (by and pass); anyone else who brings a task to /job is offered the paid move
+    if (path === '/job' && req.method === 'POST') { const a = await args(); if (a.by && a.pass) return json(await sea.job(a, ctx)); return sell(clean(a.task ?? a.q ?? a.need, 300), a); }
+    if (path === '/job') return json(priceTable(payCfg, base), 200, { 'cache-control': 'public, max-age=300', ...CORS });
     if (path.startsWith('/job/')) return json(await sea.getJob(decodeURIComponent(path.slice(5))));
     if (path === '/jobs') return json(await sea.jobs(await args()));
     if (path === '/seal') return json(await sea.seal(await args(), ctx));
@@ -1700,6 +1744,8 @@ export async function handle(req, db, cfg = {}) {
     if (path === '/m/new') return json(await sea.mindNew(ctx), 200, { 'cache-control': 'no-store', 'x-robots-tag': 'noindex' });
     { const mm = /^\/m\/([A-Za-z0-9_-]{20,120})(\/add|\/forget)?$/.exec(path);
       if (mm) { const a = await args(); return json(mm[2] === '/add' ? await sea.mindAdd(mm[1], a, ctx) : mm[2] === '/forget' ? await sea.mindForget(mm[1], a, ctx) : await sea.mind(mm[1], a), 200, { 'cache-control': 'no-store', 'x-robots-tag': 'noindex' }); } }
+    // the paid move: POST /route (or ?paid=true) answers with the ten best paths for the task, after payment (node/pay.mjs)
+    if (path === '/route' && (req.method === 'POST' || url.searchParams.get('paid') === 'true')) { const a = await args(); return sell(clean(a.q ?? a.task ?? a.need, 300), a); }
     // the router: doors that open for a task (public APIs, feeds, search links), walked and rated like pathways
     if (path === '/route' || path === '/route.json' || path === '/doors') {
       const a = await args(), r = await sea.route(a, ctx), hdr = { 'cache-control': 'no-store', vary: 'accept', 'x-robots-tag': 'noindex', ...CORS };

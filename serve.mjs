@@ -24,6 +24,7 @@ import { loadGeo } from './node/geoip.mjs';
 import { carryIn } from './node/carry.mjs';
 import { installEgressGuard } from './node/guard.mjs';
 import { immune } from './node/immune.mjs';
+import { createLedger } from './node/ledger.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.argv[2] || process.env.PORT || 8787);
@@ -65,6 +66,9 @@ try { await immune.use({ store, kv, log, base }); } catch (e) { log('mare_immune
 try { const n = await immune.forgetMindAddresses(kv); if (n) log('mare_immune', `mind addresses blotted out of ${n} kept lists`); } catch (e) { log('mare_immune', e?.message); }
 // answers marked s-maxage are kept ready, as a CDN would
 const shelf = createShelf();
+// the record of the till (sales of the paid move) and of the walks through /via/ addresses, in the long memory when
+// there is one (node/ledger.mjs); written behind the answers, never in their way
+const ledger = createLedger({ url: process.env.MARE_DB_URL, key: process.env.MARE_DB_KEY, secret: process.env.MARE_DB_SECRET, log, waitUntil });
 
 // files that travel beside the node (fonts, icons, the key of the search engines): a web server in front serves them
 // first; a node without one serves them itself
@@ -98,7 +102,7 @@ const server = createServer(async (req, res) => {
     headers.set('x-forwarded-for', proxied && local(peer) && said ? said : peer.replace(/^::ffff:/, ''));
     // HEAD is answered like GET, without the body
     const request = new Request(base + req.url, { method: req.method === 'HEAD' ? 'GET' : req.method, headers, body: chunks.length ? Buffer.concat(chunks) : undefined });
-    const out = await handle(request, db, { kv, seed, site, waitUntil, geoIndex, indexnowKey, shelf, download, ...(geoOf ? { geoOf } : {}) });
+    const out = await handle(request, db, { kv, seed, site, waitUntil, geoIndex, indexnowKey, shelf, download, ledger, ...(geoOf ? { geoOf } : {}) });
     if (!out.headers.has('link')) out.headers.set('link', AGENT_LINK);
     if (stopping) out.headers.set('connection', 'close');
     res.writeHead(out.status, Object.fromEntries(out.headers));
@@ -126,6 +130,7 @@ async function stop(sig) {
   for (let i = 0; i < 60 && open > 0; i++) await new Promise((r) => setTimeout(r, 100));
   await Promise.race([Promise.allSettled([...later]), new Promise((r) => setTimeout(r, 5000))]);
   try { await kv.settle?.(); } catch {}
+  try { await ledger.settle(); } catch {}
   try { await disk?.close(); } catch {}
   process.exit(0);
 }
