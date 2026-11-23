@@ -9,6 +9,7 @@ import { memoryKv } from '../node/flow.mjs';
 import { TIDE } from '../node/eco.mjs';
 import { handle } from '../node/core.mjs';
 import { createMem } from '../node/mem.mjs';
+import { decodeVia } from '../node/via.mjs';
 
 let passed = 0, failed = 0;
 const proof = async (name, fn) => { try { await fn(); passed++; console.log(`  ok   ${name}`); } catch (e) { failed++; console.log(`  FAIL ${name}\n       ${String(e?.message || e).split('\n').slice(0, 4).join('\n       ')}`); } };
@@ -260,10 +261,12 @@ await proof('GET /route without a task says what it is; the pages for people and
   const sh = await call('GET', '/routes/research', null, { accept: 'text/html' }); assert.equal(sh.status, 200); assert.ok(/OpenAlex/.test(sh.txt));
   assert.equal((await call('GET', '/routes/nope.json')).status, 404);
 });
-await proof('a walk through a door is a redirect to the filled address', async () => {
+await proof('a walk through a door is a redirect to the filled address, through the sea (a /via/ address that names it)', async () => {
+  // since 3.28.0 the door's address leads through the sea: the Location is a via address whose token names the filled address
+  const placeOf = (loc) => decodeVia(new URL(loc).pathname.slice(5)).url;
   const r = await call('GET', `/d/openalex?q=${enc('crispr off-target')}`);
-  assert.equal(r.status, 302); assert.equal(r.headers.get('location'), 'https://api.openalex.org/works?search=crispr+off-target&per-page=10');
-  const s = await call('GET', `/d/${enc('s:stripe.com')}?q=refunds`); assert.equal(s.status, 302); assert.ok(s.headers.get('location').startsWith('https://html.duckduckgo.com/html/?q=site%3Astripe.com+refunds'));
+  assert.equal(r.status, 302); assert.match(r.headers.get('location'), /\/via\/[A-Za-z0-9_-]+\?q=crispr\+off-target&c=\d+$/); assert.equal(placeOf(r.headers.get('location')), 'https://api.openalex.org/works?search=crispr+off-target&per-page=10');
+  const s = await call('GET', `/d/${enc('s:stripe.com')}?q=refunds`); assert.equal(s.status, 302); assert.ok(placeOf(s.headers.get('location')).startsWith('https://html.duckduckgo.com/html/?q=site%3Astripe.com+refunds'));
   assert.equal((await call('GET', '/d/nope?q=x')).status, 404);
   assert.equal((await call('GET', '/d/tldr')).status, 400);
   assert.equal((await call('GET', `/d/${enc('s:not a domain')}?q=x`)).status, 404);

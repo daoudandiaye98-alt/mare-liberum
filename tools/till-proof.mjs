@@ -7,12 +7,14 @@
 // the paid route.
 // Runs without the network (only this machine): node tools/till-proof.mjs   (exit code 1 when a proof fails)
 import assert from 'node:assert/strict';
-import { handle } from '../node/core.mjs';
+import { handle, lineJson } from '../node/core.mjs';
 import { createMem } from '../node/mem.mjs';
 import { payConfig, termsFor, checkPayment, receiptOf, HOUSE_WALLET, USDC_BASE, FACILITATOR } from '../node/pay.mjs';
-import { createLedger, summarize, pulseOf } from '../node/ledger.mjs';
+import { createLedger, summarize, pulseOf, pulseOrdered } from '../node/ledger.mjs';
 import { paidRoute } from '../node/paid.mjs';
 import { setViaKey, decodeVia } from '../node/via.mjs';
+import { pricingOf, priceLine, withPrice, PRICING, DEFAULT_CENTS } from '../node/pricing.mjs';
+import { readFileSync } from 'node:fs';
 
 let passed = 0, failed = 0;
 const proof = async (name, fn) => { try { await fn(); passed++; console.log(`  ok   ${name}`); } catch (e) { failed++; console.log(`  FAIL ${name}\n       ${String(e?.stack || e).split('\n').slice(0, 4).join('\n       ')}`); } };
@@ -148,13 +150,38 @@ await proof('the treasury counts money that arrived as money, a claim apart, and
   const old = summarize([{ ts: '2026-11-01T10:00:00Z', status: 'settled', amount_cents: 2 }], Date.parse('2026-11-23T10:00:00Z'));
   assert.equal(old.today_count, 0); assert.equal(old.total_usd, 0.02);
 });
-await proof('the pulse: walks of the last hour, sites, tasks only once two walks carried them, and what was paid today', async () => {
-  const now = Date.now(), at = (m) => new Date(now - m * 60e3).toISOString();
-  const hits = [{ ts: at(5), target_domain: 'openalex.org', q: 'creatine', outcome: 'worked' }, { ts: at(10), target_domain: 'openalex.org', q: 'creatine' }, { ts: at(20), target_domain: 'crossref.org', q: 'one agent alone' }, { ts: at(120), target_domain: 'old.org', q: null }];
-  const p = pulseOf(hits, [{ ts: at(1), status: 'settled', amount_cents: 2 }], now);
-  assert.equal(p.hits_last_hour, 3); assert.equal(p.unique_domains_last_hour, 2); assert.deepEqual(p.top_10_domains[0], { domain: 'openalex.org', hits: 2 });
-  assert.deepEqual(p.top_5_queries, [{ q: 'creatine', hits: 2 }]); assert.equal(p.paid_today.usd, 0.02); assert.equal(p.worked_last_24h, 1);
-  const r = await call('/pulse'); assert.equal(r.status, 200); assert.equal(typeof r.j.hits_last_hour, 'number');
+await proof('the pulse of the day: domains, tasks (only once two different callers carried them), sites, agents, steps, money that arrived and free samples, in that order', async () => {
+  const now = Date.now(), at = (m) => new Date(now - m * 60e3).toISOString(), today = new Date(now).toISOString().slice(0, 10);
+  const hits = [{ ts: at(5), kind: 'walk', target_domain: 'openalex.org', q: 'creatine', ua_hash: 'a1', outcome: 'worked' }, { ts: at(10), kind: 'door', target_domain: 'openalex.org', q: 'creatine', ua_hash: 'b2' },
+    { ts: at(20), kind: 'read', target_domain: 'crossref.org', q: 'one agent alone', ua_hash: 'c3' }, { ts: at(21), kind: 'ask', target_domain: null, q: 'one agent alone', ua_hash: 'c3' }, { ts: at(30), kind: 'ask', target_domain: null, q: 'find usdc price', ua_hash: 'c3' }]
+    .filter((h) => h.ts.slice(0, 10) === today);
+  const sales = [{ ts: at(1), status: 'settled', amount_cents: 2 }, { ts: at(2), status: 'unverified', amount_cents: 2 }, { ts: at(3), status: 'free_sample', amount_cents: 0 }, { ts: at(4), status: 'free_sample', amount_cents: 0 }].filter((x) => x.ts.slice(0, 10) === today);
+  const p = pulseOrdered(pulseOf(hits, sales, now));
+  assert.deepEqual(Object.keys(p).slice(0, 8), ['unique_domains_today', 'top_queries', 'top_domains', 'agents_today', 'hits_today', 'hits_last_hour', 'paid_today_usd', 'free_samples_today']);
+  if (hits.length === 5 && sales.length === 4) {
+    assert.equal(p.unique_domains_today, 2); assert.deepEqual(p.top_queries, [{ query: 'creatine', count: 2 }], 'one caller asking twice is not on show');
+    assert.deepEqual(p.top_domains, [{ domain: 'openalex.org', count: 2 }, { domain: 'crossref.org', count: 1 }]); assert.equal(p.agents_today, 3); assert.equal(p.hits_today, 5); assert.equal(p.hits_last_hour, 5);
+    assert.equal(p.paid_today_usd, 0.02); assert.equal(p.free_samples_today, 2); assert.deepEqual(p.by_kind_today, { walk: 1, door: 1, read: 1, ask: 2 });
+    assert.equal(p.paid_today.count, 2); assert.equal(p.paid_today_usd_unconfirmed, 0.02); assert.deepEqual(p.top_5_queries, [{ q: 'creatine', hits: 2 }]); assert.equal(p.worked_last_24h, 1);
+  }
+  const r = await (await handle(new Request(`${BASE}/pulse`, { headers: { 'user-agent': 'curl/8.5.0' } }), db, { base: BASE, pay: PAY, ledger: createLedger({}), waitUntil: () => {} })).text();
+  assert.match(r, /^\{"unique_domains_today":/, 'the first key, as sent'); const j = JSON.parse(r); assert.equal(typeof j.hits_today, 'number'); assert.ok(Array.isArray(j.top_queries) && Array.isArray(j.top_domains)); assert.match(j.read, /two different callers/);
+});
+await proof('a question to the brain or the doors answered as data counts as an ask (not for a page, not for a crawler); its task shows once a second caller asked it', async () => {
+  const ledger = createLedger({});
+  const ask = (path, ua = 'proof-agent/1.0', accept = 'application/json', ip = '192.0.2.10') => handle(new Request(BASE + path, { headers: { accept, 'user-agent': ua, 'x-forwarded-for': ip } }), db, { base: BASE, pay: PAY, ledger, waitUntil: () => {} });
+  await ask('/brain?q=find+usdc+price'); await ask('/route?q=find+usdc+price', 'another-agent/2.0', '*/*', '192.0.2.77');
+  await ask('/brain?q=find+usdc+price', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/131.0 Safari/537.36', 'text/html'); await ask('/brain?q=find+usdc+price', 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)', '*/*');
+  const asks = ledger.mem.hits.filter((h) => h.kind === 'ask'); assert.equal(asks.length, 2); assert.equal(asks[0].q, 'find usdc price'); assert.equal(asks[0].target_domain, null);
+  const p = await ledger.pulse(); assert.deepEqual(p.top_queries, [{ query: 'find usdc price', count: 2 }]); assert.equal(p.agents_today, 2); assert.equal(p.unique_domains_today, 0, 'a question alone sends no one anywhere');
+});
+await proof('answers that hand out addresses are written one entry per line, as valid JSON: the free sample, the brain, the map of a site', async () => {
+  const r = await handle(new Request(`${BASE}/route?q=find+usdc+price&free=true`, { method: 'POST', headers: { 'user-agent': 'proof-agent/1.0', 'x-forwarded-for': '192.0.2.31' } }), db, { base: BASE, pay: PAY, ledger: createLedger({}), waitUntil: () => {} });
+  const txt = await r.text(), j = JSON.parse(txt); assert.equal(j.paths.length, 3);
+  assert.equal(txt.split('\n').filter((l) => l.includes('/via/')).length, 3, 'one line per path'); assert.match(txt, /^\{\n"task":"find usdc price",\n/);
+  const b = await (await handle(new Request(`${BASE}/brain?q=latest+research+on+creatine`, { headers: { 'user-agent': 'proof-agent/1.0', 'x-forwarded-for': '192.0.2.32' } }), db, { base: BASE, pay: PAY, ledger: createLedger({}), waitUntil: () => {} })).text();
+  JSON.parse(b); const lines = b.split('\n').filter((l) => l.includes('/via/')); assert.ok(lines.length >= 3, `${lines.length} lines with /via/`);
+  assert.equal(lineJson({ a: [1, { b: [2, 3] }], s: 'x\ny', e: [], o: {} }), '{\n"a":[\n1,\n{"b":[2,3]}\n],\n"s":"x\\ny",\n"e":[],\n"o":{}\n}');
 });
 
 console.log('the ledger behind the answers');
@@ -205,6 +232,131 @@ await proof('the operator rests the till without a release ("till" in rest): 503
 });
 await proof('x402 discovery names the one paid resource and the wallet', async () => {
   const r = await call('/.well-known/x402'); assert.deepEqual(r.j.resources, [`${BASE}/route`]); assert.equal(r.j.payTo[0].address, payConfig().payTo);
+});
+
+console.log('the price in plain sight (3.28.0)');
+await proof('one place writes the price down: 0.02 USDC on Base, 6 decimals, the house wallet, the one line every guide starts with', () => {
+  const p = pricingOf(payConfig({}), BASE);
+  assert.equal(p.price_usd, 0.02); assert.equal(p.amount_usd, '0.02'); assert.equal(p.human, '2 cents'); assert.equal(p.maxAmountRequired, '20000'); assert.equal(p.decimals, 6);
+  assert.equal(p.scheme, 'x402'); assert.equal(p.network, 'base'); assert.equal(p.token, 'USDC'); assert.equal(p.payTo, HOUSE_WALLET); assert.equal(p.endpoint, 'POST /route'); assert.equal(p.unit, 'USDC on Base, 6 decimals');
+  assert.equal(p.line, 'POST /route costs 0.02 USDC on Base, no account, settle with POST /settle'); assert.equal(p.how_to_pay, `${BASE}/pay/howto`);
+  assert.match(p.instructions, /every address we hand out is a \/via\/ token/i); assert.match(p.instructions, /no account/);
+  assert.equal(PRICING.amount_usd, (DEFAULT_CENTS / 100).toFixed(2)); assert.equal(pricingOf({ cents: 1, payTo: HOUSE_WALLET }).human, '1 cent');
+  assert.equal(termsFor(payConfig({ MARE_ROUTE_PRICE_CENTS: '3' }), { base: BASE }).pricing.amount_usd, '0.03');
+});
+await proof('the agent card, /a2a and /a2a.card.json carry the price: an extension of the card with price_usd, x402, base, USDC, 6 decimals, payTo and POST /route', async () => {
+  for (const path of ['/.well-known/agent-card.json', '/a2a', '/a2a.card.json']) {
+    const r = await call(path); assert.equal(r.status, 200, path);
+    const ext = r.j.capabilities.extensions.find((e) => e.uri === `${BASE}/pay/howto`); assert.ok(ext, path); assert.equal(ext.required, false);
+    const c = ext.params.pricing[0];
+    assert.deepEqual([c.capability, c.price_usd, c.scheme, c.network, c.token, c.decimals, c.payTo, c.endpoint], ['route', 0.02, 'x402', 'base', 'USDC', 6, HOUSE_WALLET, 'POST /route']);
+    assert.match(c.instructions, /\/via\/ token/); assert.match(c.instructions, /no account/);
+    const skill = r.j.skills.find((s) => s.id === 'route_paid'); assert.match(skill.description, /0\.02 USDC \(2 cents\) on Base/); assert.match(skill.description, /free=true/);
+    assert.ok(JSON.stringify(r.j).includes('0.02'), path);
+  }
+  const three = await call('/a2a.card.json', { pay: { ...PAY, cents: 3 } }); assert.equal(three.j.capabilities.extensions[0].params.pricing[0].price_usd, 0.03, 'the price the node is set to');
+});
+await proof('/.well-known/x402 names the price block, the line and the guide to paying', async () => {
+  const r = await call('/.well-known/x402'); const c = r.j.pricing[0];
+  assert.equal(c.amount_usd, '0.02'); assert.equal(c.payTo, HOUSE_WALLET); assert.equal(r.j.how_to_pay, `${BASE}/pay/howto`); assert.match(r.j.instructions, /^POST \/route costs 0\.02 USDC on Base, no account, settle with POST \/settle\./);
+});
+await proof('llms.txt and llms-full.txt name the price in their first section; the static file holds the line, and a node set to another price says that one', async () => {
+  const txt = readFileSync(new URL('../site/llms.txt', import.meta.url), 'utf8'), top = txt.split('Copy and run')[0];
+  assert.ok(top.includes(priceLine(PRICING)), 'site/llms.txt says the line in its first section');
+  assert.match(top.split('\n\n')[1], /^POST \/route costs 0\.02 USDC on Base, no account, settle with POST \/settle\./); assert.match(top.split('\n\n')[1], /\/via\//);
+  const site = { '/llms.txt': { body: txt, type: 'text/plain; charset=utf-8' } };
+  const served = await (await handle(new Request(`${BASE}/llms.txt`, { headers: { 'user-agent': 'proof-agent/1.0' } }), db, { base: BASE, pay: { ...PAY, cents: 3 }, site, ledger: createLedger({}), waitUntil: () => {} })).text();
+  assert.ok(served.includes('POST /route costs 0.03 USDC on Base, no account, settle with POST /settle'), 'served with the price of the node'); assert.ok(served.includes('0.03 USDC (3 cents)')); assert.ok(!served.includes('0.02 USDC'));
+  assert.equal(withPrice(txt, pricingOf(payConfig({}), BASE)), txt, 'the default price leaves the text as it is');
+  const full = await (await handle(new Request(`${BASE}/llms-full.txt`, { headers: { 'user-agent': 'proof-agent/1.0' } }), db, { base: BASE, pay: PAY, ledger: createLedger({}), waitUntil: () => {} })).text();
+  assert.match(full.split('\n\n')[1], /^POST \/route costs 0\.02 USDC on Base, no account, settle with POST \/settle\./);
+});
+
+console.log('the 402 a reader understands (3.28.0)');
+await proof('the 402 says the price in dollars and words beside maxAmountRequired, points to /pay/howto (body, header, Link), and keeps every field it had', async () => {
+  const r = await call('/route?q=find+usdc+price', { method: 'POST' });
+  assert.equal(r.status, 402);
+  assert.equal(r.j.amount_usd, '0.02'); assert.equal(r.j.unit, 'USDC on Base, 6 decimals'); assert.equal(r.j.human, '2 cents'); assert.equal(r.j.how_to_pay, `${BASE}/pay/howto`);
+  assert.equal(r.j.x402Version, 1); assert.equal(r.j.accepts[0].maxAmountRequired, '20000'); assert.equal(r.j.price.usd, 0.02); assert.ok(r.j.pay.length === 3 && r.j.settle && r.j.prices && r.j.free && r.j.note, 'the fields of 3.27.0 stay');
+  const short = JSON.parse(r.h.get('x402-payment-required'));
+  assert.equal(short.amount_usd, '0.02'); assert.equal(short.how_to_pay, `${BASE}/pay/howto`); assert.equal(short.human, '2 cents'); assert.equal(short.decimals, 6);
+  assert.equal(short.amount, 2); assert.equal(short.unit, 'USD cents'); assert.equal(short.to, HOUSE_WALLET);
+  assert.equal(r.h.get('link'), `<${BASE}/pay/howto>; rel="describedby"`);
+  const s = await call('/settle', { method: 'POST', body: { q: 'x' } }); assert.equal(s.status, 402); assert.equal(s.h.get('link'), `<${BASE}/pay/howto>; rel="describedby"`); assert.equal(s.j.amount_usd, '0.02');
+});
+await proof('/pay/howto: plain text under 60 lines, the three commands in their order, what 20000 means, and that a payment not yet verified is still delivered', async () => {
+  const res = await handle(new Request(`${BASE}/pay/howto`, { headers: { 'user-agent': 'curl/8.5.0' } }), db, { base: BASE, pay: PAY, ledger: createLedger({}), waitUntil: () => {} });
+  assert.equal(res.status, 200); assert.match(res.headers.get('content-type'), /^text\/plain/);
+  const txt = await res.text(), lines = txt.trimEnd().split('\n'), curls = lines.filter((l) => l.startsWith('curl '));
+  assert.ok(lines.length <= 60, `${lines.length} lines`); assert.equal(curls.length, 3);
+  assert.equal(curls[0], `curl -s -X POST '${BASE}/route?q=test&free=true'`); assert.equal(curls[1], `curl -si -X POST '${BASE}/route?q=<task>'`); assert.match(curls[2], /^curl -s -X POST '.+\/settle' -H 'content-type: application\/json' -d '\{"q":"<task>","tx":"0x<transaction hash>"\}'$/);
+  assert.ok(txt.includes('POST /route costs 0.02 USDC on Base, no account, settle with POST /settle.')); assert.match(txt, /USDC has 6 decimals/); assert.match(txt, /20000 means 0\.020000 USDC, that is 0\.02 US dollars or 2 cents/);
+  assert.match(lines[lines.length - 1], /still accepted and delivered at once/); assert.ok(txt.includes(HOUSE_WALLET));
+  const g = await call('/settle'); assert.ok(!JSON.stringify(g.j).includes('"test"'), 'the public guide to /settle names the free sample, not the test'); assert.match(g.j.try_free, /free=true/);
+});
+
+console.log('the free sample before the wall (3.28.0)');
+await proof('POST /route?free=true: 200 with exactly the first 3 paths, all /via/ addresses, a hint with the price and how to pay; written down as a free sample', async () => {
+  const ledger = createLedger({});
+  const r = await call('/route?q=find+usdc+price&free=true', { method: 'POST', ledger });
+  assert.equal(r.status, 200); assert.equal(r.j.sample, true); assert.equal(r.j.paths.length, 3); assert.equal(r.j.count, 3); assert.ok(r.j.of >= 3);
+  for (const p of r.j.paths) { assert.match(p.to, /^https:\/\/mare\.test\/via\/[A-Za-z0-9_-]+\?q=find\+usdc\+price$/); assert.equal(decodeVia(p.to.split('/via/')[1].split('?')[0]).ok, true); }
+  assert.deepEqual(r.j.paths.map((p) => p.rank), [1, 2, 3]);
+  assert.match(r.j.hint, /free sample: the first 3 of the \d+ best paths/); assert.match(r.j.hint, /0\.02 USDC \(2 cents\) on Base/); assert.match(r.j.hint, /\/pay\/howto/); assert.match(r.j.hint, /no account/);
+  assert.equal(r.j.full_list.url, `${BASE}/route?q=find%20usdc%20price`); assert.equal(r.j.full_list.amount_usd, '0.02'); assert.equal(r.j.full_list.payTo, HOUSE_WALLET);
+  assert.equal(ledger.mem.sales[0].status, 'free_sample'); assert.equal(ledger.mem.sales[0].amount_cents, 0); assert.equal(ledger.mem.sales[0].q, 'find usdc price');
+  const t = await ledger.treasury(); assert.equal(t.today_free, 1); assert.equal(t.today_paid, 0); assert.equal(t.today_count, 0); assert.equal(t.total_count, 0); assert.equal(t.last_5.length, 0, 'a sample is no sale');
+  const pl = await ledger.pulse(); assert.equal(pl.paid_today.count, 0);
+  assert.equal((await call('/route?q=find+usdc+price', { method: 'POST', ledger })).status, 402, 'without free the 402 stays exactly as it was');
+  assert.equal((await call('/route?q=find+usdc+price&free=1', { method: 'POST', ledger })).status, 200);
+  assert.equal((await call('/route', { method: 'POST', body: { q: 'find usdc price', free: true }, ledger })).status, 200, 'free in the body');
+  assert.equal((await call('/route?free=true', { method: 'POST', ledger })).status, 400, 'no task, no sample');
+});
+await proof('a sale and a sample stand apart in the treasury: today_paid counts the sale, today_free the samples, last_5 only sales', async () => {
+  const ledger = createLedger({});
+  await call('/route?q=one&free=true', { method: 'POST', ledger }); await call('/route?q=two&free=true', { method: 'POST', ledger });
+  await call('/settle', { method: 'POST', body: { q: 'three', tx: '0x' + '9c'.repeat(32) }, ledger });
+  const t = await ledger.treasury(); assert.equal(t.today_free, 2); assert.equal(t.today_paid, 1); assert.equal(t.today_usd_unconfirmed, 0.02); assert.equal(t.today_usd, 0); assert.deepEqual(t.last_5.map((x) => x.q), ['three']);
+  const tr = await call('/treasury', { ledger }); assert.equal(tr.j.today_free, 2); assert.equal(tr.j.today_paid, 1); assert.match(tr.j.read, /today_free the free samples/);
+});
+await proof('samples are paced (60 an hour per address, then 429 with Retry-After and the free brain) and rest with the till', async () => {
+  const ledger = createLedger({}), ip = { 'x-forwarded-for': '198.51.100.77' };
+  const at = async () => (await handle(new Request(`${BASE}/route?q=pace&free=true`, { method: 'POST', headers: { accept: 'application/json', 'user-agent': 'proof-agent/1.0', ...ip } }), db, { base: BASE, pay: PAY, ledger, waitUntil: () => {} }));
+  let last; for (let i = 0; i < 61; i++) last = await at();
+  assert.equal(last.status, 429); assert.ok(Number(last.headers.get('retry-after')) > 0); assert.match((await last.json()).brain, /\/brain\?q=pace/);
+  const { immune } = await import('../node/immune.mjs');
+  immune.set({ mode: 'normal', rest: ['till'] }); try { assert.equal((await call('/route?q=x&free=true', { method: 'POST' })).status, 503); } finally { immune.set({ mode: 'normal', rest: [] }); }
+});
+
+console.log('found overnight without help (3.28.0)');
+await proof('/.well-known/opensearch.xml is text/xml and sends the words to /brain?q={searchTerms}&via=opensearch; the Link header names it', async () => {
+  const res = await handle(new Request(`${BASE}/.well-known/opensearch.xml`, { headers: { 'user-agent': 'curl/8.5.0' } }), db, { base: BASE, pay: PAY, ledger: createLedger({}), waitUntil: () => {} });
+  assert.equal(res.status, 200); assert.match(res.headers.get('content-type'), /^text\/xml/);
+  const x = await res.text(); assert.ok(x.includes(`template="${BASE}/brain?q={searchTerms}&amp;via=opensearch"`)); assert.match(x, /<ShortName>Mare Liberum<\/ShortName>/); assert.match(x, /^<\?xml version="1\.0" encoding="UTF-8"\?>/);
+  const { AGENT_LINK } = await import('../node/core.mjs'); assert.match(AGENT_LINK, /<\/\.well-known\/opensearch\.xml>; rel="search"/);
+});
+await proof('the sitemap names the brain, the route, both guides, the agent card, the pulse and the treasury', async () => {
+  const res = await handle(new Request(`${BASE}/sitemaps/site.xml`, { headers: { 'user-agent': 'curl/8.5.0' } }), db, { base: BASE, pay: PAY, ledger: createLedger({}), waitUntil: () => {} });
+  const x = await res.text();
+  for (const p of ['/brain', '/route', '/via/howto', '/pay/howto', '/.well-known/agent-card.json', '/pulse', '/treasury']) assert.ok(x.includes(`<loc>${BASE}${p}</loc>`), p);
+});
+await proof('the skill is one file in three places (site, plugin, skills/), version 4.1.0, with the price line, the free sample, /pay/howto, /treasury, /pulse and a /via/ walk', () => {
+  const read = (f) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
+  const site = read('site/skill.md');
+  assert.equal(read('skills/mare-liberum/SKILL.md'), site); assert.equal(read('plugins/mare-liberum/skills/mare-liberum/SKILL.md'), site);
+  assert.match(site, /^---\nname: mare-liberum\nversion: 4\.1\.0\n/);
+  for (const w of [priceLine(PRICING), '&free=true', '/pay/howto', '/treasury', '/pulse', '/via/<token>']) assert.ok(site.includes(w), w);
+  assert.equal(JSON.parse(read('site/skill.json')).version, '4.1.0'); assert.equal(JSON.parse(read('.claude-plugin/marketplace.json')).plugins[0].version, '4.1.0'); assert.equal(JSON.parse(read('plugins/mare-liberum/.claude-plugin/plugin.json')).version, '4.1.0');
+});
+await proof('four examples, each with three lines on top (what, the curl that proves it, how to run), each calling POST /route with free=true and walking a /via/ token; a README with the proofs', () => {
+  const read = (f) => readFileSync(new URL(`../examples/${f}`, import.meta.url), 'utf8');
+  for (const [f, c] of [['langchain-mare-liberum-tool.py', '#'], ['openai-agents-sdk-tool.py', '#'], ['vercel-ai-sdk-tool.ts', '//']]) {
+    const t = read(f), top = t.split('\n').slice(0, 3);
+    assert.ok(top[0].startsWith(`${c} What:`) && top[1].startsWith(`${c} Proof: curl -s -X POST 'https://mareliberum.dev/route?q=find+usdc+price&free=true'`) && top[2].startsWith(`${c} Run:`), f);
+    assert.match(t, /free/); assert.match(t, /\/via\//); assert.match(t, /\/route/);
+  }
+  const sk = read('claude-code-skill.md').split('\n'); assert.equal(sk[0], '---'); assert.ok(sk[1].startsWith('# What:') && sk[2].startsWith('# Proof: curl') && sk[3].startsWith('# Run:')); assert.ok(sk.includes('name: mare-liberum-route'));
+  const rd = read('README.md'); for (const w of ['## Proof', "route?q=find+usdc+price&free=true", 'xargs curl', '/pulse']) assert.ok(rd.includes(w), w);
 });
 
 console.log(`\n${passed} held, ${failed} failed`);

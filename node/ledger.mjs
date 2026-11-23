@@ -4,7 +4,8 @@
 //              and whether the money was seen to arrive (settled) or only claimed (unverified)
 //   via_hits   one line for every walk through a /via/ address: when, to which site, for which task, a hash of the
 //              caller (its program and network, salted per day; no address is kept) and, once the agent says so,
-//              whether the place worked
+//              whether the place worked. Since 3.28.0 also what else passed through toward a site or a task
+//              (kind: read, door, go, site, ask), so the pulse counts the whole of it
 // Nothing here stands in the way of an answer: lines are handed over and written behind it, a few at a time. A
 // database that does not answer is left alone for a while and the lines wait. The node keeps its own copy of the last
 // day in memory; /treasury and /pulse answer from that copy, and say so, when the database cannot.
@@ -12,39 +13,65 @@ const READ_MS = 2500, WRITE_MS = 5000, REST_MS = 30_000, DAYMS = 864e5;
 // what counts as money that arrived, and what is claimed or still on its way
 export const ARRIVED = new Set(['settled']);
 export const OPEN = new Set(['pending', 'unverified', 'unsettled']);
+// a sale of the paid move (whatever became of its money); a test and a free sample are no sales
+export const PAID = new Set([...ARRIVED, ...OPEN]);
+// what passed through the sea, line by line in via_hits (since 3.28.0; lines from before are walks)
+export const KINDS = new Set(['walk', 'read', 'door', 'go', 'site', 'ask']);
 const usd = (cents) => Math.round(Number(cents) || 0) / 100;
 const dayOf = (t) => new Date(t).toISOString().slice(0, 10);
 const short = (tx) => (typeof tx === 'string' && tx.length > 16 ? `${tx.slice(0, 10)}…${tx.slice(-6)}` : tx || undefined);
 
 // the same numbers the database gives (mare_treasury), from a list of sales, newest first
 export function summarize(sales, t = Date.now()) {
-  const today = dayOf(t), real = sales.filter((s) => s.status !== 'test'), now1 = real.filter((s) => dayOf(s.ts) === today);
+  const today = dayOf(t), real = sales.filter((s) => PAID.has(s.status)), now1 = real.filter((s) => dayOf(s.ts) === today);
   const sum = (list, set) => usd(list.filter((s) => set.has(s.status)).reduce((n, s) => n + (Number(s.amount_cents) || 0), 0));
   const by = {}; for (const s of now1) by[s.status] = (by[s.status] || 0) + 1;
+  const todayOf = (status) => sales.filter((s) => s.status === status && dayOf(s.ts) === today).length;
   return {
-    today, today_count: now1.length, today_usd: sum(now1, ARRIVED), today_usd_unconfirmed: sum(now1, OPEN), today_by_status: by,
-    tests_today: sales.filter((s) => s.status === 'test' && dayOf(s.ts) === today).length,
+    // today_paid: sales of the paid move today; today_free: free samples today (POST /route?free=true), never money
+    today, today_count: now1.length, today_paid: now1.length, today_free: todayOf('free_sample'), today_usd: sum(now1, ARRIVED), today_usd_unconfirmed: sum(now1, OPEN), today_by_status: by,
+    tests_today: todayOf('test'),
     total_count: real.length, total_usd: sum(real, ARRIVED), total_usd_unconfirmed: sum(real, OPEN),
-    last_5: sales.slice(0, 5).map((s) => ({ id: s.id, ts: s.ts, q: s.q ? String(s.q).slice(0, 80) : null, amount_usd: usd(s.amount_cents), status: s.status, method: s.method || undefined, tx: short(s.tx) })),
+    last_5: sales.filter((s) => s.status !== 'free_sample').slice(0, 5).map((s) => ({ id: s.id, ts: s.ts, q: s.q ? String(s.q).slice(0, 80) : null, amount_usd: usd(s.amount_cents), status: s.status, method: s.method || undefined, tx: short(s.tx) })),
   };
 }
 
-// the same numbers the database gives (mare_pulse), from the hits of the last day and the sales
+// the same numbers the database gives (mare_pulse), from the hits of the last day and the sales. Today is the UTC day.
+// A task is put on show only once two different callers carried it: one agent's words alone never are.
+export const PULSE_FIRST = ['unique_domains_today', 'top_queries', 'top_domains', 'agents_today', 'hits_today', 'hits_last_hour', 'paid_today_usd', 'free_samples_today'];
 export function pulseOf(hits, sales, t = Date.now()) {
-  const hour = t - 3600e3, day = t - DAYMS, last = hits.filter((h) => Date.parse(h.ts) >= hour), day1 = hits.filter((h) => Date.parse(h.ts) >= day);
+  const hour = t - 3600e3, day = t - DAYMS, today = dayOf(t);
+  const last = hits.filter((h) => Date.parse(h.ts) >= hour), day1 = hits.filter((h) => Date.parse(h.ts) >= day), now1 = hits.filter((h) => dayOf(h.ts) === today);
   const count = (list, f) => { const m = new Map(); for (const h of list) { const k = f(h); if (k) m.set(k, (m.get(k) || 0) + 1); } return [...m.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)); };
+  const shown = (list) => { const m = new Map(); for (const h of list) { if (!h.q) continue; const x = m.get(h.q) || { n: 0, who: new Set() }; x.n++; if (h.ua_hash) x.who.add(h.ua_hash); m.set(h.q, x); } return [...m.entries()].filter(([, x]) => x.who.size >= 2).sort((a, b) => b[1].n - a[1].n || (a[0] < b[0] ? -1 : 1)); };
+  const kinds = {}; for (const h of now1) { const k = h.kind || 'walk'; kinds[k] = (kinds[k] || 0) + 1; }
   const s = summarize(sales, t);
   return {
+    unique_domains_today: new Set(now1.map((h) => h.target_domain).filter(Boolean)).size,
+    top_queries: shown(now1).slice(0, 10).map(([q, x]) => ({ query: String(q).slice(0, 80), count: x.n })),
+    top_domains: count(now1, (h) => h.target_domain).slice(0, 10).map(([domain, n]) => ({ domain, count: n })),
+    agents_today: new Set(now1.map((h) => h.ua_hash).filter(Boolean)).size,
+    hits_today: now1.length,
     hits_last_hour: last.length,
+    paid_today_usd: s.today_usd,
+    free_samples_today: s.today_free,
+    // what the numbers above are made of, and the numbers of 3.27.0 (the last 24 hours), as they were
+    by_kind_today: kinds,
+    paid_today_usd_unconfirmed: s.today_usd_unconfirmed,
     unique_domains_last_hour: new Set(last.map((h) => h.target_domain).filter(Boolean)).size,
-    top_10_domains: count(day1, (h) => h.target_domain).slice(0, 10).map(([domain, n]) => ({ domain, hits: n })),
-    paid_today: { count: s.today_count, usd: s.today_usd, usd_unconfirmed: s.today_usd_unconfirmed },
-    // a task shows only once two walks carried it: one agent's words alone are never put on show
-    top_5_queries: count(day1, (h) => h.q).filter(([, n]) => n >= 2).slice(0, 5).map(([q, n]) => ({ q: String(q).slice(0, 80), hits: n })),
     hits_last_24h: day1.length,
     worked_last_24h: day1.filter((h) => h.outcome === 'worked').length,
     failed_last_24h: day1.filter((h) => h.outcome === 'failed').length,
+    top_10_domains: count(day1, (h) => h.target_domain).slice(0, 10).map(([domain, n]) => ({ domain, hits: n })),
+    top_5_queries: shown(day1).slice(0, 5).map(([q, x]) => ({ q: String(q).slice(0, 80), hits: x.n })),
+    paid_today: { count: s.today_paid, usd: s.today_usd, usd_unconfirmed: s.today_usd_unconfirmed },
   };
+}
+// the pulse in the order a reader takes it in: the eight numbers of the day first, then the rest as it came
+export function pulseOrdered(p) {
+  const out = {}; for (const k of PULSE_FIRST) out[k] = p?.[k] ?? (k.startsWith('top_') ? [] : 0);
+  for (const [k, v] of Object.entries(p || {})) if (!(k in out)) out[k] = v;
+  return out;
 }
 
 export function createLedger({ url, key, secret, fetch: get = (...a) => fetch(...a), log = () => {}, waitUntil, now = () => Date.now(), keepHits = 100_000, keepSales = 2000 } = {}) {
@@ -118,7 +145,8 @@ export function createLedger({ url, key, secret, fetch: get = (...a) => fetch(..
     },
     // one walk through a /via/ address; never awaited by the one who walks
     hit(row) {
-      const h = { ts: new Date(now()).toISOString(), target_domain: row.target_domain ?? null, q: row.q ?? null, ua_hash: row.ua_hash ?? null, token_host: row.token_host ?? null, outcome: row.outcome ?? null, status: Number.isInteger(row.status) ? row.status : null };
+      // kind: walk (through /via/), read (the reader), door (/d/…), go (a pathway's go link), site (/site/<domain> as data), ask (a question to the brain)
+      const h = { ts: new Date(now()).toISOString(), kind: KINDS.has(row.kind) ? row.kind : 'walk', target_domain: row.target_domain ?? null, q: row.q ?? null, ua_hash: row.ua_hash ?? null, token_host: row.token_host ?? null, outcome: row.outcome ?? null, status: Number.isInteger(row.status) ? row.status : null };
       mem.hits.push(h); if (mem.hits.length % 500 === 0) prune();
       if (on) { queue.hits.push(h); if (queue.hits.length > 5000) { queue.hits.splice(0, queue.hits.length - 5000); dropped++; } if (queue.hits.length >= 200) soon(5); else soon(1000); }
     },

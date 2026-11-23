@@ -12,11 +12,10 @@
 // and the sale is written down as unverified. A payment the facilitator itself refuses is answered with 402 again,
 // with the reason, and nothing is delivered for it.
 import { Buffer } from 'node:buffer';
+import { USDC_BASE, HOUSE_WALLET, priceOf, pricingOf } from './pricing.mjs';
 
-export const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-// where the money goes when the operator names no other wallet: the receiving wallet of Angel, the house agent of
-// Oroboros Design, as Angel publishes it at https://angel.oroboros-design.com/.well-known/x402 (MARE_PAY_TO changes it)
-export const HOUSE_WALLET = '0x0CAc7D3c89be4f478E4c8f713C0D3D2D0954678D';
+// price, wallet and token live in node/pricing.mjs, the one place that writes them down
+export { USDC_BASE, HOUSE_WALLET };
 // a public facilitator for Base that needs no key (free up to 10,000 settlements a month); MARE_X402_FACILITATOR
 // names another one, "off" switches checking off (every sale is then unverified)
 export const FACILITATOR = 'https://facilitator.payai.network';
@@ -25,12 +24,11 @@ const UA = 'MareLiberum-Till/1.0 (+https://mareliberum.dev/job)';
 const b64 = (s) => Buffer.from(s, 'utf8').toString('base64');
 
 export function payConfig(env = process.env) {
-  const cents = Math.round(Number(env.MARE_ROUTE_PRICE_CENTS));
   const f = String(env.MARE_X402_FACILITATOR ?? '').trim();
+  // the price of the move (1 to 5 US cents, 2 when nothing else is set) and the wallet: node/pricing.mjs
+  const { cents, payTo } = priceOf(env);
   return {
-    payTo: WALLET.test(String(env.MARE_PAY_TO || '')) ? String(env.MARE_PAY_TO) : HOUSE_WALLET,
-    // the price of the move: 1 to 5 US cents, 2 when nothing else is set
-    cents: cents >= 1 && cents <= 5 ? cents : 2,
+    payTo, cents,
     window: 300,
     facilitator: /^(off|none|0|false)$/i.test(f) ? null : /^https:\/\/[^\s]+$/.test(f) ? f.replace(/\/+$/, '') : FACILITATOR,
     verifyMs: 6000, settleWaitMs: 12000, settleMs: 60000,
@@ -45,7 +43,7 @@ export function termsFor(cfg, { base, q, path = '/route' }) {
   const extra = { name: 'USD Coin', version: '2' };
   const v1 = { scheme: 'exact', network: 'base', maxAmountRequired: atomic, resource, description, mimeType: 'application/json', payTo: cfg.payTo, maxTimeoutSeconds: cfg.window, asset: USDC_BASE, extra };
   const v2 = { scheme: 'exact', network: 'eip155:8453', amount: atomic, asset: USDC_BASE, payTo: cfg.payTo, maxTimeoutSeconds: cfg.window, extra };
-  return { cents: cfg.cents, usd: cfg.cents / 100, atomic, resource, description, v1, v2, payTo: cfg.payTo, window: cfg.window };
+  return { cents: cfg.cents, usd: cfg.cents / 100, atomic, resource, description, v1, v2, payTo: cfg.payTo, window: cfg.window, pricing: pricingOf(cfg, base) };
 }
 
 // how to pay, in words an agent without an x402 client can follow
@@ -57,11 +55,16 @@ export function howToPay(t, base) {
   ];
 }
 
-// the answer that asks for payment: 402, the terms in every place a client looks for them
+// the answer that asks for payment: 402, the terms in every place a client looks for them, and in words a reader
+// without an x402 client understands (amount_usd, human, how_to_pay). Fields are only ever added, never taken away.
 export function paymentRequired(t, { base, error, cors = {} }) {
+  const p = t.pricing || pricingOf(t, base);
   const v2 = { x402Version: 2, error: error || 'PAYMENT-SIGNATURE header is required', resource: { url: t.resource, description: t.description, mimeType: 'application/json' }, accepts: [t.v2] };
   const body = {
     x402Version: 1, error: error || 'X-PAYMENT header is required', accepts: [t.v1],
+    // maxAmountRequired above is in USDC base units (6 decimals): 20000 is 0.02 USDC
+    amount_usd: p.amount_usd, unit: p.unit, human: p.human, how_to_pay: p.how_to_pay,
+    free_sample: `POST ${base}/route?q=<your task>&free=true (the first 3 paths, no payment)`,
     what: t.description,
     price: { usd: t.usd, cents: t.cents, asset: 'USDC', network: 'Base (eip155:8453)', pay_to: t.payTo },
     pay: howToPay(t, base),
@@ -69,10 +72,49 @@ export function paymentRequired(t, { base, error, cors = {} }) {
     free: { brain: `${base}/brain?q=<your task>`, doors: `GET ${base}/route?q=<your task>` },
     note: 'No account, no key. The USDC goes from your wallet straight to the address above; the sea never holds anyone\'s money.',
   };
-  const short = { scheme: 'exact', network: 'base', to: t.payTo, payTo: t.payTo, amount: t.cents, unit: 'USD cents', asset: 'USDC', maxTimeoutSeconds: t.window, settle: `${base}/settle` };
+  // the short form for a header: amount and unit as before (US cents), the same price in dollars and in words beside them
+  const short = { scheme: 'exact', network: 'base', to: t.payTo, payTo: t.payTo, amount: t.cents, unit: 'USD cents', asset: 'USDC', maxTimeoutSeconds: t.window, settle: `${base}/settle`,
+    amount_usd: p.amount_usd, human: p.human, decimals: p.decimals, how_to_pay: p.how_to_pay };
   return new Response(JSON.stringify(body), { status: 402, headers: {
     'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex',
-    'payment-required': b64(JSON.stringify(v2)), 'x402-payment-required': JSON.stringify(short), 'x-pay-to': t.payTo, 'x-settle-window': String(t.window), ...cors } });
+    'payment-required': b64(JSON.stringify(v2)), 'x402-payment-required': JSON.stringify(short), 'x-pay-to': t.payTo, 'x-settle-window': String(t.window),
+    link: `<${p.how_to_pay}>; rel="describedby"`, ...cors } });
+}
+
+// /pay/howto: how to pay, as three commands to copy, in plain text (at most 60 lines)
+export function payHowto(t, base) {
+  const p = t.pricing || pricingOf(t, base);
+  return [
+    'Mare Liberum · how to pay for the paid route',
+    `${p.line}.`,
+    `You get the 10 best agent paths for your task, each one a /via/ address, ranked with reasons and the next step.`,
+    '',
+    '1) Try it free: the first 3 of the 10 paths, no payment.',
+    `curl -s -X POST '${base}/route?q=test&free=true'`,
+    '',
+    '2) Ask for all 10. The answer is HTTP 402 Payment Required; its headers say what to pay:',
+    `curl -si -X POST '${base}/route?q=<task>'`,
+    `   x402-payment-required  the terms as JSON: network base, to (the wallet), amount_usd "${p.amount_usd}", how_to_pay`,
+    `   PAYMENT-REQUIRED       the same terms for x402 v2 clients (base64 JSON, network eip155:8453, amount ${p.maxAmountRequired})`,
+    `   X-Pay-To               the wallet: ${p.payTo}`,
+    `   X-Settle-Window        seconds the terms stay open: ${p.settle_window_seconds}`,
+    '   The body repeats the terms for x402 v1 clients ("accepts", with maxAmountRequired).',
+    'An x402 client pays by itself: it calls again with PAYMENT-SIGNATURE (v2) or X-PAYMENT (v1) and gets the 10 paths in the same answer.',
+    '',
+    `3) Paid by a plain USDC transfer instead? Send ${p.amount_usd} USDC on Base to the wallet above, then hand in the receipt:`,
+    `curl -s -X POST '${base}/settle' -H 'content-type: application/json' -d '{"q":"<task>","tx":"0x<transaction hash>"}'`,
+    '   An x402 payment payload works too: {"q":"<task>","payment":"<base64 payload>"}.',
+    '',
+    `Amounts: maxAmountRequired is written in USDC base units, and USDC has ${p.decimals} decimals.`,
+    `${p.maxAmountRequired} means ${(Number(p.maxAmountRequired) / 1e6).toFixed(6)} USDC, that is ${p.amount_usd} US dollars or ${p.human}.`,
+    '',
+    `USDC on Base: token ${p.asset}, chain id ${p.chain_id}. No account, no key.`,
+    'The money goes from your wallet straight to the wallet above; the sea never holds anyone\'s money.',
+    `What the till has taken in: ${base}/treasury`,
+    '',
+    'A payment the sea cannot verify at once is still accepted and delivered at once; the sale is booked as unverified until it settles.',
+    '',
+  ].join('\n');
 }
 
 // the payment a caller brought: PAYMENT-SIGNATURE (v2), X-PAYMENT (v1), or "payment" in the body of /settle
@@ -173,16 +215,19 @@ export function receiptOf(body = {}) {
 
 // the price table: what the one paid move costs and how to pay for it
 export function priceTable(cfg, base) {
-  const t = termsFor(cfg, { base });
+  const t = termsFor(cfg, { base }), p = t.pricing;
   return {
-    what: 'The one paid move of Mare Liberum. Everything else in the sea stays free.',
+    what: `The one paid move of Mare Liberum. ${p.line}. Everything else in the sea stays free.`,
+    pricing: p,
     price_table: [{
       item: 'route', method: 'POST', url: `${base}/route?q=<your task>`, also: `GET ${base}/route?q=<your task>&paid=true`,
-      amount_cents: t.cents, price_usd: t.usd, asset: 'USDC', network: 'Base (eip155:8453)', pay_to: t.payTo, settle_window_seconds: t.window,
+      amount_cents: t.cents, price_usd: t.usd, amount_usd: p.amount_usd, human: p.human, asset: 'USDC', network: 'Base (eip155:8453)', pay_to: t.payTo, settle_window_seconds: t.window,
+      free_sample: `POST ${base}/route?q=<your task>&free=true (the first 3 paths, no payment)`, how_to_pay: p.how_to_pay,
       returns: 'the 10 best agent paths for exactly this task, each one already a /via/ address, with the reason for its rank, what other agents reported, and the next step',
       pay: howToPay(t, base),
     }],
-    settle: `POST ${base}/settle {"q":"<task>","tx":"<transaction hash>"} · test without money: {"q":"<task>","test":true}`,
+    settle: `POST ${base}/settle {"q":"<task>","tx":"<transaction hash>"}`,
+    try_free: `POST ${base}/route?q=<task>&free=true`,
     facilitator: cfg.facilitator || 'none (sales are written down as unverified)',
     treasury: `${base}/treasury`, pulse: `${base}/pulse`,
     free: { brain: `${base}/brain?q=<your task>`, doors: `GET ${base}/route?q=<your task>`, sites: `${base}/find?q=<words>`, read: `${base}/r/<address>` },

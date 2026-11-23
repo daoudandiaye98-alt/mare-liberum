@@ -6,7 +6,10 @@
 // pages, 502 with a hint when a place fails, and what each walk leaves in the record.
 // Runs without the network (only this machine): node tools/via-proof.mjs   (exit code 1 when a proof fails)
 import assert from 'node:assert/strict';
-import { setViaKey, encodeVia, decodeVia, wraps, viaUrl, rewriteForAgents, viaProxy, callerHash, callerHashes, PROXY } from '../node/via.mjs';
+import { setViaKey, encodeVia, decodeVia, wraps, viaUrl, rewriteForAgents, viaProxy, callerHash, callerHashes, PROXY, VIA_EXCLUDE } from '../node/via.mjs';
+import { handle } from '../node/core.mjs';
+import { createMem } from '../node/mem.mjs';
+import { createLedger } from '../node/ledger.mjs';
 
 let passed = 0, failed = 0;
 const proof = async (name, fn) => { try { await fn(); passed++; console.log(`  ok   ${name}`); } catch (e) { failed++; console.log(`  FAIL ${name}\n       ${String(e?.stack || e).split('\n').slice(0, 4).join('\n       ')}`); } };
@@ -151,13 +154,53 @@ await proof('a web page whose robots.txt asks programs to stay away is not carri
 });
 await proof('a walk out of a private memory is counted without site and task, and strengthens nothing', async () => {
   const { hits, walks } = await run(encodeVia('https://example.com/x'), { query: '?p=1&q=secret+task' });
-  assert.deepEqual(hits[0], { q: null, ua_hash: hits[0].ua_hash, token_host: null, target_domain: null, status: 200, outcome: null }); assert.equal(walks.length, 0);
+  assert.deepEqual(hits[0], { kind: 'walk', q: null, ua_hash: hits[0].ua_hash, token_host: null, target_domain: null, status: 200, outcome: null }); assert.equal(walks.length, 0);
 });
 await proof('the caller is a salted hash of program and network: the same caller the same day, another day another; no address in it', () => {
   const a = callerHash('203.0.113.5', 'agent/1', '2026-11-23'), b = callerHash('203.0.113.5', 'agent/1', '2026-11-23');
   assert.equal(a, b); assert.match(a, /^[0-9a-f]{16}$/); assert.notEqual(a, callerHash('203.0.113.5', 'agent/1', '2026-11-24')); assert.notEqual(a, callerHash('203.0.113.6', 'agent/1', '2026-11-23'));
   assert.equal(callerHash('2001:db8:1:2:3:4:5:6', 'x', 'd'), callerHash('2001:db8:1:2:ffff:4:5:6', 'x', 'd'), 'an IPv6 network counts as one caller');
   assert.equal(callerHashes('203.0.113.5', 'agent/1').length, 2);
+});
+
+console.log('every road through the sea (3.28.0)');
+await proof('with anyKey every whole web address of an answer goes through the sea, under any key and inside lists; payment pages, the sea\'s own code, its own routes and templates stay', () => {
+  const site = { site: 'github.com', home: 'https://github.com/', llmsTxt: 'https://github.com/llms.txt', sitemaps: ['https://github.com/sitemap_marketing.xml', 'https://github.com/sitemap2.xml'],
+    search: { template: 'https://github.com/search?q={q}&ref=opensearch', example: 'https://github.com/search?q=example' }, feeds: [{ title: 'Blog', href: 'https://github.blog/feed/' }],
+    report: { pay: 'https://buy.stripe.com/fZu3co4PC2kIcJx3f7es00o?client_reference_id=report-github_com', details: 'https://sea.test/offers#report' },
+    use: { read: 'https://sea.test/r/https://github.com/', worked: 'https://sea.test/d/github/worked' }, code: 'https://github.com/daoudandiaye98-alt/mare-liberum/tree/main/examples', words: 'see https://github.com/ for more', n: 3 };
+  const out = rewriteForAgents(site, { base: BASE, anyKey: true });
+  for (const v of [out.home, out.llmsTxt, out.sitemaps[0], out.sitemaps[1], out.search.example, out.feeds[0].href]) assert.match(v, /^https:\/\/sea\.test\/via\//, v);
+  assert.equal(out.search.template, site.search.template, 'a template stays'); assert.equal(out.report.pay, site.report.pay, 'a payment page stays');
+  assert.equal(out.report.details, site.report.details); assert.equal(out.use.read, site.use.read); assert.equal(out.use.worked, site.use.worked, 'the sea\'s own routes stay');
+  assert.equal(out.code, site.code, 'the sea\'s own code stays'); assert.equal(out.words, site.words, 'text that only mentions an address stays'); assert.equal(out.n, 3);
+  assert.match(out.via, /^6 addresses in this answer lead through the sea/); assert.equal(site.sitemaps[0], 'https://github.com/sitemap_marketing.xml', 'what the sea keeps is never changed');
+  assert.ok(VIA_EXCLUDE.length >= 2); assert.equal(wraps('https://checkout.stripe.com/c/pay/cs_x', BASE), false); assert.equal(wraps('https://raw.githubusercontent.com/daoudandiaye98-alt/mare-liberum/main/site/skill.md', BASE), false);
+  assert.equal(rewriteForAgents({ list: ['https://a.example/'] }, { base: BASE }).list[0], 'https://a.example/', 'without anyKey lists of plain strings stay as before');
+});
+await proof('an address handed out by a door that counted the click is carried but not counted twice within two minutes; later it counts again', async () => {
+  const t = encodeVia('https://api.example.com/x'), now = Date.now();
+  const c = new URL(viaUrl('https://api.example.com/x', { base: BASE, q: 'x', counted: now })).searchParams.get('c'); assert.equal(c, String(Math.floor(now / 60000)));
+  const fresh = await run(t, { query: `?q=x&c=${c}`, now: () => now + 30_000 }); assert.equal(fresh.res.status, 200); assert.equal(fresh.hits.length, 0, 'counted at the door already'); assert.equal(fresh.walks.length, 1, 'the path still grows');
+  const later = await run(t, { query: `?q=x&c=${c}`, now: () => now + 10 * 60_000 }); assert.equal(later.hits.length, 1); assert.equal(later.hits[0].kind, 'walk');
+  const plain = await run(t, { query: '?q=x' }); assert.equal(plain.hits[0].kind, 'walk');
+});
+const mdb = createMem({ file: 'data/none.tsv', base: BASE });
+const at = async (path, { ua = 'proof-agent/1.0', accept = 'application/json', ledger = createLedger({}) } = {}) => { const r = await handle(new Request(BASE + path, { headers: { accept, 'user-agent': ua, 'x-forwarded-for': ip() } }), mdb, { base: BASE, ledger, waitUntil: () => {} }); return { r, ledger }; };
+await proof('a door (/d/<id>) leads through the sea: Location is a /via/ address with the task, and the click is counted as a door; a crawler is sent to the place itself and not counted', async () => {
+  const { r, ledger } = await at('/d/wikipedia?q=creatine');
+  assert.equal(r.status, 302); const loc = r.headers.get('location'); assert.match(loc, /^https:\/\/sea\.test\/via\/[A-Za-z0-9_-]+\?q=creatine&c=\d+$/);
+  assert.match(decodeVia(loc.split('/via/')[1].split('?')[0]).url, /^https:\/\/[a-z.]*wikipedia\.org\//);
+  assert.equal(ledger.mem.hits.length, 1); assert.deepEqual([ledger.mem.hits[0].kind, ledger.mem.hits[0].status, ledger.mem.hits[0].target_domain, ledger.mem.hits[0].q], ['door', 302, 'wikipedia.org', 'creatine']);
+  const bot = await at('/d/wikipedia?q=creatine', { ua: 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)', accept: 'text/html' });
+  assert.equal(bot.r.status, 302); assert.doesNotMatch(bot.r.headers.get('location'), /\/via\//); assert.equal(bot.ledger.mem.hits.length, 0);
+});
+await proof('/site/<domain> answers a program with data and a person with the page; the data is never HTML', async () => {
+  const data = await at('/site/unmapped-proof-site.com', { accept: '*/*' }); assert.match(data.r.headers.get('content-type'), /^application\/json/); assert.equal(data.r.headers.get('vary'), 'accept');
+  const plain = await at('/site/unmapped-proof-site.com', { accept: '' }); assert.match(plain.r.headers.get('content-type'), /^application\/json/);
+  const page = await at('/site/unmapped-proof-site.com', { accept: 'text/html,application/xhtml+xml' }); assert.match(page.r.headers.get('content-type'), /^text\/html/);
+  const md = await at('/site/unmapped-proof-site.com', { accept: 'text/markdown' }); assert.match(md.r.headers.get('content-type'), /^text\/markdown/);
+  const json2 = await at('/site/unmapped-proof-site.com.json', { accept: 'text/html' }); assert.match(json2.r.headers.get('content-type'), /^application\/json/);
 });
 
 console.log(`\n${passed} held, ${failed} failed`);

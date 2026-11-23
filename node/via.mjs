@@ -34,6 +34,13 @@ export function decodeVia(token, key = viaKey()) {
 // the sea's own addresses stay as they are: its doors, the links an agent posts to (worked_it, failed_it, lay, settle)
 const OWN = new Set(['mareliberum.dev', 'www.mareliberum.dev', 'hz.mareliberum.dev', 'mare-liberum.vercel.app']);
 export function ownHost(host, base) { const h = String(host || '').toLowerCase(); let b = ''; try { b = new URL(base).hostname.toLowerCase(); } catch {} return OWN.has(h) || (b && h === b); }
+// what always stays as it is, wherever it stands in an answer. Every address of the sea itself (above): the routes an
+// agent writes to (/lay, /via/mare:…, worked_it, failed_it, /m/…, /settle, /job, /rate, /d/…/worked), /works.json,
+// /llms.txt, the skill and the pages; and templates still to be filled (<task>, {q}). Besides those:
+export const VIA_EXCLUDE = [
+  /^https:\/\/(buy|checkout|billing|pay)\.stripe\.com\//i, // a payment page needs its own origin, cookies and scripts; a sandboxed copy breaks it
+  /^https:\/\/(github\.com|raw\.githubusercontent\.com)\/daoudandiaye98-alt\/mare-liberum(\/|$)/i, // the sea's own code: skills, examples
+];
 // an address goes through the sea when it is a plain public web address: http or https on the usual ports, no
 // template still to be filled ({q}, <task>), no name and password inside, not too long, and not the sea's own
 export function wraps(raw, base) { return !!wrapTarget(raw, base); }
@@ -43,27 +50,31 @@ export function wrapTarget(raw, base) {
   if (s.length > VIA.maxUrl || !/^https?:\/\//i.test(s) || /[<>{}\s]/.test(s)) return null;
   let u; try { u = new URL(s); } catch { return null; }
   if (u.username || u.password || (u.port && u.port !== '80' && u.port !== '443') || u.href.length > VIA.maxUrl) return null;
-  return ownHost(u.hostname, base) ? null : u.href;
+  return ownHost(u.hostname, base) || VIA_EXCLUDE.some((x) => x.test(u.href)) ? null : u.href;
 }
-// the via address for a place; q (the task) and p (from a private memory) ride along for the count, never to the place
-export function viaUrl(url, { base, q, priv } = {}) {
-  const p = new URLSearchParams(); if (q) p.set('q', String(q).slice(0, 120)); if (priv) p.set('p', '1');
+// the via address for a place; q (the task) and p (from a private memory) ride along for the count, never to the place.
+// c (the minute) marks an address handed out by a door the sea already counted the click at (/d/…, /go/…): the walk
+// that follows within two minutes is carried as always, but not counted a second time
+export function viaUrl(url, { base, q, priv, counted } = {}) {
+  const p = new URLSearchParams(); if (q) p.set('q', String(q).slice(0, 120)); if (priv) p.set('p', '1'); if (counted) p.set('c', String(Math.floor(counted / 60000)));
   const s = p.toString();
   return `${String(base).replace(/\/+$/, '')}/via/${encodeVia(url)}${s ? `?${s}` : ''}`;
 }
 // the keys under which the sea hands out addresses (the plain ones, and where /find and /site/<domain> put them)
 export const ADDRESS_KEYS = new Set(['url', 'href', 'to', 'go', 'target', 'next', 'path', 'example', 'home']);
-// every address under those keys, however deep, becomes a via address. What the sea keeps is never changed: the answer
-// is copied where it changes and only there.
-export function rewriteForAgents(payload, { base, q, priv, keys = ADDRESS_KEYS } = {}) {
+// every address under those keys, however deep, becomes a via address; with anyKey every value that is a whole web
+// address does, under any key and inside lists (the map of a site: /site/<domain>). What the sea keeps is never
+// changed: the answer is copied where it changes and only there.
+export function rewriteForAgents(payload, { base, q, priv, keys = ADDRESS_KEYS, anyKey = false } = {}) {
   let n = 0;
+  const swap = (x) => { const t = wrapTarget(x, base); if (!t) return x; n++; return viaUrl(t, { base, q, priv }); };
   const walk = (v, depth) => {
     if (depth > 14 || v == null || typeof v !== 'object') return v;
-    if (Array.isArray(v)) { let out = null; for (let i = 0; i < v.length; i++) { const x = walk(v[i], depth + 1); if (x !== v[i]) { out ||= v.slice(); out[i] = x; } } return out || v; }
+    if (Array.isArray(v)) { let out = null; for (let i = 0; i < v.length; i++) { const x = v[i], y = typeof x === 'string' ? (anyKey ? swap(x) : x) : walk(x, depth + 1); if (y !== x) { out ||= v.slice(); out[i] = y; } } return out || v; }
     let out = null;
     for (const k of Object.keys(v)) {
       const x = v[k]; let y = x;
-      if (typeof x === 'string') { const t = keys.has(k) ? wrapTarget(x, base) : null; if (t) { y = viaUrl(t, { base, q, priv }); n++; } }
+      if (typeof x === 'string') { if (anyKey || keys.has(k)) y = swap(x); }
       else if (x && typeof x === 'object') y = walk(x, depth + 1);
       if (y !== x) { out ||= { ...v }; out[k] = y; }
     }
@@ -155,6 +166,8 @@ export async function viaProxy({ req, token, base, ip, ua, readOnly = false, onH
   const d = decodeVia(token);
   if (!d) return null;
   const at = new URL(req.url), q = (at.searchParams.get('q') || '').replace(/[\p{Cc}\p{Cf}]/gu, ' ').trim().slice(0, 120) || null, priv = at.searchParams.get('p') === '1';
+  // handed out by a door that counted the click a moment ago: carried, not counted again
+  const minute = Number(at.searchParams.get('c')), counted = Number.isInteger(minute) && minute > 0 && Math.abs(Math.floor(now() / 60000) - minute) <= 2;
   const brain = `${base}/brain?q=${encodeURIComponent(q || '<your task>')}`;
   if (!d.ok) return answer(403, { error: { code: 'BAD_TOKEN', message: 'this via address was not made by this sea (or was changed on the way); ask the brain for fresh addresses' }, hint: brain });
   let u; try { u = new URL(d.url); } catch { return answer(400, { error: { code: 'INVALID_ARGUMENT', message: 'the address in this token cannot be read' }, hint: brain }); }
@@ -165,7 +178,7 @@ export async function viaProxy({ req, token, base, ip, ua, readOnly = false, onH
   // not stand in for other websites in an index
   if (readOnly) return new Response(null, { status: 302, headers: { location: target, 'cache-control': 'public, max-age=3600', 'x-robots-tag': 'noindex, nofollow', 'x-via': 'mare-liberum', 'x-via-target': target, ...VIA_CORS } });
   const host = u.hostname.toLowerCase().replace(/^www\./, ''), who = callerHash(ip, ua);
-  const hit = (status, outcome = null) => { try { onHit?.(priv ? { q: null, ua_hash: who, token_host: null, target_domain: null, status, outcome } : { q, ua_hash: who, token_host: host, target_domain: familyOf(host), status, outcome }); } catch {} };
+  const hit = (status, outcome = null) => { if (counted) return; try { onHit?.(priv ? { kind: 'walk', q: null, ua_hash: who, token_host: null, target_domain: null, status, outcome } : { kind: 'walk', q, ua_hash: who, token_host: host, target_domain: familyOf(host), status, outcome }); } catch {} };
   const wait = paced(ip, now());
   if (wait) return answer(429, { error: { code: 'RESOURCE_EXHAUSTED', message: `this address walked ${PROXY.perHour} via addresses this hour; the next hour opens in ${wait} seconds` }, free: `the brain is free and has no such limit: ${brain}`, direct: d.url }, { 'retry-after': String(wait) });
   if (inFlight >= PROXY.inFlight) return answer(503, { error: { code: 'UNAVAILABLE', message: 'the sea is carrying many requests at this moment; try again in a few seconds' }, direct: d.url, hint: brain }, { 'retry-after': '2' });
