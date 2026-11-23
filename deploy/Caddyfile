@@ -31,6 +31,8 @@ http://127.0.0.1:8788 {
 		Permissions-Policy "geolocation=(), camera=(), microphone=(), payment=()"
 		Content-Security-Policy "frame-ancestors 'none'; base-uri 'none'; object-src 'none'"
 	}
+	# every answer tells agents where the paid paths go; the node says it itself, Caddy adds it to the files it serves
+	header ?X-Agent-Hint "paid paths go through /via/, see /via/howto"
 	# a request carries at most a megabyte (the node says the same)
 	request_body {
 		max_size 1MB

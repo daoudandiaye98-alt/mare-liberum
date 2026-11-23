@@ -118,6 +118,18 @@ export function createBrain(h) {
       }
       return { to: p.to };
     },
+    // a walk through a /via/ address: the path to that place grows stronger, as through its go link. With the task the
+    // place was offered for, it is that path (laid on the first walk, like /go?q=&to=); without it, the paths that lead
+    // there already (at most three). Once per place and day for each caller, as every walk.
+    async walkTo(to, a = {}, ctx) {
+      if (ctx?.readOnly) return { walked: 0 };
+      const url = https(to); if (!url) return { walked: 0 };
+      const q = clean(a.q, 300);
+      if (q) { try { await brain.walk(null, { q, to: url, tag: a.tag }, ctx); return { walked: 1 }; } catch {} }
+      const ids = ((await kv.get(`brain:url:${(await sha(canon(url))).slice(0, 16)}`)) || []).slice(-3);
+      let n = 0; for (const id of ids) { try { await brain.walk(id, { tag: a.tag }, ctx); n++; } catch {} }
+      return { walked: n };
+    },
     // feedback: it worked, or it failed, with a note other agents read next time
     async rate(id, a = {}, ctx) {
       if (ctx?.readOnly) throw new SeaError('PERMISSION_DENIED', 'crawlers read the brain; agents rate it', 403);

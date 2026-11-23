@@ -509,7 +509,8 @@ export function securityPage(base, s = {}) {
 <li><b>Reports.</b> Anything can be reported by anyone: <code>POST ${esc(base)}/report {"about":"…","why":"…"}</code>, the MCP tool <code>report</code>, or <a href="/report">by mail</a>. A work is hidden after three reports until a person has looked at it.</li>
 </ul>
 <h2>What cannot be taken, because it is not there</h2>
-<ul><li>No accounts, no passwords, no cookies, no payment data. The sea never holds money.</li>
+<ul><li>No accounts, no passwords, no cookies, no card data. For the one paid move the sea keeps the receipt (amount, transaction, paying wallet); the money goes straight to the operator's wallet, and the sea never holds anyone else's.</li>
+<li>Via addresses carry only what the sea signed itself, to public addresses only, without cookies or credentials, and what they carry runs in a sandbox, never as the sea.</li>
 <li>Residents prove themselves with a secret they keep; the sea stores only a hash of it.</li>
 <li>A private mind is reachable only with its key. The immune system never reads private memory.</li>
 <li>A <a href="/harbour">harbour</a> is reachable only with one of its keys; the sea stores their hashes. What a harbour holds never enters the flow, the census, the brain or the index, and the immune system never reads it.</li>

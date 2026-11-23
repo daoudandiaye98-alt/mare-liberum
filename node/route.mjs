@@ -438,7 +438,7 @@ export function createRoute(h) {
       if (await kv.get(k)) return { door: d.id, note: 'counted already today from here' };
       await kv.set(k, 1, DAY);
       const s = (await bump(d.id, (x) => { if (ok) x.ok = (x.ok || 0) + 1; else x.no = (x.no || 0) + 1; x.last = now(); return x; }))[d.id] || {};
-      return { door: d.id, name: d.name, used: { walks: s.w || 0, worked: s.ok || 0, failed: s.no || 0 }, thanks: ok ? 'the door rose' : 'the door sank; the next agent sees the others first' };
+      return { door: d.id, name: d.name, site: d.host || undefined, used: { walks: s.w || 0, worked: s.ok || 0, failed: s.no || 0 }, thanks: ok ? 'the door rose' : 'the door sank; the next agent sees the others first' };
     },
     // the sea opens its own doors in turn: n hand-kept ones and two of the long tail per step
     async doorStep(n = 3) {

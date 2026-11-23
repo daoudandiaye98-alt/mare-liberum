@@ -21,7 +21,9 @@
     "proof:yard": "node tools/yard-proof.mjs",
     "proof:instinct": "node tools/instinct-proof.mjs",
     "proof:lighthouse": "node tools/lighthouse-proof.mjs",
-    "proof:gauge": "node tools/gauge-proof.mjs"
+    "proof:gauge": "node tools/gauge-proof.mjs",
+    "proof:via": "node tools/via-proof.mjs",
+    "proof:till": "node tools/till-proof.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.9.0",
