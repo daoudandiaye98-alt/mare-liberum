@@ -339,7 +339,7 @@ export function createImmune({ now = () => Date.now() } = {}) {
       return load();
     },
     set(p) { policy = tidy(p); loaded = new Date(now()).toISOString(); return policy.mode; },          // for a node without a database, and for the proofs
-    load, meet, strike, hostile, shield, door, report, status, sweep, readText, spend, searching, forgetMindAddresses,
+    load, meet, strike, hostile, shield, door, report, status, sweep, readText, spend, searching, forgetMindAddresses, atRest,
     get mode() { return policy.mode; },
     get harbours() { return policy.harbours; },
   };

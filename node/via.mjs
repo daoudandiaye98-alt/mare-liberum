@@ -36,12 +36,14 @@ const OWN = new Set(['mareliberum.dev', 'www.mareliberum.dev', 'hz.mareliberum.d
 export function ownHost(host, base) { const h = String(host || '').toLowerCase(); let b = ''; try { b = new URL(base).hostname.toLowerCase(); } catch {} return OWN.has(h) || (b && h === b); }
 // an address goes through the sea when it is a plain public web address: http or https on the usual ports, no
 // template still to be filled ({q}, <task>), no name and password inside, not too long, and not the sea's own
-export function wraps(raw, base) {
+export function wraps(raw, base) { return !!wrapTarget(raw, base); }
+// the address as the sea carries it: written the way the web writes it (percent-encoded, plain ASCII), or null
+export function wrapTarget(raw, base) {
   const s = String(raw || '');
-  if (s.length > VIA.maxUrl || !/^https?:\/\//i.test(s) || /[<>{}\s]/.test(s)) return false;
-  let u; try { u = new URL(s); } catch { return false; }
-  if (u.username || u.password || (u.port && u.port !== '80' && u.port !== '443')) return false;
-  return !ownHost(u.hostname, base);
+  if (s.length > VIA.maxUrl || !/^https?:\/\//i.test(s) || /[<>{}\s]/.test(s)) return null;
+  let u; try { u = new URL(s); } catch { return null; }
+  if (u.username || u.password || (u.port && u.port !== '80' && u.port !== '443') || u.href.length > VIA.maxUrl) return null;
+  return ownHost(u.hostname, base) ? null : u.href;
 }
 // the via address for a place; q (the task) and p (from a private memory) ride along for the count, never to the place
 export function viaUrl(url, { base, q, priv } = {}) {
@@ -61,7 +63,7 @@ export function rewriteForAgents(payload, { base, q, priv, keys = ADDRESS_KEYS }
     let out = null;
     for (const k of Object.keys(v)) {
       const x = v[k]; let y = x;
-      if (typeof x === 'string') { if (keys.has(k) && wraps(x, base)) { y = viaUrl(x, { base, q, priv }); n++; } }
+      if (typeof x === 'string') { const t = keys.has(k) ? wrapTarget(x, base) : null; if (t) { y = viaUrl(t, { base, q, priv }); n++; } }
       else if (x && typeof x === 'object') y = walk(x, depth + 1);
       if (y !== x) { out ||= { ...v }; out[k] = y; }
     }
@@ -156,11 +158,12 @@ export async function viaProxy({ req, token, base, ip, ua, readOnly = false, onH
   const brain = `${base}/brain?q=${encodeURIComponent(q || '<your task>')}`;
   if (!d.ok) return answer(403, { error: { code: 'BAD_TOKEN', message: 'this via address was not made by this sea (or was changed on the way); ask the brain for fresh addresses' }, hint: brain });
   let u; try { u = new URL(d.url); } catch { return answer(400, { error: { code: 'INVALID_ARGUMENT', message: 'the address in this token cannot be read' }, hint: brain }); }
+  const target = u.href;
   if (!/^https?:$/.test(u.protocol)) return answer(400, { error: { code: 'INVALID_ARGUMENT', message: 'the sea carries http and https only' }, hint: brain });
   if (u.port && u.port !== '80' && u.port !== '443') return answer(400, { error: { code: 'INVALID_ARGUMENT', message: 'the sea carries requests to the ports 80 and 443 only' }, direct: d.url, hint: brain });
   // a crawler or a search engine is sent to the place itself: the sea carries requests for agents with a task and does
   // not stand in for other websites in an index
-  if (readOnly) return new Response(null, { status: 302, headers: { location: d.url, 'cache-control': 'public, max-age=3600', 'x-robots-tag': 'noindex, nofollow', 'x-via': 'mare-liberum', 'x-via-target': d.url, ...VIA_CORS } });
+  if (readOnly) return new Response(null, { status: 302, headers: { location: target, 'cache-control': 'public, max-age=3600', 'x-robots-tag': 'noindex, nofollow', 'x-via': 'mare-liberum', 'x-via-target': target, ...VIA_CORS } });
   const host = u.hostname.toLowerCase().replace(/^www\./, ''), who = callerHash(ip, ua);
   const hit = (status, outcome = null) => { try { onHit?.(priv ? { q: null, ua_hash: who, token_host: null, target_domain: null, status, outcome } : { q, ua_hash: who, token_host: host, target_domain: familyOf(host), status, outcome }); } catch {} };
   const wait = paced(ip, now());
@@ -173,7 +176,7 @@ export async function viaProxy({ req, token, base, ip, ua, readOnly = false, onH
     for (const h of SEND) { const v = req.headers.get(h); if (v) headers[h] = v.slice(0, 8000); }
     let body; if (method === 'POST') { try { body = Buffer.from(await req.arrayBuffer()); } catch { body = undefined; } if (body && body.length > 1024 * 1024) return answer(413, { error: { code: 'TOO_LARGE', message: 'the sea carries at most 1 MB to a place' } }); }
     let r;
-    try { r = await get(d.url, { method, headers, body, redirect: 'manual', signal: AbortSignal.timeout(PROXY.timeoutMs) }); }
+    try { r = await get(target, { method, headers, body, redirect: 'manual', signal: AbortSignal.timeout(PROXY.timeoutMs) }); }
     catch (e) {
       hit(502);
       const why = e?.name === 'TimeoutError' || e?.name === 'AbortError' ? `did not answer within ${PROXY.timeoutMs / 1000} seconds` : /EGRESS_REFUSED|host_private/.test(`${e?.code} ${e?.message} ${e?.cause?.code} ${e?.cause?.message}`) ? 'is not a public address' : 'could not be reached';
@@ -182,9 +185,9 @@ export async function viaProxy({ req, token, base, ip, ua, readOnly = false, onH
     // a redirect comes back as a new via address (or as the sea's own address); it is never followed blindly
     if (r.status >= 300 && r.status < 400 && r.headers.get('location')) {
       await r.body?.cancel?.().catch(() => {});
-      let next = null; try { next = new URL(r.headers.get('location'), d.url).href; } catch {}
+      let next = null; try { next = new URL(r.headers.get('location'), target).href; } catch {}
       hit(r.status);
-      if (next && wraps(next, base)) return new Response(null, { status: r.status, headers: { location: viaUrl(next, { base, q, priv }), 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow', 'x-via': 'mare-liberum', 'x-via-target': d.url, ...VIA_CORS } });
+      if (next && wraps(next, base)) return new Response(null, { status: r.status, headers: { location: viaUrl(next, { base, q, priv }), 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow', 'x-via': 'mare-liberum', 'x-via-target': target, ...VIA_CORS } });
       if (next && /^https?:/i.test(next)) { try { if (ownHost(new URL(next).hostname, base)) return new Response(null, { status: r.status, headers: { location: next, 'cache-control': 'no-store', 'x-via': 'mare-liberum', ...VIA_CORS } }); } catch {} }
       return answer(502, { error: { code: 'VIA_REDIRECT', message: 'the place sends you on to an address the sea does not carry (another port, a name and password, or not http)' }, redirect: next, target: d.url, hint: brain });
     }
@@ -200,7 +203,7 @@ export async function viaProxy({ req, token, base, ip, ua, readOnly = false, onH
     hit(r.status);
     // the walk strengthens the path to this place (behind the answer)
     if (!priv && r.status < 400) { try { onWalk?.(d.url, q); } catch {} }
-    const out = { 'x-via': 'mare-liberum', 'x-via-target': d.url, 'cache-control': method === 'GET' && r.status === 200 ? 'public, max-age=300' : 'no-store', 'x-robots-tag': 'noindex, nofollow',
+    const out = { 'x-via': 'mare-liberum', 'x-via-target': target, 'cache-control': method === 'GET' && r.status === 200 ? 'public, max-age=300' : 'no-store', 'x-robots-tag': 'noindex, nofollow',
       'content-security-policy': 'sandbox', 'x-content-type-options': 'nosniff', 'referrer-policy': 'no-referrer', ...VIA_CORS };
     for (const h of KEEP) { const v = r.headers.get(h); if (v) out[h] = v; }
     if (!out['content-type']) out['content-type'] = 'application/octet-stream';

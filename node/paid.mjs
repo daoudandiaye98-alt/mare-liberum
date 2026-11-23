@@ -4,7 +4,7 @@
 // the sea opens itself in turn), places from the open index and the current, and websites from the Atlas — ranked by one
 // rule that is written into the answer. Every address is already a /via/ address: walking it is counted and
 // strengthens the path. The answer ends with the next step.
-import { viaUrl, wraps } from './via.mjs';
+import { viaUrl, wrapTarget } from './via.mjs';
 
 // the rule, in one line, and the weights it uses
 export const RANKING = 'score = weight of the source (pathway 50, door that answers as data 32, the current 30, door with a search link 26, place from the open index 24 (26 with a first-hand price), website from the Atlas 18 to 21, a door for any question 20, the open web 12) + 8 × strength of a pathway + 5 per "worked" − 7 per "failed" (doors: + 4 per "worked" − 6 per "failed") + 6 when a verifier checked it; ties keep the order in which the sea found them';
@@ -21,8 +21,9 @@ export async function paidRoute({ sea, q, ctx, base, limit = 10, ms = 6000 }) {
   const timed = (p, t) => Promise.race([Promise.resolve().then(() => p).catch(() => null), new Promise((r) => { const x = setTimeout(() => r(null), t); x.unref?.(); })]);
   const cand = [];
   const add = (c) => {
-    if (!c.to || !wraps(c.to, base)) return;
-    const k = canon(c.to), old = cand.find((x) => x.k === k);
+    const to = wrapTarget(c.to, base); if (!to) return;
+    c = { ...c, to };
+    const k = canon(to), old = cand.find((x) => x.k === k);
     if (old) { if (c.score > old.score) Object.assign(old, c, { k }); return; }
     cand.push({ ...c, k, order: cand.length });
   };
