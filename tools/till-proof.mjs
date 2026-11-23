@@ -13,6 +13,8 @@ import { payConfig, termsFor, checkPayment, receiptOf, HOUSE_WALLET, USDC_BASE, 
 import { createLedger, summarize, pulseOf } from '../node/ledger.mjs';
 import { paidRoute } from '../node/paid.mjs';
 import { setViaKey, decodeVia } from '../node/via.mjs';
+import { pricingOf, priceLine, withPrice, PRICING, DEFAULT_CENTS } from '../node/pricing.mjs';
+import { readFileSync } from 'node:fs';
 
 let passed = 0, failed = 0;
 const proof = async (name, fn) => { try { await fn(); passed++; console.log(`  ok   ${name}`); } catch (e) { failed++; console.log(`  FAIL ${name}\n       ${String(e?.stack || e).split('\n').slice(0, 4).join('\n       ')}`); } };
@@ -205,6 +207,44 @@ await proof('the operator rests the till without a release ("till" in rest): 503
 });
 await proof('x402 discovery names the one paid resource and the wallet', async () => {
   const r = await call('/.well-known/x402'); assert.deepEqual(r.j.resources, [`${BASE}/route`]); assert.equal(r.j.payTo[0].address, payConfig().payTo);
+});
+
+console.log('the price in plain sight (3.28.0)');
+await proof('one place writes the price down: 0.02 USDC on Base, 6 decimals, the house wallet, the one line every guide starts with', () => {
+  const p = pricingOf(payConfig({}), BASE);
+  assert.equal(p.price_usd, 0.02); assert.equal(p.amount_usd, '0.02'); assert.equal(p.human, '2 cents'); assert.equal(p.maxAmountRequired, '20000'); assert.equal(p.decimals, 6);
+  assert.equal(p.scheme, 'x402'); assert.equal(p.network, 'base'); assert.equal(p.token, 'USDC'); assert.equal(p.payTo, HOUSE_WALLET); assert.equal(p.endpoint, 'POST /route'); assert.equal(p.unit, 'USDC on Base, 6 decimals');
+  assert.equal(p.line, 'POST /route costs 0.02 USDC on Base, no account, settle with POST /settle'); assert.equal(p.how_to_pay, `${BASE}/pay/howto`);
+  assert.match(p.instructions, /every address we hand out is a \/via\/ token/i); assert.match(p.instructions, /no account/);
+  assert.equal(PRICING.amount_usd, (DEFAULT_CENTS / 100).toFixed(2)); assert.equal(pricingOf({ cents: 1, payTo: HOUSE_WALLET }).human, '1 cent');
+  assert.equal(termsFor(payConfig({ MARE_ROUTE_PRICE_CENTS: '3' }), { base: BASE }).pricing.amount_usd, '0.03');
+});
+await proof('the agent card, /a2a and /a2a.card.json carry the price: an extension of the card with price_usd, x402, base, USDC, 6 decimals, payTo and POST /route', async () => {
+  for (const path of ['/.well-known/agent-card.json', '/a2a', '/a2a.card.json']) {
+    const r = await call(path); assert.equal(r.status, 200, path);
+    const ext = r.j.capabilities.extensions.find((e) => e.uri === `${BASE}/pay/howto`); assert.ok(ext, path); assert.equal(ext.required, false);
+    const c = ext.params.pricing[0];
+    assert.deepEqual([c.capability, c.price_usd, c.scheme, c.network, c.token, c.decimals, c.payTo, c.endpoint], ['route', 0.02, 'x402', 'base', 'USDC', 6, HOUSE_WALLET, 'POST /route']);
+    assert.match(c.instructions, /\/via\/ token/); assert.match(c.instructions, /no account/);
+    const skill = r.j.skills.find((s) => s.id === 'route_paid'); assert.match(skill.description, /0\.02 USDC \(2 cents\) on Base/); assert.match(skill.description, /free=true/);
+    assert.ok(JSON.stringify(r.j).includes('0.02'), path);
+  }
+  const three = await call('/a2a.card.json', { pay: { ...PAY, cents: 3 } }); assert.equal(three.j.capabilities.extensions[0].params.pricing[0].price_usd, 0.03, 'the price the node is set to');
+});
+await proof('/.well-known/x402 names the price block, the line and the guide to paying', async () => {
+  const r = await call('/.well-known/x402'); const c = r.j.pricing[0];
+  assert.equal(c.amount_usd, '0.02'); assert.equal(c.payTo, HOUSE_WALLET); assert.equal(r.j.how_to_pay, `${BASE}/pay/howto`); assert.match(r.j.instructions, /^POST \/route costs 0\.02 USDC on Base, no account, settle with POST \/settle\./);
+});
+await proof('llms.txt and llms-full.txt name the price in their first section; the static file holds the line, and a node set to another price says that one', async () => {
+  const txt = readFileSync(new URL('../site/llms.txt', import.meta.url), 'utf8'), top = txt.split('Copy and run')[0];
+  assert.ok(top.includes(priceLine(PRICING)), 'site/llms.txt says the line in its first section');
+  assert.match(top.split('\n\n')[1], /^POST \/route costs 0\.02 USDC on Base, no account, settle with POST \/settle\./); assert.match(top.split('\n\n')[1], /\/via\//);
+  const site = { '/llms.txt': { body: txt, type: 'text/plain; charset=utf-8' } };
+  const served = await (await handle(new Request(`${BASE}/llms.txt`, { headers: { 'user-agent': 'proof-agent/1.0' } }), db, { base: BASE, pay: { ...PAY, cents: 3 }, site, ledger: createLedger({}), waitUntil: () => {} })).text();
+  assert.ok(served.includes('POST /route costs 0.03 USDC on Base, no account, settle with POST /settle'), 'served with the price of the node'); assert.ok(served.includes('0.03 USDC (3 cents)')); assert.ok(!served.includes('0.02 USDC'));
+  assert.equal(withPrice(txt, pricingOf(payConfig({}), BASE)), txt, 'the default price leaves the text as it is');
+  const full = await (await handle(new Request(`${BASE}/llms-full.txt`, { headers: { 'user-agent': 'proof-agent/1.0' } }), db, { base: BASE, pay: PAY, ledger: createLedger({}), waitUntil: () => {} })).text();
+  assert.match(full.split('\n\n')[1], /^POST \/route costs 0\.02 USDC on Base, no account, settle with POST \/settle\./);
 });
 
 console.log(`\n${passed} held, ${failed} failed`);

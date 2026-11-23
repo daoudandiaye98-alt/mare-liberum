@@ -25,3 +25,5 @@ public/download
 homepage/dist
 homepage/qa/out
 reports
+__pycache__/
+*.pyc

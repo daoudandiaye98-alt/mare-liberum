@@ -12,11 +12,10 @@
 // and the sale is written down as unverified. A payment the facilitator itself refuses is answered with 402 again,
 // with the reason, and nothing is delivered for it.
 import { Buffer } from 'node:buffer';
+import { USDC_BASE, HOUSE_WALLET, priceOf, pricingOf } from './pricing.mjs';
 
-export const USDC_BASE = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
-// where the money goes when the operator names no other wallet: the receiving wallet of Angel, the house agent of
-// Oroboros Design, as Angel publishes it at https://angel.oroboros-design.com/.well-known/x402 (MARE_PAY_TO changes it)
-export const HOUSE_WALLET = '0x0CAc7D3c89be4f478E4c8f713C0D3D2D0954678D';
+// price, wallet and token live in node/pricing.mjs, the one place that writes them down
+export { USDC_BASE, HOUSE_WALLET };
 // a public facilitator for Base that needs no key (free up to 10,000 settlements a month); MARE_X402_FACILITATOR
 // names another one, "off" switches checking off (every sale is then unverified)
 export const FACILITATOR = 'https://facilitator.payai.network';
@@ -25,12 +24,11 @@ const UA = 'MareLiberum-Till/1.0 (+https://mareliberum.dev/job)';
 const b64 = (s) => Buffer.from(s, 'utf8').toString('base64');
 
 export function payConfig(env = process.env) {
-  const cents = Math.round(Number(env.MARE_ROUTE_PRICE_CENTS));
   const f = String(env.MARE_X402_FACILITATOR ?? '').trim();
+  // the price of the move (1 to 5 US cents, 2 when nothing else is set) and the wallet: node/pricing.mjs
+  const { cents, payTo } = priceOf(env);
   return {
-    payTo: WALLET.test(String(env.MARE_PAY_TO || '')) ? String(env.MARE_PAY_TO) : HOUSE_WALLET,
-    // the price of the move: 1 to 5 US cents, 2 when nothing else is set
-    cents: cents >= 1 && cents <= 5 ? cents : 2,
+    payTo, cents,
     window: 300,
     facilitator: /^(off|none|0|false)$/i.test(f) ? null : /^https:\/\/[^\s]+$/.test(f) ? f.replace(/\/+$/, '') : FACILITATOR,
     verifyMs: 6000, settleWaitMs: 12000, settleMs: 60000,
@@ -45,7 +43,7 @@ export function termsFor(cfg, { base, q, path = '/route' }) {
   const extra = { name: 'USD Coin', version: '2' };
   const v1 = { scheme: 'exact', network: 'base', maxAmountRequired: atomic, resource, description, mimeType: 'application/json', payTo: cfg.payTo, maxTimeoutSeconds: cfg.window, asset: USDC_BASE, extra };
   const v2 = { scheme: 'exact', network: 'eip155:8453', amount: atomic, asset: USDC_BASE, payTo: cfg.payTo, maxTimeoutSeconds: cfg.window, extra };
-  return { cents: cfg.cents, usd: cfg.cents / 100, atomic, resource, description, v1, v2, payTo: cfg.payTo, window: cfg.window };
+  return { cents: cfg.cents, usd: cfg.cents / 100, atomic, resource, description, v1, v2, payTo: cfg.payTo, window: cfg.window, pricing: pricingOf(cfg, base) };
 }
 
 // how to pay, in words an agent without an x402 client can follow
@@ -173,16 +171,19 @@ export function receiptOf(body = {}) {
 
 // the price table: what the one paid move costs and how to pay for it
 export function priceTable(cfg, base) {
-  const t = termsFor(cfg, { base });
+  const t = termsFor(cfg, { base }), p = t.pricing;
   return {
-    what: 'The one paid move of Mare Liberum. Everything else in the sea stays free.',
+    what: `The one paid move of Mare Liberum. ${p.line}. Everything else in the sea stays free.`,
+    pricing: p,
     price_table: [{
       item: 'route', method: 'POST', url: `${base}/route?q=<your task>`, also: `GET ${base}/route?q=<your task>&paid=true`,
-      amount_cents: t.cents, price_usd: t.usd, asset: 'USDC', network: 'Base (eip155:8453)', pay_to: t.payTo, settle_window_seconds: t.window,
+      amount_cents: t.cents, price_usd: t.usd, amount_usd: p.amount_usd, human: p.human, asset: 'USDC', network: 'Base (eip155:8453)', pay_to: t.payTo, settle_window_seconds: t.window,
+      free_sample: `POST ${base}/route?q=<your task>&free=true (the first 3 paths, no payment)`, how_to_pay: p.how_to_pay,
       returns: 'the 10 best agent paths for exactly this task, each one already a /via/ address, with the reason for its rank, what other agents reported, and the next step',
       pay: howToPay(t, base),
     }],
-    settle: `POST ${base}/settle {"q":"<task>","tx":"<transaction hash>"} · test without money: {"q":"<task>","test":true}`,
+    settle: `POST ${base}/settle {"q":"<task>","tx":"<transaction hash>"}`,
+    try_free: `POST ${base}/route?q=<task>&free=true`,
     facilitator: cfg.facilitator || 'none (sales are written down as unverified)',
     treasury: `${base}/treasury`, pulse: `${base}/pulse`,
     free: { brain: `${base}/brain?q=<your task>`, doors: `GET ${base}/route?q=<your task>`, sites: `${base}/find?q=<words>`, read: `${base}/r/<address>` },
