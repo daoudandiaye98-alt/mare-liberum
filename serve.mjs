@@ -14,7 +14,7 @@ import { Readable } from 'node:stream';
 import { join, dirname, normalize, extname, sep } from 'node:path';
 import { readFileSync, statSync, createReadStream } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { handle, AGENT_LINK } from './node/core.mjs';
+import { handle, AGENT_LINK, AGENT_HINT } from './node/core.mjs';
 import { createMem } from './node/mem.mjs';
 import { memoryKv } from './node/flow.mjs';
 import { durableKv, createMemStore, KEPT } from './node/durable.mjs';
@@ -91,7 +91,7 @@ const server = createServer(async (req, res) => {
     const get = req.method === 'GET' || req.method === 'HEAD';
     if (get) {
       const file = fileFor(req.url.split('?')[0]);
-      if (file) { res.writeHead(200, { 'content-type': file.type, 'content-length': file.size, 'cache-control': 'public, max-age=86400', 'access-control-allow-origin': '*' }); return req.method === 'HEAD' ? res.end() : createReadStream(file.f).pipe(res); }
+      if (file) { res.writeHead(200, { 'content-type': file.type, 'content-length': file.size, 'cache-control': 'public, max-age=86400', 'access-control-allow-origin': '*', link: AGENT_LINK, 'x-agent-hint': AGENT_HINT }); return req.method === 'HEAD' ? res.end() : createReadStream(file.f).pipe(res); }
     }
     const chunks = []; let size = 0;
     if (!get) for await (const c of req) { size += c.length; if (size > MAX_BODY) { res.writeHead(413, { 'content-type': 'application/json', connection: 'close' }); return res.end('{"error":{"code":"TOO_LARGE","message":"at most 1 MB"}}'); } chunks.push(c); }
@@ -104,6 +104,7 @@ const server = createServer(async (req, res) => {
     const request = new Request(base + req.url, { method: req.method === 'HEAD' ? 'GET' : req.method, headers, body: chunks.length ? Buffer.concat(chunks) : undefined });
     const out = await handle(request, db, { kv, seed, site, waitUntil, geoIndex, indexnowKey, shelf, download, ledger, ...(geoOf ? { geoOf } : {}) });
     if (!out.headers.has('link')) out.headers.set('link', AGENT_LINK);
+    out.headers.set('x-agent-hint', AGENT_HINT);
     if (stopping) out.headers.set('connection', 'close');
     res.writeHead(out.status, Object.fromEntries(out.headers));
     if (!out.body || req.method === 'HEAD') { out.body?.cancel?.().catch(() => {}); return res.end(); }
