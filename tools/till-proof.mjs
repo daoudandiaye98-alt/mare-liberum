@@ -328,5 +328,36 @@ await proof('samples are paced (60 an hour per address, then 429 with Retry-Afte
   immune.set({ mode: 'normal', rest: ['till'] }); try { assert.equal((await call('/route?q=x&free=true', { method: 'POST' })).status, 503); } finally { immune.set({ mode: 'normal', rest: [] }); }
 });
 
+console.log('found overnight without help (3.28.0)');
+await proof('/.well-known/opensearch.xml is text/xml and sends the words to /brain?q={searchTerms}&via=opensearch; the Link header names it', async () => {
+  const res = await handle(new Request(`${BASE}/.well-known/opensearch.xml`, { headers: { 'user-agent': 'curl/8.5.0' } }), db, { base: BASE, pay: PAY, ledger: createLedger({}), waitUntil: () => {} });
+  assert.equal(res.status, 200); assert.match(res.headers.get('content-type'), /^text\/xml/);
+  const x = await res.text(); assert.ok(x.includes(`template="${BASE}/brain?q={searchTerms}&amp;via=opensearch"`)); assert.match(x, /<ShortName>Mare Liberum<\/ShortName>/); assert.match(x, /^<\?xml version="1\.0" encoding="UTF-8"\?>/);
+  const { AGENT_LINK } = await import('../node/core.mjs'); assert.match(AGENT_LINK, /<\/\.well-known\/opensearch\.xml>; rel="search"/);
+});
+await proof('the sitemap names the brain, the route, both guides, the agent card, the pulse and the treasury', async () => {
+  const res = await handle(new Request(`${BASE}/sitemaps/site.xml`, { headers: { 'user-agent': 'curl/8.5.0' } }), db, { base: BASE, pay: PAY, ledger: createLedger({}), waitUntil: () => {} });
+  const x = await res.text();
+  for (const p of ['/brain', '/route', '/via/howto', '/pay/howto', '/.well-known/agent-card.json', '/pulse', '/treasury']) assert.ok(x.includes(`<loc>${BASE}${p}</loc>`), p);
+});
+await proof('the skill is one file in three places (site, plugin, skills/), version 4.1.0, with the price line, the free sample, /pay/howto, /treasury, /pulse and a /via/ walk', () => {
+  const read = (f) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
+  const site = read('site/skill.md');
+  assert.equal(read('skills/mare-liberum/SKILL.md'), site); assert.equal(read('plugins/mare-liberum/skills/mare-liberum/SKILL.md'), site);
+  assert.match(site, /^---\nname: mare-liberum\nversion: 4\.1\.0\n/);
+  for (const w of [priceLine(PRICING), '&free=true', '/pay/howto', '/treasury', '/pulse', '/via/<token>']) assert.ok(site.includes(w), w);
+  assert.equal(JSON.parse(read('site/skill.json')).version, '4.1.0'); assert.equal(JSON.parse(read('.claude-plugin/marketplace.json')).plugins[0].version, '4.1.0'); assert.equal(JSON.parse(read('plugins/mare-liberum/.claude-plugin/plugin.json')).version, '4.1.0');
+});
+await proof('four examples, each with three lines on top (what, the curl that proves it, how to run), each calling POST /route with free=true and walking a /via/ token; a README with the proofs', () => {
+  const read = (f) => readFileSync(new URL(`../examples/${f}`, import.meta.url), 'utf8');
+  for (const [f, c] of [['langchain-mare-liberum-tool.py', '#'], ['openai-agents-sdk-tool.py', '#'], ['vercel-ai-sdk-tool.ts', '//']]) {
+    const t = read(f), top = t.split('\n').slice(0, 3);
+    assert.ok(top[0].startsWith(`${c} What:`) && top[1].startsWith(`${c} Proof: curl -s -X POST 'https://mareliberum.dev/route?q=find+usdc+price&free=true'`) && top[2].startsWith(`${c} Run:`), f);
+    assert.match(t, /free/); assert.match(t, /\/via\//); assert.match(t, /\/route/);
+  }
+  const sk = read('claude-code-skill.md').split('\n'); assert.equal(sk[0], '---'); assert.ok(sk[1].startsWith('# What:') && sk[2].startsWith('# Proof: curl') && sk[3].startsWith('# Run:')); assert.ok(sk.includes('name: mare-liberum-route'));
+  const rd = read('README.md'); for (const w of ['## Proof', "route?q=find+usdc+price&free=true", 'xargs curl', '/pulse']) assert.ok(rd.includes(w), w);
+});
+
 console.log(`\n${passed} held, ${failed} failed`);
 process.exit(failed ? 1 : 0);
