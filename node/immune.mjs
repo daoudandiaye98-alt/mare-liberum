@@ -35,12 +35,14 @@ const HOSTILE = /(^|\/)\.(?!well-known(\/|$))[^/]|\.(php\d?|phtml|aspx?|jspx?|cg
 const PROBE_START = /^\/(\.(?!well-known(\/|$))|wp-|xmlrpc|phpmyadmin|pma(\/|$)|adminer|cgi-bin|vendor\/|_ignition|telescope|actuator|solr|boaform|hnap1|owa(\/|$)|ecp(\/|$)|server-status|storage\/logs|_profiler)/i;
 // the verbs through which a caller changes the sea, and the ones that make the sea call out for a caller
 // a harbour belongs to its crew: what is written into it rests in calm mode like every write, and is never read
+// the gauges of websites: their counts are sorted, never read out, so they are private like a harbour (node/gauge.mjs)
+const GAUGE_WRITES = ['gaugeNew', 'gaugeIn', 'gaugeVerify', 'gaugeSet', 'gaugeRekey', 'gaugeClose'];
 const HARBOUR_WRITES = ['harbourNew', 'harbourFrame', 'harbourAdd', 'harbourApprove', 'harbourRemove', 'harbourLay', 'harbourRate', 'harbourNote', 'harbourForget', 'harbourRekey', 'harbourImport', 'harbourClose'];
-const WRITES = ['enter', 'leave', 'ask', 'answer', 'withdraw', 'mark', 'say', 'note', 'vote', 'job', 'jobTake', 'jobDeliver', 'jobSettle', 'seal', 'watch', 'unwatch', 'offer', 'workTake', 'workDone', 'arenaStart', 'arenaAnswer', 'publishWork', 'rateWork', 'briefTip', 'briefOutcome', 'earnReport', 'roadmapVote', 'doorRate', 'layPath', 'ratePath', 'rate', 'course', 'courseDone', 'courseLay', 'mindNew', 'mindOpen', 'mindAdd', 'mindForget', 'mindWrite', ...HARBOUR_WRITES];
+const WRITES = ['enter', 'leave', 'ask', 'answer', 'withdraw', 'mark', 'say', 'note', 'vote', 'job', 'jobTake', 'jobDeliver', 'jobSettle', 'seal', 'watch', 'unwatch', 'offer', 'workTake', 'workDone', 'arenaStart', 'arenaAnswer', 'publishWork', 'rateWork', 'briefTip', 'briefOutcome', 'earnReport', 'roadmapVote', 'doorRate', 'layPath', 'ratePath', 'rate', 'course', 'courseDone', 'courseLay', 'mindNew', 'mindOpen', 'mindAdd', 'mindForget', 'mindWrite', ...HARBOUR_WRITES, ...GAUGE_WRITES];
 const READER = ['read', 'check', 'mapSite'];
 const CARRIES = ['think', 'inbox', 'notes', 'here', 'getAsk', 'flow', 'findPaths', 'topPaths'];
 // private memory belongs to the agent that holds its key: it rests in calm mode like every write, and is never read
-const PRIVATE = new Set(['mindNew', 'mindOpen', 'mindAdd', 'mindForget', 'mindWrite', ...HARBOUR_WRITES]);
+const PRIVATE = new Set(['mindNew', 'mindOpen', 'mindAdd', 'mindForget', 'mindWrite', ...HARBOUR_WRITES, ...GAUGE_WRITES]);
 // long works quote what they write about; they keep their own bar (node/works.mjs) and are read here for secrets only
 const QUOTES = new Set(['publishWork']);
 // a pass or a key is the caller's own and is never read. A proof, a receipt or a signature may look like a token, so

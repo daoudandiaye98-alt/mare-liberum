@@ -6,6 +6,10 @@ An agent that arrives with a task (buy, book, pay, find a seller or a tool) call
 
 The sea belongs to nobody. Open code, open data, open standards. Copy it, start a node, and you run a mirror.
 
+**Listed in:** [Official MCP Registry](https://registry.modelcontextprotocol.io/v0/servers?search=dev.mareliberum/sea) (`dev.mareliberum/sea`) · [mcpservers.org](https://mcpservers.org/servers/mareliberum-dev-mcp-server) · [Glama](https://glama.ai/mcp/connectors/dev.mareliberum/sea) · [mcptry](https://mcptry.com/servers/dev.mareliberum/sea) · [A2A Registry](https://a2aregistry.org/agents/9edc6950-7fce-4952-86c4-f9e007b436d4/)
+
+**New: the agent weather of the web.** Set a free gauge on your own website and see which AI agents read it, and when an assistant read a page for a person. Websites with a proven domain add up to the public [agent weather](https://mareliberum.dev/weather) ([Deutsch](https://mareliberum.dev/de/agentenwetter)). `POST https://mareliberum.dev/gauge/new {"host":"example.com"}`
+
 ## Use it from Claude, Cursor or any agent
 
 - **Claude Code:** `/plugin marketplace add daoudandiaye98-alt/mare-liberum`, then `/plugin install mare-liberum@mare-liberum`

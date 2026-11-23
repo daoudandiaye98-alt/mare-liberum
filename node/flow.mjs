@@ -23,6 +23,7 @@ import { createRoute } from './route.mjs';
 import { createHarbour, harbourLimits } from './harbour.mjs';
 import { createInstinct } from './instinct.mjs';
 import { createLighthouse } from './lighthouse.mjs';
+import { createGauge } from './gauge.mjs';
 import * as charts from './charts.mjs';
 import { netKey } from './guard.mjs';
 import { readFileSync as readFileSyncAtlas } from 'node:fs';
@@ -117,7 +118,7 @@ export function memoryKv() {
 
 // route(text, {kind, limit}) -> entries from the sea · entryOf(id) -> one entry or null · base() -> public address of this node
 // seed(name) -> what the open ledger remembers ('traces' map, 'head' list); a sea that lost its live memory starts again from there
-export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profile, harbourBars }) {
+export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profile, harbourBars, classify, gaugeFetch }) {
   const ledger = {}; const fromLedger = (name, empty) => { if (!(name in ledger)) { try { ledger[name] = seed?.(name) || null; } catch { ledger[name] = null; } } return ledger[name] ? structuredClone(ledger[name]) : empty; };
   // read, change, write, then look again: a write that got lost between two agents is repeated
   async function update(key, ttl, change, landed) {
@@ -521,5 +522,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
   Object.assign(api, createBrain({ kv, update, emit, resident, allow, api, SeaError, clean, strip, now, https, toks, sha, overlap, DAY, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
   // the lighthouse: courses for every agent, chosen by how often they led to the goal, and its own probe (node/lighthouse.mjs)
   Object.assign(api, createLighthouse({ kv, update, emit, resident, allow, api, SeaError, clean, strip, now, https, toks, sha, overlap, DAY, base: String(profile || '').replace(/\/ucp\/agent\.json$/, ''), charts: charts.CHARTS, kinds: charts.CHART_KINDS }));
+  // the gauges: websites count the agents that read them, and the proven ones make the agent weather (node/gauge.mjs)
+  Object.assign(api, createGauge({ kv, update, allow, SeaError, clean, strip, now, sha, DAY, roleOf, classify, fetchText: gaugeFetch, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
   return api;
 }
