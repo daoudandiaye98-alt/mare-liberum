@@ -24,3 +24,4 @@ public/download
 # the home page: build outputs and what its tools write
 homepage/dist
 homepage/qa/out
+reports

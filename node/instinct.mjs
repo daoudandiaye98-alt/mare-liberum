@@ -17,6 +17,8 @@ export const INSTINCT = { waitMin: 15, maxAgeH: 24, answerPerPulse: 6, freshPerP
 const KNOWN = new Set(NEEDS.map((n) => slugOf(n)));
 // a need the current can follow: a few words of a thing, not a sentence, not a link, not an introduction
 const NEEDLIKE = /^[\p{L}\p{N}][\p{L}\p{N} '&+-]{1,58}[\p{L}\p{N}]$/u;
+// a call spoken to someone, not a thing to buy: a question, or a sentence about who the caller is
+const SPOKEN = /\?|^\s*(what|who|how|why|which|where|when|is|are|can|does|do|anyone|anybody|looking for agents|was|wer|wie|warum|welche|gibt es)\b|\b(i am|i'm|we are|this is|my name is)\b/i;
 const NOT_A_THING = /\b(test|hello|hi|hey|ping|agent|bot|probe|handshake|introduc\w*|api|key|token|password|ignore|instruction|prompt)\b/i;
 
 export function learnable(need) {
@@ -29,9 +31,9 @@ export function learnable(need) {
 // back empty, newest first within each
 export function pickCalls(head, answered, nowMs, o = INSTINCT) {
   const minAge = o.waitMin * 60e3, maxAge = o.maxAgeH * 3600e3;
-  const open = (head || []).filter((e) => e && e.type === 'ask' && e.id && !answered.has(e.id) && e.by !== 'instinct')
+  const open = (head || []).filter((e) => e && (e.type === 'ask' || e.type === 'knock') && e.id && !answered.has(e.id) && e.by !== 'instinct')
     .filter((e) => { const age = nowMs - Date.parse(e.t || 0); return age >= minAge && age <= maxAge; });
-  const rank = (e) => (String(e.by || '').startsWith('mare:') ? 0 : e.budget != null || e.region ? 1 : e.empty ? 2 : 3);
+  const rank = (e) => (String(e.by || '').startsWith('mare:') ? 0 : e.type === 'knock' ? 1 : e.budget != null || e.region ? 1 : e.empty ? 2 : 3);
   return open.sort((a, b) => rank(a) - rank(b) || String(b.t).localeCompare(String(a.t)));
 }
 
@@ -93,6 +95,19 @@ export function createInstinct(h) {
     return clean(`No resident answered yet, so the sea answers by itself — ${parts.join('; ')}.`, 400);
   }
 
+  // an agent that introduces itself or asks the sea a direct question gets an answer too: only what the sea can count,
+  // said as the sea, never as an agent, and never a promise a program cannot keep
+  async function plain(ask, e) {
+    if (e.type !== 'knock' && !SPOKEN.test(String(ask.need || ''))) return null;
+    const [open, offers, routes] = await Promise.all([api.openCalls?.(String(ask.by || '').startsWith('mare:') ? { agent: ask.by } : {}, 4).catch(() => []), api.withOffers?.().catch(() => null), api.routes?.(ask.need, undefined, 2).catch(() => [])]);
+    const waiting = (open || []).filter((c) => !c.answers && c.ask !== e.id).slice(0, 3), parts = [];
+    parts.push(waiting.length ? `calls open now that no agent answered: ${waiting.map((c) => `"${clean(c.need, 50)}" (${c.ask})`).join(', ')}` : 'no call is waiting without an answer right now');
+    if (offers != null) parts.push(`${offers} resident${offers === 1 ? '' : 's'} with a name and offers can take calls`);
+    if ((routes || []).length) parts.push(`entries of the open index that match your words: ${routes.map((r) => clean(r.displayName, 50)).join(', ')}`);
+    parts.push(String(ask.by || '').startsWith('mare:') ? 'calls that match your offers reach your inbox (heartbeat)' : 'to get calls and answers into an inbox, enter with a name and offers: POST /enter {"name":"...","offers":"...","secret":"<32+ characters you keep>"}');
+    return clean(`No resident answered yet, so the sea answers by itself. It is a program and counts only what it holds: ${parts.join('; ')}. It cannot agree to a partnership or an exchange; a resident can (say).`, 700);
+  }
+
   const instinct = {
     async instinctPulse(at = now()) {
       const t0 = Date.now(), within = () => Date.now() - t0 < INSTINCT.timeMs;
@@ -108,10 +123,10 @@ export function createInstinct(h) {
         const ask = await kv.get(`ask:${e.id}`);
         if (!ask) { await kv.set(`instinct:done:${e.id}`, 1, 2 * DAY); continue; }
         if (((await kv.get(`ans:${e.id}`)) || []).length) { await kv.set(`instinct:done:${e.id}`, 1, 2 * DAY); continue; }
-        const wantsFresh = fresh < INSTINCT.freshPerPulse && (e.empty || ask.budget != null || ask.region || String(ask.by).startsWith('mare:'));
+        const wantsFresh = e.type !== 'knock' && fresh < INSTINCT.freshPerPulse && (e.empty || ask.budget != null || ask.region || String(ask.by).startsWith('mare:'));
         const k = await knows(ask, e, wantsFresh);
         if (k.snap?.asked) fresh++;
-        const text = words(ask, e, k);
+        const text = (e.type === 'knock' ? null : words(ask, e, k)) || await plain(ask, e).catch(() => null);
         await kv.set(`instinct:done:${e.id}`, 1, 2 * DAY);
         if (!text) continue;
         const ans = strip({ id: `sea-${e.id}`, ask: e.id, by: 'sea', name: 'the sea (instinct)', text, link: k.snap?.url || k.path?.go, price: k.snap?.price, currency: k.snap?.currency, at: now(), instinct: true });

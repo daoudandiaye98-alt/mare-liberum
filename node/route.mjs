@@ -152,6 +152,7 @@ export function topicsOf(t) {
   return out.filter((x, i) => x.score >= 0.8 && (i === 0 || (i < 2 && x.score >= top * 0.7)));
 }
 // the words to search with: the subject of the task, without the instruction around it
+const OWN = /(^|[^\p{L}])(my|our|mein|meine|meinen|meinem|meiner|unser|unsere|unseren|mon|ma|mes|notre|nos|mi|mis|nuestro|nuestra|il mio|la mia|meu|minha)(?=[^\p{L}]|$)/u;
 export function termsOf(t, drop = new Set(), lead = null) {
   const keep = [], soft = [];
   for (let i = 0; i < t.raw.length; i++) {
@@ -287,7 +288,10 @@ export function planRoute(q, { base = 'https://mareliberum.dev', limit = ROUTE.d
   if (sureNames.size) tops = tops.filter((tp) => !(tp.got.length && tp.got.every((g) => sureNames.has(g))));
   const lead = tops[0]?.id;
   // the names of the sites the task calls are not part of the question to them; nor are the words that only name the shelf
-  const drop = new Set([...named.filter((n) => !n.hint).map((n) => n.label), ...t.domains, ...String(T.topics.get(lead)?.strip || '').split(' ').filter(Boolean)]);
+  // "list my MCP server in directories" is about the asker's own server: there the words that name the shelf are the subject
+  // and stay; in "an MCP server for Postgres" they only name the shelf and go
+  const own = OWN.test(t.low);
+  const drop = new Set([...named.filter((n) => !n.hint).map((n) => n.label), ...t.domains, ...(own ? [] : String(T.topics.get(lead)?.strip || '').split(' ').filter(Boolean))]);
   // a task that asks for a package is not searched with the word "package" or the name of the registry
   if (t.pack) for (const w of t.words) if (PACKISH.test(w) || T.curated.some((d) => d.mode === 'package' && d.whenSet?.has(w) && ['npm', 'pip', 'pypi', 'cargo', 'crate', 'crates', 'gem', 'gems', 'composer', 'maven', 'nuget', 'hex'].includes(w))) drop.add(w);
   const leadT = T.topics.get(lead) || null; let cjk = false;

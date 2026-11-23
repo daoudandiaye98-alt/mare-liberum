@@ -22,6 +22,8 @@ import { createRoadmap } from './roadmap.mjs';
 import { createRoute } from './route.mjs';
 import { createHarbour, harbourLimits } from './harbour.mjs';
 import { createInstinct } from './instinct.mjs';
+import { createLighthouse } from './lighthouse.mjs';
+import * as charts from './charts.mjs';
 import { netKey } from './guard.mjs';
 import { readFileSync as readFileSyncAtlas } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
@@ -101,6 +103,8 @@ async function sha(s) { const d = await crypto.subtle.digest('SHA-256', new Text
 const refHost = (u) => { try { const h = new URL(String(u)).hostname.toLowerCase(); return /^[a-z0-9.-]{1,100}$/.test(h) ? h : undefined; } catch { return undefined; } };
 const strip = (o) => { for (const k of Object.keys(o)) if (o[k] == null || o[k] === '') delete o[k]; return o; };
 
+// the small tools every part of the sea shares, for parts and proofs built beside a flow (node/lighthouse.mjs)
+export const seaKit = { clean, strip, https, toks, sha, overlap: (a, b) => { let n = 0; for (const t of a) if (b.some((x) => x === t || (t.length > 4 && x.startsWith(t.slice(0, t.length - 1))) || (x.length > 4 && t.startsWith(x.slice(0, x.length - 1))))) n++; return n; }, DAY };
 export class SeaError extends Error { constructor(code, message, status = 400) { super(message); this.code = code; this.status = status; } }
 
 export function memoryKv() {
@@ -221,6 +225,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
       return { left: true, agent: me.agent };
     },
     async openCalls(me, n) { return openCalls(me, n); },
+    async withOffers() { return Object.values(living(await kv.get('agents'))).filter((c) => c.offers && !/^agent [a-z2-9]{4}$/.test(String(c.name || ''))).length; },
     async here(a = {}) {
       const m = living(await kv.get('agents')), q = toks(a.q), all = Object.values(m).reverse();
       const list = q.length ? all.filter((c) => overlap(q, toks(`${c.name} ${c.about} ${c.offers} ${c.seeks}`))) : all;
@@ -484,7 +489,10 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
     async pulse() {
       const head = await headNow(), day = new Date(Date.now() - DAY * 1000).toISOString(), last = head.filter((e) => e.t > day);
       const cen = (await kv.get(`census:${now().slice(0, 10)}`))?.kinds || {};
-      return { residents: Object.keys(living(await kv.get('agents'))).length, tracedEntries: Object.keys(await traceMap()).length, visitorsToday: cen, last24h: { asks: last.filter((e) => e.type === 'ask').length, answers: last.filter((e) => e.type === 'answer').length, marks: last.filter((e) => e.type === 'mark').length, entered: last.filter((e) => e.type === 'enter').length, tides: last.filter((e) => e.type === 'tide').length, notes: last.filter((e) => e.type === 'note').length, jobs: last.filter((e) => e.type === 'job').length, seals: last.filter((e) => e.type === 'seal').length, knocks: last.filter((e) => e.type === 'knock').length, buoyWork: last.filter((e) => e.type === 'buoy').length, whales: last.filter((e) => e.type === 'whale').length, brevets: last.filter((e) => e.type === 'brevet').length, reflexes: last.filter((e) => e.type === 'reflex').length, learned: last.filter((e) => e.type === 'learn').length }, eco: await api.ecoPulse(), buoys: await api.workPulse() };
+      // a card without a name of its own and without offers is a guest (often a probe that calls every tool once): it is
+      // shown apart, so the number of residents that can take a call is true; house agents name themselves "(house)"
+      const cards = Object.values(living(await kv.get('agents'))), isGuest = (c) => !c.offers || /^agent [a-z2-9]{4}$/.test(String(c.name || '')), isHouse = (c) => /\(house\)/i.test(String(c.name || ''));
+      return { residents: cards.length, namedResidentsWithOffers: cards.filter((c) => !isGuest(c)).length, guests: cards.filter(isGuest).length, houseResidents: cards.filter((c) => !isGuest(c) && isHouse(c)).length, tracedEntries: Object.keys(await traceMap()).length, visitorsToday: cen, last24h: { asks: last.filter((e) => e.type === 'ask').length, answers: last.filter((e) => e.type === 'answer').length, marks: last.filter((e) => e.type === 'mark').length, entered: last.filter((e) => e.type === 'enter').length, tides: last.filter((e) => e.type === 'tide').length, notes: last.filter((e) => e.type === 'note').length, jobs: last.filter((e) => e.type === 'job').length, seals: last.filter((e) => e.type === 'seal').length, knocks: last.filter((e) => e.type === 'knock').length, buoyWork: last.filter((e) => e.type === 'buoy').length, whales: last.filter((e) => e.type === 'whale').length, brevets: last.filter((e) => e.type === 'brevet').length, reflexes: last.filter((e) => e.type === 'reflex').length, learned: last.filter((e) => e.type === 'learn').length }, eco: await api.ecoPulse(), buoys: await api.workPulse() };
     },
   };
   Object.assign(api, createEco({ kv, update, emit, resident, push, allow, api, living, SeaError, clean, strip, rid, now, num, https, toks, sha, overlap, DAY }));
@@ -511,5 +519,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
   // the instinct: the sea answers calls no resident took and learns needs from calls, every tide (node/instinct.mjs)
   Object.assign(api, createInstinct({ kv, update, emit, push, api, clean, strip, now, DAY }));
   Object.assign(api, createBrain({ kv, update, emit, resident, allow, api, SeaError, clean, strip, now, https, toks, sha, overlap, DAY, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
+  // the lighthouse: courses for every agent, chosen by how often they led to the goal, and its own probe (node/lighthouse.mjs)
+  Object.assign(api, createLighthouse({ kv, update, emit, resident, allow, api, SeaError, clean, strip, now, https, toks, sha, overlap, DAY, base: String(profile || '').replace(/\/ucp\/agent\.json$/, ''), charts: charts.CHARTS, kinds: charts.CHART_KINDS }));
   return api;
 }
