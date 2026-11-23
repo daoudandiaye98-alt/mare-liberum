@@ -4,7 +4,8 @@
 -- opens them. The node writes and reads only through the functions below, and every function first checks the node's
 -- writer secret against the 'writer' row of mare.keys (its SHA-256), like mare_mem_put does.
 -- Applied as migrations mare_till_sales (sales, treasury) and mare_via_hits (via record, pulse); since 3.28.0
--- mare_till_free_sample (free samples beside the sales) and mare_via_kinds (what passed through, by kind).
+-- mare_till_free_sample (free samples beside the sales), mare_via_kinds (what passed through, by kind) and
+-- mare_pulse_today (the pulse of the day).
 
 -- ---------------------------------------------------------------- sales: one line for every sale of the paid move
 create table if not exists mare.sales (
@@ -145,7 +146,9 @@ begin
   return n;
 end $$;
 
--- the pulse: how many agents walk through the sea right now, where to, for what, and what they paid today
+-- the pulse of the day (since 3.28.0, migration mare_pulse_today): every step through the sea counts (walks, reads,
+-- doors, go links, maps of sites as data, questions to the brain); a task shows once two different callers carried it;
+-- free samples and paid money apart. The numbers of 3.27.0 (the last 24 hours) stay beside them.
 create or replace function public.mare_pulse(secret text) returns jsonb
 language plpgsql stable security definer set search_path = '' as $$
 declare h1 timestamptz := now() - interval '1 hour'; h24 timestamptz := now() - interval '1 day';
@@ -155,21 +158,34 @@ begin
     raise exception 'not allowed';
   end if;
   select jsonb_build_object(
+    'unique_domains_today', count(distinct target_domain) filter (where ts >= d0),
+    'agents_today', count(distinct ua_hash) filter (where ts >= d0),
+    'hits_today', count(*) filter (where ts >= d0),
     'hits_last_hour', count(*) filter (where ts >= h1),
     'unique_domains_last_hour', count(distinct target_domain) filter (where ts >= h1),
-    'hits_last_24h', count(*),
-    'worked_last_24h', count(*) filter (where outcome = 'worked'),
-    'failed_last_24h', count(*) filter (where outcome = 'failed')
-  ) into r from mare.via_hits where ts >= h24;
+    'hits_last_24h', count(*) filter (where ts >= h24),
+    'worked_last_24h', count(*) filter (where ts >= h24 and outcome = 'worked'),
+    'failed_last_24h', count(*) filter (where ts >= h24 and outcome = 'failed')
+  ) into r from mare.via_hits where ts >= least(d0, h24);
+  -- a task shows only once two different callers carried it: one agent's words alone are never put on show
+  r := r || jsonb_build_object('top_queries', coalesce((select jsonb_agg(jsonb_build_object('query', left(x.q, 80), 'count', x.n) order by x.n desc, x.q)
+            from (select q, count(*) as n from mare.via_hits where ts >= d0 and q is not null group by q having count(distinct ua_hash) >= 2 order by count(*) desc, q limit 10) x), '[]'::jsonb));
+  r := r || jsonb_build_object('top_domains', coalesce((select jsonb_agg(jsonb_build_object('domain', x.target_domain, 'count', x.n) order by x.n desc, x.target_domain)
+            from (select target_domain, count(*) as n from mare.via_hits where ts >= d0 and target_domain is not null group by target_domain order by count(*) desc, target_domain limit 10) x), '[]'::jsonb));
+  r := r || jsonb_build_object('by_kind_today', coalesce((select jsonb_object_agg(x.k, x.n) from (select coalesce(kind, 'walk') as k, count(*) as n from mare.via_hits where ts >= d0 group by 1) x), '{}'::jsonb));
+  -- as in 3.27.0: the last 24 hours
   r := r || jsonb_build_object('top_10_domains', coalesce((select jsonb_agg(jsonb_build_object('domain', x.target_domain, 'hits', x.n) order by x.n desc, x.target_domain)
             from (select target_domain, count(*) as n from mare.via_hits where ts >= h24 and target_domain is not null group by target_domain order by count(*) desc, target_domain limit 10) x), '[]'::jsonb));
-  -- a task shows only once two walks carried it: one agent's words alone are never put on show
   r := r || jsonb_build_object('top_5_queries', coalesce((select jsonb_agg(jsonb_build_object('q', left(x.q, 80), 'hits', x.n) order by x.n desc, x.q)
-            from (select q, count(*) as n from mare.via_hits where ts >= h24 and q is not null group by q having count(*) >= 2 order by count(*) desc, q limit 5) x), '[]'::jsonb));
-  r := r || jsonb_build_object('paid_today', (select jsonb_build_object(
-              'count', count(*) filter (where status <> 'test'),
-              'usd', round(coalesce(sum(amount_cents) filter (where status = 'settled'), 0) / 100.0, 2),
-              'usd_unconfirmed', round(coalesce(sum(amount_cents) filter (where status in ('pending', 'unverified', 'unsettled')), 0) / 100.0, 2))
-            from mare.sales where ts >= d0));
+            from (select q, count(*) as n from mare.via_hits where ts >= h24 and q is not null group by q having count(distinct ua_hash) >= 2 order by count(*) desc, q limit 5) x), '[]'::jsonb));
+  r := r || (select jsonb_build_object(
+              'paid_today_usd', round(coalesce(sum(amount_cents) filter (where status = 'settled'), 0) / 100.0, 2),
+              'paid_today_usd_unconfirmed', round(coalesce(sum(amount_cents) filter (where status in ('pending', 'unverified', 'unsettled')), 0) / 100.0, 2),
+              'free_samples_today', count(*) filter (where status = 'free_sample'),
+              'paid_today', jsonb_build_object(
+                'count', count(*) filter (where status in ('settled', 'pending', 'unverified', 'unsettled')),
+                'usd', round(coalesce(sum(amount_cents) filter (where status = 'settled'), 0) / 100.0, 2),
+                'usd_unconfirmed', round(coalesce(sum(amount_cents) filter (where status in ('pending', 'unverified', 'unsettled')), 0) / 100.0, 2)))
+            from mare.sales where ts >= d0);
   return r;
 end $$;

@@ -36,22 +36,42 @@ export function summarize(sales, t = Date.now()) {
   };
 }
 
-// the same numbers the database gives (mare_pulse), from the hits of the last day and the sales
+// the same numbers the database gives (mare_pulse), from the hits of the last day and the sales. Today is the UTC day.
+// A task is put on show only once two different callers carried it: one agent's words alone never are.
+export const PULSE_FIRST = ['unique_domains_today', 'top_queries', 'top_domains', 'agents_today', 'hits_today', 'hits_last_hour', 'paid_today_usd', 'free_samples_today'];
 export function pulseOf(hits, sales, t = Date.now()) {
-  const hour = t - 3600e3, day = t - DAYMS, last = hits.filter((h) => Date.parse(h.ts) >= hour), day1 = hits.filter((h) => Date.parse(h.ts) >= day);
+  const hour = t - 3600e3, day = t - DAYMS, today = dayOf(t);
+  const last = hits.filter((h) => Date.parse(h.ts) >= hour), day1 = hits.filter((h) => Date.parse(h.ts) >= day), now1 = hits.filter((h) => dayOf(h.ts) === today);
   const count = (list, f) => { const m = new Map(); for (const h of list) { const k = f(h); if (k) m.set(k, (m.get(k) || 0) + 1); } return [...m.entries()].sort((a, b) => b[1] - a[1] || (a[0] < b[0] ? -1 : 1)); };
+  const shown = (list) => { const m = new Map(); for (const h of list) { if (!h.q) continue; const x = m.get(h.q) || { n: 0, who: new Set() }; x.n++; if (h.ua_hash) x.who.add(h.ua_hash); m.set(h.q, x); } return [...m.entries()].filter(([, x]) => x.who.size >= 2).sort((a, b) => b[1].n - a[1].n || (a[0] < b[0] ? -1 : 1)); };
+  const kinds = {}; for (const h of now1) { const k = h.kind || 'walk'; kinds[k] = (kinds[k] || 0) + 1; }
   const s = summarize(sales, t);
   return {
+    unique_domains_today: new Set(now1.map((h) => h.target_domain).filter(Boolean)).size,
+    top_queries: shown(now1).slice(0, 10).map(([q, x]) => ({ query: String(q).slice(0, 80), count: x.n })),
+    top_domains: count(now1, (h) => h.target_domain).slice(0, 10).map(([domain, n]) => ({ domain, count: n })),
+    agents_today: new Set(now1.map((h) => h.ua_hash).filter(Boolean)).size,
+    hits_today: now1.length,
     hits_last_hour: last.length,
+    paid_today_usd: s.today_usd,
+    free_samples_today: s.today_free,
+    // what the numbers above are made of, and the numbers of 3.27.0 (the last 24 hours), as they were
+    by_kind_today: kinds,
+    paid_today_usd_unconfirmed: s.today_usd_unconfirmed,
     unique_domains_last_hour: new Set(last.map((h) => h.target_domain).filter(Boolean)).size,
-    top_10_domains: count(day1, (h) => h.target_domain).slice(0, 10).map(([domain, n]) => ({ domain, hits: n })),
-    paid_today: { count: s.today_count, usd: s.today_usd, usd_unconfirmed: s.today_usd_unconfirmed },
-    // a task shows only once two walks carried it: one agent's words alone are never put on show
-    top_5_queries: count(day1, (h) => h.q).filter(([, n]) => n >= 2).slice(0, 5).map(([q, n]) => ({ q: String(q).slice(0, 80), hits: n })),
     hits_last_24h: day1.length,
     worked_last_24h: day1.filter((h) => h.outcome === 'worked').length,
     failed_last_24h: day1.filter((h) => h.outcome === 'failed').length,
+    top_10_domains: count(day1, (h) => h.target_domain).slice(0, 10).map(([domain, n]) => ({ domain, hits: n })),
+    top_5_queries: shown(day1).slice(0, 5).map(([q, x]) => ({ q: String(q).slice(0, 80), hits: x.n })),
+    paid_today: { count: s.today_paid, usd: s.today_usd, usd_unconfirmed: s.today_usd_unconfirmed },
   };
+}
+// the pulse in the order a reader takes it in: the eight numbers of the day first, then the rest as it came
+export function pulseOrdered(p) {
+  const out = {}; for (const k of PULSE_FIRST) out[k] = p?.[k] ?? (k.startsWith('top_') ? [] : 0);
+  for (const [k, v] of Object.entries(p || {})) if (!(k in out)) out[k] = v;
+  return out;
 }
 
 export function createLedger({ url, key, secret, fetch: get = (...a) => fetch(...a), log = () => {}, waitUntil, now = () => Date.now(), keepHits = 100_000, keepSales = 2000 } = {}) {
