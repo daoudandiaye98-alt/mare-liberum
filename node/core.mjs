@@ -28,7 +28,7 @@ import { siteMarkdown } from './atlas.mjs';
 import { dress, SKIN_FILES, SKIN_V } from './skin.mjs';
 import { payConfig, termsFor, paymentRequired, paymentOf, takePayment, receiptOf, priceTable, howToPay } from './pay.mjs';
 import { createLedger } from './ledger.mjs';
-import { callerHash } from './via.mjs';
+import { callerHash, viaProxy } from './via.mjs';
 import { paidRoute } from './paid.mjs';
 import { netKey } from './guard.mjs';
 
@@ -1322,7 +1322,7 @@ export async function handle(req, db, cfg = {}) {
   if (SKIN_FILES[path] && req.method === 'GET') return new Response(SKIN_FILES[path][0], { headers: { 'content-type': SKIN_FILES[path][1], 'cache-control': url.searchParams.get('v') === SKIN_V ? 'public, max-age=31536000, immutable' : 'public, max-age=300', ...CORS } });
   // a path can carry a secret (the address of a mind is its key) or the address a person had read: what the sea
   // writes down about a visit is the door, never what follows it
-  const doorOf = (p) => p.replace(/^\/m\/.+/, '/m/…').replace(/^\/h\/.+/, '/h/…').replace(/^\/gauge\/in\/.+/, '/gauge/in/…').replace(/^\/(r|read)\/.+/, '/$1/…'), door = doorOf(path);
+  const doorOf = (p) => p.replace(/^\/m\/.+/, '/m/…').replace(/^\/h\/.+/, '/h/…').replace(/^\/gauge\/in\/.+/, '/gauge/in/…').replace(/^\/(r|read)\/.+/, '/$1/…').replace(/^\/via\/.+/, '/via/…'), door = doorOf(path);
   // crawlers and search engines read; they do not write calls into the flow
   ctx.readOnly = ['ai-crawler', 'crawler', 'search', 'search-ai'].includes(who.kind);
   ctx.who = who.name; ctx.whoKind = who.kind;
@@ -1789,6 +1789,14 @@ export async function handle(req, db, cfg = {}) {
     if (path === '/use' && req.method === 'GET') return new Response(usePage(base), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=3600', ...CORS } });
     if (path === '/terms' && req.method === 'GET') return new Response(termsPage(base), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=3600', ...CORS } });
     if (path === '/privacy' && req.method === 'GET') return new Response(privacyPage(base), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=3600', ...CORS } });
+    // a via address: the sea carries the request to the place it names (node/via.mjs); the walk is counted and
+    // strengthens the path, behind the answer
+    if (path.startsWith('/via/') && (req.method === 'GET' || req.method === 'POST')) {
+      const res = await viaProxy({ req, token: path.slice(5), base, ip, ua: req.headers.get('user-agent'), readOnly: ctx.readOnly,
+        onHit: (h) => ledger.hit(h),
+        onWalk: (to, q) => { try { const p = sea.walkTo(to, { q }, ctx).catch(() => {}); cfg.waitUntil?.(p); } catch {} } });
+      if (res) return res;
+    }
     if (path.startsWith('/via/') && req.method === 'GET') {
       const id = decodeURIComponent(path.slice(5)), host = /^mare:[a-z2-9]{12}$/.test(id) ? await sea.standing(id).catch(() => null) : null;
       const skill = cfg.site?.['/skill.md']?.body || `Read ${base}/llms.txt`;
