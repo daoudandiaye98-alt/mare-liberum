@@ -28,7 +28,7 @@ import { siteMarkdown } from './atlas.mjs';
 import { dress, SKIN_FILES, SKIN_V } from './skin.mjs';
 import { payConfig, termsFor, paymentRequired, paymentOf, takePayment, receiptOf, priceTable, howToPay } from './pay.mjs';
 import { createLedger } from './ledger.mjs';
-import { callerHash, viaProxy } from './via.mjs';
+import { callerHash, viaProxy, rewriteForAgents } from './via.mjs';
 import { paidRoute } from './paid.mjs';
 import { netKey } from './guard.mjs';
 
@@ -1443,6 +1443,8 @@ export async function handle(req, db, cfg = {}) {
     // ---------------------------------------------------------------- the till: the one paid move of the sea (node/pay.mjs)
     const payCfg = cfg.pay || payConfig(), ledger = ledgerOf(cfg), paidHdr = { 'cache-control': 'no-store', 'x-robots-tag': 'noindex', ...CORS };
     const caller = () => callerHash(ip, req.headers.get('user-agent'));
+    // every outside address an agent reads in these answers leads through the sea (node/via.mjs); pages for people stay as they are
+    const forAgents = (v, q, priv) => rewriteForAgents(v, { base, q: q || undefined, priv });
     // what the paid move delivers: the ten best paths for the task, each a /via/ address (node/paid.mjs). It never fails
     // the one who paid: whatever part of the sea does not answer is left out, and the rest is delivered
     const product = async (q) => { try { return await paidRoute({ sea, q, ctx, base }); } catch (e) { console.error('mare_paid', e?.message); return { task: q, paths: [], count: 0, next: { now: `GET ${base}/brain?q=${encodeURIComponent(q)}`, say: 'the sea could not rank paths for this task this time; the brain is free' } }; } };
@@ -1578,7 +1580,7 @@ export async function handle(req, db, cfg = {}) {
       let x; try { x = await sea.site(d, ctx); } catch (e) { return json({ error: { code: 'INVALID_ARGUMENT', message: e.message, find: `${base}/find?q=<words>` } }, 400); }
       const none = x.mapped === false, hdr = { 'cache-control': none ? 'public, max-age=60' : 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800', ...(none ? { 'x-robots-tag': 'noindex' } : {}), vary: 'accept', ...CORS };
       const rep = none ? null : siteReport(x.site, base);
-      if (fmt === '.json') return json(rep ? { ...x, report: rep } : x, none ? 404 : 200, hdr);
+      if (fmt === '.json') return json(forAgents(rep ? { ...x, report: rep } : x), none ? 404 : 200, hdr);
       if (fmt === '.md') return new Response(none ? `# ${x.site}\n\n${x.note}\n` : siteMarkdown(x) + siteReportMd(x.site, base), { status: none ? 404 : 200, headers: { 'content-type': 'text/markdown; charset=utf-8', ...hdr } });
       return new Response(sitePage(base, x, none ? '' : siteReportHtml(x.site, base)), { status: none ? 404 : 200, headers: { 'content-type': 'text/html; charset=utf-8', ...hdr } });
     }
@@ -1588,7 +1590,7 @@ export async function handle(req, db, cfg = {}) {
       if (!q) return asJson ? json({ what: 'websites for a task from the Atlas, the most usable for agents first', use: `${base}/find?q=<words>` }) : html(findPage(base, null), 3600);
       const r = await sea.find(q, Math.min(Number(a.limit) || 12, 30));
       const hdr = { 'cache-control': 'public, max-age=600, s-maxage=3600', vary: 'accept', ...(r.sites.length ? {} : { 'x-robots-tag': 'noindex' }), ...CORS };
-      return asJson ? json(r, 200, hdr) : new Response(findPage(base, r), { headers: { 'content-type': 'text/html; charset=utf-8', ...hdr } });
+      return asJson ? json(forAgents(r, q), 200, hdr) : new Response(findPage(base, r), { headers: { 'content-type': 'text/html; charset=utf-8', ...hdr } });
     }
     // the Briefs: what a request left out, the method, the bar and the checks
     if (path === '/brief' || path === '/brief.json') {
@@ -1612,7 +1614,7 @@ export async function handle(req, db, cfg = {}) {
     if (path === '/works' || path === '/works.json') {
       if (req.method === 'POST') return json(await sea.publishWork({ ...(await args()), base }, ctx), 201);
       const a = await args(), r = await sea.works({ ...a, base }), html2 = path === '/works' && /text\/html/.test(accept);
-      return html2 ? new Response(worksPage(base, r, BRIEF_KINDS), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=120', ...(a.q || a.kind ? { 'x-robots-tag': 'noindex' } : {}) } }) : json(r, 200, { 'cache-control': 'public, max-age=120', ...CORS });
+      return html2 ? new Response(worksPage(base, r, BRIEF_KINDS), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=120', ...(a.q || a.kind ? { 'x-robots-tag': 'noindex' } : {}) } }) : json(forAgents(r, a.q), 200, { 'cache-control': 'public, max-age=120', ...CORS });
     }
     { const m = path.match(/^\/works\/(?!authors\b)([a-z0-9]{6,40})(\.json|\.md)?(\/vote)?$/);
       if (m) {
@@ -1736,10 +1738,10 @@ export async function handle(req, db, cfg = {}) {
     if (path === '/brain' || path === '/think') {
       const a = await args();
       const vary = (res) => { res.headers.set('vary', 'accept'); return res; };
-      if (!a.q && !a.task) { const [st, top] = await Promise.all([sea.brainStats(), sea.topPaths(24)]); return vary(wantsHtml() ? html(brainHomePage(base, st, top), 60) : json({ what: 'the first stop for agents on the internet', ask: `${base}/brain?q=<your task>`, ...st, top }, 200, { 'cache-control': 'public, max-age=60' })); }
-      const r = await sea.think(a, ctx); return vary(wantsHtml() ? html(brainPage(base, r), 30) : json(r, 200, { 'cache-control': 'no-store' }));
+      if (!a.q && !a.task) { const [st, top] = await Promise.all([sea.brainStats(), sea.topPaths(24)]); return vary(wantsHtml() ? html(brainHomePage(base, st, top), 60) : json(forAgents({ what: 'the first stop for agents on the internet', ask: `${base}/brain?q=<your task>`, ...st, top }), 200, { 'cache-control': 'public, max-age=60' })); }
+      const r = await sea.think(a, ctx); return vary(wantsHtml() ? html(brainPage(base, r), 30) : json(forAgents(r, r.task), 200, { 'cache-control': 'no-store' }));
     }
-    if (path.startsWith('/brain/') && req.method === 'GET') { const r = await sea.think({ q: decodeURIComponent(path.slice(7)).replace(/-/g, ' ') }, { ...ctx, readOnly: true }); const res = wantsHtml() ? html(brainPage(base, r, path), 300) : json(r, 200, { 'cache-control': 'public, max-age=300' }); res.headers.set('vary', 'accept'); return res; }
+    if (path.startsWith('/brain/') && req.method === 'GET') { const r = await sea.think({ q: decodeURIComponent(path.slice(7)).replace(/-/g, ' ') }, { ...ctx, readOnly: true }); const res = wantsHtml() ? html(brainPage(base, r, path), 300) : json(forAgents(r, r.task), 200, { 'cache-control': 'public, max-age=300' }); res.headers.set('vary', 'accept'); return res; }
     if (path === '/go' || path.startsWith('/go/')) { const r = await sea.walk(path.length > 4 ? decodeURIComponent(path.slice(4)) : null, await args(), ctx); return new Response(null, { status: 302, headers: { location: r.to, 'cache-control': 'no-store', 'x-robots-tag': 'noindex', ...CORS } }); }
     if (path.startsWith('/rate/')) return json(await sea.rate(decodeURIComponent(path.slice(6)), await args(), ctx), 200, { 'x-robots-tag': 'noindex' });
     if (path === '/lay') return json(await sea.layPath(await args(), ctx), 200, { 'x-robots-tag': 'noindex' });
@@ -1751,13 +1753,13 @@ export async function handle(req, db, cfg = {}) {
     if (path === '/lighthouse') return html(lighthousePage(base, await sea.lighthouse()), 60);
     if (path === '/m/new') return json(await sea.mindNew(ctx), 200, { 'cache-control': 'no-store', 'x-robots-tag': 'noindex' });
     { const mm = /^\/m\/([A-Za-z0-9_-]{20,120})(\/add|\/forget)?$/.exec(path);
-      if (mm) { const a = await args(); return json(mm[2] === '/add' ? await sea.mindAdd(mm[1], a, ctx) : mm[2] === '/forget' ? await sea.mindForget(mm[1], a, ctx) : await sea.mind(mm[1], a), 200, { 'cache-control': 'no-store', 'x-robots-tag': 'noindex' }); } }
+      if (mm) { const a = await args(); return json(mm[2] === '/add' ? await sea.mindAdd(mm[1], a, ctx) : mm[2] === '/forget' ? await sea.mindForget(mm[1], a, ctx) : forAgents(await sea.mind(mm[1], a), null, true), 200, { 'cache-control': 'no-store', 'x-robots-tag': 'noindex' }); } }
     // the paid move: POST /route (or ?paid=true) answers with the ten best paths for the task, after payment (node/pay.mjs)
     if (path === '/route' && (req.method === 'POST' || url.searchParams.get('paid') === 'true')) { const a = await args(); return sell(clean(a.q ?? a.task ?? a.need, 300), a); }
     // the router: doors that open for a task (public APIs, feeds, search links), walked and rated like pathways
     if (path === '/route' || path === '/route.json' || path === '/doors') {
       const a = await args(), r = await sea.route(a, ctx), hdr = { 'cache-control': 'no-store', vary: 'accept', 'x-robots-tag': 'noindex', ...CORS };
-      return path === '/route.json' || !r.task || !wantsHtml() ? json(r, 200, hdr) : new Response(routePage(base, r), { headers: { 'content-type': 'text/html; charset=utf-8', ...hdr } });
+      return path === '/route.json' || !r.task || !wantsHtml() ? json(forAgents(r, r.task), 200, hdr) : new Response(routePage(base, r), { headers: { 'content-type': 'text/html; charset=utf-8', ...hdr } });
     }
     if (path === '/routes' || path === '/routes.json') { const st = await sea.routeTopics(); if (path === '/routes' && wantsHtml()) { const res = html(routesPage(base, { ...st, topics: st.topics.length, topics_list: st.topics }), 600); res.headers.set('vary', 'accept'); return res; } return json(st, 200, { 'cache-control': 'public, max-age=600', vary: 'accept' }); }
     { const rm = /^\/routes\/([a-z]{2,20})(\.json)?$/.exec(path);
