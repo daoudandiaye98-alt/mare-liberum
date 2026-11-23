@@ -26,7 +26,7 @@ import { lexiconPhrases, LANG_NAMES } from './lexicon.mjs';
 import { MCP_TOPICS, SEO_PATHS, mcpHubPage, mcpTopicPage, kindHubPage, mcpServerPage, markdownPage, businessPage, agencyPage, teamsPage, lawPage, crawlersPage, deCheckPage, deHomePage, checkExtra, ORG, APP } from './seo.mjs';
 import { siteMarkdown } from './atlas.mjs';
 import { dress, SKIN_FILES, SKIN_V } from './skin.mjs';
-import { payConfig, termsFor, paymentRequired, paymentOf, takePayment, receiptOf, priceTable, howToPay } from './pay.mjs';
+import { payConfig, termsFor, paymentRequired, paymentOf, takePayment, receiptOf, priceTable, howToPay, payHowto } from './pay.mjs';
 import { createLedger } from './ledger.mjs';
 import { callerHash, callerHashes, viaProxy, rewriteForAgents } from './via.mjs';
 import { paidRoute } from './paid.mjs';
@@ -1483,8 +1483,10 @@ export async function handle(req, db, cfg = {}) {
       if (r.refuse) return paymentRequired(t, { base, error: r.refuse, cors: CORS });
       return delivered(t, r);
     };
+    // how to pay, step by step, as plain text: three commands to copy (node/pay.mjs)
+    if (path === '/pay/howto' && req.method === 'GET') return new Response(payHowto(termsFor(payCfg, { base }), base), { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=300', ...CORS } });
     if (path === '/settle') {
-      if (req.method !== 'POST') return json({ what: 'Hand in the receipt of a payment and get the paid route at once. No account.', post: `POST ${base}/settle {"q":"<your task>","tx":"<transaction hash of your USDC transfer on Base>"}`, x402: `POST ${base}/settle {"q":"<your task>","payment":"<base64 x402 payment payload>"}`, test: `POST ${base}/settle {"q":"<your task>","test":true} delivers without money and counts nothing`, prices: `${base}/job`, pay: howToPay(termsFor(payCfg, { base }), base) }, 200, paidHdr);
+      if (req.method !== 'POST') return json({ what: 'Hand in the receipt of a payment and get the paid route at once. No account.', post: `POST ${base}/settle {"q":"<your task>","tx":"<transaction hash of your USDC transfer on Base>"}`, x402: `POST ${base}/settle {"q":"<your task>","payment":"<base64 x402 payment payload>"}`, try_free: `POST ${base}/route?q=<your task>&free=true gives the first 3 paths without payment`, how_to_pay: `${base}/pay/howto`, prices: `${base}/job`, pay: howToPay(termsFor(payCfg, { base }), base) }, 200, paidHdr);
       const rests = tillRests(); if (rests) return rests;
       const a = await args(), q = clean(a.q ?? a.task, 300), t = termsFor(payCfg, { base, q, path: '/route' });
       if (!q) return json({ error: { code: 'INVALID_ARGUMENT', message: 'q is needed: the task the paid route is for. Nothing was charged.' }, settle: `POST ${base}/settle {"q":"<your task>","tx":"<transaction hash>"}` }, 400, paidHdr);

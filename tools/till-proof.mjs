@@ -247,5 +247,28 @@ await proof('llms.txt and llms-full.txt name the price in their first section; t
   assert.match(full.split('\n\n')[1], /^POST \/route costs 0\.02 USDC on Base, no account, settle with POST \/settle\./);
 });
 
+console.log('the 402 a reader understands (3.28.0)');
+await proof('the 402 says the price in dollars and words beside maxAmountRequired, points to /pay/howto (body, header, Link), and keeps every field it had', async () => {
+  const r = await call('/route?q=find+usdc+price', { method: 'POST' });
+  assert.equal(r.status, 402);
+  assert.equal(r.j.amount_usd, '0.02'); assert.equal(r.j.unit, 'USDC on Base, 6 decimals'); assert.equal(r.j.human, '2 cents'); assert.equal(r.j.how_to_pay, `${BASE}/pay/howto`);
+  assert.equal(r.j.x402Version, 1); assert.equal(r.j.accepts[0].maxAmountRequired, '20000'); assert.equal(r.j.price.usd, 0.02); assert.ok(r.j.pay.length === 3 && r.j.settle && r.j.prices && r.j.free && r.j.note, 'the fields of 3.27.0 stay');
+  const short = JSON.parse(r.h.get('x402-payment-required'));
+  assert.equal(short.amount_usd, '0.02'); assert.equal(short.how_to_pay, `${BASE}/pay/howto`); assert.equal(short.human, '2 cents'); assert.equal(short.decimals, 6);
+  assert.equal(short.amount, 2); assert.equal(short.unit, 'USD cents'); assert.equal(short.to, HOUSE_WALLET);
+  assert.equal(r.h.get('link'), `<${BASE}/pay/howto>; rel="describedby"`);
+  const s = await call('/settle', { method: 'POST', body: { q: 'x' } }); assert.equal(s.status, 402); assert.equal(s.h.get('link'), `<${BASE}/pay/howto>; rel="describedby"`); assert.equal(s.j.amount_usd, '0.02');
+});
+await proof('/pay/howto: plain text under 60 lines, the three commands in their order, what 20000 means, and that a payment not yet verified is still delivered', async () => {
+  const res = await handle(new Request(`${BASE}/pay/howto`, { headers: { 'user-agent': 'curl/8.5.0' } }), db, { base: BASE, pay: PAY, ledger: createLedger({}), waitUntil: () => {} });
+  assert.equal(res.status, 200); assert.match(res.headers.get('content-type'), /^text\/plain/);
+  const txt = await res.text(), lines = txt.trimEnd().split('\n'), curls = lines.filter((l) => l.startsWith('curl '));
+  assert.ok(lines.length <= 60, `${lines.length} lines`); assert.equal(curls.length, 3);
+  assert.equal(curls[0], `curl -s -X POST '${BASE}/route?q=test&free=true'`); assert.equal(curls[1], `curl -si -X POST '${BASE}/route?q=<task>'`); assert.match(curls[2], /^curl -s -X POST '.+\/settle' -H 'content-type: application\/json' -d '\{"q":"<task>","tx":"0x<transaction hash>"\}'$/);
+  assert.ok(txt.includes('POST /route costs 0.02 USDC on Base, no account, settle with POST /settle.')); assert.match(txt, /USDC has 6 decimals/); assert.match(txt, /20000 means 0\.020000 USDC, that is 0\.02 US dollars or 2 cents/);
+  assert.match(lines[lines.length - 1], /still accepted and delivered at once/); assert.ok(txt.includes(HOUSE_WALLET));
+  const g = await call('/settle'); assert.ok(!JSON.stringify(g.j).includes('"test"'), 'the public guide to /settle names the free sample, not the test'); assert.match(g.j.try_free, /free=true/);
+});
+
 console.log(`\n${passed} held, ${failed} failed`);
 process.exit(failed ? 1 : 0);
