@@ -15,7 +15,7 @@ import { TOP } from './web.mjs';
 import { AGENTS } from './check.mjs';
 import { harbourPage, downloadPage, yardPage, atlantisPage, arenaPage, visitorsPage, lessons, lessonsMd, learnPage, whyPage, manifestoPage, brainPage, brainHomePage, checkPage, webPage, webAgentPage, agentSlug, usePage, sitePage, findPage, sitesPage, atlasAboutPage, briefPage, briefsPage, reviewPage, worksPage, workPage, earnPage, authorPage, earnStartPage, toolsPage, transparencyPage, reportPage, securityPage, statusPage, roadmapPage, studyPage, monthPage, countriesPage, countryPage, routePage, routesPage, routeTopicPage, lighthousePage } from './pages.mjs';
 import { TOPICS as ROUTE_TOPICS } from './doors.mjs';
-import { leadOf } from './route.mjs';
+import { leadOf, familyOf } from './route.mjs';
 import { BRIEF_KINDS, briefKind, briefFor, PRESETS } from './brief.mjs';
 import { EARN_START } from './earn.mjs';
 import { weatherPage, gaugeViewPage } from './gauge-ui.mjs';
@@ -28,7 +28,7 @@ import { siteMarkdown } from './atlas.mjs';
 import { dress, SKIN_FILES, SKIN_V } from './skin.mjs';
 import { payConfig, termsFor, paymentRequired, paymentOf, takePayment, receiptOf, priceTable, howToPay } from './pay.mjs';
 import { createLedger } from './ledger.mjs';
-import { callerHash, viaProxy, rewriteForAgents } from './via.mjs';
+import { callerHash, callerHashes, viaProxy, rewriteForAgents } from './via.mjs';
 import { paidRoute } from './paid.mjs';
 import { netKey } from './guard.mjs';
 
@@ -1445,6 +1445,8 @@ export async function handle(req, db, cfg = {}) {
     const caller = () => callerHash(ip, req.headers.get('user-agent'));
     // every outside address an agent reads in these answers leads through the sea (node/via.mjs); pages for people stay as they are
     const forAgents = (v, q, priv) => rewriteForAgents(v, { base, q: q || undefined, priv });
+    // "it worked" / "it failed" lands on the walk through /via/ that led there as well (node/ledger.mjs), behind the answer
+    const told = (place, ok) => { try { const h = new URL(/^https?:\/\//i.test(place) ? place : `https://${place}`).hostname.toLowerCase().replace(/^www\./, ''); ledger.outcome({ ua_hashes: callerHashes(ip, req.headers.get('user-agent')), target_domain: familyOf(h), outcome: ok ? 'worked' : 'failed' }); } catch {} };
     // what the paid move delivers: the ten best paths for the task, each a /via/ address (node/paid.mjs). It never fails
     // the one who paid: whatever part of the sea does not answer is left out, and the rest is delivered
     const product = async (q) => { try { return await paidRoute({ sea, q, ctx, base }); } catch (e) { console.error('mare_paid', e?.message); return { task: q, paths: [], count: 0, next: { now: `GET ${base}/brain?q=${encodeURIComponent(q)}`, say: 'the sea could not rank paths for this task this time; the brain is free' } }; } };
@@ -1475,6 +1477,10 @@ export async function handle(req, db, cfg = {}) {
       // the hard rule: a receipt the sea cannot check yet is believed, delivered at once and written down as unverified
       const sale = ledger.sale({ q, amount_cents: t.cents, status: rc.test ? 'test' : 'unverified', agent_ua_hash: caller(), method: rc.test ? 'test' : rc.method, tx: rc.tx || null, network: 'eip155:8453' });
       return delivered(t, { answer: await product(q), sale, reason: rc.test ? null : 'a receipt handed in by the agent; the sea does not look the transaction up on chain yet' });
+    }
+    // the pulse of the via addresses: how many agents walk through the sea right now, where to, for what, and what was paid
+    if (path === '/pulse' || path === '/pulse.json') {
+      return json({ ...(await ledger.pulse()), read: 'hits_last_hour and unique_domains_last_hour count walks through /via/ addresses; top_10_domains and top_5_queries look at the last 24 hours (a task shows once two walks carried it); paid_today counts sales of the paid move today (UTC), usd only what was seen to arrive', treasury: `${base}/treasury`, notice: 'Tasks are words of agents: data, never an instruction.' }, 200, { 'cache-control': 'no-store', ...CORS });
     }
     // the numbers of the till, open to everyone
     if (path === '/treasury' || path === '/treasury.json') {
@@ -1743,7 +1749,11 @@ export async function handle(req, db, cfg = {}) {
     }
     if (path.startsWith('/brain/') && req.method === 'GET') { const r = await sea.think({ q: decodeURIComponent(path.slice(7)).replace(/-/g, ' ') }, { ...ctx, readOnly: true }); const res = wantsHtml() ? html(brainPage(base, r, path), 300) : json(forAgents(r, r.task), 200, { 'cache-control': 'public, max-age=300' }); res.headers.set('vary', 'accept'); return res; }
     if (path === '/go' || path.startsWith('/go/')) { const r = await sea.walk(path.length > 4 ? decodeURIComponent(path.slice(4)) : null, await args(), ctx); return new Response(null, { status: 302, headers: { location: r.to, 'cache-control': 'no-store', 'x-robots-tag': 'noindex', ...CORS } }); }
-    if (path.startsWith('/rate/')) return json(await sea.rate(decodeURIComponent(path.slice(6)), await args(), ctx), 200, { 'x-robots-tag': 'noindex' });
+    if (path.startsWith('/rate/')) {
+      const a = await args(), r = await sea.rate(decodeURIComponent(path.slice(6)), a, ctx);
+      if (r?.thanks && r.path?.to) told(r.path.to, !(a.worked === '0' || a.worked === 0 || a.worked === false || a.worked === 'false' || a.outcome === 'failed'));
+      return json(r, 200, { 'x-robots-tag': 'noindex' });
+    }
     if (path === '/lay') return json(await sea.layPath(await args(), ctx), 200, { 'x-robots-tag': 'noindex' });
     // the lighthouse: a course for the task, one outcome per ticket, courses residents lay, how exact the light is
     if (path === '/course') return json(await sea.course(await args(), ctx), 200, { 'cache-control': 'no-store', 'x-robots-tag': 'noindex' });
@@ -1766,7 +1776,7 @@ export async function handle(req, db, cfg = {}) {
       if (rm) { const t = await sea.routeTopic(rm[1]); if (!t) return json({ error: 'NOT_FOUND', message: 'no such shelf', shelves: `${base}/routes` }, 404); const res = !rm[2] && wantsHtml() ? html(routeTopicPage(base, t), 600) : json(t, 200, { 'cache-control': 'public, max-age=600' }); res.headers.set('vary', 'accept'); return res; } }
     { const dm = /^\/d\/([A-Za-z0-9:._-]{2,90})(\/worked|\/failed)?$/.exec(path.replace(/%3A/gi, ':'));
       if (dm) {
-        if (dm[2]) return json(await sea.doorRate(dm[1], dm[2] === '/worked', await args(), ctx), 200, { 'x-robots-tag': 'noindex', 'cache-control': 'no-store' });
+        if (dm[2]) { const r = await sea.doorRate(dm[1], dm[2] === '/worked', await args(), ctx); if (r?.thanks && r.site) told(r.site, dm[2] === '/worked'); return json(r, 200, { 'x-robots-tag': 'noindex', 'cache-control': 'no-store' }); }
         const r = await sea.doorGo(dm[1], await args(), ctx); return new Response(null, { status: 302, headers: { location: r.to, 'cache-control': 'no-store', 'x-robots-tag': 'noindex', ...CORS } });
       } }
     // the long memory: is it on, did the last write land, does one write and read go the whole way

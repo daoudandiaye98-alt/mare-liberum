@@ -161,8 +161,8 @@ export async function viaProxy({ req, token, base, ip, ua, readOnly = false, onH
   // a crawler or a search engine is sent to the place itself: the sea carries requests for agents with a task and does
   // not stand in for other websites in an index
   if (readOnly) return new Response(null, { status: 302, headers: { location: d.url, 'cache-control': 'public, max-age=3600', 'x-robots-tag': 'noindex, nofollow', 'x-via': 'mare-liberum', 'x-via-target': d.url, ...VIA_CORS } });
-  const host = u.hostname.toLowerCase(), who = callerHash(ip, ua);
-  const hit = (status, outcome = null) => { try { onHit?.(priv ? { q: null, ua_hash: who, token_host: null, target_domain: null, status, outcome } : { q, ua_hash: who, token_host: host, target_domain: familyOf(host.replace(/^www\./, '')), status, outcome }); } catch {} };
+  const host = u.hostname.toLowerCase().replace(/^www\./, ''), who = callerHash(ip, ua);
+  const hit = (status, outcome = null) => { try { onHit?.(priv ? { q: null, ua_hash: who, token_host: null, target_domain: null, status, outcome } : { q, ua_hash: who, token_host: host, target_domain: familyOf(host), status, outcome }); } catch {} };
   const wait = paced(ip, now());
   if (wait) return answer(429, { error: { code: 'RESOURCE_EXHAUSTED', message: `this address walked ${PROXY.perHour} via addresses this hour; the next hour opens in ${wait} seconds` }, free: `the brain is free and has no such limit: ${brain}`, direct: d.url }, { 'retry-after': String(wait) });
   if (inFlight >= PROXY.inFlight) return answer(503, { error: { code: 'UNAVAILABLE', message: 'the sea is carrying many requests at this moment; try again in a few seconds' }, direct: d.url, hint: brain }, { 'retry-after': '2' });

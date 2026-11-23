@@ -123,11 +123,12 @@ export function createLedger({ url, key, secret, fetch: get = (...a) => fetch(..
       if (on) { queue.hits.push(h); if (queue.hits.length > 5000) { queue.hits.splice(0, queue.hits.length - 5000); dropped++; } if (queue.hits.length >= 200) soon(5); else soon(1000); }
     },
     // the agent says how the place it walked to worked: the newest walk of that caller to that site of the last day
-    outcome({ ua_hashes, token_host, outcome }) {
-      const hs = (ua_hashes || []).filter(Boolean); if (!hs.length || !token_host || !/^(worked|failed)$/.test(outcome)) return;
+    // (the site by its registrable name: a door kept as x.wikipedia.org is walked as en.wikipedia.org)
+    outcome({ ua_hashes, target_domain, outcome }) {
+      const hs = (ua_hashes || []).filter(Boolean); if (!hs.length || !target_domain || !/^(worked|failed)$/.test(outcome)) return;
       const cut = now() - DAYMS;
-      for (let i = mem.hits.length - 1; i >= 0; i--) { const h = mem.hits[i]; if (Date.parse(h.ts) < cut) break; if (!h.outcome && h.token_host === token_host && hs.includes(h.ua_hash)) { h.outcome = outcome; break; } }
-      if (on) { queue.outcomes.push({ ua_hashes: hs, token_host, outcome }); if (queue.outcomes.length > 2000) queue.outcomes.shift(); soon(1000); }
+      for (let i = mem.hits.length - 1; i >= 0; i--) { const h = mem.hits[i]; if (Date.parse(h.ts) < cut) break; if (!h.outcome && h.target_domain === target_domain && hs.includes(h.ua_hash)) { h.outcome = outcome; break; } }
+      if (on) { queue.outcomes.push({ ua_hashes: hs, target_domain, outcome }); if (queue.outcomes.length > 2000) queue.outcomes.shift(); soon(1000); }
     },
     async treasury() {
       if (on && !down()) { try { await flush(); return { ...(await rpc('mare_treasury', {}, READ_MS)), source: 'database' }; } catch (e) { failed(e); } }
