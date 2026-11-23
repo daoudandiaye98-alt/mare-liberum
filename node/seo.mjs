@@ -414,7 +414,7 @@ ${faqHtml(qa, 'Fragen')}`;
 }
 
 // every page here, for the sitemap and IndexNow
-export const SEO_PATHS = ['/mcp-server', '/de/mcp-server', '/mcp-servers', ...MCP_TOPICS.map((t) => `/mcp-servers/${t[0]}`), '/a2a-agents', '/x402-apis', '/web-to-markdown', '/de/webseite-als-markdown', '/business', '/de/unternehmen', '/ai-crawlers', '/de/ki-crawler', '/de/ki-sichtbarkeit', '/de', '/check', '/de/agenturen', '/teams', '/de/kanzleien'];
+export const SEO_PATHS = ['/mcp-server', '/de/mcp-server', '/mcp-servers', ...MCP_TOPICS.map((t) => `/mcp-servers/${t[0]}`), '/a2a-agents', '/x402-apis', '/web-to-markdown', '/de/webseite-als-markdown', '/business', '/de/unternehmen', '/ai-crawlers', '/de/ki-crawler', '/de/ki-sichtbarkeit', '/de', '/check', '/de/agenturen', '/teams', '/de/kanzleien', '/weather', '/de/agentenwetter'];
 
 // ── Three audiences, three offers. The prices are a pilot: what a team pays for is room on this node and help, never the code. ──
 export const OFFER = {
