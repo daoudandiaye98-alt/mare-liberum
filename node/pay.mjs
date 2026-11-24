@@ -35,13 +35,24 @@ export function payConfig(env = process.env) {
   };
 }
 
+// how the paid move is called and what it answers, for discovery catalogs (the x402 "bazaar" extension): a facilitator
+// that settles a payment carrying it lists the move in its catalog, so paying agents find it (since 3.29.0)
+export function bazaarOf(base) {
+  return { info: {
+    input: { type: 'http', method: 'POST', bodyType: 'json', body: { q: 'find usdc price' } },
+    output: { type: 'json', example: { task: 'find usdc price', count: 10, paths: [{ rank: 1, title: 'a USDC price API', kind: 'x402', from: 'the open index', to: `${base}/via/<token>?q=find+usdc+price`, why: 'a place from the open index; paid per call via x402' }], next: { now: 'GET the first "to"' } } },
+  } };
+}
+
 // the terms of one sale, in both shapes x402 knows
 export function termsFor(cfg, { base, q, path = '/route' }) {
   const resource = q ? `${base}${path}?q=${encodeURIComponent(q)}` : `${base}${path}`;
   const atomic = String(cfg.cents * 10000); // USDC has 6 decimals: 1 cent = 10,000
   const description = 'Mare Liberum: the 10 best agent paths for your task, each a /via/ address, ranked with reasons and the next step';
   const extra = { name: 'USD Coin', version: '2' };
-  const v1 = { scheme: 'exact', network: 'base', maxAmountRequired: atomic, resource, description, mimeType: 'application/json', payTo: cfg.payTo, maxTimeoutSeconds: cfg.window, asset: USDC_BASE, extra };
+  // v1 catalogs read the call from outputSchema (discoverable: true)
+  const outputSchema = { input: { type: 'http', method: 'POST', discoverable: true, bodyType: 'json', bodyFields: { q: { type: 'string', required: true, description: 'the task in plain words' } } }, output: { type: 'object', properties: { task: { type: 'string' }, count: { type: 'number' }, paths: { type: 'array', description: 'the 10 best agent paths, each a /via/ address, with rank, title, why and score' }, next: { type: 'object' } } } };
+  const v1 = { scheme: 'exact', network: 'base', maxAmountRequired: atomic, resource, description, mimeType: 'application/json', outputSchema, payTo: cfg.payTo, maxTimeoutSeconds: cfg.window, asset: USDC_BASE, extra };
   const v2 = { scheme: 'exact', network: 'eip155:8453', amount: atomic, asset: USDC_BASE, payTo: cfg.payTo, maxTimeoutSeconds: cfg.window, extra };
   return { cents: cfg.cents, usd: cfg.cents / 100, atomic, resource, description, v1, v2, payTo: cfg.payTo, window: cfg.window, pricing: pricingOf(cfg, base) };
 }
@@ -59,7 +70,7 @@ export function howToPay(t, base) {
 // without an x402 client understands (amount_usd, human, how_to_pay). Fields are only ever added, never taken away.
 export function paymentRequired(t, { base, error, cors = {} }) {
   const p = t.pricing || pricingOf(t, base);
-  const v2 = { x402Version: 2, error: error || 'PAYMENT-SIGNATURE header is required', resource: { url: t.resource, description: t.description, mimeType: 'application/json' }, accepts: [t.v2] };
+  const v2 = { x402Version: 2, error: error || 'PAYMENT-SIGNATURE header is required', resource: { url: t.resource, description: t.description, mimeType: 'application/json' }, accepts: [t.v2], extensions: { bazaar: bazaarOf(base) } };
   const body = {
     x402Version: 1, error: error || 'X-PAYMENT header is required', accepts: [t.v1],
     // maxAmountRequired above is in USDC base units (6 decimals): 20000 is 0.02 USDC
