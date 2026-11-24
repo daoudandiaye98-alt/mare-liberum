@@ -24,7 +24,8 @@
     "proof:gauge": "node tools/gauge-proof.mjs",
     "proof:via": "node tools/via-proof.mjs",
     "proof:till": "node tools/till-proof.mjs",
-    "proof:shore": "node tools/shore-proof.mjs"
+    "proof:shore": "node tools/shore-proof.mjs",
+    "proof:seed": "node tools/seed-proof.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.9.0",
