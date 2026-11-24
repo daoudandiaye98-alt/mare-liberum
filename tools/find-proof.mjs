@@ -103,11 +103,14 @@ await proof('the sitemaps name the MCP server and the paid agent, not the thin r
 });
 
 console.log('the sitemaps carry the day the sea was drawn; robots.txt; who runs it');
-await proof('hubs and entries carry the day of the build as lastmod, the index names it too; /pricing (a redirect for people) is no longer listed', async () => {
-  const site = (await call('/sitemaps/site.xml')).text; assert.match(site, /<loc>https:\/\/mare\.test\/<\/loc><lastmod>2026-11-20<\/lastmod>/); assert.doesNotMatch(site, /\/pricing</);
-  assert.match(site, /<loc>https:\/\/mare\.test\/about<\/loc>/);
-  const entries = (await call('/sitemaps/0.xml')).text; assert.match(entries, /<lastmod>2026-11-20<\/lastmod>/);
-  const index = (await call('/sitemap.xml')).text; assert.match(index, /sitemaps\/site\.xml<\/loc><lastmod>2026-11-20<\/lastmod>/); assert.match(index, /sitemaps\/0\.xml<\/loc><lastmod>2026-11-20<\/lastmod>/);
+// (3.33.0: a lastmod Google can verify, or none. The hubs carry theirs in hubs.xml, an entry its own last change at its
+// source, the other pages none; the day of the build only dates the files of the entry maps in the index. node/hubs.mjs)
+await proof('a sitemap names a day only where it knows it; the index dates the entry maps by the build; /pricing stands in no list of pages for people', async () => {
+  const hubs = (await call('/sitemaps/hubs.xml')).text, today = new Date().toISOString().slice(0, 10);
+  assert.match(hubs, new RegExp(`<loc>https://mare\\.test/</loc><lastmod>${today}</lastmod>`)); assert.match(hubs, /<loc>https:\/\/mare\.test\/about<\/loc>/);
+  const site = (await call('/sitemaps/site.xml')).text; assert.doesNotMatch(site, /\/pricing</); assert.doesNotMatch(site, /<lastmod>/);
+  const entries = (await call('/sitemaps/0.xml')).text; assert.doesNotMatch(entries, /<lastmod>2026-11-20<\/lastmod>/, 'not the day of the build');
+  const index = (await call('/sitemap.xml')).text; assert.match(index, /sitemaps\/site\.xml<\/loc><\/sitemap>/); assert.match(index, /sitemaps\/0\.xml<\/loc><lastmod>2026-11-20<\/lastmod>/);
   assert.doesNotMatch(index, /sitemaps\/brain\.xml<\/loc><lastmod>/, 'a list without a known day carries none');
 });
 await proof('robots.txt: every agent may take every step; search engines and crawlers skip the moves (/go, /d, /via, /rate, /lay, /course/)', () => {

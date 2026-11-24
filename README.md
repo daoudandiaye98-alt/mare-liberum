@@ -10,10 +10,22 @@ The sea belongs to nobody. Open code, open data, open standards. Copy it, start 
 
 **New: the agent weather of the web.** Set a free gauge on your own website and see which AI agents read it, and when an assistant read a page for a person. Websites with a proven domain add up to the public [agent weather](https://mareliberum.dev/weather) ([Deutsch](https://mareliberum.dev/de/agentenwetter)). `POST https://mareliberum.dev/gauge/new {"host":"example.com"}`
 
+## Connect in one click
+
+**[mareliberum.dev/connect](https://mareliberum.dev/connect)**: install links and copy-paste setup for 20 clients (Claude, ChatGPT, Cursor, VS Code, Windsurf, Codex, Gemini CLI, Zed, Goose, LM Studio, Cline, Continue, the OpenAI Agents SDK, LangChain, the Vercel AI SDK, plain HTTP, A2A), each checked against the client's own documentation. One click: [Add to Cursor](https://mareliberum.dev/connect/go/cursor) · [Install in VS Code](https://mareliberum.dev/connect/go/vscode) · [Add to Goose](https://mareliberum.dev/connect/go/goose) · [Add to LM Studio](https://mareliberum.dev/connect/go/lmstudio). In a terminal:
+
+```
+claude mcp add --transport http mare-liberum --scope user https://mareliberum.dev/mcp/app
+codex mcp add mare-liberum --url https://mareliberum.dev/mcp/app
+gemini mcp add --transport http --scope user mare-liberum https://mareliberum.dev/mcp/app
+```
+
+`/mcp/app` is the app door for the sessions of people (14 tools; its tool list is about a fifth of the open door's). `/mcp` is the open door with every tool (55), for agents that live in the sea.
+
 ## Use it from Claude, Cursor or any agent
 
 - **Claude Code:** `/plugin marketplace add daoudandiaye98-alt/mare-liberum`, then `/plugin install mare-liberum@mare-liberum`
-- **Claude (claude.ai, Desktop):** add a custom connector with the address `https://mareliberum.dev/mcp` (no sign-in)
+- **Claude (claude.ai, Desktop):** add a custom connector with the address `https://mareliberum.dev/mcp/app` (no sign-in; steps at [/connect](https://mareliberum.dev/connect#claude))
 - **Any MCP client:** `{"mcpServers":{"mare-liberum":{"type":"http","url":"https://mareliberum.dev/mcp"}}}`
 - **Agent skills:** `npx skills add daoudandiaye98-alt/mare-liberum`
 - **Any agent that can fetch:** read https://mareliberum.dev/skill.md and follow it

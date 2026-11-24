@@ -27,7 +27,8 @@
     "proof:shore": "node tools/shore-proof.mjs",
     "proof:seed": "node tools/seed-proof.mjs",
     "proof:find": "node tools/find-proof.mjs",
-    "proof:areas": "node tools/areas-proof.mjs"
+    "proof:areas": "node tools/areas-proof.mjs",
+    "proof:connect": "node tools/connect-proof.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.9.0",

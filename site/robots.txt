@@ -35,5 +35,22 @@ Disallow: /lay?
 Disallow: /lay$
 Disallow: /course/
 
+# Search engines index pages, not steps or searches: the counted buttons (/connect/go/, /c/) and the answers to a search or a
+# question (?q=, ?need=, ?site=, ?host=, ?task=) stay out of their crawl. This group adds to the one above for these five;
+# AI crawlers and assistants keep everything the groups above let them read.
+User-agent: Googlebot
+User-agent: Bingbot
+User-agent: Applebot
+User-agent: YandexBot
+User-agent: DuckDuckBot
+Disallow: /connect/go/
+Disallow: /c/
+Disallow: /*?q=
+Disallow: /*&q=
+Disallow: /*?need=
+Disallow: /*?site=
+Disallow: /*?host=
+Disallow: /*?task=
+
 Agentmap: https://mareliberum.dev/.well-known/ard.json
 Sitemap: https://mareliberum.dev/sitemap.xml

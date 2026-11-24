@@ -359,7 +359,7 @@ await proof('the page of the harbours: for people, with a desk that keeps the ke
   assert.ok(!HARBOUR_UI.includes('`') && !/<\/script/i.test(HARBOUR_UI));
   for (const id of [...HARBOUR_UI.matchAll(/\$\('([a-z]+)'\)/g)].map((m) => m[1])) assert.ok(new RegExp(`id="${id}"`).test(r.text), `the page has no element "${id}"`);
   const j = await call('/harbour'); assert.equal(j.headers.get('content-type').split(';')[0], 'application/json'); assert.ok(j.json.verbs.includes(`POST ${BASE}/harbour/add`));
-  assert.match((await call('/sitemaps/site.xml')).text, /\/harbour<\/loc>/);
+  assert.match((await call('/sitemaps/hubs.xml')).text, /\/harbour<\/loc>/); // a hub (node/hubs.mjs)
   assert.equal(Object.keys(HARBOUR_VERBS).length, 20); assert.equal(HARBOUR_TOOLS.length, 15);
 });
 await proof('words, passages: a question finds its passage across forms of a word', async () => {

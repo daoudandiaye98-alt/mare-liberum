@@ -24,7 +24,7 @@ Cursor · ~/.cursor/mcp.json
 VS Code · .vscode/mcp.json
 { "servers": { "mare-liberum": { "type": "http", "url": "${url}" } } }
 
-Claude, ChatGPT and other apps: add ${url} as a custom connector.</pre>`;
+Claude, ChatGPT and other apps: add ${url} as a custom connector.</pre><p><a href="/connect">One click into Claude, ChatGPT, Cursor, VS Code and more clients</a></p>`;
 const connectDe = (url = 'https://mareliberum.dev/mcp') => `<pre>Claude Code
 claude mcp add --transport http mare-liberum ${url}
 
@@ -34,7 +34,7 @@ Cursor · ~/.cursor/mcp.json
 VS Code · .vscode/mcp.json
 { "servers": { "mare-liberum": { "type": "http", "url": "${url}" } } }
 
-Claude, ChatGPT und andere Apps: ${url} als eigenen Connector hinzufügen.</pre>`;
+Claude, ChatGPT und andere Apps: ${url} als eigenen Connector hinzufügen.</pre><p><a href="/connect" hreflang="en">Mit einem Klick in Claude, ChatGPT, Cursor, VS Code und weitere Programme</a> (auf Englisch)</p>`;
 
 // ── The directory of MCP servers, by topic ──
 // [slug, name, search words, one sentence on what such servers do]
@@ -356,7 +356,7 @@ Disallow: /</pre>
 ${faqHtml(qa, de ? 'Fragen' : 'Questions')}`;
   return page(base, path, de ? 'KI-Crawler-Liste: GPTBot, ClaudeBot, PerplexityBot — live gezählt · Mare Liberum' : 'AI Crawler List 2026: GPTBot, ClaudeBot, PerplexityBot — counted live · Mare Liberum',
     de ? `Welche KI-Crawler eine Website wirklich besuchen, live gezählt (${F(ai)} am ${day}), mit robots.txt-Namen aller KI-Bots und einer Vorlage: in KI-Antworten erscheinen, Training sperren.` : `Which AI crawlers really visit a website, counted live (${F(ai)} on ${day}), with the robots.txt names of every AI bot and a template to appear in AI answers while keeping out of training.`,
-    body, graph(ORG(base), crumbs(base, [['Mare Liberum', de ? '/de' : '/'], [de ? 'KI-Crawler' : 'AI crawlers', path]]), faqLd(qa), { '@type': 'Dataset', name: de ? 'KI-Crawler-Besuche' : 'AI crawler visits', description: de ? 'Tägliche Zahl der Abrufe von KI-Crawlern, Assistenten und Suchmaschinen an mareliberum.dev' : 'Daily requests by AI crawlers, assistants and search engines to mareliberum.dev', url: `${base}/census`, isAccessibleForFree: true, license: 'https://creativecommons.org/publicdomain/zero/1.0/' }), '/og.png', { lang, alt: { en: '/ai-crawlers', de: '/de/ki-crawler' } });
+    body, graph(ORG(base), crumbs(base, [['Mare Liberum', de ? '/de' : '/'], [de ? 'KI-Crawler' : 'AI crawlers', path]]), faqLd(qa), { '@type': 'Dataset', name: de ? 'KI-Crawler-Besuche' : 'AI crawler visits', description: de ? 'Tägliche Zahl der Abrufe von KI-Crawlern, Assistenten und Suchmaschinen an mareliberum.dev' : 'Daily requests by AI crawlers, assistants and search engines to mareliberum.dev', url: `${base}/census`, isAccessibleForFree: true, license: 'https://creativecommons.org/publicdomain/zero/1.0/', creator: { '@type': 'Organization', name: 'Mare Liberum', url: base } }), '/og.png', { lang, alt: { en: '/ai-crawlers', de: '/de/ki-crawler' } });
 }
 
 // ── The AI visibility check, explained (under the form of /check) ──

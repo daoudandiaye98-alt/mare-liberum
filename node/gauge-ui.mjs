@@ -83,7 +83,7 @@ ${grew.length ? `<p>${t.grewLead}</p><table><thead><tr><th>${t.lake}</th><th>${t
 <style>.gbar{display:inline-block;height:.55em;width:var(--w);max-width:7em;background:currentColor;opacity:.55;border-radius:3px;vertical-align:middle}.gdays td{white-space:nowrap}#g-out pre{white-space:pre-wrap;overflow-wrap:anywhere}</style>
 <script>${GAUGE_NEW_JS.replace('__LANG__', lang)}</script>`;
   return page(base, t.path, t.title, t.desc, body,
-    { '@context': 'https://schema.org', '@type': 'Dataset', name: lang === 'de' ? 'Agentenwetter im Netz' : 'Agent weather of the web', description: t.desc, url: `${base}${t.path}`, isAccessibleForFree: true, creator: { '@type': 'Organization', name: 'Mare Liberum', url: base }, distribution: [{ '@type': 'DataDownload', encodingFormat: 'application/json', contentUrl: `${base}/weather.json` }] },
+    { '@context': 'https://schema.org', '@type': 'Dataset', name: lang === 'de' ? 'Agentenwetter im Netz' : 'Agent weather of the web', description: t.desc, url: `${base}${t.path}`, isAccessibleForFree: true, license: 'https://creativecommons.org/publicdomain/zero/1.0/', creator: { '@type': 'Organization', name: 'Mare Liberum', url: base }, distribution: [{ '@type': 'DataDownload', encodingFormat: 'application/json', contentUrl: `${base}/weather.json` }] },
     '/og.png', { lang, alt: { en: '/weather', de: '/de/agentenwetter' } });
 }
 
