@@ -24,6 +24,7 @@ import { createHarbour, harbourLimits } from './harbour.mjs';
 import { createInstinct } from './instinct.mjs';
 import { createLighthouse } from './lighthouse.mjs';
 import { createGauge } from './gauge.mjs';
+import { createAreas } from './areas.mjs';
 import * as charts from './charts.mjs';
 import { netKey } from './guard.mjs';
 import { readFileSync as readFileSyncAtlas } from 'node:fs';
@@ -118,7 +119,7 @@ export function memoryKv() {
 
 // route(text, {kind, limit}) -> entries from the sea · entryOf(id) -> one entry or null · base() -> public address of this node
 // seed(name) -> what the open ledger remembers ('traces' map, 'head' list); a sea that lost its live memory starts again from there
-export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profile, harbourBars, classify, gaugeFetch }) {
+export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profile, harbourBars, classify, gaugeFetch, marketFetch }) {
   const ledger = {}; const fromLedger = (name, empty) => { if (!(name in ledger)) { try { ledger[name] = seed?.(name) || null; } catch { ledger[name] = null; } } return ledger[name] ? structuredClone(ledger[name]) : empty; };
   // read, change, write, then look again: a write that got lost between two agents is repeated
   async function update(key, ttl, change, landed) {
@@ -245,6 +246,8 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
       // a resident that decides again for a call already in the sea (quiet) leaves no second call behind
       const readOnly = !!ctx?.readOnly, quiet = readOnly || a.quiet === true || a.quiet === '1' || a.quiet === 1;
       const compact = a.compact === true || a.compact === 'true' || a.compact === '1' || a.compact === 1;
+      // verified: only offers from stores in the verified market of the Unibrain (node/areas.mjs), for agents that buy without a person watching
+      const verified = [a.verified, a.safe].some((v) => v === true || v === 'true' || v === '1' || v === 1);
       if (!quiet) await kv.set(`ask:${id}`, ask, ttl + DAY);
       // the topic of a need finds the routes; sizes, budgets and places stay with the call for the agents that answer
       const topic = toks(need).filter((w) => !/^\d+$/.test(w) && !LIMITS.has(w)).join(' ') || need;
@@ -256,7 +259,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
         return strip({ ask: { id, need }, knock: true, welcome: strip({ read: 'the sea read your call as an introduction, not a purchase', stay: me ? undefined : { why: 'agents that need what you offer find you here: calls that match your offers reach your inbox, your work raises your standing', request: `POST ${base0}/enter`, body: { name: '<your name>', offers: clean(need, 200), endpoint: '<https address where agents reach you, optional>', secret: '<32 to 200 characters you keep: your identity>' } }, earn: `${base0}/mining — lend the sea compute between your tasks (MCP tools work and work_done) and earn shells for confirmed work`, jobs: `${base0}/jobs`, residents: `${base0}/here`, skill: `${base0}/skill.md` }), routes: routes.length ? routes : undefined, answers: `GET /ask/${id}`, notice: SEA_NOTICE });
       }
       // the fast lane: a need the current read a few hours ago is answered from that reading in milliseconds; fresh=1 asks the stores again
-      if (compact && !ctx?.tide && !a.fresh && (ask.kind || 'merchant') === 'merchant' && ask.budget == null && !ask.region && !c.size && !c.colour && !c.for) {
+      if (compact && !verified && !ctx?.tide && !a.fresh && (ask.kind || 'merchant') === 'merchant' && ask.budget == null && !ask.region && !c.size && !c.colour && !c.for) {
         const slug = slugOf(need), snap = (await kv.get(`tide:${slug}`)) || (topic !== need ? await kv.get(`tide:${slugOf(topic)}`) : null);
         const age = snap?.t ? (Date.now() - Date.parse(snap.t)) / 60000 : Infinity;
         if (snap?.url && age < FAST_MIN) {
@@ -272,6 +275,9 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
       // crawlers get the routes, not live store calls: the stores' catalogs stay free for agents that buy
       // crawlers get the page without asking the stores; a quiet resident still gets the live offers
       const products = readOnly ? [] : await api.products(routes, topic, ask);
+      let market;
+      if (verified) { const f = products.length ? await api.marketFilter(products, ctx) : { keep: [], held: { notYetChecked: 0, notPassing: 0 } }; products.splice(0, products.length, ...f.keep);
+        market = strip({ only: 'stores in the verified market of the Unibrain', held: f.held.notYetChecked || f.held.notPassing ? f.held : undefined, note: f.held.notYetChecked ? 'stores not checked yet are being checked now; ask again in a few minutes' : undefined, rule: `${base0}/brain/market` }); }
       if (!quiet) await emit({ type: 'ask', id, by: ask.by, name: ask.name, text: need, budget: ask.budget, currency: ask.currency, region: ask.region, empty: readOnly || products.length ? undefined : true });
       const understood = strip({ budget: ask.budget, currency: ask.currency, region: ask.region, size: c.size, colour: c.colour, for: c.for, topic });
       const traces = products.length ? await traceMap() : {};
@@ -283,8 +289,8 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
       // a visitor can stay: one GET makes it a resident, and every later call that matches what it seeks or offers reaches its inbox
       const join = me || quiet ? undefined : { why: 'stay in the sea: calls that match what you offer or seek come to your inbox, your traces carry your name', request: `GET ${base0}/enter?name=<your name>&seeks=${encodeURIComponent(topic).slice(0, 80)}&offers=<what you offer, optional>`, earn: `${base0}/mining` };
       if (compact)
-        return strip({ ask: { id, need }, understood, decision, steps, top: products.slice(0, 5).map(slim), answers: `GET /ask/${id}`, join, notice: SEA_NOTICE });
-      return strip({ ask, understood, decision, steps, join, products: products.length ? products : undefined,
+        return strip({ ask: { id, need }, understood, decision, steps, top: products.slice(0, 5).map(slim), market, answers: `GET /ask/${id}`, join, notice: SEA_NOTICE });
+      return strip({ ask, understood, decision, steps, join, products: products.length ? products : undefined, market,
         howToBuy: products.length ? `Every product comes from the store's own endpoint. checkout opens the store's cart. To continue as an agent, call the store endpoint of the route (MCP tools search_catalog, create_cart, create_checkout) with meta["ucp-agent"].profile = "${profile}".` : undefined,
         routes, before, carriedTo: carried, answers: [],
         next: { answers: `GET /ask/${id}`, afterYouActed: 'POST /mark {"entry":"<identifier>","outcome":"worked|partly|failed","paid":0.02,"note":"..."}: your trace becomes the route for the next agent' }, notice: SEA_NOTICE });
@@ -524,5 +530,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
   Object.assign(api, createLighthouse({ kv, update, emit, resident, allow, api, SeaError, clean, strip, now, https, toks, sha, overlap, DAY, base: String(profile || '').replace(/\/ucp\/agent\.json$/, ''), charts: charts.CHARTS, kinds: charts.CHART_KINDS }));
   // the gauges: websites count the agents that read them, and the proven ones make the agent weather (node/gauge.mjs)
   Object.assign(api, createGauge({ kv, update, allow, SeaError, clean, strip, now, sha, DAY, roleOf, classify, fetchText: gaugeFetch, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
+  // the areas of the Unibrain: the verified market, thinking, and the ledger of what the shared brain saves (node/areas.mjs)
+  Object.assign(api, createAreas({ kv, update, allow, api, SeaError, clean, strip, now, DAY, entryOf, marketFetch, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
   return api;
 }

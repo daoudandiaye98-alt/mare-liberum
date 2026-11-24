@@ -45,9 +45,11 @@ export function pageMarkdown(html, url, base) {
 }
 
 // the response for an agent that asked for Markdown: built from the HTML answer, or that answer as it was
-export async function asMarkdown(res, { url, base, twin = false }) {
+export async function asMarkdown(res, { url, base, twin = false, spared }) {
   if (res.status !== 200 || !/^text\/html/i.test(res.headers.get('content-type') || '')) return res;
-  const { canon, md } = pageMarkdown(await res.text(), url, base);
+  const page = await res.text(), { canon, md } = pageMarkdown(page, url, base);
+  // what the Markdown spared against the HTML, for the ledger of the Unibrain (node/areas.mjs)
+  try { spared?.(page.length, md.length); } catch {}
   const h = new Headers();
   for (const k of ['cache-control', 'access-control-allow-origin', 'access-control-expose-headers', 'x-robots-tag']) { const v = res.headers.get(k); if (v) h.set(k, v); }
   h.set('content-type', 'text/markdown; charset=utf-8');
