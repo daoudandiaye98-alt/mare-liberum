@@ -19,6 +19,8 @@ import { plainTextBytes } from '../node/agentmd.mjs';
 import { leftOut } from '../node/atlas.mjs';
 import { csvCell, LICENCES } from '../node/open.mjs';
 import { createAttention } from '../node/attention.mjs';
+import { leanMarkdown } from '../node/lean.mjs';
+import { SAVINGS_CAVEAT } from '../node/open.mjs';
 
 let passed = 0, failed = 0;
 const proof = async (name, fn) => { try { await fn(); passed++; console.log(`  ok   ${name}`); } catch (e) { failed++; console.log(`  FAIL ${name}\n       ${String(e?.stack || e).split('\n').slice(0, 5).join('\n       ')}`); } };
@@ -149,8 +151,8 @@ await proof('I5 "measured" is said to be against raw HTML, an upper bound, every
   const sv = (await call('/savings', { ua: UA.browser, headers: NAV })).text;
   assert.match(sv, /measured [\d,]+ against raw HTML \(an upper bound\) · modelled/); assert.match(sv, /<th[^>]*>measured, against raw HTML \(upper bound\), and under it the lower view<\/th>/); assert.match(sv, /<br><small>lower view: [\d,]+ of [\d,]+ \([\d,]+ answers?\)<\/small><\/td>/); assert.match(before.savings, /<br><small>lower view: – \(no answer yet\)<\/small><\/td>/);
   assert.match(sv, /So far [\d,]+ answers? (was|were) measured both ways: against raw HTML (it|they) spared [\d,]+ tokens, against plain text [\d,]+\./);
-  assert.match(before.savings, /No answer has been measured so yet\./); assert.match(before.open, /<b>–<\/b><span>the lower view against plain text: counted from 3\.33\.0 on, no answer measured so yet/); assert.match(sv, /alt="Tokens spared for agents by the open sea, measured against raw HTML \(an upper bound\)/);
-  const o = (await call('/open', { ua: UA.browser, headers: NAV })).text; assert.match(o, /Markdown instead of raw HTML, an upper bound/); assert.match(o, /the lower view: against plain text, for the [\d,]+ answers? measured so since 3\.33\.0 \(against raw HTML the same spared [\d,]+\)/);
+  assert.match(before.savings, /No answer has been measured both ways so far\./); assert.match(before.open, /<b>–<\/b><span>the lower view against plain text: counted from 3\.33\.0 on, no answer measured both ways so far/); assert.match(sv, /alt="Tokens spared for agents by the open sea, measured against raw HTML \(an upper bound\)/);
+  const o = (await call('/open', { ua: UA.browser, headers: NAV })).text; assert.match(o, /Markdown instead of raw HTML, an upper bound/); assert.match(o, /the lower view: against plain text, for the [\d,]+ answers? measured both ways so far, since 3\.33\.0 \(against raw HTML the same spared [\d,]+\)/);
   const md = (await call('/', { accept: 'text/markdown', ip: '203.0.113.71' })).text; assert.match(md, /measured [\d,]+ against raw HTML, an upper bound/);
   const s = await sea().savings(), lv = s.hero.lowerView; assert.ok(lv.answers >= 1 && s.today.vsText.answers === lv.answers && lv.againstRawHtml > 0, 'the lower view is counted, the same answers both ways');
   assert.ok(lv.againstPlainText <= lv.againstRawHtml && lv.againstRawHtml <= s.hero.measured + lv.answers + 1 && s.hero.measuredVsText === lv.againstPlainText, `like for like, and lower: ${JSON.stringify(lv)}`);
@@ -249,6 +251,34 @@ await proof('M8 the Kanzlei harbour in /pricing\'s structured data names its 990
 });
 await proof('the dock: the counter of the home page ends a screen above the floating bar (its lines are never under it at rest)', () => {
   assert.match(read('homepage/src/style.css'), /\.spared\{padding-bottom:calc\(84px \+ env\(safe-area-inset-bottom,0px\)\)\}/); assert.match(read('site/index.html'), /\.spared\{padding-bottom:calc\(84px/);
+});
+
+console.log('the re-verification (verify-3.33.md, Re-verification: remaining minors)');
+await proof('R1-R3 /savings says its once-a-day table is per process; /connect\'s data and /attention\'s note say what is true', async () => {
+  const sv = (await call('/savings', { ua: UA.browser, headers: NAV })).text; assert.ok(sv.includes(SAVINGS_CAVEAT.replace(/'/g, '&#39;')), 'the caveat on /savings');
+  assert.match(SAVINGS_CAVEAT, /restart of the node during a day can count a network once more that day/);
+  const ld = ldOf((await call('/connect', { ua: UA.browser, headers: NAV })).text).flatMap((x) => x['@graph'] || [x]).find((x) => x['@type'] === 'SoftwareApplication');
+  assert.match(ld.description, /One click for Cursor, VS Code, Goose and LM Studio, a few steps for Claude and ChatGPT\./); assert.doesNotMatch(ld.description, /One click into/);
+  const note = (await call('/attention.json', { accept: 'application/json' })).j.clicks.note; assert.match(note, /only people who navigate there in a browser are counted/); assert.doesNotMatch(note, /person, assistant, program/);
+  assert.match(read('node/once.mjs'), /about 35 MB in all when both are full/);
+});
+const leanPage = (main) => `<!doctype html><html><head><title>Help</title></head><body><main><h1>Shop help</h1><p>Questions people ask before they order from this shop, answered in full sentences for everyone.</p>${main}</main></body></html>`;
+const leanOf = (html, url = 'https://shop-proof.dev/help') => leanMarkdown(html, url).md;
+await proof('R4 lean: a box of the shop\'s payment methods is its text ("payment-methods", "payment-list"); a row of payment icons is not', () => {
+  const md = leanOf(leanPage('<div class="payment-methods"><h2>Payment</h2><p>We accept Visa, Mastercard, PayPal and invoice for orders above 50 euros.</p></div><div class="payment-list"><p>Invoices are due within 14 days of delivery.</p></div><ul class="payment-icons"><li>Amex</li><li>Klarna</li></ul><div class="payment-logos">Maestro</div>'));
+  assert.match(md, /We accept Visa, Mastercard, PayPal and invoice for orders above 50 euros\./); assert.match(md, /Invoices are due within 14 days of delivery\./);
+  assert.doesNotMatch(md, /Amex|Klarna|Maestro/, 'the icons and logos still go');
+});
+await proof('R4 lean: a tooltip box that explains in a full sentence stays; one without a sentence goes, and role=tooltip always goes', () => {
+  const md = leanOf(leanPage('<p>The APR is shown per year. <span class="tooltip-text">The annual percentage rate is the yearly cost of a loan, fees included.</span></p><span class="tooltip">Add to wishlist</span><div class="product-tooltip__inner">Copy link</div><div role="tooltip">This box says a full sentence, but its role is a tooltip.</div>'));
+  assert.match(md, /The annual percentage rate is the yearly cost of a loan, fees included\./, 'the glossary note stays');
+  assert.doesNotMatch(md, /Add to wishlist|Copy link/, 'tooltip chrome goes'); assert.doesNotMatch(md, /its role is a tooltip/, 'role=tooltip goes');
+});
+await proof('R4 lean: a rating is shown only between 0 and its best rating (5 where none is named): "97 of 5" is none', () => {
+  const prod = (r) => `<!doctype html><html><head><title>Kettle</title><script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', '@type': 'Product', name: 'Kettle', offers: { '@type': 'Offer', price: '49.00', priceCurrency: 'EUR', availability: 'https://schema.org/InStock' }, aggregateRating: { '@type': 'AggregateRating', ...r } })}</script></head><body><main><h1>Kettle</h1><p>A kettle for a small kitchen holds a litre and boils fast.</p></main></body></html>`;
+  const line = (r) => (leanOf(prod(r), 'https://shop-proof.dev/products/kettle').match(/^- Rating: .*$/m) || [null])[0];
+  assert.equal(line({ ratingValue: 97, reviewCount: 12 }), null); assert.equal(line({ ratingValue: -1 }), null); assert.equal(line({ ratingValue: 6, bestRating: 5 }), null);
+  assert.equal(line({ ratingValue: 4.6, reviewCount: 12 }), '- Rating: 4.6 of 5 (12 reviews)'); assert.equal(line({ ratingValue: 9, bestRating: 10, reviewCount: 3 }), '- Rating: 9 of 10 (3 reviews)');
 });
 
 console.log(`\n${passed} proofs hold${failed ? `, ${failed} FAIL` : ''}`);

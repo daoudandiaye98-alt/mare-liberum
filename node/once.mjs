@@ -1,8 +1,10 @@
 // Mare Liberum · once a day: what was already counted today, per caller network, kept in memory only
 // A count that one address could repeat in a loop (a page read as Markdown, a solved part handed out) counts once per
 // network (an IPv4 address, an IPv6 /64), kind and subject (the page, the task) and UTC day, and one network adds at most
-// `cap` counts of a group a day. The table is a fixed array of salted 32-bit hashes (2 MB), drawn anew every day and never
-// written down; when it is full, or a hash collides, nothing new counts: the count errs low, never high.
+// `cap` counts of a group a day. The table is a fixed array of salted 32-bit hashes (2 MB); beside it a count per network
+// and group, for at most 200,000 of them: about 35 MB in all when both are full (measured by the verifier of 3.33.0).
+// Both are drawn anew every day and never written down; when either is full, or a hash collides, nothing new counts: the
+// count errs low, never high.
 import { netKey } from './guard.mjs';
 
 const fnv = (s) => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return h >>> 0; };

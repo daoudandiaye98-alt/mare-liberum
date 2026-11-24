@@ -2041,7 +2041,7 @@ async function handleOne(req, db, cfg = {}) {
     // the license robots.txt names (RSL 1.0): every automated use, free, with credit
     if (path === '/license.xml' && req.method === 'GET') return new Response(licenseXml(base), { headers: { 'content-type': 'application/rsl+xml; charset=utf-8', 'cache-control': 'public, max-age=86400', ...CORS } });
     // /c/<service>?from=<page kind>&ref=<listing>: the target comes from the sea's own table, never from the request; a service
-    // that is not open leads to /pricing. Counted per service, page kind and kind of caller (crawlers and the sea itself not)
+    // that is not open leads to /pricing. Counted per service and page kind, people who navigate only (attention click, connect's countable)
     { const cm = /^\/c\/([a-z]{2,12})$/.exec(path); if (cm && req.method === 'GET' && Object.hasOwn(CTA, cm[1])) {
       const to = ctaTarget(cm[1], url.searchParams.get('ref')), hdr = { 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow', 'referrer-policy': 'strict-origin-when-cross-origin', ...CORS };
       if (!to) return new Response(null, { status: 302, headers: { location: `${base}/pricing`, ...hdr } });

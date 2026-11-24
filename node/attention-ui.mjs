@@ -57,7 +57,7 @@ export function attentionJson(base, O) {
     days: O.days.map((d) => ({ day: d.day, ai: d.ai, search: d.search, assistant: d.assistant, maps: d.maps, entries: d.entries, byFamily: d.by, notCounted: d.notCounted })),
     top: O.top.map((t) => ({ site: t.site, ai: t.ai, search: t.search, assistant: t.assistant, aiOnMap: t.maps, aiOnEntries: t.entries, byFamily: t.by, listing: t.mapped ? `${base}/site/${t.site}` : null })),
     notCounted7days: O.notCounted, leftOutOfListings7days: O.leftOutOfListings,
-    clicks: { ...O.clicks, note: 'clicks on the paid services through the counted door /c/<service>, per service, page kind and kind of caller (person, assistant, program); crawlers and the sea itself are not counted. A click is not a sale: payments happen at Stripe and are not seen here.' },
+    clicks: { ...O.clicks, note: 'clicks on the paid services through the counted door /c/<service>, per service and page kind: only people who navigate there in a browser are counted (no crawler, program, assistant, prefetch or headless browser, and not the sea itself), at most 3 per network, service and day. A click is not a sale: payments happen at Stripe and are not seen here.' },
     offers: providerOffers(base),
     rules: RULES(O.since),
     families: FAMILIES.map(([kind, name, label, group]) => ({ label, group: GROUPS[group], census: `${kind} · ${name}` })),

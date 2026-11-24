@@ -94,7 +94,12 @@ const ROLE_FRAME = /^(banner|contentinfo|complementary)$/i;
 // "site-cookie-banner__inner". A word inside another name says nothing: a "cookie-recipe" is a recipe, a "share-price" a
 // stock quote, "social-security" a benefit, a "localization-guide" a guide.
 //   UI words: a box whose name starts or ends with one of them is never the page's text, inside the main part or around it
-const UI_WORDS_BOX = new Set('gdpr popup popups modal modals drawer drawers toast tooltip wishlist breadcrumb breadcrumbs nav navbar navigation megamenu skiplink backtotop'.split(' '));
+const UI_WORDS_BOX = new Set('gdpr popup popups modal modals drawer drawers toast wishlist breadcrumb breadcrumbs nav navbar navigation megamenu skiplink backtotop'.split(' '));
+//   tooltip words: a box named so goes only when it holds no full sentence ("Add to cart" goes; a glossary note that explains
+//   a term in a sentence is the page's text and stays); role=tooltip always goes (ROLE_ALWAYS)
+const TIP_WORDS = new Set('tooltip tooltips'.split(' '));
+// a full sentence: four words or more that end in . ! or ?
+const fullSentence = (s) => /(?:^|[.!?:]\s+)(?:[^\s.!?]+\s+){3,}[^\s.!?]+[.!?](?:\s|$)/u.test(one(s));
 //   frame words: the site's head, menus, footer and sidebars, left out around the main part; inside it a "header" is the
 //   title of a section, a "menu" what a restaurant serves, and a footer or sidebar stays unless it is mostly links
 const FRAME_WORDS = new Set('header masthead topbar banner menu menus footer sidebar announcement announcements'.split(' '));
@@ -106,7 +111,7 @@ const SIGNUP = W('form signup popup modal banner bar widget box block');
 const SLIDES = W('counter buttons button controls control dots dot pagination pager arrows arrow bullets nav navigation prev next');
 const PICKER = W('selector select switcher picker form dropdown toggle popup modal drawer menu');
 const PAIRS = { cookie: CONSENT, cookies: CONSENT, consent: CONSENT, privacy: W('banner bar notice popup modal'), share: SHARING, sharing: SHARING, social: SHARING, newsletter: SIGNUP, subscribe: SIGNUP, subscription: SIGNUP, localization: PICKER, locale: PICKER, language: PICKER, lang: PICKER, country: PICKER, currency: PICKER, region: PICKER,
-  cart: W('drawer popup notification modal overlay flyout sidebar preview'), search: W('form modal overlay drawer popup bar toggle box'), chat: W('widget button launcher bubble popup frame'), payment: W('icons icon logos list methods badges'), app: W('banner'), promo: W('bar banner popup strip'), age: W('gate verification popup modal'), notify: W('modal popup'),
+  cart: W('drawer popup notification modal overlay flyout sidebar preview'), search: W('form modal overlay drawer popup bar toggle box'), chat: W('widget button launcher bubble popup frame'), payment: W('icons icon logos badges'), app: W('banner'), promo: W('bar banner popup strip'), age: W('gate verification popup modal'), notify: W('modal popup'),
   slider: SLIDES, slideshow: SLIDES, carousel: SLIDES, swiper: SLIDES, splide: SLIDES, flickity: SLIDES };
 const CONCAT = new Set(Object.entries(PAIRS).flatMap(([t, ws]) => [...ws].map((w) => t + w)));
 //   names of widgets in more than two parts (whole, or at the start or the end of a name), and the makers of consent and
@@ -131,7 +136,7 @@ function nameKind(raw) {
   const t = raw.toLowerCase(); let v = verdicts.get(t);
   if (v !== undefined) return v;
   v = judgeName(t);
-  if (v !== 'ui' && t.includes('__')) for (const part of t.split('__')) { const x = judgeName(part); if (x === 'ui') { v = 'ui'; break; } if (x === 'frame' || (x === 'shop' && !v)) v = x; }
+  if (v !== 'ui' && t.includes('__')) for (const part of t.split('__')) { const x = judgeName(part); if (x === 'ui') { v = 'ui'; break; } if (x === 'tip' || (x === 'frame' && v !== 'tip') || (x === 'shop' && !v)) v = x; }
   if (verdicts.size > 50_000) verdicts.clear();
   verdicts.set(t, v);
   return v;
@@ -144,15 +149,16 @@ function judgeName(t) {
     const ends = w.length === 1 ? [w[0]] : [w[0], w[w.length - 1]], joined = w.join('');
     if (MAKERS.test(t) || ends.some((x) => UI_WORDS_BOX.has(x)) || w.some((x, i) => i + 1 < w.length && PAIRS[x]?.has(w[i + 1]))
       || CONCAT.has(joined) || CONCAT_START.test(w[0]) || CONCAT_END.test(w[w.length - 1]) || edgeSeq(w, COMPOUND_SET) || COMPOUND_SET.has(joined)) v = 'ui';
+    else if (ends.some((x) => TIP_WORDS.has(x))) v = 'tip';
     else if (ends.some((x) => FRAME_WORDS.has(x))) v = 'frame';
     else if (w.some((x) => SHOP_WORDS.has(x)) || edgeSeq(w, SHOP_SET)) v = 'shop';
   }
   return v;
 }
-// the verdict on one box's names (class, id, and a custom element's own name): 'ui', 'frame', 'shop' or null
+// the verdict on one box's names (class, id, and a custom element's own name): 'ui', 'tip', 'frame', 'shop' or null
 function boxKind(names) {
   let kind = null;
-  for (const raw of names) { const v = nameKind(raw); if (v === 'ui') return 'ui'; if (v === 'frame') kind = 'frame'; else if (v === 'shop' && !kind) kind = 'shop'; }
+  for (const raw of names) { const v = nameKind(raw); if (v === 'ui') return 'ui'; if (v === 'tip') kind = 'tip'; else if (v === 'frame' && kind !== 'tip') kind = 'frame'; else if (v === 'shop' && !kind) kind = 'shop'; }
   return kind;
 }
 const RESPONSIVE_SHOW = /^(sm|md|lg|xl|2xl):(block|flex|inline|inline-block|inline-flex|grid|table|contents)$/;
@@ -308,7 +314,8 @@ export function productOf(html, pageUrl, { heading } = {}) {
   return {
     name: name || null, brand, price, was, low: low !== high ? low : null, high: low !== high ? high : null, currency: /^[A-Za-z]{3}$/.test(String(cur0 || '').trim()) ? String(cur0).trim().toUpperCase() : null, availability: avail || null,
     variants: variants.length > 1 ? { n: variants.length, inStock: known.length ? stocked.length : null, options, list: variants, selected: sel && variants.length > 1 ? sel.title : null } : null,
-    rating: rating && num(rating.ratingValue) != null ? { value: num(rating.ratingValue), best: num(rating.bestRating) || 5, count: num(rating.reviewCount ?? rating.ratingCount) } : null,
+    // a rating only where it can be one: 0 to the best rating (5 where the data names none); "97 of 5" is no rating
+    rating: (() => { const v = rating ? num(rating.ratingValue) : null, b = (rating && num(rating.bestRating)) || 5; return v != null && v >= 0 && v <= b ? { value: v, best: b, count: num(rating.reviewCount ?? rating.ratingCount) } : null; })(),
     gtin: gtinOf(sel?.gtin) || (variants.length <= 1 ? gtinOf(strOf(main?.gtin13 || main?.gtin12 || main?.gtin || main?.gtin14 || main?.gtin8)) : null),
     // the page's canonical address: a path on this site (www. or not), else said to be another site's
     url: canon, path: (() => { try { const c = new URL(canon), site = (u) => u.hostname.replace(/^www\./, ''); return page && /^https?:$/.test(c.protocol) && site(c) === site(page) ? c.pathname + c.search : null; } catch { return null; } })(), probe, handle: handle ? safeDecode(handle) : null,
@@ -600,7 +607,7 @@ export function leanMarkdown(html, base, { product: wantProduct = true, max = LE
         const o = attrs(k);
         if (o.role && (ROLE_ALWAYS.test(o.role) || (ROLE_FRAME.test(o.role) && (!inMain || linky(k))))) return false;
         const kind = k.len < bodyLen * 0.5 ? boxKind(boxNames(k)) : null;
-        if (kind === 'ui' || (kind === 'frame' && (!inMain || linky(k))) || (kind === 'shop' && product)) return false;
+        if (kind === 'ui' || (kind === 'tip' && !fullSentence(entities(textOfEl(k)))) || (kind === 'frame' && (!inMain || linky(k))) || (kind === 'shop' && product)) return false;
         if (product && t === 'form' && /\/cart(\/add)?\b/i.test(o.action || '')) return false;
         // a box of other products (recommendations, "complete the look", a grid): two or more links to them that are a fifth
         // of its text, or four and more

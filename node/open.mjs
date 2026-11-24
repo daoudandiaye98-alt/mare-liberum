@@ -23,6 +23,8 @@ export const LICENCES = [
   { data: 'every other page of the site', paths: ['/license.xml'], license: 'CC BY 4.0 (RSL: every automated use, free, with credit)', url: 'https://creativecommons.org/licenses/by/4.0/' },
 ];
 // how the ledger of savings counts, said on /savings (node/areas.mjs, node/once.mjs)
+// the table of what was counted today lives in the memory of the node, as the keys of the working sessions do (WORK_TEXT.caveat)
+export const SAVINGS_CAVEAT = 'A restart of the node during a day can count a network once more that day: the table of what was already counted today is kept in its memory only.';
 export const SAVINGS_RULE = 'Counted once a day per caller network (an IPv4 address or an IPv6 /64) and page for Markdown, and per network and task for a solved part; one network adds at most 500 of each a day. The sea\'s own calls, crawlers and the house agent count in none of the numbers here. What one address repeats in a loop counts once.';
 // the kinds of caller the chart shows, in the census's own words (node/core.mjs classify, node/atlantis.mjs roleOf)
 export const VISIT_KINDS = [
@@ -392,8 +394,8 @@ const tr = (cells) => `<tr>${cells.map((c, i) => (i ? `<td data-r>${c}</td>` : `
 const nums = (list, cls = '') => `<ul class="nums${cls ? ` ${cls}` : ''}">${list.map(([v, label]) => `<li><b>${v}</b><span>${esc(label)}</span></li>`).join('')}</ul>`;
 // the lower view (pages of the sea, since 3.33.0): the answers measured against a page's plain text as well, what they spared
 // against plain text and, like for like, against raw HTML; none yet is said as none, never as a saving of zero
-const lowerNum = (lv = {}) => [lv.answers ? n(lv.againstPlainText || 0) : '–', lv.answers ? `the lower view: against plain text, for the ${n(lv.answers)} ${lv.answers === 1 ? 'answer' : 'answers'} measured so since 3.33.0 (against raw HTML the same spared ${n(lv.againstRawHtml || 0)})` : 'the lower view against plain text: counted from 3.33.0 on, no answer measured so yet'];
-const lowerLine = (lv = {}) => (lv.answers ? `So far ${n(lv.answers)} ${lv.answers === 1 ? 'answer was' : 'answers were'} measured both ways: against raw HTML ${lv.answers === 1 ? 'it' : 'they'} spared ${n(lv.againstRawHtml || 0)} tokens, against plain text ${n(lv.againstPlainText || 0)}.` : 'No answer has been measured so yet.');
+const lowerNum = (lv = {}) => [lv.answers ? n(lv.againstPlainText || 0) : '–', lv.answers ? `the lower view: against plain text, for the ${n(lv.answers)} ${lv.answers === 1 ? 'answer' : 'answers'} measured both ways so far, since 3.33.0 (against raw HTML the same spared ${n(lv.againstRawHtml || 0)})` : 'the lower view against plain text: counted from 3.33.0 on, no answer measured both ways so far'];
+const lowerLine = (lv = {}) => (lv.answers ? `So far ${n(lv.answers)} ${lv.answers === 1 ? 'answer was' : 'answers were'} measured both ways: against raw HTML ${lv.answers === 1 ? 'it' : 'they'} spared ${n(lv.againstRawHtml || 0)} tokens, against plain text ${n(lv.againstPlainText || 0)}.` : 'No answer has been measured both ways so far.');
 const BERLIN = (t) => { const d = new Date(t); return Number.isNaN(d.getTime()) ? '' : `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Europe/Berlin' })}, ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' })}`; };
 
 export function openPage(base, v) {
@@ -504,7 +506,7 @@ export function savingsPage(base, s) {
 <p>Everywhere in the world people give their agents tasks that other people's agents already solved: the same product, the same kind of report, the same check of the same shop. Every agent works it out again, and every time it costs tokens, time and electricity. The Unibrain keeps the solved part — a confirmed place, a worked-out method, a verified store — and hands it to the next agent in one call. And every page of the sea goes to an agent as Markdown when that is what it reads: the same words for a fraction of the tokens.</p>
 <p>Two kinds of number, never mixed: <b>measured</b> is Markdown sent instead of raw HTML, counted once a day per network and page and turned into tokens with ratios measured on the <a href="/proof">proof of function</a>; <b>modelled</b> is a reuse of a solved part, counted once a day per network and task and multiplied by a sourced range of what it spares.</p>
 <p>Measured is counted against the page as raw HTML, what an agent that opens the page itself reads: an <b>upper bound</b>. Many agent tools hand their model plain text instead, and against plain text the sea's Markdown spares little or nothing (it keeps headings, lists and link addresses that plain text drops; the proof measured it). So since 3.33.0 each answer of a page of the sea is also counted against that page's plain text: the lower view, beside what the same answers spared against raw HTML. ${lowerLine(h.lowerView)} A page whose Markdown is another document (the front page answers with the guide for agents) is counted against its own plain text, never against the guide.</p>
-<p><small>${esc(SAVINGS_RULE)}</small></p>
+<p><small>${esc(SAVINGS_RULE)} ${esc(SAVINGS_CAVEAT)}</small></p>
 <h2>The last 30 days</h2>
 ${savingsChart(s.series || [])}
 <h2>By kind and by door</h2>

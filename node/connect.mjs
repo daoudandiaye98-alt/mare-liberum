@@ -232,7 +232,7 @@ export function connectJson(base, counts, sizes) {
 export function connectLd(base, sizes) {
   const d = doorsOf(base), org = { '@id': `${base}/#org` };
   return { '@context': 'https://schema.org', '@graph': [ORG(base),
-    { '@type': 'SoftwareApplication', '@id': `${base}/connect#app`, name: 'Mare Liberum MCP server', description: 'A remote MCP server without account or key: a shared brain of what worked for other agents, any web page as Markdown, how AI agents see a site, memory across sessions, an open index of agents, MCP servers and APIs. One click into Claude, ChatGPT, Cursor, VS Code and more.',
+    { '@type': 'SoftwareApplication', '@id': `${base}/connect#app`, name: 'Mare Liberum MCP server', description: 'A remote MCP server without account or key: a shared brain of what worked for other agents, any web page as Markdown, how AI agents see a site, memory across sessions, an open index of agents, MCP servers and APIs. One click for Cursor, VS Code, Goose and LM Studio, a few steps for Claude and ChatGPT.',
       url: `${base}/connect`, installUrl: `${base}/connect`, applicationCategory: 'DeveloperApplication', applicationSubCategory: 'MCP server', operatingSystem: 'Any', isAccessibleForFree: true,
       offers: { '@type': 'Offer', price: '0', priceCurrency: 'EUR' }, softwareHelp: { '@type': 'CreativeWork', url: `${base}/connect` }, license: 'https://opensource.org/licenses/MIT', publisher: org },
     { '@type': 'WebAPI', '@id': `${d.app}#api`, name: 'Mare Liberum MCP, the app door', description: `Streamable HTTP MCP endpoint with ${sizes?.app?.tools ?? 14} tools for the sessions of people. No account, no key.`, url: d.app, documentation: `${base}/connect`, termsOfService: `${base}/terms`, provider: org },
