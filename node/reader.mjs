@@ -2,7 +2,7 @@
 // It follows robots.txt, reads one page per call, keeps nothing but a short cache and the name of the site that was read.
 import { safeHost, publicDns, grab, robotsGroups, robotsAllows, readPage } from './check.mjs';
 import { aside } from './aside.mjs';
-import { entities, leanMarkdown, cleanUrl } from './lean.mjs';
+import { entities, leanMarkdown } from './lean.mjs';
 export { entities };
 
 export const READER_UA = 'MareLiberum-Reader/1.0 (+https://mareliberum.dev/read; reads one page for an agent and follows robots.txt)';
