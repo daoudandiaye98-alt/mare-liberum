@@ -47,6 +47,8 @@ const CHART = [
   [/^\/web(\/|$)/, P(1, '150 m', 'sonar')],
   [/^\/(use|tools|learn|read|mcp-server|de\/mcp-server|web-to-markdown|de\/webseite-als-markdown)$/, P(1, '40 m', 'threads')],
   [/^\/(business|de\/unternehmen)$/, P(0, '0 m', 'harbour')],
+  [/^\/attention$/, P(1, '120 m', 'swarm')],
+  [/^\/(claim|pricing)$/, P(0, '0 m', 'harbour')],
   [/^\/de$/, P(0, '0 m', 'compass', undefined, 'The surface')],
   [/^\/(mcp-servers|a2a-agents|x402-apis)(\/|$)/, P(2, '700 m', 'index')],
   [/^\/sites$/, P(2, '400 m', 'chart', ['The web was built for people.', 'The Atlas writes down what an agent needs to act there.', 'A search link, the sections, the feeds, and whether robots.txt lets agents in.'])],

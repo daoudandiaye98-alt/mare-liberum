@@ -269,7 +269,7 @@ ${B}/brain?q=&lt;task&gt;      pathways other agents used for the same task
 ${B}/r/&lt;address&gt;        any page as clean Markdown
 ${B}/check/&lt;domain&gt;       how AI agents see a website, scored</pre>`;
 const findBox = (q = '') => `<form action="/find" method="get" role="search" style="display:flex;gap:8px;margin:14px 0"><input type="search" name="q" value="${esc(q)}" placeholder="what do you need? e.g. train tickets germany" aria-label="Search the Atlas" style="flex:1;padding:10px 12px;border-radius:10px;border:1px solid #2a5a80;background:#0a1c2e;color:#eaf4ff;font-size:16px"><button style="padding:10px 16px;border-radius:10px;border:0;background:#4fe3c1;color:#04101c;font-weight:600">Find</button></form>`;
-export function sitePage(base, x, extra = '') {
+export function sitePage(base, x, extra = '', lead = '') {
   const B = esc(base);
   if (!x || x.mapped === false) return page(base, `/site/${esc(x?.site || '')}`, `${x?.site || 'Site'} for agents · Mare Liberum Atlas`, 'Not on the map yet.', `<p class="muted" style="margin:0"><a href="/sites">The Atlas</a></p><h1>${esc(x?.site || '')}</h1><p>${esc(x?.note || 'Not on the map yet.')}</p>${findBox()}`);
   const no = (x.agents || []).filter((a) => a.allowed === false), live = no.filter((a) => a.role !== 'training');
@@ -277,6 +277,7 @@ export function sitePage(base, x, extra = '') {
   const files = [['Feeds', x.feeds], ['Sitemaps', x.sitemaps], ['Developer pages', x.developers && [x.developers]], ['llms.txt', x.llmsTxt && [x.llmsTxt]]].filter(([, v]) => v?.length).map(([k, v]) => `<tr><td>${k}</td><td>${v.map((u) => `<a href="${esc(u)}" rel="nofollow">${esc(u)}</a>`).join('<br>')}</td></tr>`).join('');
   const body = `<p class="muted" style="margin:0"><a href="/sites">The Atlas</a> · the web as an agent needs it</p><h1>${esc(x.site)} for agents</h1>
 ${x.title ? `<p style="font-size:1.1rem"><b>${esc(x.title)}</b>${x.description ? ` — ${esc(x.description)}` : ''}</p>` : ''}
+${lead ? `<p>${lead}</p>` : ''}
 ${x.search ? `<h2>Search ${esc(x.site)} with one link</h2><pre>${esc(x.search.template)}</pre><p class="muted">Put the words where {q} stands. From ${esc(x.search.from)}.${x.search.robotsDisallowsFor ? ` robots.txt asks ${esc([].concat(x.search.robotsDisallowsFor).join(', '))} not to fetch this path.` : ''} Read the result as Markdown: <code>${B}/r/${esc(x.search.example)}</code></p>` : x.atlas ? '' : `<h2>Search</h2><p class="muted">The home page shows no search the Atlas can turn into a link.</p>`}
 ${x.atlas ? `<p><b>${esc(x.atlas)}</b></p>` : ''}
 <h2>Who may read it</h2><p>${x.robots.startsWith('robots.txt did not') ? esc(x.robots) : live.length ? `robots.txt blocks ${live.map((a) => `<b>${esc(a.name)}</b>`).join(', ')}${no.length > live.length ? ` and, for training, ${no.filter((a) => a.role === 'training').map((a) => esc(a.name)).join(', ')}` : ''}.` : no.length ? `Every assistant and AI search crawler may read it; for training robots.txt blocks ${no.map((a) => esc(a.name)).join(', ')}.` : 'robots.txt lets all 18 known AI agents read it.'}</p>

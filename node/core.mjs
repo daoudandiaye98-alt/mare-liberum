@@ -33,6 +33,9 @@ import { paidRoute } from './paid.mjs';
 import { pricingOf, priceLine, withPrice } from './pricing.mjs';
 import { wantsMarkdown, mdTwin, asMarkdown } from './agentmd.mjs';
 import { areasPage, areasJson, marketPage, thinkingPage, savingsPage } from './areas.mjs';
+import { attentionOf, ctaTarget, providerHost, CTA } from './attention.mjs';
+import { attentionLine, attentionData, attentionJson, attentionPage, claimJson, claimPage, pricingJson, pricingPage, licenseXml } from './attention-ui.mjs';
+import { siteProviderHtml, siteOwnerCheck } from './offers.mjs';
 import { SHORE_MOVES, MCP_ALIASES, SSE_OPEN, SSE_POST, meant, aboutOf, aboutPage, imprintPage, didDoc, agentsJson, discoveryOf, sseOpen, sseOf } from './shore.mjs';
 import { netKey } from './guard.mjs';
 
@@ -1060,7 +1063,7 @@ export function entryPage(e, base, standing, mapped) {
   // the website behind the entry, for its map in the Atlas (only a real web address, never a registry name)
   const siteHost = (() => { try { const h = new URL(kind === 'merchant' ? `https://${m.publisher}` : e.url).hostname.toLowerCase().replace(/^www\./, ''); return /^[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,24}$/.test(h) && !/(^|\.)(github\.com|githubusercontent\.com|huggingface\.co|vercel\.app|netlify\.app|pages\.dev|workers\.dev|onrender\.com|herokuapp\.com|railway\.app|fly\.dev)$/.test(h) || h === 'github.com' ? h : null; } catch { return null; } })();
   const rows = [['Kind', esc(KIND_WORD[kind] || kind)], ['Publisher', esc(m.publisher)], ['Endpoint', ep ? `<code>${esc(ep.url || ep.address || ep.identifier)}</code>${ep.transport ? ` · ${esc(ep.transport)}` : ''}${ep.method ? ` · ${esc(ep.method)}` : ''}` : ''],
-    ['Price', price], ['Capabilities', esc((e.capabilities || []).slice(0, 16).join(', '))], ['Verified', verifiedOf(e) ? `checked by a person on ${esc(verifiedOf(e).at)}${verifiedOf(e).until ? `, holds until ${esc(verifiedOf(e).until)}` : ''} · a paid check, it changes no order · <a href="/offers#verified">what that means</a>` : ''], ['Vouched by', esc(m.attestedBy === 'domain' ? 'its own domain' : m.attestedBy || '')],
+    ['Price', price], ['Capabilities', esc((e.capabilities || []).slice(0, 16).join(', '))], ['Owner checked', verifiedOf(e) ? `checked by a person on ${esc(verifiedOf(e).at)}${verifiedOf(e).until ? `, holds until ${esc(verifiedOf(e).until)}` : ''} · a paid check, it changes no order and adds no level of the verified market · <a href="/claim">what that means</a>` : ''], ['Vouched by', esc(m.attestedBy === 'domain' ? 'its own domain' : m.attestedBy || '')],
     ['For agents', siteHost && mapped?.(siteHost) ? `<a href="/site/${esc(siteHost)}">how an agent uses ${esc(siteHost)}</a> (search link, sections, who may read it)` : ''],
     ['Traces of agents', standing ? `${standing.worked} worked · ${standing.partly} partly · ${standing.failed} failed` : 'none yet: be the first to leave one'], ['Source', esc(m.lake || '')]].filter((r) => r[1]);
   // the title says what a searcher asks about this entry, the first line answers it from the entry's own data
@@ -1425,9 +1428,11 @@ async function handleOne(req, db, cfg = {}) {
     late.push({ ...who, path: door, geo, ...(who.kind === 'assistant' ? { ua: req.headers.get('user-agent'), ref: req.headers.get('referer'), method: req.method } : {}) });
   }
   seen(...late);
+  // a read of a listing (/site/<domain>, an entry) by an AI crawler, a search engine or an assistant counts once its answer is known (node/attention.mjs)
+  const att = req.method === 'GET' ? attentionOf(db, cfg).hook(path, who, ip) : null;
   // a node that stands alone keeps its own shelf of ready answers (the work a CDN did for it elsewhere); every caller is counted first
   const shelf = cfg.shelf && req.method === 'GET' ? cfg.shelf : null, ready = shelf?.take(req, path, who.kind);
-  if (ready?.fresh) return ready.res;
+  if (ready?.fresh) { att?.(200); return ready.res; }
   const answer = async () => {
   try {
     const page = cfg.site?.[path];
@@ -1441,6 +1446,7 @@ async function handleOne(req, db, cfg = {}) {
       let id; try { id = `urn:air:${decodeURIComponent(path.slice(3))}`; } catch { id = ''; }
       const e = id ? await db('mare_get', { id }) : null;
       if (!e) return new Response('<!doctype html><title>Not in the sea</title><p>This entry is not in the sea. <a href="/">Mare Liberum</a></p>', { status: 404, headers: { 'content-type': 'text/html; charset=utf-8' } });
+      ctx.listing = providerHost(e);
       const [t, known] = await Promise.all([sea.tracesOf(e.identifier).catch(() => null), sea.atlasKnown?.(e).catch(() => null)]);
       return new Response(entryPage(e, base, t?.standing, (h) => known === h), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=300', ...CORS } });
     }
@@ -1491,7 +1497,6 @@ async function handleOne(req, db, cfg = {}) {
     { const m = meant(path) ?? SHORE_MOVES.get(path); if (m) { const [to, frag] = m.split('#'); return new Response(null, { status: 308, headers: { location: `${base}${to}${url.search}${frag ? `#${frag}` : ''}`, 'cache-control': 'public, max-age=86400', ...CORS } }); } }
     if (path === '/about' && req.method === 'GET') { const pr = pricingOf(cfg.pay || payConfig(), base); return /text\/html/.test(req.headers.get('accept') || '') ? new Response(aboutPage(base, pr), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=3600', vary: 'accept', ...CORS } }) : json(aboutOf(base, pr), 200, { ...cached, vary: 'accept' }); }
     if (path === '/impressum' && req.method === 'GET') return new Response(imprintPage(base), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=3600', ...CORS } });
-    if (path === '/pricing' && req.method === 'GET') return /text\/html/.test(req.headers.get('accept') || '') ? new Response(null, { status: 303, headers: { location: `${base}/offers`, vary: 'accept', ...CORS } }) : json({ price: pricingOf(cfg.pay || payConfig(), base).line, paid_route: priceTable(cfg.pay || payConfig(), base), house: offersJson(base), free: 'everything else in the sea: the brain, the doors, the reader, the check, the map of a site', how_to_pay: `${base}/pay/howto` }, 200, { ...cached, vary: 'accept' });
     if (path === '/.well-known/did.json') return json(didDoc(base), 200, cached);
     if (path === '/.well-known/agents.json') return json(agentsJson(base), 200, cached);
     if (path === '/a2a/health') return json({ status: 'ok', version: VERSION, a2a: `${base}/a2a`, card: `${base}/.well-known/agent-card.json`, transport: 'JSONRPC' }, 200, { 'cache-control': 'no-store', ...CORS });
@@ -1622,7 +1627,7 @@ async function handleOne(req, db, cfg = {}) {
     if (path === '/say') return json(await sea.say(await args(), ctx));
     if (path === '/inbox') return json(await sea.inbox(await args()));
     // the ecosystem: the current, watches, the reef, work between agents, seals, the heartbeat
-    if (path === '/tide') { const t = await sea.tide(await args(), ctx); try { if (!t?.calm) { const m = (async () => { await sea.flushSave?.(); if (!immune.atRest?.('market')) await sea.marketSweep?.(); })().catch((e) => console.error('mare_market', e?.message)); cfg.waitUntil?.(m); } } catch {} try { const p = indexNowDaily(db, base, sea, cfg).catch(() => {}); cfg.waitUntil?.(p); } catch {} try { const g = db('mare_stats', {}).then((idx) => sea.gaugeLakes(idx)).catch(() => {}); cfg.waitUntil?.(g); } catch {} return json(t); }
+    if (path === '/tide') { const t = await sea.tide(await args(), ctx); try { if (!t?.calm) { const m = (async () => { await sea.flushSave?.(); await attentionOf(db, cfg).flush().catch((e) => console.error('mare_attention', e?.message)); if (!immune.atRest?.('market')) await sea.marketSweep?.(); })().catch((e) => console.error('mare_market', e?.message)); cfg.waitUntil?.(m); } } catch {} try { const p = indexNowDaily(db, base, sea, cfg).catch(() => {}); cfg.waitUntil?.(p); } catch {} try { const g = db('mare_stats', {}).then((idx) => sea.gaugeLakes(idx)).catch(() => {}); cfg.waitUntil?.(g); } catch {} return json(t); }
     if (path === '/indexnow.json') return json((await cfg.kv?.get(`indexnow:${new Date().toISOString().slice(0, 10)}`).catch(() => null)) || { today: 'not yet' }, 200, { 'cache-control': 'public, max-age=60' });
     if (path === '/tides') return json(await sea.tides(await args()), 200, { 'cache-control': 'public, max-age=60' });
     if (path === '/instinct.json' || path === '/instinct') return json(await sea.instinctState(), 200, { 'cache-control': 'public, max-age=30' });
@@ -1705,12 +1710,12 @@ async function handleOne(req, db, cfg = {}) {
       let x; try { x = await sea.site(d, ctx); } catch (e) { return json({ error: { code: 'INVALID_ARGUMENT', message: e.message, find: `${base}/find?q=<words>` } }, 400); }
       // a site that did not answer (no address, an error) has a page for agents, but none for a search engine
       const none = x.mapped === false, dead = !(Number(x.status) >= 200 && Number(x.status) < 400), hdr = { 'cache-control': none ? 'public, max-age=60' : 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800', ...(none || dead ? { 'x-robots-tag': 'noindex, follow' } : {}), vary: 'accept', ...CORS };
-      const rep = none ? null : siteReport(x.site, base);
+      const rep = none ? null : siteReport(x.site, base), own = none ? null : siteOwnerCheck(x.site, base), A = none ? null : await attentionOf(db, cfg).site(x.site);
       // as data, every web address of the site leads through the sea (payment pages and the sea's own stay as they are);
       // counted like a step to that site, so it is not kept on the shelf
-      if (fmt === '.json') { if (!none) passed('site', x.site || d); return ajson(rewriteForAgents(rep ? { ...x, report: rep } : x, { base, anyKey: true }), none ? 404 : 200, { ...hdr, 'cache-control': none ? 'public, max-age=60' : 'public, max-age=3600' }); }
-      if (fmt === '.md') return new Response(none ? `# ${x.site}\n\n${x.note}\n` : siteMarkdown(x) + siteReportMd(x.site, base), { status: none ? 404 : 200, headers: { 'content-type': 'text/markdown; charset=utf-8', ...hdr } });
-      return new Response(sitePage(base, x, none ? '' : siteReportHtml(x.site, base)), { status: none ? 404 : 200, headers: { 'content-type': 'text/html; charset=utf-8', ...hdr } });
+      if (fmt === '.json') { if (!none) passed('site', x.site || d); return ajson(rewriteForAgents({ ...x, ...(rep ? { report: rep } : {}), ...(own ? { ownerCheck: own } : {}), ...(A ? { attention: attentionData(A, base) } : {}) }, { base, anyKey: true }), none ? 404 : 200, { ...hdr, 'cache-control': none ? 'public, max-age=60' : 'public, max-age=3600' }); }
+      if (fmt === '.md') return new Response(none ? `# ${x.site}\n\n${x.note}\n` : siteMarkdown(x) + (attentionLine(A, { html: false }) ? `\n${attentionLine(A, { html: false })}\n` : '') + siteReportMd(x.site, base), { status: none ? 404 : 200, headers: { 'content-type': 'text/markdown; charset=utf-8', ...hdr } });
+      return new Response(sitePage(base, x, none ? '' : siteProviderHtml(x.site, base), none ? '' : attentionLine(A, { box: !!(rep || own) })), { status: none ? 404 : 200, headers: { 'content-type': 'text/html; charset=utf-8', ...hdr } });
     }
     if (path === '/site') { const a = await args(); const d = a.domain || a.site || a.q; return new Response(null, { status: 302, headers: { location: d ? `/site/${encodeURIComponent(String(d).trim())}` : '/sites', ...CORS } }); }
     if (path === '/find' || path === '/find.json') {
@@ -1883,6 +1888,26 @@ async function handleOne(req, db, cfg = {}) {
       if (at === '/brain/market') { const r = await sea.market(a, ctx); return out(r, () => marketPage(base, r), a.q || a.need || a.host ? 0 : 120); }
       const r = await sea.thinking(a, ctx); return out(r, () => thinkingPage(base, r), a.q || a.task ? 0 : 300);
     }
+    // attention (node/attention.mjs, node/attention-ui.mjs): what the AIs read of the listings, how a provider claims one, every price,
+    // and the counted door to the paid services. A program gets the data unless it asks for a page (or Markdown)
+    if (/^\/(attention|claim|pricing)(\.json)?$/.test(path) && req.method === 'GET') {
+      const at = path.replace(/\.json$/, ''), asJson = path.endsWith('.json') || url.searchParams.get('format') === 'json' || !/text\/(html|markdown)/.test(req.headers.get('accept') || '');
+      const send = (v, pg, age) => (asJson ? ajson(v, 200, { 'cache-control': `public, max-age=${age}`, vary: 'accept', ...(path.endsWith('.json') ? { 'x-robots-tag': 'noindex' } : {}) }) : new Response(pg(), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': `public, max-age=${age}`, vary: 'accept', ...CORS } }));
+      if (at === '/attention') { const O = await attentionOf(db, cfg).overview(); return send(attentionJson(base, O), () => attentionPage(base, O), 60); }
+      if (at === '/claim') return send(claimJson(base), () => claimPage(base), 300);
+      const P = { price: pricingOf(cfg.pay || payConfig(), base), paidRoute: priceTable(cfg.pay || payConfig(), base), house: offersJson(base), savings: await sea.savings?.().catch(() => null) };
+      return send(pricingJson(base, P), () => pricingPage(base, P), 300);
+    }
+    // the license robots.txt names (RSL 1.0): every automated use, free, with credit
+    if (path === '/license.xml' && req.method === 'GET') return new Response(licenseXml(base), { headers: { 'content-type': 'application/rsl+xml; charset=utf-8', 'cache-control': 'public, max-age=86400', ...CORS } });
+    // /c/<service>?from=<page kind>&ref=<listing>: the target comes from the sea's own table, never from the request; a service
+    // that is not open leads to /pricing. Counted per service, page kind and kind of caller (crawlers and the sea itself not)
+    { const cm = /^\/c\/([a-z]{2,12})$/.exec(path); if (cm && req.method === 'GET' && Object.hasOwn(CTA, cm[1])) {
+      const to = ctaTarget(cm[1], url.searchParams.get('ref')), hdr = { 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow', 'referrer-policy': 'strict-origin-when-cross-origin', ...CORS };
+      if (!to) return new Response(null, { status: 302, headers: { location: `${base}/pricing`, ...hdr } });
+      attentionOf(db, cfg).click(cm[1], url.searchParams.get('from'), who, ip);
+      return new Response(null, { status: 302, headers: { location: to.startsWith('/') ? `${base}${to}` : to, ...hdr } });
+    } }
     if (path.startsWith('/brain/') && req.method === 'GET') { const r = await sea.think({ q: decodeURIComponent(path.slice(7)).replace(/-/g, ' ') }, { ...ctx, readOnly: true }); const res = wantsHtml() ? html(brainPage(base, r, path), 300) : ajson(forAgents(r, r.task), 200, { 'cache-control': 'public, max-age=300' }); res.headers.set('vary', 'accept'); return res; }
     if (path === '/go' || path.startsWith('/go/')) { const a = await args(), r = await sea.walk(path.length > 4 ? decodeURIComponent(path.slice(4)) : null, a, ctx), to = onward(r.to, a.q, Date.now()); if (to !== r.to) passed('go', r.to, { q: a.q, status: 302 }); return new Response(null, { status: 302, headers: { location: to, 'cache-control': 'no-store', 'x-robots-tag': 'noindex', ...CORS } }); }
     if (path.startsWith('/rate/')) {
@@ -2160,6 +2185,7 @@ async function handleOne(req, db, cfg = {}) {
   // one that a cache hands out still speaks up). An answer that only sends a browser on is no visit: the visit is where it leads
   const page = async () => {
     const res = await answer();
+    att?.(res.status, ctx.listing);
     if (waiting && res.status >= 300 && res.status < 400 && res.headers.has('location')) { const i = waits.indexOf(waiting); if (i >= 0) waits.splice(i, 1); }
     try { return await sendPage(res, path, door, counted); } catch (e) { console.error('mare_error', door, String(e?.message || 'failed')); return json({ error: { code: 'INTERNAL', message: 'the node hit an error, try again' } }, 500); }
   };
