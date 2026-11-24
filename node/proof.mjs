@@ -271,7 +271,7 @@ const times = (x) => (x == null ? '–' : `${n(x)}×`);
 function leanSays(d, L) {
   const a = d.summary, b = L.summary, ra = a.reading[TOK], rb = b.reading[TOK], ta = a.times[TOK], tb = b.times[TOK], fa = a.finding[TOK], fb = b.finding[TOK], wa = a.whole[TOK], wb = b.whole[TOK], ka = a.keeps.all, kb = b.keeps.all;
   const out = [
-    `The reader's Markdown of the median page: ${n(ra.markdown?.median)} tokens on the live sea (${esc(d.bench.seaVersion || '')}), ${n(rb.markdown?.median)} with the lean reader; plain text, the baseline, ${n(ra.text?.median)} and ${n(rb.text?.median)}. On the same copy of each page the reader of ${esc(L.bench.prior?.version || 'the release before')} wrote ${n(rb.prior?.median)} tokens, page by page a median ${times(tb.priorPerMarkdown)} the lean Markdown.`,
+    `The reader's Markdown of the median page: ${n(ra.markdown?.median)} tokens on the live sea (${esc(d.bench.seaVersion || '')}), ${n(rb.markdown?.median)} with the lean reader; plain text, the baseline, ${ra.text?.median === rb.text?.median ? `${n(rb.text?.median)} in both runs` : `${n(ra.text?.median)} and ${n(rb.text?.median)}`}. On the same copy of each page the reader of ${esc(L.bench.prior?.version || 'the release before')} wrote ${n(rb.prior?.median)} tokens, page by page a median ${times(tb.priorPerMarkdown)} the lean Markdown.`,
     `Against plain text, page by page: the Markdown was a median ${times(ta.markdownPerText)} the plain text before, and is ${times(tb.markdownPerText)} now. It still holds the page (its heading, on shop pages a price) on ${n(kb.markdown?.kept)} of ${n(kb.markdown?.of)} pages; plain text on ${n(kb.text?.kept)} of ${n(kb.text?.of)}.`,
     `The /r/ answer of the median page: ${n(ra.served?.median)} tokens before, ${n(rb.served?.median)} now (one line of source above the page, one line of how to cite it below); format=full keeps the long lines: ${n(rb.servedFull?.median)}. The MCP tool read_page: ${n(ra.mcp?.median)} before, ${n(rb.mcp?.median)} now.`,
   ];
@@ -296,7 +296,8 @@ ${row('search loop without the sea, modelled', `${n(fa.low)}–${n(fa.high)}`, `
 // per task: the earlier reader (a ring), the lean reader (a dot), plain text (a dot), on one logarithmic axis
 function leanReadingChart(L) {
   const rows = measuredRows(L).filter((t) => tk(t, 'prior') > 0);
-  const F = [['prior', 'vz-ring', 'the earlier reader\'s Markdown, same copy'], ['markdown', 'vz-md', 'the lean reader\'s Markdown'], ['text', 'vz-text', 'plain text']];
+  // (drawn plain text first and larger, the lean Markdown smaller on top: where the two are nearly equal both stay visible)
+  const F = [['prior', 'vz-ring', 'the earlier reader\'s Markdown, same copy'], ['markdown', 'vz-md', 'the lean reader\'s Markdown'], ['text', 'vz-text', 'plain text']], R = { text: 7, markdown: 4.5, prior: 5.5 }, ORDER = [2, 1, 0];
   const vals = rows.flatMap((t) => F.map(([f]) => tk(t, f))).filter((v) => v > 0);
   if (!vals.length) return '';
   const lo = Math.floor(Math.log10(Math.min(...vals))), hi = Math.max(lo + 1, Math.ceil(Math.log10(Math.max(...vals))));
@@ -305,7 +306,7 @@ function leanReadingChart(L) {
   const lab = (v) => (v >= 1e6 ? `${v / 1e6}M` : v >= 1e3 ? `${v / 1e3}K` : String(v));
   const sorted = [...rows].sort((a, b) => tk(b, 'prior') - tk(a, 'prior'));
   const row = (t) => { const v = F.map(([f]) => tk(t, f)), ok = v.filter((y) => y > 0);
-    return `<li><span class="vz-n">${esc(t.task)} <small>${esc(hostOf(t.page.final || t.url))}</small></span><svg class="vz-s" width="100%" height="22" aria-hidden="true" focusable="false">${gridOf(ticks, x, 22)}<line class="vz-span" x1="${x(Math.min(...ok))}%" x2="${x(Math.max(...ok))}%" y1="11" y2="11"/>${F.map(([f, c, name], i) => (v[i] > 0 ? `<circle class="${c}" cx="${x(v[i])}%" cy="11" r="5.5"><title>${esc(t.task)}: ${esc(name)} ${n(v[i])} tokens</title></circle>` : '')).join('')}</svg><span class="vz-vh">${F.map(([, , name], i) => `${esc(name)} ${n(v[i])}`).join(' · ')} tokens</span></li>`; };
+    return `<li><span class="vz-n">${esc(t.task)} <small>${esc(hostOf(t.page.final || t.url))}</small></span><svg class="vz-s" width="100%" height="22" aria-hidden="true" focusable="false">${gridOf(ticks, x, 22)}<line class="vz-span" x1="${x(Math.min(...ok))}%" x2="${x(Math.max(...ok))}%" y1="11" y2="11"/>${ORDER.map((i) => { const [f, c, name] = F[i]; return v[i] > 0 ? `<circle class="${c}" cx="${x(v[i])}%" cy="11" r="${R[f]}"><title>${esc(t.task)}: ${esc(name)} ${n(v[i])} tokens</title></circle>` : ''; }).join('')}</svg><span class="vz-vh">${F.map(([, , name], i) => `${esc(name)} ${n(v[i])}`).join(' · ')} tokens</span></li>`; };
   return `<figure class="vz wide" id="chart-lean"><figcaption>The reader before and after, page by page (${TOK}, one row per task, the same copy of each page, a logarithmic axis)</figcaption><ul class="vz-k"><li><i class="vz-ringkey"></i>${esc(F[0][2])}</li><li><i class="vz-md"></i>${esc(F[1][2])}</li><li><i class="vz-text"></i>${esc(F[2][2])}</li></ul>${axisRow(ticks, x, lab)}<ol class="vz-r">${sorted.map(row).join('')}</ol>${axisRow(ticks, x, lab)}</figure>`;
 }
 // per task: the live sea's full answer (a ring), the short answer (a dot), the modelled search loop (a band)

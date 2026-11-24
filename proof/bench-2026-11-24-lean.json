@@ -1,0 +1,1180 @@
+{
+ "what": "Proof of function: the tokens an agent reads with the open sea and without it (https://mareliberum.dev/proof)",
+ "version": 1,
+ "date": "2026-11-24",
+ "startedAt": "2026-11-24T15:25:45.118Z",
+ "endedAt": "2026-11-24T15:28:31.650Z",
+ "bench": {
+  "script": "tools/proof-bench.mjs",
+  "ua": "MareLiberum-ProofBench/1.0 (+https://mareliberum.dev/proof; reads each page of a published task set once to count its tokens; follows robots.txt)",
+  "sessionUa": "MareLiberum-session/1.0",
+  "node": "v22.23.5",
+  "commit": "2ea1cb9",
+  "seaVersion": "3.32.0",
+  "sea": "http://127.0.0.1:8120",
+  "base": "https://mareliberum.dev",
+  "prior": {
+   "commit": "bc74c42",
+   "version": "3.32.0"
+  },
+  "ranFrom": "a Claude Code session machine (cloud sandbox, through its egress proxy); the brain from a local node of lean/1 on 127.0.0.1:8120"
+ },
+ "tokenizers": [
+  {
+   "id": "o200k_base",
+   "package": "js-tiktoken@1.0.21",
+   "models": "OpenAI GPT-4o, GPT-4.1, o-series and GPT-5 models"
+  },
+  {
+   "id": "cl100k_base",
+   "package": "js-tiktoken@1.0.21",
+   "models": "OpenAI GPT-4 and GPT-3.5 models"
+  },
+  {
+   "id": "claude-legacy",
+   "package": "@anthropic-ai/tokenizer@0.0.4",
+   "models": "Anthropic Claude 1 and 2; for Claude 3 and later only \"a very rough approximation\" (Anthropic)"
+  }
+ ],
+ "crossCheck": "@mozilla/readability@0.6.0 + linkedom@0.18.15",
+ "taskSet": {
+  "file": "proof/tasks.json",
+  "picked": "2026-11-24T13:56:02.125Z",
+  "rule": "shopping: the pathways GET /brain lists as the strongest (field top, 24 at pick time), kept when confirmed (more worked than failed reports), at most one per site, at most 24; everyday: questions asked at the brain (the record of the doors, 23 and 24 November 2026) and common reads of coding agents, with the page a person would expect an agent to open (chosen by hand; pages whose robots.txt forbids reading, or that a bot wall closes, were not chosen)"
+ },
+ "method": {
+  "run": "local run of lean/1 before deploy",
+  "perHostMs": 1100,
+  "timeoutMs": 15000,
+  "maxBytes": 2500000,
+  "markdownCap": 60000,
+  "snippetChars": 160,
+  "brainGapMs": 1500,
+  "hops": 4,
+  "robots": "robots.txt is read once per host and obeyed for the token MareLiberum-ProofBench (RFC 9309: a 4xx answer allows everything, a 5xx answer or no answer forbids everything); a page the sea's reader is asked not to read (token MareLiberum-Reader) is left out too",
+  "html": "the page as the server sent it, decoded as UTF-8, at most 2.5 MB",
+  "walls": "a page that answers with a bot wall instead of itself (a challenge, a captcha, a request to enable JavaScript) is not counted; the run says so in its row",
+  "text": "readability-style extraction (tools/proof-bench.mjs, extractText): scripts, styles, form controls, hidden elements, nav, aside and footer elements and boxes whose class or id names navigation, menus, headers, footers, sidebars, comments, cookies, sharing or ads are dropped; every paragraph-like block of 25 characters or more scores its parent (1 + commas + one point per 100 characters, at most 3) and, at half and a sixth, the elements above; a box scores more for words like article, content, main, product, post or text in its class or id and less for the words above; the score is reduced by the share of text in links; the best box and its siblings that score at least a fifth of it are the article; like Readability it tries again with fewer rules when an attempt finds less than 500 characters (without dropping unlikely boxes, then without weighing class names) and keeps the longest attempt; a box that holds the page's main or article element is never dropped; the text is written out one block per line, without link targets, markup or images",
+  "readability": "Mozilla Readability 0.6.0 (the library behind Firefox Reader View) on a linkedom document: the text of the article it finds, whitespace collapsed the same way; a cross-check of the extraction above, where it is installed",
+  "markdown": "the Markdown of the sea's reader, digest in node/reader.mjs (the code that answers /r/ and read_page; since 3.33.0 the lean reader of node/lean.mjs: the main part only, a product's essentials first, links once and short), on the same copy of the page; not cut (the reader itself cuts at 60,000 characters, see served)",
+  "prior": "the Markdown of the reader of an earlier release (toMarkdown in node/reader.mjs of the commit named in bench.prior), on the same copy of the page: the reader before and after, page by page, without the page changing in between",
+  "served": "the answer of the sea's /r/ door for the page (a few lines about the page and the sea around the Markdown), rendered by the node's own route on the same copy of the page on the bench machine; on mareliberum.dev it can also list up to three pathways other agents walked to the site",
+  "servedFull": "the /r/ answer with format=full: the long lines around the Markdown as the reader wrote them before 3.33.0 (pathways, the site check, Angel, the brief), rendered the same way",
+  "brainCompact": "the brain's short answer, GET /brain?q=<task>&fmt=compact (since 3.33.0): the confirmed pathways with one line of reason each and the one next step; counted only where the sea answered in that shape",
+  "mcp": "the text block of the answer of the MCP tool read_page (open door /mcp), rendered the same way; it carries the Markdown and a list of the page's links",
+  "keeps": "at least two thirds of the words of its heading (the first h1 inside its main or article element, else the first h1 a person sees, else og:title, else the longest part of its title; words of three letters or more) and, on a shop page, a price",
+  "result": "one search result as a search tool hands it to a model: the page's title, its address and a snippet (its meta description, else the start of its text) of at most 160 characters",
+  "brain": "the answer of GET /brain?q=<task> (and with &fmt=compact) as a local node of the branch lean/1 serves it (127.0.0.1:8120, long memory off, its public address set to https://mareliberum.dev so its links are as long as the live ones), read with the User-Agent MareLiberum-session/1.0; that node's brain holds the 64 pathways the live brain's public answers GET /brain/<task> listed for these 33 tasks on 2026-11-24 (copied with the session's User-Agent, counted nowhere), but not the live node's open index, its current or its other kept state, so its full answers are smaller than the live ones; the short answer carries only pathways and doors, which it has",
+  "loop": {
+   "resultsPerSearch": 10,
+   "low": {
+    "toolCalls": 3,
+    "searches": 1,
+    "pages": 1
+   },
+   "high": {
+    "toolCalls": 10,
+    "searches": 5,
+    "pages": 4
+   },
+   "rule": "Anthropic puts simple fact-finding at 3 to 10 tool calls. One of them reads the destination page, which is counted under reading; the others alternate between a search and a page read to judge a result, starting with a search: 3 calls are 1 search and 1 page, 10 calls are 5 searches and 4 pages. A search hands the model 10 results (the page size of the Google Programmable Search API, the default of Exa); one result and one page are as large as the median of this run. Output tokens, reasoning and the re-reading of earlier context in later turns are left out on both sides.",
+   "sources": [
+    {
+     "what": "Simple fact-finding requires just 1 agent with 3-10 tool calls",
+     "by": "Anthropic engineering, How we built our multi-agent research system (13 June 2025)",
+     "url": "https://www.anthropic.com/engineering/multi-agent-research-system"
+    },
+    {
+     "what": "The Programmable Search JSON API returns at most 10 results per request (num 1 to 10)",
+     "by": "Google for Developers, cse.list",
+     "url": "https://developers.google.com/custom-search/v1/reference/rest/v1/cse/list"
+    },
+    {
+     "what": "numResults: 10 by default",
+     "by": "Exa API reference, search",
+     "url": "https://exa.ai/docs/reference/search"
+    },
+    {
+     "what": "count: 20 by default and at most (a loop on this API reads twice as many results per search)",
+     "by": "Brave Search API, web search parameters",
+     "url": "https://api-dashboard.search.brave.com/app/documentation/web-search/query"
+    }
+   ]
+  }
+ },
+ "brainAt": {
+  "from": "2026-11-24T15:25:51.080Z",
+  "to": "2026-11-24T15:28:30.130Z"
+ },
+ "summary": {
+  "tasks": 33,
+  "measured": 33,
+  "keeps": {
+   "all": {
+    "text": {
+     "kept": 26,
+     "of": 33
+    },
+    "readability": {
+     "kept": 18,
+     "of": 33
+    },
+    "prior": {
+     "kept": 33,
+     "of": 33
+    },
+    "markdown": {
+     "kept": 33,
+     "of": 33
+    }
+   },
+   "shopping": {
+    "text": {
+     "kept": 19,
+     "of": 24
+    },
+    "readability": {
+     "kept": 11,
+     "of": 24
+    },
+    "prior": {
+     "kept": 24,
+     "of": 24
+    },
+    "markdown": {
+     "kept": 24,
+     "of": 24
+    }
+   },
+   "everyday": {
+    "text": {
+     "kept": 7,
+     "of": 9
+    },
+    "readability": {
+     "kept": 7,
+     "of": 9
+    },
+    "prior": {
+     "kept": 9,
+     "of": 9
+    },
+    "markdown": {
+     "kept": 9,
+     "of": 9
+    }
+   }
+  },
+  "confirmedBy": {
+   "Angel": 24
+  },
+  "skipped": [],
+  "brains": 33,
+  "led": 25,
+  "compacts": 33,
+  "ledCompact": 25,
+  "firstPathCompact": 23,
+  "ledByGroup": {
+   "shopping": 24,
+   "everyday": 1
+  },
+  "firstPath": 23,
+  "groups": {
+   "shopping": {
+    "tasks": 24,
+    "measured": 24
+   },
+   "everyday": {
+    "tasks": 9,
+    "measured": 9
+   }
+  },
+  "capped": 0,
+  "reading": {
+   "o200k_base": {
+    "html": {
+     "n": 33,
+     "min": 44653,
+     "p25": 119642,
+     "median": 199459,
+     "p75": 325384,
+     "max": 529903,
+     "total": 7356943
+    },
+    "text": {
+     "n": 33,
+     "min": 115,
+     "p25": 359,
+     "median": 843,
+     "p75": 1525,
+     "max": 9562,
+     "total": 50258
+    },
+    "readability": {
+     "n": 33,
+     "min": 117,
+     "p25": 159,
+     "median": 695,
+     "p75": 1158,
+     "max": 9535,
+     "total": 47132
+    },
+    "prior": {
+     "n": 33,
+     "min": 362,
+     "p25": 1203,
+     "median": 1953,
+     "p75": 4456,
+     "max": 31231,
+     "total": 140927
+    },
+    "markdown": {
+     "n": 33,
+     "min": 81,
+     "p25": 535,
+     "median": 819,
+     "p75": 1212,
+     "max": 10756,
+     "total": 62339
+    },
+    "served": {
+     "n": 33,
+     "min": 155,
+     "p25": 644,
+     "median": 906,
+     "p75": 1289,
+     "max": 10819,
+     "total": 65098
+    },
+    "servedFull": {
+     "n": 33,
+     "min": 267,
+     "p25": 799,
+     "median": 1094,
+     "p75": 1411,
+     "max": 10921,
+     "total": 70226
+    },
+    "mcp": {
+     "n": 33,
+     "min": 241,
+     "p25": 887,
+     "median": 1152,
+     "p75": 1571,
+     "max": 13362,
+     "total": 83029
+    }
+   },
+   "cl100k_base": {
+    "html": {
+     "n": 33,
+     "min": 44053,
+     "p25": 119605,
+     "median": 197757,
+     "p75": 335828,
+     "max": 548864,
+     "total": 7370803
+    },
+    "text": {
+     "n": 33,
+     "min": 118,
+     "p25": 387,
+     "median": 887,
+     "p75": 1538,
+     "max": 9543,
+     "total": 50755
+    },
+    "readability": {
+     "n": 33,
+     "min": 117,
+     "p25": 172,
+     "median": 699,
+     "p75": 1193,
+     "max": 9519,
+     "total": 47323
+    },
+    "prior": {
+     "n": 33,
+     "min": 366,
+     "p25": 1255,
+     "median": 1971,
+     "p75": 4583,
+     "max": 31208,
+     "total": 141065
+    },
+    "markdown": {
+     "n": 33,
+     "min": 83,
+     "p25": 546,
+     "median": 856,
+     "p75": 1234,
+     "max": 10854,
+     "total": 62671
+    },
+    "served": {
+     "n": 33,
+     "min": 156,
+     "p25": 663,
+     "median": 943,
+     "p75": 1315,
+     "max": 10916,
+     "total": 65478
+    },
+    "servedFull": {
+     "n": 33,
+     "min": 276,
+     "p25": 821,
+     "median": 1133,
+     "p75": 1438,
+     "max": 11020,
+     "total": 70910
+    },
+    "mcp": {
+     "n": 33,
+     "min": 241,
+     "p25": 913,
+     "median": 1167,
+     "p75": 1606,
+     "max": 13396,
+     "total": 83348
+    }
+   },
+   "claude-legacy": {
+    "html": {
+     "n": 33,
+     "min": 50463,
+     "p25": 126675,
+     "median": 207405,
+     "p75": 343864,
+     "max": 558189,
+     "total": 7928880
+    },
+    "text": {
+     "n": 33,
+     "min": 132,
+     "p25": 428,
+     "median": 920,
+     "p75": 1618,
+     "max": 10571,
+     "total": 55555
+    },
+    "readability": {
+     "n": 33,
+     "min": 121,
+     "p25": 195,
+     "median": 745,
+     "p75": 1275,
+     "max": 11123,
+     "total": 52394
+    },
+    "prior": {
+     "n": 33,
+     "min": 434,
+     "p25": 1536,
+     "median": 2447,
+     "p75": 5400,
+     "max": 33446,
+     "total": 162899
+    },
+    "markdown": {
+     "n": 33,
+     "min": 87,
+     "p25": 631,
+     "median": 928,
+     "p75": 1413,
+     "max": 11231,
+     "total": 68384
+    },
+    "served": {
+     "n": 33,
+     "min": 169,
+     "p25": 766,
+     "median": 1021,
+     "p75": 1500,
+     "max": 11297,
+     "total": 71567
+    },
+    "servedFull": {
+     "n": 33,
+     "min": 295,
+     "p25": 922,
+     "median": 1162,
+     "p75": 1629,
+     "max": 11409,
+     "total": 76940
+    },
+    "mcp": {
+     "n": 33,
+     "min": 274,
+     "p25": 1053,
+     "median": 1326,
+     "p75": 1909,
+     "max": 13884,
+     "total": 92084
+    }
+   }
+  },
+  "readingByGroup": {
+   "shopping": {
+    "o200k_base": {
+     "html": {
+      "n": 24,
+      "min": 44653,
+      "p25": 138903,
+      "median": 226086,
+      "p75": 347546,
+      "max": 529903,
+      "total": 6016691
+     },
+     "text": {
+      "n": 24,
+      "min": 115,
+      "p25": 355,
+      "median": 757,
+      "p75": 1239,
+      "max": 3830,
+      "total": 21523
+     },
+     "markdown": {
+      "n": 24,
+      "min": 81,
+      "p25": 381,
+      "median": 631,
+      "p75": 871,
+      "max": 1702,
+      "total": 16504
+     }
+    },
+    "cl100k_base": {
+     "html": {
+      "n": 24,
+      "min": 44053,
+      "p25": 139206,
+      "median": 225757,
+      "p75": 348223,
+      "max": 548864,
+      "total": 6036449
+     },
+     "text": {
+      "n": 24,
+      "min": 118,
+      "p25": 379,
+      "median": 796,
+      "p75": 1252,
+      "max": 3968,
+      "total": 22139
+     },
+     "markdown": {
+      "n": 24,
+      "min": 83,
+      "p25": 395,
+      "median": 646,
+      "p75": 893,
+      "max": 1713,
+      "total": 16862
+     }
+    },
+    "claude-legacy": {
+     "html": {
+      "n": 24,
+      "min": 50463,
+      "p25": 156556,
+      "median": 250631,
+      "p75": 379175,
+      "max": 558189,
+      "total": 6509335
+     },
+     "text": {
+      "n": 24,
+      "min": 132,
+      "p25": 413,
+      "median": 865,
+      "p75": 1334,
+      "max": 4153,
+      "total": 23556
+     },
+     "markdown": {
+      "n": 24,
+      "min": 87,
+      "p25": 437,
+      "median": 721,
+      "p75": 985,
+      "max": 1883,
+      "total": 18727
+     }
+    }
+   },
+   "everyday": {
+    "o200k_base": {
+     "html": {
+      "n": 9,
+      "min": 48979,
+      "p25": 58010,
+      "median": 100537,
+      "p75": 201621,
+      "max": 380656,
+      "total": 1340252
+     },
+     "text": {
+      "n": 9,
+      "min": 165,
+      "p25": 757,
+      "median": 2052,
+      "p75": 4247,
+      "max": 9562,
+      "total": 28735
+     },
+     "markdown": {
+      "n": 9,
+      "min": 690,
+      "p25": 2136,
+      "median": 2915,
+      "p75": 9457,
+      "max": 10756,
+      "total": 45835
+     }
+    },
+    "cl100k_base": {
+     "html": {
+      "n": 9,
+      "min": 48608,
+      "p25": 57944,
+      "median": 99918,
+      "p75": 197757,
+      "max": 380602,
+      "total": 1334354
+     },
+     "text": {
+      "n": 9,
+      "min": 165,
+      "p25": 759,
+      "median": 2107,
+      "p75": 4231,
+      "max": 9543,
+      "total": 28616
+     },
+     "markdown": {
+      "n": 9,
+      "min": 732,
+      "p25": 2184,
+      "median": 2938,
+      "p75": 9273,
+      "max": 10854,
+      "total": 45809
+     }
+    },
+    "claude-legacy": {
+     "html": {
+      "n": 9,
+      "min": 52843,
+      "p25": 64954,
+      "median": 114072,
+      "p75": 207405,
+      "max": 387245,
+      "total": 1419545
+     },
+     "text": {
+      "n": 9,
+      "min": 172,
+      "p25": 805,
+      "median": 2147,
+      "p75": 4895,
+      "max": 10571,
+      "total": 31999
+     },
+     "markdown": {
+      "n": 9,
+      "min": 710,
+      "p25": 2268,
+      "median": 3316,
+      "p75": 10367,
+      "max": 11231,
+      "total": 49657
+     }
+    }
+   }
+  },
+  "fair": {
+   "o200k_base": {
+    "n": 26,
+    "html": {
+     "n": 26,
+     "min": 48979,
+     "p25": 105313,
+     "median": 185612,
+     "p75": 310409,
+     "max": 529903,
+     "total": 5517314
+    },
+    "text": {
+     "n": 26,
+     "min": 187,
+     "p25": 590,
+     "median": 943,
+     "p75": 1813,
+     "max": 9562,
+     "total": 47175
+    },
+    "markdown": {
+     "n": 26,
+     "min": 169,
+     "p25": 554,
+     "median": 835,
+     "p75": 2028,
+     "max": 10756,
+     "total": 57703
+    },
+    "served": {
+     "n": 26,
+     "min": 295,
+     "p25": 654,
+     "median": 917,
+     "p75": 2102,
+     "max": 10819,
+     "total": 59874
+    }
+   },
+   "cl100k_base": {
+    "n": 26,
+    "html": {
+     "n": 26,
+     "min": 48608,
+     "p25": 104840,
+     "median": 184572,
+     "p75": 308957,
+     "max": 548864,
+     "total": 5535747
+    },
+    "text": {
+     "n": 26,
+     "min": 187,
+     "p25": 602,
+     "median": 958,
+     "p75": 1858,
+     "max": 9543,
+     "total": 47589
+    },
+    "markdown": {
+     "n": 26,
+     "min": 170,
+     "p25": 566,
+     "median": 863,
+     "p75": 2066,
+     "max": 10854,
+     "total": 57941
+    },
+    "served": {
+     "n": 26,
+     "min": 298,
+     "p25": 671,
+     "median": 945,
+     "p75": 2139,
+     "max": 10916,
+     "total": 60156
+    }
+   },
+   "claude-legacy": {
+    "n": 26,
+    "html": {
+     "n": 26,
+     "min": 52843,
+     "p25": 117223,
+     "median": 201693,
+     "p75": 335923,
+     "max": 558189,
+     "total": 6010003
+    },
+    "text": {
+     "n": 26,
+     "min": 201,
+     "p25": 657,
+     "median": 1038,
+     "p75": 1961,
+     "max": 10571,
+     "total": 52104
+    },
+    "markdown": {
+     "n": 26,
+     "min": 188,
+     "p25": 652,
+     "median": 960,
+     "p75": 2172,
+     "max": 11231,
+     "total": 63546
+    },
+    "served": {
+     "n": 26,
+     "min": 332,
+     "p25": 774,
+     "median": 1056,
+     "p75": 2258,
+     "max": 11297,
+     "total": 66055
+    }
+   }
+  },
+  "times": {
+   "o200k_base": {
+    "htmlPerMarkdown": 276,
+    "htmlPerText": 234.5,
+    "markdownPerText": 1.1,
+    "servedPerText": 1.2,
+    "readabilityPerText": 0.9,
+    "priorPerMarkdown": 2.2,
+    "priorPerText": 1.9
+   },
+   "cl100k_base": {
+    "htmlPerMarkdown": 267,
+    "htmlPerText": 228.6,
+    "markdownPerText": 1.1,
+    "servedPerText": 1.2,
+    "readabilityPerText": 0.9,
+    "priorPerMarkdown": 2.2,
+    "priorPerText": 1.9
+   },
+   "claude-legacy": {
+    "htmlPerMarkdown": 269.1,
+    "htmlPerText": 236.9,
+    "markdownPerText": 1.1,
+    "servedPerText": 1.2,
+    "readabilityPerText": 0.9,
+    "priorPerMarkdown": 2.3,
+    "priorPerText": 2.1
+   }
+  },
+  "finding": {
+   "o200k_base": {
+    "brain": {
+     "n": 33,
+     "min": 1464,
+     "p25": 2108,
+     "median": 2533,
+     "p75": 2813,
+     "max": 4612,
+     "total": 84378
+    },
+    "led": {
+     "n": 25,
+     "min": 1639,
+     "p25": 2256,
+     "median": 2586,
+     "p75": 3122,
+     "max": 4612,
+     "total": 66754
+    },
+    "resultTokens": 75,
+    "pageTokens": 843,
+    "searchTokens": 750,
+    "low": 1593,
+    "high": 7122,
+    "compact": {
+     "n": 33,
+     "min": 165,
+     "p25": 178,
+     "median": 190,
+     "p75": 249,
+     "max": 388,
+     "total": 7364
+    },
+    "ledCompact": {
+     "n": 25,
+     "min": 165,
+     "p25": 175,
+     "median": 181,
+     "p75": 249,
+     "max": 333,
+     "total": 5238
+    }
+   },
+   "cl100k_base": {
+    "brain": {
+     "n": 33,
+     "min": 1481,
+     "p25": 2149,
+     "median": 2573,
+     "p75": 2880,
+     "max": 4702,
+     "total": 86005
+    },
+    "led": {
+     "n": 25,
+     "min": 1671,
+     "p25": 2298,
+     "median": 2652,
+     "p75": 3179,
+     "max": 4702,
+     "total": 68125
+    },
+    "resultTokens": 79,
+    "pageTokens": 887,
+    "searchTokens": 790,
+    "low": 1677,
+    "high": 7498,
+    "compact": {
+     "n": 33,
+     "min": 169,
+     "p25": 178,
+     "median": 195,
+     "p75": 253,
+     "max": 396,
+     "total": 7431
+    },
+    "ledCompact": {
+     "n": 25,
+     "min": 169,
+     "p25": 177,
+     "median": 182,
+     "p75": 251,
+     "max": 336,
+     "total": 5281
+    }
+   },
+   "claude-legacy": {
+    "brain": {
+     "n": 33,
+     "min": 1610,
+     "p25": 2303,
+     "median": 2782,
+     "p75": 3064,
+     "max": 4879,
+     "total": 91671
+    },
+    "led": {
+     "n": 25,
+     "min": 1804,
+     "p25": 2466,
+     "median": 2805,
+     "p75": 3368,
+     "max": 4879,
+     "total": 72444
+    },
+    "resultTokens": 85,
+    "pageTokens": 920,
+    "searchTokens": 850,
+    "low": 1770,
+    "high": 7930,
+    "compact": {
+     "n": 33,
+     "min": 181,
+     "p25": 192,
+     "median": 204,
+     "p75": 277,
+     "max": 417,
+     "total": 8054
+    },
+    "ledCompact": {
+     "n": 25,
+     "min": 181,
+     "p25": 191,
+     "median": 198,
+     "p75": 276,
+     "max": 360,
+     "total": 5708
+    }
+   }
+  },
+  "whole": {
+   "o200k_base": {
+    "n": 25,
+    "sea": {
+     "n": 25,
+     "min": 2031,
+     "p25": 2919,
+     "median": 3437,
+     "p75": 3869,
+     "max": 11355,
+     "total": 92715
+    },
+    "low": {
+     "n": 25,
+     "min": 1708,
+     "p25": 1952,
+     "median": 2399,
+     "p75": 2844,
+     "max": 9628,
+     "total": 69383
+    },
+    "high": {
+     "n": 25,
+     "min": 7237,
+     "p25": 7481,
+     "median": 7928,
+     "p75": 8373,
+     "max": 15157,
+     "total": 207608
+    },
+    "lowHtml": {
+     "n": 25,
+     "min": 46246,
+     "p25": 141573,
+     "median": 227148,
+     "p75": 338177,
+     "max": 531496,
+     "total": 6258137
+    },
+    "highHtml": {
+     "n": 25,
+     "min": 51775,
+     "p25": 147102,
+     "median": 232677,
+     "p75": 343706,
+     "max": 537025,
+     "total": 6396362
+    },
+    "compactN": 25,
+    "seaCompact": {
+     "n": 25,
+     "min": 336,
+     "p25": 616,
+     "median": 855,
+     "p75": 1100,
+     "max": 6337,
+     "total": 27838
+    },
+    "lowCompact": {
+     "n": 25,
+     "min": 1708,
+     "p25": 1952,
+     "median": 2399,
+     "p75": 2844,
+     "max": 5840,
+     "total": 65595
+    },
+    "highCompact": {
+     "n": 25,
+     "min": 7237,
+     "p25": 7481,
+     "median": 7928,
+     "p75": 8373,
+     "max": 11369,
+     "total": 203820
+    }
+   },
+   "cl100k_base": {
+    "n": 25,
+    "sea": {
+     "n": 25,
+     "min": 2059,
+     "p25": 2984,
+     "median": 3522,
+     "p75": 3921,
+     "max": 11198,
+     "total": 94260
+    },
+    "low": {
+     "n": 25,
+     "min": 1795,
+     "p25": 2064,
+     "median": 2545,
+     "p75": 2948,
+     "max": 9556,
+     "total": 71943
+    },
+    "high": {
+     "n": 25,
+     "min": 7616,
+     "p25": 7885,
+     "median": 8366,
+     "p75": 8769,
+     "max": 15377,
+     "total": 217468
+    },
+    "lowHtml": {
+     "n": 25,
+     "min": 45730,
+     "p25": 142159,
+     "median": 226736,
+     "p75": 339538,
+     "max": 550541,
+     "total": 6276131
+    },
+    "highHtml": {
+     "n": 25,
+     "min": 51551,
+     "p25": 147980,
+     "median": 232557,
+     "p75": 345359,
+     "max": 556362,
+     "total": 6421656
+    },
+    "compactN": 25,
+    "seaCompact": {
+     "n": 25,
+     "min": 340,
+     "p25": 620,
+     "median": 867,
+     "p75": 1121,
+     "max": 6306,
+     "total": 28210
+    },
+    "lowCompact": {
+     "n": 25,
+     "min": 1795,
+     "p25": 2064,
+     "median": 2545,
+     "p75": 2948,
+     "max": 5908,
+     "total": 68295
+    },
+    "highCompact": {
+     "n": 25,
+     "min": 7616,
+     "p25": 7885,
+     "median": 8366,
+     "p75": 8769,
+     "max": 11729,
+     "total": 213820
+    }
+   },
+   "claude-legacy": {
+    "n": 25,
+    "sea": {
+     "n": 25,
+     "min": 2242,
+     "p25": 3216,
+     "median": 3757,
+     "p75": 4238,
+     "max": 12462,
+     "total": 101538
+    },
+    "low": {
+     "n": 25,
+     "min": 1902,
+     "p25": 2198,
+     "median": 2684,
+     "p75": 3131,
+     "max": 10818,
+     "total": 76854
+    },
+    "high": {
+     "n": 25,
+     "min": 8062,
+     "p25": 8358,
+     "median": 8844,
+     "p75": 9291,
+     "max": 16978,
+     "total": 230854
+    },
+    "lowHtml": {
+     "n": 25,
+     "min": 52233,
+     "p25": 160286,
+     "median": 250999,
+     "p75": 369179,
+     "max": 559959,
+     "total": 6760990
+    },
+    "highHtml": {
+     "n": 25,
+     "min": 58393,
+     "p25": 166446,
+     "median": 257159,
+     "p75": 375339,
+     "max": 566119,
+     "total": 6914990
+    },
+    "compactN": 25,
+    "seaCompact": {
+     "n": 25,
+     "min": 368,
+     "p25": 682,
+     "median": 946,
+     "p75": 1244,
+     "max": 7348,
+     "total": 31518
+    },
+    "lowCompact": {
+     "n": 25,
+     "min": 1902,
+     "p25": 2198,
+     "median": 2684,
+     "p75": 3131,
+     "max": 6665,
+     "total": 72701
+    },
+    "highCompact": {
+     "n": 25,
+     "min": 8062,
+     "p25": 8358,
+     "median": 8844,
+     "p75": 9291,
+     "max": 12825,
+     "total": 226701
+    }
+   }
+  },
+  "ratios": {
+   "o200k_base": {
+    "html": 3.22,
+    "text": 4.32,
+    "markdown": 3.89,
+    "served": 3.88,
+    "bytes": {
+     "html": 3.23,
+     "text": 4.34,
+     "markdown": 3.9,
+     "served": 3.89
+    }
+   },
+   "cl100k_base": {
+    "html": 3.22,
+    "text": 4.27,
+    "markdown": 3.87,
+    "served": 3.86,
+    "bytes": {
+     "html": 3.22,
+     "text": 4.3,
+     "markdown": 3.88,
+     "served": 3.87
+    }
+   },
+   "claude-legacy": {
+    "html": 2.99,
+    "text": 3.9,
+    "markdown": 3.54,
+    "served": 3.53,
+    "bytes": {
+     "html": 2.99,
+     "text": 3.93,
+     "markdown": 3.56,
+     "served": 3.54
+    }
+   }
+  }
+ },
+ "tasks": [
+  {"id":"s01","task":"running shoes","group":"shopping","source":"confirmed pathway of the Unibrain","path":"5ba4310391f8b3","worked":20,"failed":3,"url":"https://shop.simon.com/products/mens-adidas-galaxy-7-running-shoes?variant=45422477836348&_gsid=sdN4LKEYsTqd&utm_source=shopify&utm_medium=catalog","page":{"at":"2026-11-24T15:25:45.118Z","status":200,"type":"text/html","ms":308,"keeps":{"text":false,"readability":false,"prior":true,"markdown":true},"chars":{"html":1361107,"text":602,"readability":712,"prior":92608,"markdown":987,"served":1291,"servedFull":1686,"mcp":1922,"result":355},"bytes":{"html":1361147,"text":606,"readability":712,"prior":92613,"markdown":993,"served":1297,"servedFull":1696,"mcp":1928,"result":355},"tokens":{"o200k_base":{"html":467226,"text":115,"readability":121,"prior":31231,"markdown":297,"served":380,"servedFull":569,"mcp":555,"result":95},"cl100k_base":{"html":465690,"text":118,"readability":121,"prior":31208,"markdown":301,"served":385,"servedFull":582,"mcp":560,"result":96},"claude-legacy":{"html":474765,"text":132,"readability":127,"prior":33446,"markdown":305,"served":400,"servedFull":597,"mcp":614,"result":111}}},"requests":2,"brain":{"at":"2026-11-24T15:25:51.080Z","status":200,"chars":12734,"bytes":12770,"tokens":{"o200k_base":4612,"cl100k_base":4702,"claude-legacy":4879},"paths":8,"doors":4,"places":0,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:25:52.633Z","status":200,"chars":1003,"bytes":1011,"tokens":{"o200k_base":319,"cl100k_base":319,"claude-legacy":342},"paths":3,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"s02","task":"vintage clothing","group":"shopping","source":"confirmed pathway of the Unibrain","path":"e26a1c43452d1d","worked":6,"failed":1,"url":"https://plumgarments.com/products/plum-standard-vintage-bundle?variant=42883666509924&_gsid=XNaCA1pDmj3T&utm_source=shopify&utm_medium=catalog","page":{"at":"2026-11-24T15:25:52.639Z","status":200,"type":"text/html","ms":248,"keeps":{"text":true,"readability":true,"prior":true,"markdown":true},"chars":{"html":1028736,"text":1304,"readability":1192,"prior":2125,"markdown":1474,"served":1792,"servedFull":2188,"mcp":2474,"result":369},"bytes":{"html":1029306,"text":1304,"readability":1192,"prior":2125,"markdown":1477,"served":1795,"servedFull":2195,"mcp":2477,"result":369},"tokens":{"o200k_base":{"html":311052,"text":341,"readability":314,"prior":561,"markdown":389,"served":473,"servedFull":665,"mcp":682,"result":104},"cl100k_base":{"html":309489,"text":354,"readability":327,"prior":574,"markdown":404,"served":489,"servedFull":693,"mcp":702,"result":107},"claude-legacy":{"html":313738,"text":366,"readability":336,"prior":689,"markdown":440,"served":539,"servedFull":742,"mcp":775,"result":121}}},"requests":2,"brain":{"at":"2026-11-24T15:25:56.441Z","status":200,"chars":6850,"bytes":6861,"tokens":{"o200k_base":2291,"cl100k_base":2328,"claude-legacy":2533},"paths":1,"doors":4,"places":4,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:25:57.954Z","status":200,"chars":550,"bytes":552,"tokens":{"o200k_base":181,"cl100k_base":181,"claude-legacy":199},"paths":1,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"s03","task":"birthday gift","group":"shopping","source":"confirmed pathway of the Unibrain","path":"7d5ae3fac09ed3","worked":5,"failed":2,"url":"https://purechakra.com/products/personalized-happy-birthday-box-succulent-gift-box-thinking-of-you-care-package-spa-gift-box-with-relaxing-cozy-candle-good-vibes-only?variant=39772165079149&_gsid=mXAzTshK7RFp&utm_source=shopify&utm_medium=catalog","page":{"at":"2026-11-24T15:25:57.955Z","status":200,"type":"text/html","ms":166,"keeps":{"text":true,"readability":false,"prior":true,"markdown":true},"chars":{"html":470631,"text":1827,"readability":733,"prior":5658,"markdown":2521,"served":2968,"servedFull":3397,"mcp":3831,"result":498},"bytes":{"html":470675,"text":1827,"readability":733,"prior":5658,"markdown":2526,"served":2973,"servedFull":3406,"mcp":3836,"result":498},"tokens":{"o200k_base":{"html":139980,"text":415,"readability":159,"prior":1432,"markdown":631,"served":746,"servedFull":996,"mcp":981,"result":125},"cl100k_base":{"html":140482,"text":427,"readability":160,"prior":1474,"markdown":650,"served":770,"servedFull":1048,"mcp":1009,"result":130},"claude-legacy":{"html":158516,"text":462,"readability":166,"prior":1743,"markdown":721,"served":866,"servedFull":1113,"mcp":1150,"result":159}}},"requests":2,"brain":{"at":"2026-11-24T15:26:02.050Z","status":200,"chars":8473,"bytes":8490,"tokens":{"o200k_base":2813,"cl100k_base":2880,"claude-legacy":3064},"paths":1,"doors":4,"places":4,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:26:03.563Z","status":200,"chars":563,"bytes":565,"tokens":{"o200k_base":181,"cl100k_base":182,"claude-legacy":196},"paths":1,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"s04","task":"gaming headset","group":"shopping","source":"confirmed pathway of the Unibrain","path":"4b679d84a38c29","worked":3,"failed":1,"url":"https://hyperx.com/products/hyperx-cloud-iii-wired-gaming-headset?variant=43656365375645&_gsid=UpB2eDqfYF41&utm_source=shopify&utm_medium=catalog","page":{"at":"2026-11-24T15:26:03.565Z","status":200,"type":"text/html","ms":295,"keeps":{"text":true,"readability":false,"prior":true,"markdown":true},"chars":{"html":758315,"text":6479,"readability":3060,"prior":14046,"markdown":7318,"served":7612,"servedFull":8003,"mcp":8399,"result":344},"bytes":{"html":760568,"text":6503,"readability":3076,"prior":14078,"markdown":7343,"served":7637,"servedFull":8032,"mcp":8424,"result":344},"tokens":{"o200k_base":{"html":225555,"text":1525,"readability":695,"prior":3836,"markdown":1702,"served":1784,"servedFull":1979,"mcp":2061,"result":95},"cl100k_base":{"html":225059,"text":1538,"readability":699,"prior":3781,"markdown":1713,"served":1795,"servedFull":1999,"mcp":2073,"result":95},"claude-legacy":{"html":252032,"text":1618,"readability":745,"prior":4380,"markdown":1883,"served":1977,"servedFull":2178,"mcp":2314,"result":107}}},"requests":2,"brain":{"at":"2026-11-24T15:26:06.561Z","status":200,"chars":5633,"bytes":5642,"tokens":{"o200k_base":1918,"cl100k_base":1945,"claude-legacy":2098},"paths":1,"doors":5,"places":0,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:26:08.071Z","status":200,"chars":526,"bytes":530,"tokens":{"o200k_base":176,"cl100k_base":177,"claude-legacy":190},"paths":1,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"s05","task":"gifts for her","group":"shopping","source":"confirmed pathway of the Unibrain","path":"5e1046bff9b26d","worked":5,"failed":3,"url":"https://basketfulgifts.com/products/aesthetic-gift-baskets","page":{"at":"2026-11-24T15:26:08.072Z","status":200,"type":"text/html","ms":190,"keeps":{"text":true,"readability":false,"prior":true,"markdown":true},"chars":{"html":438735,"text":2781,"readability":808,"prior":4752,"markdown":2794,"served":3072,"servedFull":3385,"mcp":3864,"result":261},"bytes":{"html":439035,"text":2823,"readability":820,"prior":4794,"markdown":2836,"served":3114,"servedFull":3431,"mcp":3906,"result":261},"tokens":{"o200k_base":{"html":141857,"text":605,"readability":159,"prior":1075,"markdown":610,"served":682,"servedFull":799,"mcp":908,"result":62},"cl100k_base":{"html":141281,"text":618,"readability":159,"prior":1085,"markdown":624,"served":696,"servedFull":821,"mcp":921,"result":62},"claude-legacy":{"html":160127,"text":676,"readability":172,"prior":1330,"markdown":714,"served":797,"servedFull":922,"mcp":1053,"result":72}}},"requests":2,"brain":{"at":"2026-11-24T15:26:10.525Z","status":200,"chars":6849,"bytes":6866,"tokens":{"o200k_base":2309,"cl100k_base":2360,"claude-legacy":2545},"paths":1,"doors":4,"places":4,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:26:12.037Z","status":200,"chars":561,"bytes":563,"tokens":{"o200k_base":189,"cl100k_base":187,"claude-legacy":203},"paths":1,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"s06","task":"bracelet","group":"shopping","source":"confirmed pathway of the Unibrain","path":"39f3b2f6f8a88c","worked":4,"failed":2,"url":"https://atoleajewelry.com/products/double-white-beaded-bracelet?variant=48700260090188&_gsid=aT1hjCdjJw2a&utm_source=shopify&utm_medium=catalog","page":{"at":"2026-11-24T15:26:12.039Z","status":200,"type":"text/html","ms":931,"keeps":{"text":true,"readability":true,"prior":true,"markdown":true},"chars":{"html":1254020,"text":3735,"readability":6158,"prior":6931,"markdown":3662,"served":3944,"servedFull":4341,"mcp":4604,"result":333},"bytes":{"html":1254913,"text":3737,"readability":6160,"prior":6942,"markdown":3664,"served":3946,"servedFull":4347,"mcp":4606,"result":333},"tokens":{"o200k_base":{"html":529903,"text":864,"readability":1625,"prior":1624,"markdown":851,"served":927,"servedFull":1113,"mcp":1144,"result":88},"cl100k_base":{"html":548864,"text":887,"readability":1644,"prior":1649,"markdown":870,"served":947,"servedFull":1145,"mcp":1166,"result":91},"claude-legacy":{"html":558189,"text":949,"readability":1809,"prior":1937,"markdown":968,"served":1056,"servedFull":1251,"mcp":1304,"result":105}}},"requests":2,"brain":{"at":"2026-11-24T15:26:16.877Z","status":200,"chars":7141,"bytes":7154,"tokens":{"o200k_base":2586,"cl100k_base":2652,"claude-legacy":2782},"paths":4,"doors":4,"places":0,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:26:18.387Z","status":200,"chars":739,"bytes":745,"tokens":{"o200k_base":249,"cl100k_base":251,"claude-legacy":276},"paths":2,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"s07","task":"women's running shoes","group":"shopping","source":"confirmed pathway of the Unibrain","path":"6285d1cf85ec49","worked":5,"failed":3,"url":"https://startfitness.co.uk/products/brooks-ghost-17-womens-running-shoes-black","page":{"at":"2026-11-24T15:26:18.390Z","status":200,"type":"text/html","ms":378,"keeps":{"text":true,"readability":false,"prior":true,"markdown":true},"chars":{"html":1821982,"text":5711,"readability":2829,"prior":7598,"markdown":1960,"served":2272,"servedFull":2592,"mcp":3764,"result":306},"bytes":{"html":1822569,"text":5732,"readability":2842,"prior":7623,"markdown":1967,"served":2279,"servedFull":2603,"mcp":3773,"result":306},"tokens":{"o200k_base":{"html":484705,"text":1399,"readability":676,"prior":1953,"markdown":535,"served":616,"servedFull":742,"mcp":983,"result":72},"cl100k_base":{"html":485243,"text":1428,"readability":685,"prior":1971,"markdown":546,"served":628,"servedFull":763,"mcp":1001,"result":74},"claude-legacy":{"html":529817,"text":1470,"readability":712,"prior":2322,"markdown":602,"served":698,"servedFull":835,"mcp":1142,"result":85}}},"requests":2,"brain":{"at":"2026-11-24T15:26:25.878Z","status":200,"chars":10751,"bytes":10781,"tokens":{"o200k_base":3766,"cl100k_base":3842,"claude-legacy":4000},"paths":5,"doors":4,"places":0,"pathRank":2,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:26:27.391Z","status":200,"chars":1007,"bytes":1015,"tokens":{"o200k_base":320,"cl100k_base":321,"claude-legacy":344},"paths":3,"doors":0,"pathRank":2,"destinationHost":true}},
+  {"id":"s08","task":"guitar strings","group":"shopping","source":"confirmed pathway of the Unibrain","path":"bcd880f5b6299f","worked":1,"failed":0,"url":"https://x38e60-8v.myshopify.com/products/ernie-ball-regular-slinky-nickel-wound-electric-guitar-strings-10-46-gauge-p02221?variant=42374197248061&_gsid=EsmS2yEKhXXH&utm_source=shopify&utm_medium=catalog","page":{"at":"2026-11-24T15:26:27.397Z","status":200,"type":"text/html","ms":153,"keeps":{"text":true,"readability":true,"prior":true,"markdown":true},"chars":{"html":186738,"text":649,"readability":530,"prior":1421,"markdown":592,"served":994,"servedFull":1417,"mcp":1723,"result":453},"bytes":{"html":186744,"text":649,"readability":530,"prior":1421,"markdown":592,"served":994,"servedFull":1421,"mcp":1723,"result":453},"tokens":{"o200k_base":{"html":65848,"text":187,"readability":145,"prior":459,"markdown":169,"served":295,"servedFull":521,"mcp":496,"result":132},"cl100k_base":{"html":65379,"text":187,"readability":145,"prior":459,"markdown":170,"served":298,"servedFull":544,"mcp":498,"result":133},"claude-legacy":{"html":70770,"text":201,"readability":155,"prior":553,"markdown":188,"served":332,"servedFull":567,"mcp":575,"result":155}}},"requests":2,"brain":{"at":"2026-11-24T15:26:29.171Z","status":200,"chars":9600,"bytes":9623,"tokens":{"o200k_base":3626,"cl100k_base":3713,"claude-legacy":3851},"paths":6,"doors":4,"places":0,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:26:30.682Z","status":200,"chars":1019,"bytes":1025,"tokens":{"o200k_base":333,"cl100k_base":336,"claude-legacy":360},"paths":3,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"s09","task":"smart watch","group":"shopping","source":"confirmed pathway of the Unibrain","path":"22a0ebabfafe66","worked":1,"failed":0,"url":"https://runmefit.com/products/runmefit-gts7-pro-smart-sports-watch","page":{"at":"2026-11-24T15:26:30.685Z","status":200,"type":"text/html","ms":361,"keeps":{"text":true,"readability":true,"prior":true,"markdown":true},"chars":{"html":618831,"text":8159,"readability":5796,"prior":9777,"markdown":5165,"served":5450,"servedFull":5760,"mcp":6300,"result":255},"bytes":{"html":619538,"text":8177,"readability":5814,"prior":9803,"markdown":5177,"served":5462,"servedFull":5776,"mcp":6312,"result":255},"tokens":{"o200k_base":{"html":199459,"text":1868,"readability":1284,"prior":2302,"markdown":1212,"served":1289,"servedFull":1411,"mcp":1571,"result":70},"cl100k_base":{"html":199536,"text":1905,"readability":1312,"prior":2347,"markdown":1234,"served":1315,"servedFull":1438,"mcp":1606,"result":75},"claude-legacy":{"html":217929,"text":2010,"readability":1394,"prior":2760,"markdown":1413,"served":1500,"servedFull":1629,"mcp":1909,"result":79}}},"requests":2,"brain":{"at":"2026-11-24T15:26:33.566Z","status":200,"chars":9856,"bytes":9876,"tokens":{"o200k_base":3471,"cl100k_base":3533,"claude-legacy":3752},"paths":4,"doors":4,"places":4,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:26:35.077Z","status":200,"chars":556,"bytes":560,"tokens":{"o200k_base":178,"cl100k_base":184,"claude-legacy":192},"paths":1,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"s10","task":"mouse","group":"shopping","source":"confirmed pathway of the Unibrain","path":"284066a0af4844","worked":1,"failed":0,"url":"https://ausmodshop.com/products/wlmouse-beast-x-mini-pro-magnesium-wireless-gaming-mouse","page":{"at":"2026-11-24T15:26:35.078Z","status":200,"type":"text/html","ms":307,"keeps":{"text":true,"readability":true,"prior":true,"markdown":true},"chars":{"html":1355242,"text":3945,"readability":3175,"prior":5174,"markdown":3294,"served":3619,"servedFull":3938,"mcp":5424,"result":319},"bytes":{"html":1359618,"text":3975,"readability":3201,"prior":5204,"markdown":3303,"served":3628,"servedFull":3951,"mcp":5433,"result":319},"tokens":{"o200k_base":{"html":336584,"text":1008,"readability":813,"prior":1372,"markdown":917,"served":1000,"servedFull":1133,"mcp":1495,"result":75},"cl100k_base":{"html":337861,"text":1017,"readability":818,"prior":1381,"markdown":927,"served":1013,"servedFull":1157,"mcp":1513,"result":79},"claude-legacy":{"html":367409,"text":1105,"readability":858,"prior":1650,"markdown":1030,"served":1128,"servedFull":1267,"mcp":1726,"result":92}}},"requests":2,"brain":{"at":"2026-11-24T15:26:39.451Z","status":200,"chars":5314,"bytes":5326,"tokens":{"o200k_base":1678,"cl100k_base":1706,"claude-legacy":1838},"paths":1,"doors":4,"places":0,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:26:40.963Z","status":200,"chars":544,"bytes":548,"tokens":{"o200k_base":172,"cl100k_base":172,"claude-legacy":190},"paths":1,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"s11","task":"spices","group":"shopping","source":"confirmed pathway of the Unibrain","path":"bf236669e1816b","worked":1,"failed":0,"url":"https://aspenspices.com/products/original-spice-mulling-blend","page":{"at":"2026-11-24T15:26:40.965Z","status":200,"type":"text/html","ms":240,"keeps":{"text":true,"readability":false,"prior":true,"markdown":true},"chars":{"html":211663,"text":807,"readability":439,"prior":1311,"markdown":874,"served":1156,"servedFull":1467,"mcp":1644,"result":269},"bytes":{"html":211669,"text":807,"readability":439,"prior":1311,"markdown":874,"served":1156,"servedFull":1471,"mcp":1644,"result":269},"tokens":{"o200k_base":{"html":66659,"text":222,"readability":123,"prior":362,"markdown":238,"served":315,"servedFull":436,"mcp":444,"result":68},"cl100k_base":{"html":66509,"text":229,"readability":127,"prior":366,"markdown":243,"served":320,"servedFull":447,"mcp":451,"result":69},"claude-legacy":{"html":74476,"text":246,"readability":135,"prior":434,"markdown":279,"served":366,"servedFull":492,"mcp":518,"result":77}}},"requests":2,"brain":{"at":"2026-11-24T15:26:43.125Z","status":200,"chars":5563,"bytes":5573,"tokens":{"o200k_base":1793,"cl100k_base":1816,"claude-legacy":1963},"paths":1,"doors":4,"places":1,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:26:44.633Z","status":200,"chars":543,"bytes":545,"tokens":{"o200k_base":179,"cl100k_base":180,"claude-legacy":196},"paths":1,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"s12","task":"face mask","group":"shopping","source":"confirmed pathway of the Unibrain","path":"3a8ebea835f805","worked":1,"failed":0,"url":"https://thefacedr.com/products/8pcs-bioaqua-fruit-facial-masks-moisturizing-hydrating-brightening-anti-aging-face-mask-sheet-masks-for-face-skin-care","page":{"at":"2026-11-24T15:26:44.636Z","status":200,"type":"text/html","ms":463,"keeps":{"text":true,"readability":false,"prior":true,"markdown":true},"chars":{"html":739534,"text":2412,"readability":655,"prior":4721,"markdown":2247,"served":2654,"servedFull":2992,"mcp":3491,"result":401},"bytes":{"html":740173,"text":2422,"readability":655,"prior":4731,"markdown":2257,"served":2664,"servedFull":3006,"mcp":3501,"result":401},"tokens":{"o200k_base":{"html":226616,"text":585,"readability":128,"prior":1180,"markdown":530,"served":644,"servedFull":823,"mcp":887,"result":107},"cl100k_base":{"html":226455,"text":597,"readability":128,"prior":1211,"markdown":543,"served":663,"servedFull":846,"mcp":913,"result":116},"claude-legacy":{"html":249229,"text":651,"readability":131,"prior":1457,"markdown":631,"served":766,"servedFull":943,"mcp":1068,"result":133}}},"requests":2,"brain":{"at":"2026-11-24T15:26:48.022Z","status":200,"chars":7784,"bytes":7804,"tokens":{"o200k_base":2727,"cl100k_base":2787,"claude-legacy":2948},"paths":2,"doors":4,"places":4,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:26:49.533Z","status":200,"chars":553,"bytes":555,"tokens":{"o200k_base":182,"cl100k_base":187,"claude-legacy":199},"paths":1,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"s13","task":"throw blanket","group":"shopping","source":"confirmed pathway of the Unibrain","path":"94a7abb4268a4e","worked":1,"failed":0,"url":"https://mellowsleep.com/products/cloud-throw-blanket?variant=47279976317181&_gsid=v4s977v39kqh&utm_source=shopify&utm_medium=catalog","page":{"at":"2026-11-24T15:26:49.535Z","status":200,"type":"text/html","ms":344,"keeps":{"text":true,"readability":true,"prior":true,"markdown":true},"chars":{"html":922507,"text":15212,"readability":5269,"prior":19654,"markdown":4887,"served":5164,"servedFull":5556,"mcp":5851,"result":324},"bytes":{"html":922974,"text":15303,"readability":5282,"prior":19751,"markdown":4909,"served":5186,"servedFull":5582,"mcp":5873,"result":324},"tokens":{"o200k_base":{"html":325384,"text":3830,"readability":1158,"prior":4919,"markdown":1085,"served":1160,"servedFull":1337,"mcp":1406,"result":83},"cl100k_base":{"html":335828,"text":3968,"readability":1193,"prior":5042,"markdown":1120,"served":1198,"servedFull":1384,"mcp":1443,"result":87},"claude-legacy":{"html":343318,"text":4153,"readability":1307,"prior":5735,"markdown":1262,"served":1347,"servedFull":1532,"mcp":1604,"result":98}}},"requests":2,"brain":{"at":"2026-11-24T15:26:58.780Z","status":200,"chars":7097,"bytes":7111,"tokens":{"o200k_base":2442,"cl100k_base":2476,"claude-legacy":2641},"paths":2,"doors":4,"places":3,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:27:00.290Z","status":200,"chars":511,"bytes":513,"tokens":{"o200k_base":171,"cl100k_base":173,"claude-legacy":183},"paths":1,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"s14","task":"cutting board","group":"shopping","source":"confirmed pathway of the Unibrain","path":"3925fb768aed88","worked":1,"failed":0,"url":"https://stewartsblocksandboards.com/products/handcrafted-hard-maple-cutting-board-with-juice-groove-11x17x1-5","page":{"at":"2026-11-24T15:27:00.292Z","status":200,"type":"text/html","ms":270,"keeps":{"text":false,"readability":false,"prior":true,"markdown":true},"chars":{"html":968998,"text":3864,"readability":3864,"prior":8807,"markdown":4404,"served":4763,"servedFull":5102,"mcp":5245,"result":324},"bytes":{"html":969374,"text":3873,"readability":3873,"prior":8850,"markdown":4417,"served":4778,"servedFull":5121,"mcp":5262,"result":328},"tokens":{"o200k_base":{"html":393775,"text":708,"readability":708,"prior":1862,"markdown":861,"served":963,"servedFull":1111,"mcp":1117,"result":87},"cl100k_base":{"html":392420,"text":723,"readability":723,"prior":1899,"markdown":883,"served":988,"servedFull":1150,"mcp":1144,"result":91},"claude-legacy":{"html":415047,"text":816,"readability":816,"prior":2310,"markdown":1025,"served":1143,"servedFull":1294,"mcp":1303,"result":104}}},"requests":2,"brain":{"at":"2026-11-24T15:27:04.009Z","status":200,"chars":9375,"bytes":9398,"tokens":{"o200k_base":3139,"cl100k_base":3206,"claude-legacy":3404},"paths":3,"doors":4,"places":4,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:27:05.522Z","status":200,"chars":576,"bytes":580,"tokens":{"o200k_base":180,"cl100k_base":181,"claude-legacy":196},"paths":1,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"s15","task":"loose leaf tea","group":"shopping","source":"confirmed pathway of the Unibrain","path":"8de2d5c20ab4e6","worked":1,"failed":0,"url":"https://www.heavenlytealeaves.com/products/chamomile-lavender?variant=31063112450096&_gsid=9cFxotCjSrwF&utm_source=shopify&utm_medium=catalog","page":{"at":"2026-11-24T15:27:05.525Z","status":200,"type":"text/html","ms":278,"keeps":{"text":true,"readability":true,"prior":true,"markdown":true},"chars":{"html":482518,"text":3601,"readability":3743,"prior":4846,"markdown":1198,"served":1499,"servedFull":1904,"mcp":2057,"result":338},"bytes":{"html":482612,"text":3617,"readability":3759,"prior":4862,"markdown":1201,"served":1502,"servedFull":1911,"mcp":2060,"result":338},"tokens":{"o200k_base":{"html":135671,"text":843,"readability":864,"prior":1203,"markdown":335,"served":415,"servedFull":605,"mcp":576,"result":86},"cl100k_base":{"html":135378,"text":891,"readability":908,"prior":1255,"markdown":352,"served":435,"servedFull":634,"mcp":604,"result":96},"claude-legacy":{"html":150676,"text":970,"readability":971,"prior":1536,"markdown":402,"served":497,"servedFull":693,"mcp":716,"result":114}}},"requests":2,"brain":{"at":"2026-11-24T15:27:08.321Z","status":200,"chars":9023,"bytes":9041,"tokens":{"o200k_base":3317,"cl100k_base":3386,"claude-legacy":3545},"paths":4,"doors":4,"places":4,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:27:09.830Z","status":200,"chars":782,"bytes":786,"tokens":{"o200k_base":259,"cl100k_base":264,"claude-legacy":280},"paths":2,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"s16","task":"lunch box","group":"shopping","source":"confirmed pathway of the Unibrain","path":"105966857a3d49","worked":1,"failed":0,"url":"https://www.bbox.com/products/harry-potter-lunchbox","page":{"at":"2026-11-24T15:27:09.833Z","status":200,"type":"text/html","ms":403,"keeps":{"text":false,"readability":false,"prior":true,"markdown":true},"chars":{"html":784608,"text":5590,"readability":5576,"prior":10548,"markdown":5018,"served":5312,"servedFull":5617,"mcp":6206,"result":288},"bytes":{"html":785116,"text":5644,"readability":5630,"prior":10623,"markdown":5042,"served":5336,"servedFull":5645,"mcp":6236,"result":288},"tokens":{"o200k_base":{"html":237254,"text":1235,"readability":1222,"prior":2402,"markdown":1183,"served":1263,"servedFull":1372,"mcp":1516,"result":66},"cl100k_base":{"html":236313,"text":1245,"readability":1232,"prior":2414,"markdown":1195,"served":1275,"servedFull":1389,"mcp":1522,"result":65},"claude-legacy":{"html":257207,"text":1325,"readability":1275,"prior":2691,"markdown":1306,"served":1398,"servedFull":1518,"mcp":1679,"result":76}}},"requests":2,"brain":{"at":"2026-11-24T15:27:13.076Z","status":200,"chars":7876,"bytes":7888,"tokens":{"o200k_base":2686,"cl100k_base":2726,"claude-legacy":2932},"paths":2,"doors":4,"places":4,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:27:14.586Z","status":200,"chars":512,"bytes":514,"tokens":{"o200k_base":169,"cl100k_base":169,"claude-legacy":184},"paths":1,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"s17","task":"perfume","group":"shopping","source":"confirmed pathway of the Unibrain","path":"d1ca47e80c93c3","worked":1,"failed":0,"url":"https://www.albadrfragrances.com/products/caramel-oud","page":{"at":"2026-11-24T15:27:14.588Z","status":200,"type":"text/html","ms":215,"keeps":{"text":false,"readability":false,"prior":true,"markdown":true},"chars":{"html":162915,"text":1631,"readability":1631,"prior":3319,"markdown":252,"served":511,"servedFull":828,"mcp":861,"result":221},"bytes":{"html":163348,"text":1713,"readability":1713,"prior":3408,"markdown":260,"served":519,"servedFull":840,"mcp":871,"result":223},"tokens":{"o200k_base":{"html":44653,"text":359,"readability":359,"prior":844,"markdown":81,"served":155,"servedFull":267,"mcp":241,"result":58},"cl100k_base":{"html":44053,"text":399,"readability":399,"prior":883,"markdown":83,"served":156,"servedFull":276,"mcp":241,"result":59},"claude-legacy":{"html":50463,"text":480,"readability":480,"prior":1091,"markdown":87,"served":169,"servedFull":295,"mcp":274,"result":67}}},"requests":2,"brain":{"at":"2026-11-24T15:27:16.595Z","status":200,"chars":8072,"bytes":8095,"tokens":{"o200k_base":2843,"cl100k_base":2909,"claude-legacy":3094},"paths":3,"doors":4,"places":4,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:27:18.104Z","status":200,"chars":776,"bytes":782,"tokens":{"o200k_base":255,"cl100k_base":257,"claude-legacy":281},"paths":2,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"s18","task":"vegetable seeds","group":"shopping","source":"confirmed pathway of the Unibrain","path":"b54bc77a1f64c6","worked":1,"failed":0,"url":"https://www.botanicalinterests.com/products/winter-vegetable-spaghetti-winter-squash-seeds","page":{"at":"2026-11-24T15:27:18.108Z","status":200,"type":"text/html","ms":315,"keeps":{"text":true,"readability":true,"prior":true,"markdown":true},"chars":{"html":551393,"text":3342,"readability":3202,"prior":8905,"markdown":3473,"served":3798,"servedFull":4130,"mcp":4567,"result":319},"bytes":{"html":551503,"text":3400,"readability":3262,"prior":8965,"markdown":3527,"served":3852,"servedFull":4188,"mcp":4621,"result":319},"tokens":{"o200k_base":{"html":171765,"text":878,"readability":830,"prior":2265,"markdown":899,"served":981,"servedFull":1125,"mcp":1184,"result":69},"cl100k_base":{"html":171386,"text":898,"readability":851,"prior":2294,"markdown":923,"served":1010,"servedFull":1159,"mcp":1216,"result":76},"claude-legacy":{"html":189165,"text":914,"readability":864,"prior":2709,"markdown":971,"served":1066,"servedFull":1216,"mcp":1326,"result":82}}},"requests":2,"brain":{"at":"2026-11-24T15:27:20.974Z","status":200,"chars":8792,"bytes":8814,"tokens":{"o200k_base":3122,"cl100k_base":3179,"claude-legacy":3368},"paths":4,"doors":4,"places":4,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:27:22.485Z","status":200,"chars":799,"bytes":807,"tokens":{"o200k_base":249,"cl100k_base":253,"claude-legacy":277},"paths":2,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"s19","task":"hot sauce","group":"shopping","source":"confirmed pathway of the Unibrain","path":"9d6937a326d908","worked":1,"failed":0,"url":"https://frescosauce.com/products/ghost-berry-hot-sauce?variant=33371236630663&_gsid=bfzRqk3b3biW&utm_source=shopify&utm_medium=catalog","page":{"at":"2026-11-24T15:27:22.487Z","status":200,"type":"text/html","ms":777,"keeps":{"text":true,"readability":true,"prior":true,"markdown":true},"chars":{"html":1072031,"text":931,"readability":533,"prior":7510,"markdown":1351,"served":1669,"servedFull":2061,"mcp":2938,"result":298},"bytes":{"html":1072206,"text":933,"readability":535,"prior":7520,"markdown":1353,"served":1671,"servedFull":2067,"mcp":2940,"result":298},"tokens":{"o200k_base":{"html":380432,"text":225,"readability":130,"prior":2219,"markdown":357,"served":444,"servedFull":623,"mcp":813,"result":82},"cl100k_base":{"html":379309,"text":234,"readability":133,"prior":2189,"markdown":366,"served":454,"servedFull":652,"mcp":827,"result":84},"claude-legacy":{"html":414472,"text":245,"readability":136,"prior":2744,"markdown":429,"served":527,"servedFull":718,"mcp":981,"result":96}}},"requests":2,"brain":{"at":"2026-11-24T15:27:26.909Z","status":200,"chars":7195,"bytes":7253,"tokens":{"o200k_base":2493,"cl100k_base":2553,"claude-legacy":2787},"paths":2,"doors":4,"places":4,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:27:28.417Z","status":200,"chars":541,"bytes":543,"tokens":{"o200k_base":178,"cl100k_base":178,"claude-legacy":191},"paths":1,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"s20","task":"beard trimmer","group":"shopping","source":"confirmed pathway of the Unibrain","path":"808200cbf12b42","worked":1,"failed":0,"url":"https://thebeardclub.com/products/electric-trimmer?variant=29492234715239&_gsid=bFPNRauz6y6k&utm_source=shopify&utm_medium=catalog","page":{"at":"2026-11-24T15:27:28.419Z","status":200,"type":"text/html","ms":378,"keeps":{"text":false,"readability":false,"prior":true,"markdown":true},"chars":{"html":498192,"text":1003,"readability":1000,"prior":7049,"markdown":2477,"served":2789,"servedFull":3181,"mcp":3310,"result":349},"bytes":{"html":498242,"text":1017,"readability":1014,"prior":7121,"markdown":2505,"served":2817,"servedFull":3213,"mcp":3338,"result":349},"tokens":{"o200k_base":{"html":125611,"text":228,"readability":226,"prior":1918,"markdown":630,"served":713,"servedFull":900,"mcp":866,"result":92},"cl100k_base":{"html":125233,"text":233,"readability":230,"prior":1927,"markdown":640,"served":724,"servedFull":920,"mcp":875,"result":92},"claude-legacy":{"html":143067,"text":243,"readability":240,"prior":2447,"markdown":674,"served":771,"servedFull":967,"mcp":952,"result":111}}},"requests":2,"brain":{"at":"2026-11-24T15:27:31.765Z","status":200,"chars":6586,"bytes":6595,"tokens":{"o200k_base":2256,"cl100k_base":2298,"claude-legacy":2466},"paths":1,"doors":4,"places":4,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:27:33.279Z","status":200,"chars":528,"bytes":530,"tokens":{"o200k_base":174,"cl100k_base":174,"claude-legacy":189},"paths":1,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"s21","task":"vase","group":"shopping","source":"confirmed pathway of the Unibrain","path":"76917b5d76bb96","worked":1,"failed":0,"url":"https://magnolia.com/products/marie-distressed-crackle-vase?variant=41076002619443&_gsid=YsYL7XpPF3f5&utm_source=shopify&utm_medium=catalog","page":{"at":"2026-11-24T15:27:33.281Z","status":200,"type":"text/html","ms":361,"keeps":{"text":true,"readability":true,"prior":true,"markdown":true},"chars":{"html":1903135,"text":5084,"readability":1740,"prior":7446,"markdown":2747,"served":3043,"servedFull":3434,"mcp":4292,"result":347},"bytes":{"html":1903296,"text":5114,"readability":1740,"prior":7476,"markdown":2750,"served":3046,"servedFull":3441,"mcp":4295,"result":347},"tokens":{"o200k_base":{"html":408038,"text":1251,"readability":431,"prior":1868,"markdown":732,"served":811,"servedFull":996,"mcp":1154,"result":84},"cl100k_base":{"html":406574,"text":1271,"readability":436,"prior":1887,"markdown":734,"served":817,"servedFull":1014,"mcp":1166,"result":92},"claude-legacy":{"html":452403,"text":1361,"readability":441,"prior":2233,"markdown":797,"served":890,"servedFull":1084,"mcp":1327,"result":106}}},"requests":2,"brain":{"at":"2026-11-24T15:27:37.825Z","status":200,"chars":5037,"bytes":5044,"tokens":{"o200k_base":1639,"cl100k_base":1671,"claude-legacy":1804},"paths":1,"doors":4,"places":0,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:27:39.334Z","status":200,"chars":500,"bytes":502,"tokens":{"o200k_base":165,"cl100k_base":169,"claude-legacy":181},"paths":1,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"s22","task":"motorcycle helmet","group":"shopping","source":"confirmed pathway of the Unibrain","path":"b68e520096a29d","worked":1,"failed":0,"url":"https://1stormhelmet.com/products/1storm-motorcycle-full-face-helmet-for-adults-men-and-women-street-bike-racing-helmet-dot-approved-with-one-extra-clear-shield-kt828?variant=50381986201914&_gsid=kdx9BJuBxyGb&utm_source=shopify&utm_medium=catalog","page":{"at":"2026-11-24T15:27:39.336Z","status":200,"type":"text/html","ms":347,"keeps":{"text":true,"readability":false,"prior":true,"markdown":true},"chars":{"html":561498,"text":1392,"readability":1818,"prior":14700,"markdown":2168,"served":2617,"servedFull":3048,"mcp":4072,"result":500},"bytes":{"html":561537,"text":1392,"readability":1818,"prior":14700,"markdown":2168,"served":2617,"servedFull":3052,"mcp":4072,"result":500},"tokens":{"o200k_base":{"html":170541,"text":377,"readability":466,"prior":4456,"markdown":627,"served":745,"servedFull":997,"mcp":1114,"result":121},"cl100k_base":{"html":171141,"text":387,"readability":479,"prior":4583,"markdown":641,"served":763,"servedFull":1040,"mcp":1145,"result":127},"claude-legacy":{"html":195981,"text":428,"readability":526,"prior":5828,"markdown":720,"served":863,"servedFull":1111,"mcp":1331,"result":158}}},"requests":2,"brain":{"at":"2026-11-24T15:27:42.336Z","status":200,"chars":7752,"bytes":7765,"tokens":{"o200k_base":2680,"cl100k_base":2771,"claude-legacy":2947},"paths":2,"doors":4,"places":4,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:27:43.855Z","status":200,"chars":572,"bytes":574,"tokens":{"o200k_base":175,"cl100k_base":177,"claude-legacy":198},"paths":1,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"s23","task":"beeswax wraps","group":"shopping","source":"confirmed pathway of the Unibrain","path":"4d1925930a4c8d","worked":1,"failed":0,"url":"https://www.mindyourbeeswraps.com/products/copy-of-classic-kitchen","page":{"at":"2026-11-24T15:27:43.857Z","status":200,"type":"text/html","ms":266,"keeps":{"text":true,"readability":false,"prior":true,"markdown":true},"chars":{"html":382094,"text":3422,"readability":650,"prior":4478,"markdown":3453,"served":3754,"servedFull":4077,"mcp":4567,"result":295},"bytes":{"html":382528,"text":3476,"readability":684,"prior":4532,"markdown":3480,"served":3781,"servedFull":4108,"mcp":4594,"result":295},"tokens":{"o200k_base":{"html":119642,"text":806,"readability":146,"prior":1124,"markdown":814,"served":897,"servedFull":1026,"mcp":1136,"result":73},"cl100k_base":{"html":119605,"text":868,"readability":172,"prior":1192,"markdown":856,"served":943,"servedFull":1077,"mcp":1188,"result":78},"claude-legacy":{"html":126675,"text":920,"readability":195,"prior":1359,"markdown":928,"served":1021,"servedFull":1162,"mcp":1287,"result":81}}},"requests":2,"brain":{"at":"2026-11-24T15:27:46.158Z","status":200,"chars":6170,"bytes":6179,"tokens":{"o200k_base":2108,"cl100k_base":2168,"claude-legacy":2303},"paths":2,"doors":4,"places":1,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:27:47.668Z","status":200,"chars":547,"bytes":549,"tokens":{"o200k_base":190,"cl100k_base":195,"claude-legacy":204},"paths":1,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"s24","task":"skincare","group":"shopping","source":"confirmed pathway of the Unibrain","path":"e535db9716c6da","worked":1,"failed":0,"url":"https://beautyofjoseon.com/products/glow-serum-propolis-niacinamide?variant=51833681772916&_gsid=y1o4CFcGcMGp&utm_source=shopify&utm_medium=catalog","page":{"at":"2026-11-24T15:27:47.670Z","status":200,"type":"text/html","ms":574,"keeps":{"text":true,"readability":true,"prior":true,"markdown":true},"chars":{"html":1036234,"text":6051,"readability":3804,"prior":10812,"markdown":3392,"served":3703,"servedFull":4103,"mcp":4465,"result":356},"bytes":{"html":1039659,"text":6058,"readability":3810,"prior":10819,"markdown":3397,"served":3708,"servedFull":4112,"mcp":4470,"result":356},"tokens":{"o200k_base":{"html":308481,"text":1649,"readability":938,"prior":3111,"markdown":819,"served":906,"servedFull":1094,"mcp":1152,"result":98},"cl100k_base":{"html":307361,"text":1717,"readability":978,"prior":3181,"markdown":844,"served":933,"servedFull":1133,"mcp":1183,"result":102},"claude-legacy":{"html":343864,"text":1815,"readability":1057,"prior":3783,"markdown":952,"served":1055,"servedFull":1241,"mcp":1344,"result":120}}},"requests":2,"brain":{"at":"2026-11-24T15:27:51.755Z","status":200,"chars":7375,"bytes":7388,"tokens":{"o200k_base":2541,"cl100k_base":2593,"claude-legacy":2805},"paths":2,"doors":4,"places":4,"pathRank":1,"confirmedBy":["Angel"],"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:27:53.265Z","status":200,"chars":528,"bytes":530,"tokens":{"o200k_base":173,"cl100k_base":175,"claude-legacy":192},"paths":1,"doors":0,"pathRank":1,"destinationHost":true}},
+  {"id":"e01","task":"find python library for pdf parsing","group":"everyday","source":"asked at the brain; page chosen by hand","url":"https://pypi.org/project/pypdf/","page":{"at":"2026-11-24T15:27:53.267Z","status":200,"type":"text/html","ms":33,"keeps":{"text":true,"readability":true,"prior":true,"markdown":true},"chars":{"html":290240,"text":3066,"readability":4461,"prior":44104,"markdown":27516,"served":27727,"servedFull":28021,"mcp":34195,"result":138},"bytes":{"html":290303,"text":3066,"readability":4461,"prior":44104,"markdown":27516,"served":27728,"servedFull":28026,"mcp":34196,"result":139},"tokens":{"o200k_base":{"html":78863,"text":757,"readability":1114,"prior":16143,"markdown":10756,"served":10819,"servedFull":10921,"mcp":13362,"result":35},"cl100k_base":{"html":78497,"text":759,"readability":1121,"prior":15775,"markdown":10854,"served":10916,"servedFull":11020,"mcp":13396,"result":34},"claude-legacy":{"html":84883,"text":805,"readability":1176,"prior":17557,"markdown":11231,"served":11297,"servedFull":11409,"mcp":13884,"result":37}}},"requests":2,"brain":{"at":"2026-11-24T15:27:55.424Z","status":200,"chars":6547,"bytes":6549,"tokens":{"o200k_base":2134,"cl100k_base":2149,"claude-legacy":2303},"paths":0,"doors":8,"places":0,"destinationHost":false},"brainCompact":{"at":"2026-11-24T15:27:56.933Z","status":200,"chars":879,"bytes":879,"tokens":{"o200k_base":249,"cl100k_base":248,"claude-legacy":270},"paths":0,"doors":2,"destinationHost":false}},
+  {"id":"e02","task":"latest research on creatine","group":"everyday","source":"asked at the brain; page chosen by hand","url":"https://pubmed.ncbi.nlm.nih.gov/?term=creatine&sort=date","page":{"at":"2026-11-24T15:27:56.936Z","status":200,"type":"text/html","ms":465,"keeps":{"text":true,"readability":true,"prior":true,"markdown":true},"chars":{"html":261751,"text":7078,"readability":8151,"prior":14829,"markdown":7490,"served":7748,"servedFull":8065,"mcp":9972,"result":126},"bytes":{"html":261791,"text":7114,"readability":8187,"prior":14861,"markdown":7524,"served":7782,"servedFull":8103,"mcp":10007,"result":126},"tokens":{"o200k_base":{"html":58010,"text":2052,"readability":2667,"prior":4721,"markdown":2136,"served":2208,"servedFull":2326,"mcp":2867,"result":36},"cl100k_base":{"html":57944,"text":2107,"readability":2724,"prior":4755,"markdown":2184,"served":2253,"servedFull":2372,"mcp":2888,"result":32},"claude-legacy":{"html":64954,"text":2147,"readability":2646,"prior":5400,"markdown":2268,"served":2351,"servedFull":2481,"mcp":3119,"result":42}}},"requests":2,"brain":{"at":"2026-11-24T15:27:59.507Z","status":200,"chars":7947,"bytes":7947,"tokens":{"o200k_base":2533,"cl100k_base":2573,"claude-legacy":2768},"paths":0,"doors":8,"places":0,"destinationHost":false},"brainCompact":{"at":"2026-11-24T15:28:01.016Z","status":200,"chars":846,"bytes":846,"tokens":{"o200k_base":233,"cl100k_base":233,"claude-legacy":261},"paths":0,"doors":2,"destinationHost":false}},
+  {"id":"e03","task":"convert 100 eur to usd","group":"everyday","source":"asked at the brain; page chosen by hand","url":"https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/eurofxref-graph-usd.en.html","page":{"at":"2026-11-24T15:28:01.018Z","status":200,"type":"text/html","ms":391,"keeps":{"text":false,"readability":false,"prior":true,"markdown":true},"chars":{"html":1028601,"text":831,"readability":611,"prior":2300,"markdown":1550,"served":1864,"servedFull":2197,"mcp":2649,"result":308},"bytes":{"html":1028675,"text":831,"readability":611,"prior":2300,"markdown":1550,"served":1864,"servedFull":2201,"mcp":2649,"result":308},"tokens":{"o200k_base":{"html":380656,"text":165,"readability":117,"prior":1045,"markdown":894,"served":975,"servedFull":1140,"mcp":1170,"result":68},"cl100k_base":{"html":380602,"text":165,"readability":117,"prior":1046,"markdown":896,"served":975,"servedFull":1150,"mcp":1167,"result":67},"claude-legacy":{"html":387245,"text":172,"readability":121,"prior":1249,"markdown":731,"served":830,"servedFull":995,"mcp":1086,"result":83}}},"requests":2,"brain":{"at":"2026-11-24T15:28:04.578Z","status":200,"chars":5984,"bytes":5990,"tokens":{"o200k_base":2043,"cl100k_base":2103,"claude-legacy":2234},"paths":0,"doors":4,"places":4,"destinationHost":false},"brainCompact":{"at":"2026-11-24T15:28:06.089Z","status":200,"chars":1134,"bytes":1134,"tokens":{"o200k_base":356,"cl100k_base":367,"claude-legacy":388},"paths":0,"doors":2,"destinationHost":false}},
+  {"id":"e04","task":"weather in berlin tomorrow","group":"everyday","source":"asked at the brain; page chosen by hand","url":"https://www.yr.no/en/forecast/daily-table/2-2950159/Germany/Berlin/Berlin","page":{"at":"2026-11-24T15:28:06.091Z","status":200,"final":"https://www.yr.no/en/forecast/daily-table/2-2950159/Germany/State%20of%20Berlin/Berlin","type":"text/html","ms":746,"hops":1,"keeps":{"text":false,"readability":false,"prior":true,"markdown":true},"chars":{"html":519586,"text":846,"readability":813,"prior":4535,"markdown":1862,"served":2148,"servedFull":2461,"mcp":3853,"result":169},"bytes":{"html":519638,"text":866,"readability":833,"prior":4564,"markdown":1883,"served":2169,"servedFull":2486,"mcp":3874,"result":169},"tokens":{"o200k_base":{"html":190454,"text":273,"readability":250,"prior":1461,"markdown":690,"served":775,"servedFull":899,"mcp":1380,"result":51},"cl100k_base":{"html":190745,"text":283,"readability":250,"prior":1456,"markdown":732,"served":819,"servedFull":950,"mcp":1432,"result":53},"claude-legacy":{"html":191083,"text":283,"readability":250,"prior":1770,"markdown":710,"served":801,"servedFull":938,"mcp":1436,"result":53}}},"requests":3,"brain":{"at":"2026-11-24T15:28:10.101Z","status":200,"chars":4629,"bytes":4633,"tokens":{"o200k_base":1464,"cl100k_base":1481,"claude-legacy":1610},"paths":0,"doors":5,"places":0,"destinationHost":false},"brainCompact":{"at":"2026-11-24T15:28:11.611Z","status":200,"chars":1133,"bytes":1139,"tokens":{"o200k_base":388,"cl100k_base":396,"claude-legacy":417},"paths":0,"doors":2,"destinationHost":false}},
+  {"id":"e05","task":"list an MCP server in directories","group":"everyday","source":"asked at the brain; page chosen by hand","url":"https://modelcontextprotocol.io/registry/quickstart","page":{"at":"2026-11-24T15:28:11.614Z","status":200,"type":"text/html","ms":152,"keeps":{"text":true,"readability":true,"prior":true,"markdown":true},"chars":{"html":332686,"text":9407,"readability":4825,"prior":12386,"markdown":10679,"served":10976,"servedFull":11292,"mcp":12965,"result":291},"bytes":{"html":332766,"text":9445,"readability":4857,"prior":12424,"markdown":10717,"served":11014,"servedFull":11334,"mcp":13003,"result":291},"tokens":{"o200k_base":{"html":100537,"text":2173,"readability":986,"prior":2980,"markdown":2586,"served":2658,"servedFull":2776,"mcp":3274,"result":58},"cl100k_base":{"html":99918,"text":2169,"readability":975,"prior":2971,"markdown":2579,"served":2651,"servedFull":2772,"mcp":3257,"result":58},"claude-legacy":{"html":114072,"text":2528,"readability":1070,"prior":3517,"markdown":2931,"served":3010,"servedFull":3142,"mcp":3673,"result":66}}},"requests":2,"brain":{"at":"2026-11-24T15:28:13.626Z","status":200,"chars":7826,"bytes":7826,"tokens":{"o200k_base":2544,"cl100k_base":2583,"claude-legacy":2798},"paths":0,"doors":8,"places":0,"destinationHost":false},"brainCompact":{"at":"2026-11-24T15:28:15.134Z","status":200,"chars":937,"bytes":937,"tokens":{"o200k_base":258,"cl100k_base":258,"claude-legacy":292},"paths":0,"doors":2,"destinationHost":false}},
+  {"id":"e06","task":"find usdc price","group":"everyday","source":"asked at the brain; page chosen by hand","url":"https://coinmarketcap.com/currencies/usd-coin/","page":{"at":"2026-11-24T15:28:15.138Z","status":200,"type":"text/html","ms":134,"keeps":{"text":true,"readability":true,"prior":true,"markdown":true},"chars":{"html":757857,"text":7022,"readability":8216,"prior":21982,"markdown":11783,"served":12074,"servedFull":12382,"mcp":16444,"result":268},"bytes":{"html":758469,"text":7070,"readability":8262,"prior":22045,"markdown":11831,"served":12122,"servedFull":12434,"mcp":16492,"result":268},"tokens":{"o200k_base":{"html":231082,"text":1471,"readability":1735,"prior":5958,"markdown":2915,"served":2994,"servedFull":3105,"mcp":4342,"result":79},"cl100k_base":{"html":230325,"text":1480,"readability":1744,"prior":6026,"markdown":2938,"served":3017,"servedFull":3135,"mcp":4378,"result":79},"claude-legacy":{"html":261643,"text":1550,"readability":1843,"prior":6932,"markdown":3316,"served":3401,"servedFull":3524,"mcp":4962,"result":82}}},"requests":2,"brain":{"at":"2026-11-24T15:28:18.098Z","status":200,"chars":7786,"bytes":7788,"tokens":{"o200k_base":2665,"cl100k_base":2712,"claude-legacy":2910},"paths":4,"doors":5,"places":0,"destinationHost":false},"brainCompact":{"at":"2026-11-24T15:28:19.607Z","status":200,"chars":601,"bytes":601,"tokens":{"o200k_base":196,"cl100k_base":199,"claude-legacy":218},"paths":2,"doors":0,"destinationHost":false}},
+  {"id":"e07","task":"how to use fetch in javascript","group":"everyday","source":"common read of coding agents; page chosen by hand","url":"https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch","page":{"at":"2026-11-24T15:28:19.608Z","status":200,"type":"text/html","ms":63,"keeps":{"text":true,"readability":true,"prior":true,"markdown":true},"chars":{"html":183896,"text":20024,"readability":37025,"prior":30154,"markdown":26284,"served":26558,"servedFull":26878,"mcp":33853,"result":208},"bytes":{"html":184060,"text":20038,"readability":37037,"prior":30168,"markdown":26296,"served":26570,"servedFull":26894,"mcp":33865,"result":208},"tokens":{"o200k_base":{"html":48979,"text":4247,"readability":9249,"prior":6770,"markdown":6096,"served":6169,"servedFull":6299,"mcp":8410,"result":46},"cl100k_base":{"html":48608,"text":4231,"readability":9228,"prior":6752,"markdown":6067,"served":6140,"servedFull":6275,"mcp":8357,"result":45},"claude-legacy":{"html":55417,"text":4895,"readability":11123,"prior":8489,"markdown":7083,"served":7168,"servedFull":7305,"mcp":9786,"result":53}}},"requests":2,"brain":{"at":"2026-11-24T15:28:21.504Z","status":200,"chars":6704,"bytes":6706,"tokens":{"o200k_base":2190,"cl100k_base":2211,"claude-legacy":2394},"paths":0,"doors":8,"places":0,"destinationHost":false},"brainCompact":{"at":"2026-11-24T15:28:23.016Z","status":200,"chars":853,"bytes":853,"tokens":{"o200k_base":241,"cl100k_base":239,"claude-legacy":265},"paths":0,"doors":2,"destinationHost":true}},
+  {"id":"e08","task":"python asyncio gather","group":"everyday","source":"common read of coding agents; page chosen by hand","url":"https://docs.python.org/3/library/asyncio-task.html","page":{"at":"2026-11-24T15:28:23.018Z","status":200,"type":"text/html","ms":58,"keeps":{"text":true,"readability":true,"prior":true,"markdown":true},"chars":{"html":177046,"text":42811,"readability":42706,"prior":64804,"markdown":46351,"served":46626,"servedFull":46934,"mcp":52303,"result":269},"bytes":{"html":177213,"text":42977,"readability":42871,"prior":64986,"markdown":46459,"served":46734,"servedFull":47046,"mcp":52411,"result":269},"tokens":{"o200k_base":{"html":50050,"text":9562,"readability":9535,"prior":15864,"markdown":10305,"served":10380,"servedFull":10493,"mcp":12050,"result":63},"cl100k_base":{"html":49958,"text":9543,"readability":9519,"prior":15822,"markdown":10286,"served":10361,"servedFull":10478,"mcp":12028,"result":63},"claude-legacy":{"html":52843,"text":10571,"readability":10545,"prior":18711,"markdown":11020,"served":11104,"servedFull":11226,"mcp":13034,"result":72}}},"requests":2,"brain":{"at":"2026-11-24T15:28:25.452Z","status":200,"chars":6037,"bytes":6044,"tokens":{"o200k_base":2051,"cl100k_base":2068,"claude-legacy":2210},"paths":0,"doors":4,"places":4,"destinationHost":false},"brainCompact":{"at":"2026-11-24T15:28:26.962Z","status":200,"chars":829,"bytes":829,"tokens":{"o200k_base":224,"cl100k_base":224,"claude-legacy":248},"paths":0,"doors":2,"destinationHost":false}},
+  {"id":"e09","task":"react useeffect hook","group":"everyday","source":"common read of coding agents; page chosen by hand","url":"https://react.dev/reference/react/useEffect","page":{"at":"2026-11-24T15:28:26.964Z","status":200,"type":"text/html","ms":108,"keeps":{"text":true,"readability":true,"prior":true,"markdown":true},"chars":{"html":601699,"text":36302,"readability":35086,"prior":45131,"markdown":41151,"served":41379,"servedFull":41678,"mcp":47813,"result":222},"bytes":{"html":602317,"text":36580,"readability":35354,"prior":45410,"markdown":41427,"served":41657,"servedFull":41960,"mcp":48115,"result":224},"tokens":{"o200k_base":{"html":201621,"text":8035,"readability":7759,"prior":10407,"markdown":9457,"served":9516,"servedFull":9627,"mcp":11692,"result":45},"cl100k_base":{"html":197757,"text":7879,"readability":7586,"prior":10210,"markdown":9273,"served":9331,"servedFull":9447,"mcp":11478,"result":43},"claude-legacy":{"html":207405,"text":9048,"readability":8572,"prior":12107,"markdown":10367,"served":10433,"servedFull":10553,"mcp":12832,"result":49}}},"requests":2,"brain":{"at":"2026-11-24T15:28:30.130Z","status":200,"chars":5801,"bytes":5803,"tokens":{"o200k_base":1898,"cl100k_base":1925,"claude-legacy":2095},"paths":0,"doors":4,"places":4,"destinationHost":true},"brainCompact":{"at":"2026-11-24T15:28:31.642Z","status":200,"chars":825,"bytes":825,"tokens":{"o200k_base":222,"cl100k_base":225,"claude-legacy":252},"paths":0,"doors":2,"destinationHost":false}}
+ ]
+}

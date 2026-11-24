@@ -12,7 +12,7 @@ import { memoryKv } from '../node/flow.mjs';
 import { createLedger } from '../node/ledger.mjs';
 import { payConfig } from '../node/pay.mjs';
 import { immune } from '../node/immune.mjs';
-import { summarize, stats, quantile, loadBench, loadTasks, proofPage, proofJson, remeasure, TOKEN_RATIOS, TOKEN_RATIO, tokensOf, FORMATS, LIVE } from '../node/proof.mjs';
+import { summarize, stats, quantile, loadBench, loadLean, loadTasks, proofPage, proofJson, remeasure, TOKEN_RATIOS, TOKEN_RATIO, tokensOf, FORMATS, LIVE } from '../node/proof.mjs';
 import { extractText, essentialsOf, keeps, botWall, resultOf, robotsVerdict, pacer, compact, ratioBlock, seaRenderer, BENCH_TOKEN, BENCH_UA, METHOD } from './proof-bench.mjs';
 
 let passed = 0, failed = 0;
@@ -20,6 +20,8 @@ const proof = async (name, fn) => { try { await fn(); passed++; console.log(`  o
 globalThis.fetch = async (u) => { throw new Error(`the proof does not use the network: ${String(u?.url || u).slice(0, 80)}`); };
 
 const D = loadBench({ fresh: true }), FILE = new URL(`../proof/${D?.file}`, import.meta.url), SET = loadTasks(), TOK = 'o200k_base';
+// a run of a branch before its deploy, shown beside the live run (tools/lean-proof.mjs proves that section)
+const L = loadLean({ fresh: true });
 const BASE = 'https://mare.test', db = createMem({ file: '/nonexistent/sea.tsv', base: BASE });
 const later = [], cfg = { base: BASE, kv: memoryKv(), ledger: createLedger({}), pay: payConfig({}), site: {}, waitUntil: (p) => later.push(p) };
 let ip = 1;
@@ -101,8 +103,8 @@ await proof('/proof: a page of the sea with a multi-word title, both charts and 
   for (const href of ['/savings', '/open', '/proof.json', '/proof.md', `/proof/${D.file}`, '/proof/tasks.json']) assert.ok(P.text.includes(`href="${href}"`), href);
   const ld = JSON.parse(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(P.text)[1]); assert.equal(ld['@type'], 'Dataset'); assert.match(ld.distribution[0].contentUrl, /\/proof\/bench-/);
 });
-await proof('every number on the page comes from the run (and the check catches one that does not)', () => {
-  const allowed = allowedOf(D), html = proofPage(BASE, D, null), text = mainText(html);
+await proof('every number on the page comes from the run, or from the run of the branch beside it (and the check catches one that does not)', () => {
+  const allowed = new Set([...allowedOf(D), ...(L ? allowedOf(L) : [])]), html = proofPage(BASE, D, null), text = mainText(html);
   const desc = /<meta name="description" content="([^"]*)"/.exec(html)[1].replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&quot;/g, '"');
   assert.deepEqual(strangers(text, allowed), [], 'numbers the run does not hold'); assert.deepEqual(strangers(desc, allowed), []);
   assert.ok([...text.matchAll(NUM)].length > 300, 'the page is full of the run\'s numbers');

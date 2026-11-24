@@ -193,7 +193,7 @@ await proof('the run of the branch is committed beside the live run, small, its 
 });
 await proof('/proof shows before and after side by side, said to be not live yet, with every number from one of the two runs', async () => {
   const page = await call('/proof', { accept: 'text/html' }), html = page.text;
-  holds(html, ['Before and after: the lean reader', 'Not live yet.', 'local run of lean/1 before deploy', `href="/proof/${L.file}"`, 'id="chart-lean"', 'id="chart-compact"']);
+  holds(html, ['Before and after: the lean reader', 'Not live yet.', 'Local run of lean/1 before deploy.', `href="/proof/${L.file}"`, 'id="chart-lean"', 'id="chart-compact"']);
   const fig = (id) => (new RegExp(`<figure[^>]*id="${id}"[\\s\\S]*?</figure>`).exec(html) || [''])[0];
   assert.equal((fig('chart-lean').match(/<circle /g) || []).length, L.tasks.filter((t) => t.page?.tokens?.o200k_base?.prior > 0).length * 3);
   assert.equal((fig('chart-compact').match(/<circle /g) || []).length, L.tasks.filter((t) => t.brainCompact?.tokens).length * 2);
