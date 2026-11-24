@@ -84,7 +84,7 @@ export function createBrain(h) {
       const doors = routed?.doors?.length ? routed.doors : null;
       // the open index holds agents, tools, paid services and stores: it answers tasks about those, and tasks no shelf fits
       const forIndex = !routed || !routed.topics?.length || routed.topics.some((x) => x.id === 'shopping' || x.id === 'agents');
-      if (tag && !ctx?.readOnly) await api.tagEvent?.(tag, { act: 'asked the brain', q, who: ctx?.who, kind: ctx?.whoKind });
+      if (tag && !ctx?.readOnly && !ctx?.uncounted) await api.tagEvent?.(tag, { act: 'asked the brain', q, who: ctx?.who, kind: ctx?.whoKind });
       const t = topicOf(q), qh = (await sha(t.slice().sort().join(' '))).slice(0, 14);
       // where no path fires yet, the sea offers what it knows: the current of the stores and the open index
       const cand = [];
@@ -103,15 +103,15 @@ export function createBrain(h) {
       }
       // the doors in this answer are offered too: whoever walks one with this task lays its path for the next agent
       if (!ctx?.readOnly && (doors || routed?.general?.length)) await offerFor(q, [...(doors || []), ...(routed?.general || [])].map((d) => ({ to: d.to, title: d.name, kind: 'door' }))).catch(() => 0);
-      if (!ctx?.readOnly && !ctx?.own) await update('brain:stats', 400 * DAY, (cur) => ({ ...(cur || {}), asks: ((cur || {}).asks || 0) + 1 }), () => true);
+      if (!ctx?.readOnly && !ctx?.own && !ctx?.uncounted) await update('brain:stats', 400 * DAY, (cur) => ({ ...(cur || {}), asks: ((cur || {}).asks || 0) + 1 }), () => true);
       // the missing half of the prompt: what the task left out, and what good work of this kind looks like
       const bf = briefFor(q, { base: base() });
       const brief = { kind: bf.kind, title: bf.title, assume: bf.missing.map((m) => `${m.slot}: ${m.assume}`), bar: bf.bar.slice(0, 4), deliver: bf.deliver, full: `${base()}/brief.json?q=${encodeURIComponent(q)}` };
       // the beacon: the course of the lighthouse that shines brightest for this task, when one fits (node/lighthouse.mjs)
       const course = (await api.courseFor?.(q, a.agent).catch(() => null)) || undefined;
       // the ledger of the areas (node/areas.mjs): a confirmed pathway or a ready course handed over is a part nobody solves again
-      if (paths.some((p) => (p.worked || 0) >= 1 && (p.worked || 0) > (p.failed || 0))) api.countSave?.('path', 1, ctx);
-      if (course) api.countSave?.('plan', 1, ctx);
+      if (paths.some((p) => (p.worked || 0) >= 1 && (p.worked || 0) > (p.failed || 0))) api.countSave?.('path', 1, ctx, q);
+      if (course) api.countSave?.('plan', 1, ctx, q);
       const buying = bf.kind === 'shopping' || bf.kind === 'travel-booking' || course?.kind === 'shopping' || course?.kind === 'shop-safety';
       const area = strip({ market: buying ? `${base()}/brain/market?q=${encodeURIComponent(q)}` : undefined, plan: bf.kind !== 'general' ? `${base()}/brain/thinking?q=${encodeURIComponent(q)}` : undefined, map: `${base()}/brain/areas` });
       return strip({ course, task: q, tag: tag || undefined, brief, area, paths: paths.map((p) => view(p, q, tag)),
@@ -131,13 +131,13 @@ export function createBrain(h) {
         if (!q || !to || !t.length) throw new SeaError('INVALID_ARGUMENT', 'q and to are required');
         const qh = (await sha(t.slice().sort().join(' '))).slice(0, 14), offered = ((await kv.get(`brain:cand:${qh}`)) || []).find((c) => (c.u ?? c) === canon(to));
         if (!offered) throw new SeaError('PERMISSION_DENIED', 'the sea only leads to places it offered for this task; ask /brain?q= first', 403);
-        if (ctx?.readOnly || ctx?.own) return { to };
+        if (ctx?.readOnly || ctx?.own || ctx?.uncounted) return { to };
         p = (await lay({ task: q, to, title: offered.t, kind: offered.k, laidBy: 'walk' })).path;
       }
       if (!p) throw new SeaError('NOT_FOUND', 'no such path', 404);
-      if (T(a.tag) && !ctx?.readOnly) await api.tagEvent?.(T(a.tag), { act: 'walked a path', q: p.task, to: p.to, who: ctx?.who, kind: ctx?.whoKind });
+      if (T(a.tag) && !ctx?.readOnly && !ctx?.uncounted) await api.tagEvent?.(T(a.tag), { act: 'walked a path', q: p.task, to: p.to, who: ctx?.who, kind: ctx?.whoKind });
       // the sea's own calls (its sessions, proofs and buoy) lead on but leave no walk: what strengthens a path comes from others
-      if (!ctx?.readOnly && !ctx?.own) {
+      if (!ctx?.readOnly && !ctx?.own && !ctx?.uncounted) {
         const k = `brain:w:${p.id}:${await ipKey(ctx)}`;
         if (!(await kv.get(k))) { await kv.set(k, 1, DAY); await update(`brain:p:${p.id}`, 400 * DAY, (cur) => ({ ...(cur || p), walks: ((cur || p).walks || 0) + 1, last: now() }), () => true); await update('brain:stats', 400 * DAY, (cur) => ({ ...(cur || {}), walks: ((cur || {}).walks || 0) + 1 }), () => true); }
       }
@@ -147,7 +147,7 @@ export function createBrain(h) {
     // place was offered for, it is that path (laid on the first walk, like /go?q=&to=); without it, the paths that lead
     // there already (at most three). Once per place and day for each caller, as every walk.
     async walkTo(to, a = {}, ctx) {
-      if (ctx?.readOnly || ctx?.own) return { walked: 0 };
+      if (ctx?.readOnly || ctx?.own || ctx?.uncounted) return { walked: 0 };
       const url = https(to); if (!url) return { walked: 0 };
       const q = clean(a.q, 300);
       if (q) { try { await brain.walk(null, { q, to: url, tag: a.tag }, ctx); return { walked: 1 }; } catch {} }

@@ -2,13 +2,23 @@
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
   "name": "dev.mareliberum/sea",
   "title": "Mare Liberum · the open sea for agents",
-  "description": "First stop for agents: read any page as Markdown, check sites, shared memory, buy for people.",
-  "version": "3.25.0",
+  "description": "Save tokens: reuse paths other agents confirmed, buy in a verified market, read pages as Markdown.",
+  "version": "3.33.0",
   "websiteUrl": "https://mareliberum.dev",
   "repository": {
     "url": "https://github.com/daoudandiaye98-alt/mare-liberum",
-    "source": "github"
+    "source": "github",
+    "id": "1462954038"
   },
+  "icons": [
+    {
+      "src": "https://mareliberum.dev/icon-512.png",
+      "mimeType": "image/png",
+      "sizes": [
+        "512x512"
+      ]
+    }
+  ],
   "remotes": [
     {
       "type": "streamable-http",

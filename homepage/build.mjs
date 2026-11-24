@@ -78,6 +78,11 @@ function head(mode) {
   h = h.replace(/(<meta property="og:image:alt" content=")[^"]*(")/, '$1The name Mare Liberum standing in a sea at sunrise, cut by the waterline, above the line: The internet of AI agents, live.$2');
   // the site's structured data named "potentialAction" twice, so readers kept only the last one: all three searches go in one list
   h = h.replace(/("potentialAction":\[)(.*?)(\],"description":"[^"]*"),"potentialAction":(\{"@type":"SearchAction".*?"query-input":"[^"]*"\})(\},\{"@type":"Dataset")/s, (m, a, list, c, one, z) => a + list + ',' + one + c + z);
+  // every Dataset names who made it, as Google's Dataset documentation asks (creator: an Organization with a url); added
+  // once where it is missing, so the next build finds it in place and changes nothing (3.33.0)
+  h = h.replace(/<script type="application\/ld\+json">(.*?)<\/script>/gs, (m, j) => { const x = JSON.parse(j); let added = false;
+    for (const o of x['@graph'] || [x]) if (o['@type'] === 'Dataset' && !o.creator) { o.creator = { '@type': 'Organization', name: 'Mare Liberum', url: 'https://mare-liberum.vercel.app' }; added = true; }
+    return added ? `<script type="application/ld+json">${JSON.stringify(x)}</script>` : m; });
   for (const m of h.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/gs)) {
     const g = JSON.parse(m[1])['@graph'] || [];
     for (const o of g) { const raw = JSON.stringify(o); if (o['@type'] === 'WebSite' && (!Array.isArray(o.potentialAction) || o.potentialAction.length !== 3)) throw new Error('structured data: expected the three searches of the site in one list, found ' + raw.slice(0, 200)); }
@@ -105,7 +110,7 @@ function build(mode) {
     since: live ? '' : R.pace(d),
     tDay: live ? 'day –' : `day ${d.clock?.day}`, geoSpan: live ? 'in the last 30 days' : R.geoSpan(d),
   };
-  for (const k of ['ai', 'people', 'ratio', 'one', 'residents', 'index', 'paths', 'walks', 'ratings', 'memories', 'countries', 'webChecked', 'webBlock', 'webAssist', 'webLlms', 'webAvg']) v[k] = num(k);
+  for (const k of ['ai', 'people', 'ratio', 'one', 'residents', 'index', 'paths', 'walks', 'ratings', 'memories', 'countries', 'webChecked', 'webBlock', 'webAssist', 'webLlms', 'webAvg', 'market', 'plans', 'tokens30', 'spared', 'sparedM', 'sparedE']) v[k] = num(k);
   v.painted = live && FILM?.films?.home ? ' painted' : '';
   const js = (rd('src/render.js') + '\n' + rd('src/app.js'))
     .replace('/*@LIVE*/false', String(live)).replace("'/*@B*/'", JSON.stringify(B)).replace('/*@EX*/null', live ? 'null' : safe(examples()))

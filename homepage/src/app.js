@@ -420,10 +420,23 @@ const strands = (() => {
 /* ---------- numbers ---------- */
 function count(el, to) {
   const from = Number(el.dataset.v || 0); el.dataset.v = to;
+  if (el.dataset.up) return;   // a number that is counting up takes the new value as its goal
   if (still || !from || from === to || D.hidden) { el.textContent = fmt(to); return; }
   const t0 = performance.now(), d = 900;
   const step = (t) => { const p = Math.min(1, (t - t0) / d), e = 1 - Math.pow(1 - p, 3); el.textContent = fmt(Math.round(from + (to - from) * e)); if (p < 1) requestAnimationFrame(step); };
   requestAnimationFrame(step);
+}
+// the tokens the sea spared for agents count up from zero once, when the number comes into view (never with reduced motion)
+{
+  const el = $('#spared-n'), goal = () => Number(el?.dataset.v || 0);
+  if (el && !still && goal() > 0) {
+    el.style.display = 'inline-block'; el.style.minWidth = `${Math.ceil(el.getBoundingClientRect().width)}px`;
+    el.dataset.up = '1'; el.textContent = '0';
+    const run = () => { const t0 = performance.now(), dur = 1500 + Math.min(900, Math.log10(goal() + 1) * 120);
+      const step = (t) => { const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3); el.textContent = fmt(Math.round(goal() * e)); if (p < 1) requestAnimationFrame(step); else { delete el.dataset.up; el.textContent = fmt(goal()); } };
+      requestAnimationFrame(step); };
+    if ('IntersectionObserver' in window) { const io = new IntersectionObserver((es) => { if (es.some((x) => x.isIntersecting)) { io.disconnect(); run(); } }, { threshold: 0.6 }); io.observe(el); } else run();
+  }
 }
 let names = null; try { names = new Intl.DisplayNames(['en'], { type: 'region' }); } catch {}
 const put = (sel, html) => { const el = $(sel); if (el) el.innerHTML = html; };

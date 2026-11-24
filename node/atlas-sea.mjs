@@ -4,7 +4,7 @@
 // reads it file by file and keeps what it read for half a day. A site that is not on the map yet is mapped the moment an agent or a
 // person asks for it (crawlers only get what is mapped, so no crawler makes the sea knock on other doors). Every site
 // asked for is remembered, so the next weekly map reads it too.
-import { profileSite, expand, wordsOf, prior, shardOf, idxOf, siteOf } from './atlas.mjs';
+import { profileSite, expand, wordsOf, prior, shardOf, idxOf, siteOf, leftOut } from './atlas.mjs';
 import { safeHost } from './check.mjs';
 import { TOP } from './web.mjs';
 
@@ -98,7 +98,7 @@ export function createAtlas(h) {
         if (np) { p = np; await remember(np); await want(d); }
       }
       if (!p) return { site: d, mapped: false, note: ctx?.readOnly ? 'not on the map yet; it is mapped the first time an agent or a person asks' : 'the site did not answer in time; try again in a minute', map: `${base()}/site/${d}` };
-      if (ctx && !ctx.readOnly) update(`atlas:asked:${now().slice(0, 10)}`, 3 * DAY, (cur) => ({ ...(cur || {}), [d]: ((cur || {})[d] || 0) + 1 }), () => true).catch(() => {});
+      if (ctx && !ctx.readOnly && !ctx.uncounted) update(`atlas:asked:${now().slice(0, 10)}`, 3 * DAY, (cur) => ({ ...(cur || {}), [d]: ((cur || {})[d] || 0) + 1 }), () => true).catch(() => {});
       return expand(p, base());
     },
     // the search of the Atlas: sites that answer the words, the most usable for agents first
@@ -146,6 +146,15 @@ export function createAtlas(h) {
       return { hungry: hungry ? Object.entries(hungry).slice(0, 30).map(([w, n]) => ({ word: w, asked: n })) : undefined, map: st || { note: 'the first weekly map has not been published yet' }, mappedLive: own ?? (recent || []).length, store: store ? 'the sea maps sites on its own server, every few minutes, and keeps them in its own database' : undefined, data: `https://github.com/${REPO}/tree/atlas-data`, how: { site: `${base()}/site/<domain>`, find: `${base()}/find?q=<words>`, crawler: `${base()}/atlas` } };
     },
     async atlasList(n) { if (n === 'live') return ((await kv.get('atlas:recent')) || []).slice(0, 20000); const t = await data(`l/${Number(n) || 0}.txt`); return t ? t.split('\n').filter(Boolean) : []; },
+    // the same lists as a search engine should get them (sitemaps, IndexNow, the lists on pages): no site the Atlas leaves
+    // out by its name, and of the sites mapped lately only those whose map answered, so every address is a page to index
+    async atlasListOk(n) { return (await atlas.atlasListDated(n)).map(([d]) => d); },
+    // [site, the day its map was made] for the sitemaps; the weekly lists say no day (their maps lie in the snapshots)
+    async atlasListDated(n) {
+      const l = (await atlas.atlasList(n)).filter((d) => !leftOut(d)); if (n !== 'live') return l.map((d) => [d, null]);
+      const ps = await Promise.all(l.map((d) => kv.get(`atlas:${d}`).catch(() => null)));
+      return l.map((d, i) => [d, ps[i]]).filter(([, p]) => p?.s === 200).map(([d, p]) => [d, /^\d{4}-\d{2}-\d{2}/.test(String(p.at || '')) ? String(p.at).slice(0, 10) : null]);
+    },
     async atlasLists() { const st = await data('stats.json'); return Number(st?.lists) || 0; },
     // the Atlas per country: the most visited sites there (Chrome UX Report) and how far the map has come with them
     async atlasCountries() { return (await h.countries?.().catch(() => null)) || []; },
@@ -153,7 +162,7 @@ export function createAtlas(h) {
       const c = await h.countries?.(code).catch(() => null); if (!c) return null;
       const top = c.sites.slice(0, Math.min(c.top || 1000, 1000)), look = top.slice(0, Math.min(Number(limit) || 240, 400));
       const known = await storedMany(look, false).catch(() => ({}));
-      const sites = look.map((d) => { const p = known[d]; return { site: d, mapped: !!(p && p.s !== 0), grade: p?.g ?? null, search: p ? !!p.q : null, at: p?.at || null }; });
+      const sites = look.map((d) => { const p = known[d]; return { site: d, mapped: !!(p && p.s !== 0), ok: p?.s === 200 && !leftOut(d), grade: p?.g ?? null, search: p ? !!p.q : null, at: p?.at || null }; });
       return { cc: c.cc, month: c.month, top: c.top, count: c.sites.length, looked: look.length, mapped: sites.filter((x) => x.mapped).length, sites, source: 'Chrome UX Report (Google, CC BY 4.0) via github.com/zakird/crux-top-lists' };
     },
     async atlasWanted() { const w = (await kv.get('atlas:wanted')) || []; const r = (await kv.get('atlas:recent')) || []; return [...new Set([...w, ...r])]; },

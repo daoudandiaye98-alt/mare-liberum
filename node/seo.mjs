@@ -2,7 +2,7 @@
 // Every page here answers one real search: a free MCP server, a directory of MCP servers by topic, how AI agents see a website,
 // a web page as Markdown, which AI crawlers come, how a company puts agents to work. English and German, with hreflang.
 import { page, esc } from './pages.mjs';
-import { reportBox } from './offers.mjs';
+import { reportBox, go } from './offers.mjs';
 
 const pathOf = (id) => `/e/${encodeURIComponent(String(id).replace(/^urn:air:/, '')).replace(/%3A/gi, ':')}`;
 const fmt = (n) => Number(n || 0).toLocaleString('en-US');
@@ -24,7 +24,7 @@ Cursor · ~/.cursor/mcp.json
 VS Code · .vscode/mcp.json
 { "servers": { "mare-liberum": { "type": "http", "url": "${url}" } } }
 
-Claude, ChatGPT and other apps: add ${url} as a custom connector.</pre>`;
+Claude, ChatGPT and other apps: add ${url} as a custom connector.</pre><p><a href="/connect">Cursor, VS Code, Goose and LM Studio in one click; Claude and ChatGPT in a few steps</a></p>`;
 const connectDe = (url = 'https://mareliberum.dev/mcp') => `<pre>Claude Code
 claude mcp add --transport http mare-liberum ${url}
 
@@ -34,7 +34,7 @@ Cursor · ~/.cursor/mcp.json
 VS Code · .vscode/mcp.json
 { "servers": { "mare-liberum": { "type": "http", "url": "${url}" } } }
 
-Claude, ChatGPT und andere Apps: ${url} als eigenen Connector hinzufügen.</pre>`;
+Claude, ChatGPT und andere Apps: ${url} als eigenen Connector hinzufügen.</pre><p><a href="/connect" hreflang="en">Cursor, VS Code, Goose und LM Studio mit einem Klick, Claude und ChatGPT in wenigen Schritten</a> (auf Englisch)</p>`;
 
 // ── The directory of MCP servers, by topic ──
 // [slug, name, search words, one sentence on what such servers do]
@@ -356,7 +356,7 @@ Disallow: /</pre>
 ${faqHtml(qa, de ? 'Fragen' : 'Questions')}`;
   return page(base, path, de ? 'KI-Crawler-Liste: GPTBot, ClaudeBot, PerplexityBot — live gezählt · Mare Liberum' : 'AI Crawler List 2026: GPTBot, ClaudeBot, PerplexityBot — counted live · Mare Liberum',
     de ? `Welche KI-Crawler eine Website wirklich besuchen, live gezählt (${F(ai)} am ${day}), mit robots.txt-Namen aller KI-Bots und einer Vorlage: in KI-Antworten erscheinen, Training sperren.` : `Which AI crawlers really visit a website, counted live (${F(ai)} on ${day}), with the robots.txt names of every AI bot and a template to appear in AI answers while keeping out of training.`,
-    body, graph(ORG(base), crumbs(base, [['Mare Liberum', de ? '/de' : '/'], [de ? 'KI-Crawler' : 'AI crawlers', path]]), faqLd(qa), { '@type': 'Dataset', name: de ? 'KI-Crawler-Besuche' : 'AI crawler visits', description: de ? 'Tägliche Zahl der Abrufe von KI-Crawlern, Assistenten und Suchmaschinen an mareliberum.dev' : 'Daily requests by AI crawlers, assistants and search engines to mareliberum.dev', url: `${base}/census`, isAccessibleForFree: true, license: 'https://creativecommons.org/publicdomain/zero/1.0/' }), '/og.png', { lang, alt: { en: '/ai-crawlers', de: '/de/ki-crawler' } });
+    body, graph(ORG(base), crumbs(base, [['Mare Liberum', de ? '/de' : '/'], [de ? 'KI-Crawler' : 'AI crawlers', path]]), faqLd(qa), { '@type': 'Dataset', name: de ? 'KI-Crawler-Besuche' : 'AI crawler visits', description: de ? 'Tägliche Zahl der Abrufe von KI-Crawlern, Assistenten und Suchmaschinen an mareliberum.dev' : 'Daily requests by AI crawlers, assistants and search engines to mareliberum.dev', url: `${base}/census`, isAccessibleForFree: true, license: 'https://creativecommons.org/publicdomain/zero/1.0/', creator: { '@type': 'Organization', name: 'Mare Liberum', url: base } }), '/og.png', { lang, alt: { en: '/ai-crawlers', de: '/de/ki-crawler' } });
 }
 
 // ── The AI visibility check, explained (under the form of /check) ──
@@ -439,7 +439,7 @@ export function agencyPage(base, paid) {
   const body = `${paid ? thanks('Danke, die Buchung ist angekommen. Wir schalten den Raum für Ihren Hafen frei und melden uns per Mail. Noch keinen Hafen? Öffnen Sie ihn unter /harbour und schicken Sie uns seine Kennung.') : ''}
 <h1>Ein Gedächtnis für ChatGPT und Claude zugleich</h1>
 <p style="font-size:1.15rem">Für Agenturen und Beratungen: Je Kunde ein Hafen mit Ihren Regeln, freigegebenen Unterlagen und erprobten Arbeitswegen. Das ganze Team nutzt ihn aus ChatGPT, Claude und Cursor über einen einzigen Anschluss, und er bleibt, wenn Sie den Anbieter wechseln.</p>
-${cta(OFFER.agency, 'Pilot starten: erster Monat frei', 'Danach 79 € je Team im Monat, monatlich kündbar. Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.')}
+${cta(go('agency', 'agency'), 'Pilot starten: erster Monat frei', 'Danach 79 € je Team im Monat, monatlich kündbar. Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.')}
 <p><a href="/harbour">Oder erst frei ausprobieren: einen Hafen öffnen</a></p>
 <h2>Was sich ändert</h2>
 <div class="grid">
@@ -492,7 +492,7 @@ Before a task: call think with the task. After it: lay_way with what worked, or 
 </div>
 <h2>Free to self-host, a small fee for room here</h2>
 <p>Run the node yourself for nothing: <a href="/download">download it</a>. On this node a harbour with 200 sources is free. A team that wants ten times the room and a direct line pays 49 € a month, first month free.</p>
-${cta(OFFER.teams, 'Start the team harbour: first month free', 'Then 49 € a month per team, cancel monthly. No VAT is charged (§ 19 UStG, German small-business rule).')}
+${cta(go('teams', 'teams'), 'Start the team harbour: first month free', 'Then 49 € a month per team, cancel monthly. No VAT is charged (§ 19 UStG, German small-business rule).')}
 ${faqHtml(qa)}
 <p>Questions: <a href="mailto:${OFFER.mail}?subject=Team%20harbour">${OFFER.mail}</a> · More: <a href="/harbour">The harbour</a> · <a href="/yard">Build an agent</a> · <a href="/download">Download the node</a> · <a href="/business">For companies</a> · <a href="/security">Security</a> · <a href="/terms">Terms</a></p>`;
   return page(base, path, 'Shared memory for coding agents over MCP · Mare Liberum',
@@ -513,7 +513,7 @@ export function lawPage(base, paid) {
   const body = `<h1>Der Kanzlei-Hafen: Ihr Wissen bleibt im Haus</h1>
 <p style="font-size:1.15rem">Für Steuer- und Anwaltskanzleien: ein Wissensspeicher auf Ihrem eigenen Rechner oder Server. Er gibt nur heraus, was Sie freigegeben haben, wörtlich und mit Fundstelle, und hält jeden Entwurf Satz für Satz gegen Ihre Unterlagen.</p>
 ${paid ? thanks('Danke. Wir melden uns binnen eines Werktags mit einem Termin für die Einrichtung. Bis dahin bitte noch keine Mandatsunterlagen in den Hafen legen.') : ''}
-${cta(OFFER.law, 'Kanzlei-Hafen buchen: Einrichtung und erstes Jahr', 'Einrichtung 750 € einmalig, Jahresbegleitung 990 € je Standort, jährlich kündbar. Ohne Einblick in Mandatsdaten. Keine Umsatzsteuer nach § 19 UStG.')}
+${cta(go('law', 'law'), 'Kanzlei-Hafen buchen: Einrichtung und erstes Jahr', 'Einrichtung 750 € einmalig, Jahresbegleitung 990 € je Standort, jährlich kündbar. Ohne Einblick in Mandatsdaten. Keine Umsatzsteuer nach § 19 UStG.')}
 <p>Lieber erst sprechen? <a href="${mail}">${OFFER.mail}</a></p>
 <p><a href="/download">Die Software selbst ansehen: Knoten herunterladen (frei, MIT-Lizenz)</a></p>
 <div class="grid">

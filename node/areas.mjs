@@ -18,6 +18,8 @@ import { CHARTS } from './charts.mjs';
 import { DOORS } from './doors.mjs';
 import { grab, robotsGroups, robotsAllows, safeHost } from './check.mjs';
 import { page, esc } from './pages.mjs';
+import { TOKEN_RATIO as CALIBRATED } from './proof.mjs';
+import { createOnce, pageSubject, taskSubject } from './once.mjs';
 
 export const MARKET_TOKEN = 'MareLiberum-Market';
 export const MARKET_UA = `${MARKET_TOKEN}/1.0 (+https://mareliberum.dev/brain/market; reads a store's UCP profile, robots.txt and home page about once a month)`;
@@ -37,27 +39,99 @@ export const SAVE = {
     market: { tokens: [5000, 20000, 50000], wh: [0.5, 2, 6], what: 'stores that passed open checks instead of checking unknown shops one by one',
       basis: 'Checking a shop means reading its home and legal pages, its registration and what others say: about 2 to 4 reads of 5,000 to 15,000 tokens for each of 2 or 3 shops, and the judgement. Energy: 3 to 15 ordinary queries.' },
   },
-  bytesPerToken: 4,
   mix: { path: 0.5, plan: 0.3, market: 0.2 },
+  // one network adds at most this many counts a day: Markdown answers (measured), solved parts handed out (reuses)
+  cap: { measured: 500, reuse: 500 },
   sources: [
-    { what: 'Energy of one query to a frontier model: median 0.31 Wh (0.16–0.60); a long reasoning query 3.91 Wh (2.15–7.05)', by: 'Oviedo et al., Microsoft Research, Joule (2026)', url: 'https://www.microsoft.com/en-us/research/publication/energy-use-of-ai-inference-efficiency-pathways-and-test-time-compute/' },
+    { what: 'Energy of one query to a frontier model: median 0.31 Wh (0.16–0.60); a long reasoning query (test-time scaling, about 5,000 output tokens) 3.91 Wh (2.15–7.05)', by: 'Oviedo et al., Joule (2026), doi 10.1016/j.joule.2026.102430', url: 'https://arxiv.org/abs/2509.20241' },
     { what: 'Median Gemini text prompt: 0.24 Wh', by: 'Google (August 2025)', url: 'https://arxiv.org/abs/2508.15734' },
     { what: 'Tokens of one agent task: about 26,000 input and 4,700 output at the easiest GAIA level, 121,000 and 9,800 at the hardest', by: 'Memento, arXiv 2508.16153', url: 'https://arxiv.org/abs/2508.16153' },
     { what: 'Agents use about 4 times the tokens of a chat, systems of several agents about 15 times', by: 'Anthropic engineering (June 2025)', url: 'https://www.anthropic.com/engineering/multi-agent-research-system' },
     { what: 'Data centres used about 415 TWh in 2024, about 1.5 % of the world\'s electricity, heading for about 945 TWh by 2030', by: 'IEA, Energy and AI (2025)', url: 'https://www.iea.org/reports/energy-and-ai' },
+    { what: 'Data centres used about 485 TWh in 2025, heading for about 950 TWh in 2030', by: 'IEA, Key questions on energy and AI (2026)', url: 'https://iea.org/reports/key-questions-on-energy-and-ai/executive-summary' },
   ],
   notCounted: ['the energy of the sea itself (one small server; a lookup is milliseconds of one processor, far below one model query)',
     'Markdown in watt-hours: its tokens are counted as measured, their energy is left out',
     'the time agents and people save, and the fake shops not paid'],
 };
 const r1 = (x) => Math.round(x * 10) / 10;
-// the savings that follow from counted reuses: { path, plan, market, readBytes, mdBytes, reads, md }
+
+// ------------------------------------------------------------------ bytes into tokens: one rule for the whole sea
+// What the ledger counts, kind by kind (checked for 3.33.0):
+//   md, mdAgent  UTF-8 bytes of the page as HTML and of the Markdown sent (node/core.mjs and node/agentmd.mjs, TextEncoder)
+//   read         characters as JavaScript counts them (string length): the reader holds another site's page as decoded
+//                text (node/check.mjs grab, htmlBytes = body.length in node/reader.mjs) and its Markdown as text
+//   …Bytes alone the difference kept before 3.33.0, counted in characters, as 3.32.0 counted every kind
+// Each count becomes tokens with the ratio measured for its form and its unit by the proof of function (node/proof.mjs:
+// characters and UTF-8 bytes per token for raw HTML, plain text and the sea's Markdown, tokenizer o200k_base): HTML with
+// the HTML ratio, Markdown with the Markdown ratio. The assumption of 3.32.0 (4 bytes a token for every form, from
+// Anthropic's documentation) stays only as the fallback for a node that has no measured run. Every count of the sea
+// passes through tokensOfBytes. format: 'html' (what a caller would have read), 'md' (what it read instead), 'text'.
+export const TOKEN_ASSUMED = {
+  html: 4, md: 4, text: 4, bytes: { html: 4, md: 4, text: 4 }, assumption: true,
+  basis: 'an assumption, not measured on the sea\'s own pages: 4 bytes (or characters) a token for HTML and for Markdown, the figure Anthropic\'s documentation gives for web pages (an average page of 10 kB is about 2,500 tokens); newer tokenizers make about 30 % more tokens of the same text, so 4 counts on the low side',
+  source: { what: 'Average webpage (10 kB): about 2,500 tokens; Claude 4.7 and later make about 30 % more tokens for the same text', by: 'Anthropic, Claude API pricing (web fetch tool)', url: 'https://platform.claude.com/docs/en/about-claude/pricing' },
+};
+// the unit each measured kind counts in (above)
+export const MEASURED_UNIT = { md: 'bytes', mdAgent: 'bytes', read: 'chars', before: 'chars' };
+const CAL = [CALIBRATED?.html, CALIBRATED?.markdown, CALIBRATED?.text, CALIBRATED?.bytes?.html, CALIBRATED?.bytes?.markdown, CALIBRATED?.bytes?.text].every((x) => Number(x) > 0) ? CALIBRATED : null;
+export const TOKEN_RATIO = CAL ? {
+  html: CAL.html, md: CAL.markdown, text: CAL.text, unit: 'characters per token (JavaScript string length)',
+  bytes: { html: CAL.bytes.html, md: CAL.bytes.markdown, text: CAL.bytes.text, unit: 'UTF-8 bytes per token' },
+  assumption: false, tokenizer: CAL.tokenizer, date: CAL.date, pages: CAL.pages, run: CAL.source, proof: '/proof',
+  basis: `measured, not assumed: on the ${CAL.pages} pages of the proof of function (${CAL.date}, tokenizer ${CAL.tokenizer}) one token held ${CAL.html} characters of raw HTML (${CAL.bytes.html} UTF-8 bytes), ${CAL.markdown} of the sea's Markdown (${CAL.bytes.markdown}) and ${CAL.text} of plain text (${CAL.bytes.text}). Each count becomes tokens with the ratio of its form and of the unit it was counted in: UTF-8 bytes for pages of the sea, characters for pages read through the reader and for counts from before 3.33.0`,
+  source: { what: `Characters and UTF-8 bytes per token for raw HTML, plain text and the sea's Markdown, counted with the ${CAL.tokenizer} tokenizer on the ${CAL.pages} pages of a published task set`, by: 'Mare Liberum, proof of function', url: 'https://mareliberum.dev/proof' },
+  fallback: { html: TOKEN_ASSUMED.html, md: TOKEN_ASSUMED.md, note: 'used only when no measured run is present' },
+} : TOKEN_ASSUMED;
+// n counted in unit ('bytes': UTF-8 bytes, 'chars': JavaScript string length) of a text in format, as tokens
+export function tokensOfBytes(format, n, unit = 'bytes') {
+  const R = unit === 'chars' ? TOKEN_RATIO : (TOKEN_RATIO.bytes || TOKEN_RATIO), b = Number(n) || 0;
+  const r = Number(R[format]) || Number(R.text) || TOKEN_ASSUMED.text;
+  return b > 0 ? Math.round(b / r) : 0;
+}
+// what a token is worth: list prices of the large APIs for uncached input tokens, standard rate (no batch, no cache), in
+// three bands. Spared tokens were never read, so nobody paid for them: this is what reading them would have cost, as a
+// model. An agent that had the page in its prompt cache already would pay 10 to 40 times less for it. One place.
+export const TOKEN_PRICE = {
+  asOf: '2026-11-24', unit: 'USD per million input tokens', low: 0.10, mid: 2, high: 8,
+  lowIs: 'a small model: Claude Haiku 5.5 (prompts up to 100,000 tokens) and Gemini 2.5 Flash-Lite are $0.10',
+  midIs: 'the workhorse model of each of the three: Claude Sonnet 5.5, gpt-6.2-sol and Gemini 3.1 Pro (prompts up to 200k tokens) are $2',
+  highIs: 'the top model: Claude Fable 5.2 and gpt-6.2-astra are $8',
+  label: 'list price for uncached input tokens, modelled',
+  sources: [
+    { what: 'Claude Haiku 5.5 $0.10, Claude Sonnet 5.5 $2 and Claude Fable 5.2 $8 per million base input tokens', by: 'Anthropic, Claude API pricing', url: 'https://platform.claude.com/docs/en/about-claude/pricing' },
+    { what: 'gpt-6.2-sol $2 and gpt-6.2-astra $8 per million input tokens, standard tier', by: 'OpenAI API pricing', url: 'https://developers.openai.com/api/docs/pricing' },
+    { what: 'Gemini 3.1 Pro $2 (prompts up to 200k tokens) and Gemini 2.5 Flash-Lite $0.10 per million input tokens, paid tier', by: 'Google, Gemini Developer API pricing', url: 'https://ai.google.dev/gemini-api/docs/pricing' },
+  ],
+};
+const cents = (x) => Math.round(x * 100) / 100;
+export const usdOf = (tokens, perMillion) => cents(((Number(tokens) || 0) * perMillion) / 1e6);
+
+// what Markdown spared, from the counted bytes of the kinds that deliver it: md (a page of the sea asked for as
+// Markdown), mdAgent (a page of the sea sent as Markdown to an assistant reading for a person) and read (another
+// site's page through the reader). Since 3.33.0 each answer counts the HTML it stood in for (…Html) and the Markdown it
+// sent (…Out); counts from before carry only the difference (…Bytes), which is turned into tokens as Markdown.
+export const MEASURED = { md: ['md', 'md'], mdAgent: ['mdAgent', 'md-agent'], read: ['reads', 'read'] };
+export function measuredOf(n = {}, kind) {
+  const v = (k) => Number(n[k]) || 0, saved = v(`${kind}Bytes`), html = v(`${kind}Html`), out = v(`${kind}Out`), unit = MEASURED_UNIT[kind] || 'bytes';
+  // the part of the difference that no HTML and Markdown of 3.33.0 or later explain was counted before 3.33.0, in
+  // characters; it becomes tokens as Markdown (the lower bound of what it spared: the HTML ratio would give more)
+  const rest = Math.max(0, saved - (html - out));
+  return Math.max(0, tokensOfBytes('html', html, unit) - tokensOfBytes('md', out, unit) + tokensOfBytes('md', rest, MEASURED_UNIT.before));
+}
+// the savings that follow from counted reuses: { path, plan, market, readBytes, mdBytes, reads, md, mdAgent, … }
 export function savingsOf(n = {}) {
   const tok = [0, 0, 0], wh = [0, 0, 0];
   for (const k of Object.keys(SAVE.per)) for (let i = 0; i < 3; i++) { tok[i] += (Number(n[k]) || 0) * SAVE.per[k].tokens[i]; wh[i] += (Number(n[k]) || 0) * SAVE.per[k].wh[i]; }
-  const measured = Math.round(((Number(n.readBytes) || 0) + (Number(n.mdBytes) || 0)) / SAVE.bytesPerToken);
-  return { reuses: ['path', 'plan', 'market'].reduce((s, k) => s + (Number(n[k]) || 0), 0), markdown: (Number(n.reads) || 0) + (Number(n.md) || 0),
-    tokens: { measured, low: tok[0] + measured, mid: tok[1] + measured, high: tok[2] + measured }, wh: { low: r1(wh[0]), mid: r1(wh[1]), high: r1(wh[2]) } };
+  const measured = Object.keys(MEASURED).reduce((s, k) => s + measuredOf(n, k), 0);
+  // the lower view (pages of the sea, since 3.33.0): the answers whose page's plain text was taken too, what they spared
+  // against plain text and, like for like, against raw HTML
+  const sumOf = (sfx) => Object.keys(MEASURED).reduce((s, k) => s + (Number(n[`${k}${sfx}`]) || 0), 0);
+  return { reuses: ['path', 'plan', 'market'].reduce((s, k) => s + (Number(n[k]) || 0), 0), markdown: Object.values(MEASURED).reduce((s, [k]) => s + (Number(n[k]) || 0), 0),
+    tokens: { measured, low: tok[0] + measured, mid: tok[1] + measured, high: tok[2] + measured }, modelled: { low: tok[0], mid: tok[1], high: tok[2] },
+    vsText: { tokens: sumOf('TextTok'), raw: sumOf('TextRaw'), answers: sumOf('Texted') },
+    usd: { low: usdOf(tok[0] + measured, TOKEN_PRICE.low), mid: usdOf(tok[1] + measured, TOKEN_PRICE.mid), high: usdOf(tok[2] + measured, TOKEN_PRICE.high), measuredLow: usdOf(measured, TOKEN_PRICE.low), measuredMid: usdOf(measured, TOKEN_PRICE.mid), measuredHigh: usdOf(measured, TOKEN_PRICE.high) },
+    wh: { low: r1(wh[0]), mid: r1(wh[1]), high: r1(wh[2]) } };
 }
 // one reuse of the usual mix, and what a number of reuses a day would spare in a year
 export const perReuse = () => { const m = SAVE.mix, s = (i, f) => Object.entries(m).reduce((t, [k, w]) => t + w * SAVE.per[k][f][i], 0); return { tokens: [0, 1, 2].map((i) => Math.round(s(i, 'tokens'))), wh: [0, 1, 2].map((i) => Math.round(s(i, 'wh') * 100) / 100) }; };
@@ -129,10 +203,29 @@ export function createAreas(h) {
   const hostOf = (u) => { try { return new URL(String(u)).hostname.toLowerCase().replace(/^www\./, ''); } catch { return null; } };
   const checking = new Set();
 
-  // the ledger: counted in memory, written by the tide; own calls, crawlers and empty answers count nowhere
+  // the ledger: counted in memory, written by the tide; own calls, crawlers and empty answers count nowhere. Beside each
+  // count the door it came through (the first part of the address, as the census writes it): "@<door>|<kind>"
   let pend = {};
-  const count = (kind, n = 1, ctx) => { if (ctx?.own || ctx?.readOnly || !(n > 0)) return; const d = now().slice(0, 10), b = pend[d] || (pend[d] = {}); b[kind] = (b[kind] || 0) + n; };
+  const DOORS_A_DAY = 120;
+  const doorOf = (ctx) => { const d = String(ctx?.door || ''); return /^\/[a-z0-9._-]{0,24}$/i.test(d) ? d.toLowerCase() : null; };
+  // the house agent (Angel, a resident of the sea, ctx.house) is counted apart ("h:<kind>"): never in the headline
+  const count = (kind, n = 1, ctx) => {
+    if (ctx?.own || ctx?.readOnly || ctx?.uncounted || !(n > 0)) return;
+    const d = now().slice(0, 10), b = pend[d] || (pend[d] = {});
+    if (ctx?.house) { b[`h:${kind}`] = (b[`h:${kind}`] || 0) + n; return; }
+    b[kind] = (b[kind] || 0) + n;
+    const door = doorOf(ctx); if (!door) return;
+    let k = `@${door}|${kind}`; if (!(k in b) && Object.keys(b).filter((x) => x[0] === '@').length >= DOORS_A_DAY * 4) k = `@other|${kind}`;
+    b[k] = (b[k] || 0) + n;
+  };
+  // a count one address could repeat in a loop counts once a day per network, kind and subject (the page, the task), and a
+  // network adds at most SAVE.cap of each group a day (node/once.mjs; in memory only)
+  const once = createOnce({ now });
+  const firstToday = (ctx, kind, subject, group) => !ctx?.own && !ctx?.readOnly && !ctx?.uncounted && once.first(ctx?.ip, `${ctx?.house ? 'h:' : ''}${kind}`, subject, { cap: SAVE.cap[group], group });
   const add = (a, b) => { const o = { ...(a || {}) }; for (const [k, v] of Object.entries(b || {})) o[k] = (o[k] || 0) + v; return o; };
+  // the counts of one door, out of a bucket: { '/brain': { path: 2, … }, … }
+  const byDoorOf = (n) => { const o = {}; for (const [k, v] of Object.entries(n || {})) { if (k[0] !== '@') continue; const i = k.indexOf('|'); (o[k.slice(1, i)] ||= {})[k.slice(i + 1)] = v; } return o; };
+  const flat = (n) => Object.fromEntries(Object.entries(n || {}).filter(([k]) => k[0] !== '@'));
 
   async function ucpOf(host) {
     const e = await Promise.resolve(entryOf?.(`urn:air:${host}:ucp:store`)).catch(() => null);
@@ -209,7 +302,7 @@ export function createAreas(h) {
       return { checked: done.length, waiting: q.length };
     },
     // the verified offers among products: only stores at level 2 or more stay; the rest is held back, counted, never named
-    async marketFilter(products, ctx) {
+    async marketFilter(products, ctx, need = '') {
       const hostsOf = (p) => safeHost(String(p.storeHost || hostOf(p.url) || hostOf(p.checkout) || '').replace(/^www\./, ''));
       const hosts = [...new Set(products.map(hostsOf).filter(Boolean))];
       const recs = Object.fromEntries(await Promise.all(hosts.map(async (x) => [x, await kv.get(`market:s:${x}`)])));
@@ -220,7 +313,7 @@ export function createAreas(h) {
         else if (!r || !fresh(r.at, MARKET.freshDays + 7)) { held.notYetChecked++; if (x) unseen.add(x); } else held.notPassing++;
       }
       if (unseen.size && !ctx?.readOnly) { await enqueue([...unseen], true); areas.marketSoon([...unseen]); }
-      if (keep.length) count('market', 1, ctx);
+      if (keep.length && firstToday(ctx, 'market', taskSubject(need || keep.map(hostsOf).sort().join(' ')), 'reuse')) count('market', 1, ctx);
       return { keep, held };
     },
     // the market as a list: counts by level and the stores that passed (proven first, then by name)
@@ -249,7 +342,7 @@ export function createAreas(h) {
       const [course, paths] = await Promise.all([api.courseFor?.(q).catch(() => null), api.findPaths?.(q, 8).catch(() => [])]);
       const sources = (paths || []).filter((p) => (p.worked || 0) > (p.failed || 0)).slice(0, 5).map((p) => strip({ to: p.to, title: p.title, worked: p.worked, failed: p.failed, go: p.go }));
       const ready = bf.kind !== 'general' || !!course, buying = ['shopping', 'travel-booking'].includes(bf.kind) || course?.kind === 'shopping' || course?.kind === 'shop-safety';
-      if (ready) count('plan', 1, ctx);
+      if (ready && firstToday(ctx, 'plan', taskSubject(q), 'reuse')) count('plan', 1, ctx);
       return strip({ area: 'thinking', task: q, ready,
         plan: ready ? strip({ kind: bf.kind, title: bf.title, outcome: bf.outcome, assume: (bf.missing || []).map((m) => `${m.slot}: ${m.assume}`),
           steps: course?.steps?.length ? course.steps.map((s) => strip({ do: s.do, say: s.say, check: s.check })) : (bf.steps || []).map((s) => ({ say: s })),
@@ -261,25 +354,54 @@ export function createAreas(h) {
         saves: ready ? `a worked-out method: about ${SAVE.per.plan.tokens[1].toLocaleString('en-US')} tokens of reasoning the agent does not repeat (estimate, ${base()}/savings)` : undefined });
     },
     // what the brain hands out that someone already solved, and what that spares
-    countSave(kind, a = 1, ctx) { count(kind, a, ctx); },
-    // kind 'read' (the reader) or 'md' (pages of the sea in Markdown): one answer, and the bytes it spared against the HTML
-    countBytes(kind, htmlBytes, mdBytes, ctx) { const d = (Number(htmlBytes) || 0) - (Number(mdBytes) || 0); if (d > 0) { count(kind === 'read' ? 'reads' : kind, 1, ctx); count(`${kind}Bytes`, d, ctx); } },
+    countSave(kind, a = 1, ctx, subject = '') { if (firstToday(ctx, kind, taskSubject(subject), 'reuse')) count(kind, a, ctx); },
+    // kind 'read' (the reader), 'md' (pages of the sea asked for as Markdown) or 'mdAgent' (pages of the sea sent as
+    // Markdown to an assistant reading for a person): one answer, the HTML it stood in for, the Markdown it sent, and the
+    // bytes that spared (in bytes of UTF-8 where the caller measured them so)
+    // page: the page the answer was (its site and path); textBytes: the page's plain text, where it was taken, for the
+    // lower view (what the Markdown spared against plain text instead of raw HTML)
+    countBytes(kind, htmlBytes, mdBytes, ctx, page = '', textBytes = null) {
+      const h = Number(htmlBytes) || 0, m = Number(mdBytes) || 0, d = h - m; if (!(d > 0)) return;
+      if (!firstToday(ctx, kind, pageSubject(page), 'measured')) return;
+      count(kind === 'read' ? 'reads' : kind, 1, ctx); count(`${kind}Bytes`, d, ctx); count(`${kind}Html`, h, ctx); count(`${kind}Out`, m, ctx);
+      const t = textBytes == null ? NaN : Number(textBytes), unit = MEASURED_UNIT[kind] || 'bytes';
+      // the lower view, like for like: the same answer against plain text (…TextTok) and against raw HTML (…TextRaw)
+      if (Number.isFinite(t) && t >= 0) { count(`${kind}Texted`, 1, ctx); count(`${kind}TextTok`, Math.max(0, tokensOfBytes('text', t, unit) - tokensOfBytes('md', m, unit)), ctx); count(`${kind}TextRaw`, Math.max(0, tokensOfBytes('html', h, unit) - tokensOfBytes('md', m, unit)), ctx); }
+    },
     async flushSave() {
       const p = pend; pend = {};
       for (const [d, b] of Object.entries(p)) { await update(`save:${d}`, 400 * DAY, (cur) => add(cur, b), () => true); await update('save:total', 4000 * DAY, (cur) => add(cur, b), () => true); }
       if (Object.keys(p).length) await update('save:since', 4000 * DAY, (cur) => cur || Object.keys(p).sort()[0], () => true);
       return Object.keys(p).length;
     },
-    async savings() {
-      const day = now().slice(0, 10), days = Array.from({ length: 30 }, (_, i) => new Date(Date.parse(day) - i * DAY * 1000).toISOString().slice(0, 10));
-      const [total, since, ...ds] = await Promise.all([kv.get('save:total'), kv.get('save:since'), ...days.map((d) => kv.get(`save:${d}`))]);
+    async savings({ days: span = 30 } = {}) {
+      // the days asked for, at least 30, but none before the count began (the ledger keeps 400)
+      const day = now().slice(0, 10), since = await kv.get('save:since'), back = since ? Math.floor((Date.parse(day) - Date.parse(since)) / (DAY * 1000)) + 1 : 1;
+      const n = Math.max(30, Math.min(400, Number(span) || 30, back)), days = Array.from({ length: n }, (_, i) => new Date(Date.parse(day) - i * DAY * 1000).toISOString().slice(0, 10));
+      const [total, ...ds] = await Promise.all([kv.get('save:total'), ...days.map((d) => kv.get(`save:${d}`))]);
       const live = (d, v) => add(v, pend[d]);
-      const today = live(day, ds[0]), month = days.reduce((s, d, i) => add(s, live(d, ds[i])), {}), all = Object.entries(pend).reduce((s, [, b]) => add(s, b), total || {});
-      const view = (n) => ({ counts: strip({ path: n.path, plan: n.plan, market: n.market, reads: n.reads, md: n.md, readBytes: n.readBytes, mdBytes: n.mdBytes }), ...savingsOf(n) });
+      const today = live(day, ds[0]), month = days.slice(0, 30).reduce((s, d, i) => add(s, live(d, ds[i])), {}), all = Object.entries(pend).reduce((s, [, b]) => add(s, b), total || {});
+      const view = (n) => ({ counts: strip({ path: n.path, plan: n.plan, market: n.market, reads: n.reads, md: n.md, mdAgent: n.mdAgent, readBytes: n.readBytes, mdBytes: n.mdBytes, mdAgentBytes: n.mdAgentBytes, readHtml: n.readHtml, readOut: n.readOut, mdHtml: n.mdHtml, mdOut: n.mdOut, mdAgentHtml: n.mdAgentHtml, mdAgentOut: n.mdAgentOut }), ...savingsOf(flat(n)) });
+      // the same counts by kind (what was spared) and by door (where the agent came in)
+      const kinds = (n) => [...Object.entries(MEASURED).map(([k, [answers, name]]) => ({ kind: name, how: 'measured', answers: Number(n[answers]) || 0, bytesHtml: Number(n[`${k}Html`]) || undefined, bytesMarkdown: Number(n[`${k}Out`]) || undefined, bytesSpared: Number(n[`${k}Bytes`]) || 0, tokens: measuredOf(n, k) })),
+        ...Object.keys(SAVE.per).map((k) => ({ kind: k, how: 'modelled', reuses: Number(n[k]) || 0, tokens: { low: (Number(n[k]) || 0) * SAVE.per[k].tokens[0], mid: (Number(n[k]) || 0) * SAVE.per[k].tokens[1], high: (Number(n[k]) || 0) * SAVE.per[k].tokens[2] } }))].map((x) => strip(x));
+      const doors = (n) => Object.entries(byDoorOf(n)).map(([door, c]) => { const s = savingsOf(c); return { door, answers: s.markdown, reuses: s.reuses, measured: s.tokens.measured, modelled: s.modelled }; })
+        .sort((a, b) => b.measured + b.modelled.mid - (a.measured + a.modelled.mid) || (a.door < b.door ? -1 : 1));
+      // day by day, oldest first: what was spared each day, measured and modelled
+      const series = []; for (let i = days.length - 1; i >= 0; i--) { const d = days[i], v = live(d, ds[i]), s = savingsOf(flat(v)); series.push({ day: d, recorded: d >= (since || day), measured: s.tokens.measured, modelled: s.modelled, reuses: s.reuses, markdown: s.markdown, counts: strip(flat(v)) }); }
+      const a = savingsOf(flat(all));
+      // the house agent (Angel) apart: what it was handed counts here, never in the numbers above
+      const house = (n) => { const o = {}; for (const [k, v] of Object.entries(n || {})) if (k.startsWith('h:')) o[k.slice(2)] = v; const x = savingsOf(o); return { reuses: x.reuses, markdown: x.markdown, measured: x.tokens.measured, modelled: x.modelled, note: 'Angel, the house agent of the sea: counted apart, never in the headline' }; };
       return { what: 'what the shared brain saves: reuses of parts someone already solved, and Markdown instead of HTML', since: since || day,
-        today: view(today), last30days: view(month), all: view(all), perReuse: Object.fromEntries(Object.entries(SAVE.per).map(([k, v]) => [k, { tokens: v.tokens, wh: v.wh, what: v.what, basis: v.basis }])),
-        scenarios: [1e3, 1e5, 1e7, 1e9].map(scenario), mix: SAVE.mix, sources: SAVE.sources, notCounted: SAVE.notCounted,
-        read: 'A reuse counts once per answer that handed an agent a part someone already solved: a confirmed pathway (path), a ready plan (plan), verified offers (market). reads and md count answers in Markdown, with the bytes they spared against the page as HTML (tokens = bytes / 4). Low, mid and high come from the ranges in perReuse. The sea\'s own calls and crawlers are never counted.' };
+        hero: { tokens: a.tokens.mid, measured: a.tokens.measured, measuredVsText: a.vsText.tokens, lowerView: { answers: a.vsText.answers, againstRawHtml: a.vsText.raw, againstPlainText: a.vsText.tokens }, modelled: a.modelled, usd: a.usd, wh: a.wh,
+          note: 'tokens = measured + the middle of the modelled range. measured is versus raw HTML, an upper bound. lowerView: the answers measured against a page\'s plain text as well (pages of the sea, since 3.33.0), what they spared against raw HTML and against plain text, like for like; measuredVsText is its plain-text figure' },
+        house: { today: house(today), last30days: house(month), all: house(all) },
+        today: view(today), last30days: view(month), all: view(all),
+        byKind: { all: kinds(all), last30days: kinds(month) }, byDoor: { all: doors(all), last30days: doors(month) },
+        series: series.slice(-30).map(({ counts, ...x }) => x), ...(Number(span) > 30 ? { daily: series } : {}),
+        perReuse: Object.fromEntries(Object.entries(SAVE.per).map(([k, v]) => [k, { tokens: v.tokens, wh: v.wh, what: v.what, basis: v.basis }])),
+        scenarios: [1e3, 1e5, 1e7, 1e9].map(scenario), mix: SAVE.mix, sources: SAVE.sources, notCounted: SAVE.notCounted, ratio: TOKEN_RATIO.assumption ? TOKEN_RATIO : { ...TOKEN_RATIO, proof: `${base()}/proof`, run: `${base()}${TOKEN_RATIO.run}` }, price: TOKEN_PRICE,
+        read: `A reuse counts once a day per caller network and task when an answer handed an agent a part someone already solved: a confirmed pathway (path), a ready plan (plan), verified offers (market); what it spares is modelled from the ranges in perReuse (low, mid, high). Markdown is measured: md counts pages of the sea asked for as Markdown, mdAgent pages of the sea sent as Markdown to an assistant reading for a person (md-agent), reads pages of other sites through the reader, each with what it spared against the page as HTML (UTF-8 bytes for pages of the sea, characters for pages through the reader); counts become tokens by one rule (ratio: ${TOKEN_RATIO.assumption ? `${TOKEN_RATIO.html} bytes a token, an assumption` : `HTML ${TOKEN_RATIO.bytes.html} bytes or ${TOKEN_RATIO.html} characters a token, Markdown ${TOKEN_RATIO.bytes.md} bytes or ${TOKEN_RATIO.md} characters, measured with ${TOKEN_RATIO.tokenizer} on the proof of function (${base()}/proof)`}). usd prices the tokens at list prices for uncached input tokens (price): low, mid (the headline) and high. A Markdown answer counts once a day per network and page; one network adds at most ${SAVE.cap.measured} Markdown answers and ${SAVE.cap.reuse} reuses a day. measured is against raw HTML, an upper bound; vsText is the same answers against plain text (pages of the sea), the lower view. The sea's own calls and crawlers are never counted; the house agent (Angel) is counted apart (house).` };
     },
     // the map of the brain: every area with its job, its door and its numbers
     async areasLive() {
@@ -288,7 +410,9 @@ export function createAreas(h) {
       return { market: { verified: by[2] + by[3], proven: by[3], checked: Object.keys(idx || {}).length, waiting: (q || []).length }, thinking: { kinds: BRIEF_KINDS.length, courses: CHARTS.length, plansToday: sv?.today?.counts?.plan || 0 },
         pathways: { pathways: st?.pathways || 0, walks: st?.walks || 0, ratings: st?.ratings || 0 }, memory: { minds: st?.minds || 0, memories: st?.memories || 0 },
         reading: { readsToday: reads?.total || 0, tokensSpared30d: sv?.last30days?.tokens?.measured || 0 }, doors: { doors: DOORS.length },
-        saved: sv ? { reuses30d: sv.last30days.reuses, tokens30d: sv.last30days.tokens, wh30d: sv.last30days.wh, reusesAll: sv.all.reuses, whAll: sv.all.wh, since: sv.since } : null };
+        saved: sv ? { reuses30d: sv.last30days.reuses, tokens30d: sv.last30days.tokens, wh30d: sv.last30days.wh, reusesAll: sv.all.reuses, whAll: sv.all.wh, since: sv.since,
+          // every token spared so far: measured (Markdown) and modelled (reuses), mid = measured + the middle of the modelled range
+          tokensAll: { mid: sv.all.tokens.mid, measured: sv.all.tokens.measured, modelled: sv.all.modelled.mid, low: sv.all.tokens.low, high: sv.all.tokens.high } } : null };
     },
   };
   return areas;
@@ -308,7 +432,6 @@ const LIMITS = ['The checks read public facts: they cannot see whether a parcel 
 
 // ------------------------------------------------------------------ pages
 const n = (x) => (x == null ? '–' : Number(x).toLocaleString('en-US'));
-const range = (a, unit = '') => `${n(a[0])}${unit} – ${n(a[2])}${unit} (mid ${n(a[1])}${unit})`;
 const AREA_DEF = (b, L) => [
   { id: 'market', name: 'The verified market', like: 'like the amygdala, it knows danger before anything is touched', job: 'Only stores that pass four open checks. An agent that buys without a person watching asks here and meets no shop built last week, no page that tries to command it, no store agents keep failing with.', door: `GET ${b}/brain/market?q=<need> · MCP ask or decide with verified: true`, page: '/brain/market',
     nums: L ? [[L.market.verified, 'verified stores'], [L.market.proven, 'proven by agents'], [L.market.checked, 'stores checked'], [L.market.waiting, 'waiting for a check']] : [] },
@@ -330,7 +453,7 @@ export function areasPage(base, L) {
     `<h1>The areas of the Unibrain</h1><p class="pulse">One brain for every agent, with an area for every job.</p>
 <p>A brain is not one lump. It has areas, and each one does one thing well. The Unibrain has them too. Each area below has a door an agent calls, a rule anyone can read, and its own live numbers. Everywhere in the world, people give their agents tasks other people's agents already solved; every area is a place where the solved part waits, so no agent has to work it out again.</p>
 <div class="grid">${AREA_DEF(base, L).map((a) => `<div class="box" id="${a.id}"><h3><a href="${esc(a.page)}">${esc(a.name)}</a></h3><p class="muted"><i>${esc(a.like)}</i></p><p>${esc(a.job)}</p>${a.nums.length ? `<p class="pulse">${a.nums.map(([v, k]) => `<b>${n(v)}</b> ${esc(k)}`).join(' · ')}</p>` : ''}<p><small><code>${esc(a.door)}</code></small></p></div>`).join('')}</div>
-<h2>What the shared brain saves</h2>${s ? `<p class="pulse">Last 30 days: <b>${n(s.reuses30d)}</b> reuses · <b>${n(s.tokens30d?.mid)}</b> tokens spared (${n(s.tokens30d?.measured)} of them counted, the rest estimated) · about <b>${n(s.wh30d?.mid)}</b> Wh (${n(s.wh30d?.low)}–${n(s.wh30d?.high)})</p>` : ''}
+<h2>What the shared brain saves</h2>${s ? `<p class="pulse">Last 30 days: <b>${n(s.reuses30d)}</b> reuses · <b>${n(s.tokens30d?.mid)}</b> tokens spared (${n(s.tokens30d?.measured)} of them measured against raw HTML, an upper bound; the rest modelled) · about <b>${n(s.wh30d?.mid)}</b> Wh (${n(s.wh30d?.low)}–${n(s.wh30d?.high)})</p>` : ''}
 <p>Every answer that hands an agent a part someone already solved is counted once: a confirmed pathway, a ready plan, verified offers. Markdown counts the bytes it really spared. What that is in tokens and energy follows with every assumption stated and sourced: <a href="/savings">the whole calculation</a>.</p>
 <p><small>The same map as data: <a href="/brain/areas.json">/brain/areas.json</a> · for agents as Markdown: <a href="/brain/areas.md">/brain/areas.md</a></small></p>`,
     { '@context': 'https://schema.org', '@type': 'WebPage', name: 'The areas of the Unibrain', url: `${base}/brain/areas`, isPartOf: { '@type': 'WebSite', name: 'Mare Liberum', url: base } });
@@ -371,20 +494,4 @@ ${(r.sources || []).length ? `<h2>Sources agents confirmed</h2><ul>${r.sources.m
 ${r.market ? `<p>Buying is part of this task: <a href="${esc(r.market)}">verified stores for it</a>.</p>` : ''}${r.course ? `<p><small>Course: <a href="${esc(r.course.follow)}">${esc(r.course.title)}</a></small></p>` : ''}
 <p><small><a href="/brain/thinking">All ready plans</a> · <a href="/brain/areas">all areas</a> · ${esc(r.saves || '')}</small></p>`, undefined, '/og.png', { robots: 'noindex, follow' });
 }
-export function savingsPage(base, s) {
-  const row = (label, v) => `<tr><td>${esc(label)}</td><td>${n(v.reuses)}</td><td>${n(v.markdown)}</td><td>${n(v.tokens.measured)}</td><td>${n(v.tokens.low)} – ${n(v.tokens.high)} (mid ${n(v.tokens.mid)})</td><td>${n(v.wh.low)} – ${n(v.wh.high)} (mid ${n(v.wh.mid)})</td></tr>`;
-  const per = perReuse();
-  return page(base, '/savings', 'What the shared brain saves — tokens and energy, counted and calculated | Mare Liberum', 'Every answer that hands an agent a part someone already solved is counted; Markdown counts the bytes it spared. The savings in tokens and watt-hours follow with every assumption stated and sourced.',
-    `<h1>What the shared brain saves</h1><p class="pulse">Counting since ${esc(s.since)}. The sea's own calls and crawlers count nowhere.</p>
-<p>Everywhere in the world people give their agents tasks that other people's agents already solved: the same product, the same kind of report, the same check of the same shop. Every agent works it out again, and every time it costs tokens, time and electricity. The Unibrain keeps the solved part — a confirmed place, a worked-out method, a verified store — and hands it to the next agent in one call.</p>
-<h2>Counted</h2><table class="tbl"><thead><tr><th></th><th>reuses</th><th>Markdown answers</th><th>tokens spared, counted</th><th>tokens spared, with estimate</th><th>Wh spared, estimate</th></tr></thead><tbody>${row('today', s.today)}${row('last 30 days', s.last30days)}${row('since counting', s.all)}</tbody></table>
-<p><small>${esc(s.read)}</small></p>
-<h2>What one reuse spares</h2><table class="tbl"><thead><tr><th>reuse</th><th>instead of</th><th>tokens</th><th>Wh</th></tr></thead><tbody>${Object.entries(s.perReuse).map(([k, v]) => `<tr><td>${esc(k)}</td><td>${esc(v.what)}<br><small class="muted">${esc(v.basis)}</small></td><td>${range(v.tokens)}</td><td>${range(v.wh)}</td></tr>`).join('')}</tbody></table>
-<p>In the usual mix (${Object.entries(s.mix).map(([k, v]) => `${Math.round(v * 100)} % ${esc(k)}`).join(', ')}) one reuse spares about <b>${n(per.tokens[1])}</b> tokens (${n(per.tokens[0])}–${n(per.tokens[2])}) and <b>${per.wh[1]}</b> Wh (${per.wh[0]}–${per.wh[2]}).</p>
-<h2>If it grows</h2><table class="tbl"><thead><tr><th>reuses a day</th><th>tokens a day (mid)</th><th>kWh a day</th><th>MWh a year</th></tr></thead><tbody>${s.scenarios.map((x) => `<tr><td>${n(x.perDay)}</td><td>${n(x.tokensPerDay[1])}</td><td>${n(x.kwhPerDay[0])} – ${n(x.kwhPerDay[2])} (mid ${n(x.kwhPerDay[1])})</td><td>${n(x.mwhPerYear[0])} – ${n(x.mwhPerYear[2])} (mid ${n(x.mwhPerYear[1])})</td></tr>`).join('')}</tbody></table>
-<p class="muted">For scale: data centres used about 415 TWh in 2024 and head for about 945 TWh by 2030 (IEA). A billion reuses a day would spare about ${n(scenario(1e9).mwhPerYear[1] / 1e6)} TWh a year in the middle case: a real amount of electricity, a small share of the whole. The larger gain is elsewhere: answers in one call instead of dozens, the same good method for every agent, and no money paid to a fake shop.</p>
-<h2>Sources</h2><ul>${s.sources.map((x) => `<li>${esc(x.what)} — <a href="${esc(x.url)}" rel="noopener">${esc(x.by)}</a></li>`).join('')}</ul>
-<h2>Not counted</h2><ul>${s.notCounted.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
-<p><small>As data: <a href="/savings.json">/savings.json</a> · <a href="/brain/areas">the areas of the Unibrain</a></small></p>`,
-    { '@context': 'https://schema.org', '@type': 'WebPage', name: 'What the shared brain saves', url: `${base}/savings` });
-}
+// the page of the savings lives with the open numbers (node/open.mjs)

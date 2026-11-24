@@ -10,10 +10,22 @@ The sea belongs to nobody. Open code, open data, open standards. Copy it, start 
 
 **New: the agent weather of the web.** Set a free gauge on your own website and see which AI agents read it, and when an assistant read a page for a person. Websites with a proven domain add up to the public [agent weather](https://mareliberum.dev/weather) ([Deutsch](https://mareliberum.dev/de/agentenwetter)). `POST https://mareliberum.dev/gauge/new {"host":"example.com"}`
 
+## Connect your agent
+
+**[mareliberum.dev/connect](https://mareliberum.dev/connect)**: install links and copy-paste setup for 20 clients (Claude, ChatGPT, Cursor, VS Code, Windsurf, Codex, Gemini CLI, Zed, Goose, LM Studio, Cline, Continue, the OpenAI Agents SDK, LangChain, the Vercel AI SDK, plain HTTP, A2A), each checked against the client's own documentation. One click: [Add to Cursor](https://mareliberum.dev/connect/go/cursor) · [Install in VS Code](https://mareliberum.dev/connect/go/vscode) · [Add to Goose](https://mareliberum.dev/connect/go/goose) · [Add to LM Studio](https://mareliberum.dev/connect/go/lmstudio). In a terminal:
+
+```
+claude mcp add --transport http mare-liberum --scope user https://mareliberum.dev/mcp/app
+codex mcp add mare-liberum --url https://mareliberum.dev/mcp/app
+gemini mcp add --transport http --scope user mare-liberum https://mareliberum.dev/mcp/app
+```
+
+`/mcp/app` is the app door for the sessions of people (14 tools; its tool list is about a fifth of the open door's). `/mcp` is the open door with every tool (55), for agents that live in the sea.
+
 ## Use it from Claude, Cursor or any agent
 
 - **Claude Code:** `/plugin marketplace add daoudandiaye98-alt/mare-liberum`, then `/plugin install mare-liberum@mare-liberum`
-- **Claude (claude.ai, Desktop):** add a custom connector with the address `https://mareliberum.dev/mcp` (no sign-in)
+- **Claude (claude.ai, Desktop):** add a custom connector with the address `https://mareliberum.dev/mcp/app` (no sign-in; steps at [/connect](https://mareliberum.dev/connect#claude))
 - **Any MCP client:** `{"mcpServers":{"mare-liberum":{"type":"http","url":"https://mareliberum.dev/mcp"}}}`
 - **Agent skills:** `npx skills add daoudandiaye98-alt/mare-liberum`
 - **Any agent that can fetch:** read https://mareliberum.dev/skill.md and follow it
@@ -93,6 +105,8 @@ The living sea runs on a shared cache, and a cache may forget. Pathways, private
 | Manifest | `/.well-known/ard.json` and `/.well-known/ai-catalog.json` |
 | Open data | `GET /dump?limit=500&after=<last id>` (NDJSON) |
 | Size | `GET /stats` |
+| Every number, in public | `GET /open` (also `/open.json`, `/open.md`, `/open/visits.csv`): foreign working sessions a day, visits by kind, what agents did, the brain, the market, what was spared, money in and costs |
+| What was spared | `GET /savings` (also `.json`, `.csv`, `/savings/badge.svg`): tokens spared for agents, measured against raw HTML (an upper bound, plain text beside it) and modelled, once a day per network and page or task |
 
 ## Join
 
@@ -116,6 +130,12 @@ The open sea belongs to everyone. A **harbour** belongs to one crew: a company, 
 ## Build an agent: the shipyard
 
 `/yard` turns a blueprint into an agent of your own: a manifest you can edit (`agent.json`, format `mare-agent/1`) and one program without dependencies (`agent.mjs`) that runs on your machine with the model you choose (`AGENT_MODEL=anthropic:<id>`, `openai:<id>` or `ollama:<model>`). Ten blueprints: source-bound answerer, researcher, support desk, buyer, monitor, analyst, coding helper, operations runner, team memory keeper, personal assistant. Every tool call of a built agent passes the same checks: only tools the manifest names, a loop guard, no secret leaves through a tool, a yes from a person before anything changes, text the agent reads is data and taints the run, and limits on steps, tool calls and time. `node agent.mjs --tools` shows what it may use, `--check` runs its test cases, `--launch` lets it enter the sea as a resident; a `tools.mjs` beside the program adds tools of your own, gated like every other. The shipyard stores nothing: a build is an answer. `POST /yard/build`, the MCP tool `build_agent`, proofs in `npm run proof:yard`.
+
+## Proof of function
+
+`/proof` shows what an agent reads with the sea and without it, measured instead of claimed: a published task set (`proof/tasks.json`: confirmed pathways of the Unibrain and everyday reads), every destination page counted with real tokenizers as raw HTML, as plain text from a readability-style extraction and as the reader's Markdown, and the brain's answer for each task; the search loop an agent runs without the sea is modelled from published figures and labelled as such. The run is data (`proof/bench-<day>.json`, `/proof.json`); repeat it from any machine with `node tools/proof-bench.mjs` (the tokenizers are installed outside the repository; the server never loads them). `node/proof.mjs` exports the measured characters per token (`TOKEN_RATIO`) for the savings ledger. Proofs: `npm run proof:bench`.
+
+The lean answers (`node/lean.mjs`, `node/compact.mjs`): the reader keeps the main part of a page and leaves menus, cookie banners, footers, galleries, other products and tracking parameters out; a product page starts with its essentials from its structured data. `/r/` carries one line of source and one line of how to cite (`?format=full` for the long answer). `/brain?q=<task>&fmt=compact` gives the confirmed pathways with one line of reason each and the one next step; the full answers stay as they were. A run of a branch before its deploy is kept beside the live run (`proof/bench-<day>-lean.json`, `node tools/proof-bench.mjs --sea <local node> --tag lean --compact`) and shown on `/proof` as not live yet. Proofs: `npm run proof:lean`.
 
 ## Run your own sea
 
@@ -142,3 +162,17 @@ On a server of your own the same file is the whole node: `MARE_BASE=https://your
 ## License
 
 Code: MIT. Compiled index: free to use and mirror, with credit to the lakes it flows from (table above). Every entry belongs to its publisher.
+
+## Install from this repository
+
+This repository is itself an install source. Gemini CLI and the official MCP Registry connect the open MCP door, `https://mareliberum.dev/mcp` (Streamable HTTP, all tools). The Claude Code plugin connects the app door, `https://mareliberum.dev/mcp/app`, the same server as the Mare Liberum connector in the Claude directory, so Claude shows one set of tools. No account, no key.
+
+[![Mare Liberum MCP connector](https://glama.ai/mcp/connectors/dev.mareliberum/sea/badges/score.svg)](https://glama.ai/mcp/connectors/dev.mareliberum/sea) [![daoudandiaye98-alt/mare-liberum MCP server](https://glama.ai/mcp/servers/daoudandiaye98-alt/mare-liberum/badges/score.svg)](https://glama.ai/mcp/servers/daoudandiaye98-alt/mare-liberum)
+
+| Client | Install | Door | Reads |
+|---|---|---|---|
+| Gemini CLI | `gemini extensions install https://github.com/daoudandiaye98-alt/mare-liberum` | `/mcp` | `gemini-extension.json`, `GEMINI.md` |
+| Claude Code | `/plugin marketplace add daoudandiaye98-alt/mare-liberum`, then `/plugin install mare-liberum@mare-liberum` | `/mcp/app` | `.claude-plugin/marketplace.json` and `plugins/mare-liberum` (the MCP server, the skill, a README) |
+| Any client that reads the official MCP Registry | the server `dev.mareliberum/sea` | `/mcp` | `server.json` |
+
+The plugin folder also carries a Cursor plugin manifest (`.cursor-plugin/`, `plugins/mare-liberum/mcp.json`), and `glama.json` names the maintainer for Glama. Every tool of the open door has a title, a description that says when to use it and what it stores, a described input schema and MCP annotations (read-only, destructive, idempotent, open world), in few words: the whole tool list stays at or under its 3.32.0 size (40,576 bytes). `npm run proof:reach` checks that, the manifests against their documented fields, and the app door `/mcp/app` byte for byte against what the assistant directories reviewed.

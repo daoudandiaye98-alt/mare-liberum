@@ -26,7 +26,7 @@ let ipN = 10;
 const call = async (path, { method = 'GET', body, accept = 'text/html', ua = 'proof/1.0' } = {}) => {
   const r = await handle(new Request(BASE + path, { method, headers: { accept, 'x-forwarded-for': `203.0.113.${ipN++ % 200}`, 'user-agent': ua, ...(body ? { 'content-type': 'application/json' } : {}) }, body: body ? JSON.stringify(body) : undefined }), db, { site: SITE, base: BASE });
   const txt = await r.text(); let j = null; try { j = JSON.parse(txt); } catch {}
-  return { status: r.status, txt, j, type: r.headers.get('content-type') || '' };
+  return { status: r.status, txt, j, type: r.headers.get('content-type') || '', loc: r.headers.get('location') };
 };
 const LINKS = { report: 'https://buy.stripe.com/test_reportLINK', verified: 'https://buy.stripe.com/test_verifiedLINK' };
 const was = JSON.parse(JSON.stringify(OFFERS));
@@ -66,22 +66,23 @@ await proof('closed: the free claim is there for people and for agents, and no p
   const h = await call(EP); assert.equal(h.status, 200);
   assert.match(h.txt, /Is this yours\?/); assert.match(h.txt, /Claim it, free/);
   assert.ok(h.txt.includes(`POST ${BASE}/enter {&quot;name&quot;`), 'the way in is written out'); assert.ok(h.txt.includes(ID));
-  assert.doesNotMatch(h.txt, /Verified listing|buy\.stripe\.com\/test_|§ 19/);
+  assert.doesNotMatch(h.txt, /Owner check|Verified listing|buy\.stripe\.com\/test_|§ 19/);
   const j = await call(EJ, { accept: 'application/json' }); assert.equal(j.status, 200);
   assert.equal(j.j.identifier, ID); assert.equal(j.j.displayName, 'Rope Server'); assert.deepEqual(j.j.metadata, ENTRY.metadata);
   assert.equal(j.j.listing.claim.free, true); assert.ok(j.j.listing.claim.how.includes('/enter') && j.j.listing.claim.how.includes(ID));
-  assert.equal(j.j.listing.verified, undefined);
+  assert.equal(j.j.listing.ownerCheck, undefined);
 });
 await proof('the claim is never a link a crawler could follow into /enter', async () => {
   open(); const h = await call(EP); close();
   assert.doesNotMatch(h.txt, /href="[^"]*\/enter/);
 });
-await proof('open: the verified listing shows with price, link, § 19 and no promise; the JSON says the same', async () => {
+await proof('open: the owner check shows with price, link, § 19 and no promise; the JSON says the same', async () => {
   open();
-  const h = await call(EP), j = await call(EJ, { accept: 'application/json' }); close();
-  assert.match(h.txt, /Verified listing, 19 €/); assert.ok(h.txt.includes(`${LINKS.verified}?client_reference_id=verified-tools_example_mcp_rope-server`));
+  const h = await call(EP), j = await call(EJ, { accept: 'application/json' }), door = await call('/c/owner?from=entry&ref=tools.example%3Amcp%3Arope-server'); close();
+  assert.match(h.txt, /Owner check, 19 €/); assert.ok(h.txt.includes('href="/c/owner?from=entry&amp;ref=tools.example%3Amcp%3Arope-server"'));
+  assert.equal(door.loc, `${LINKS.verified}?client_reference_id=verified-tools_example_mcp_rope-server`, 'the counted door leads to the payment link for this entry');
   assert.ok(h.txt.includes(SELLER.vat.replace(/§/, '§'))); assert.match(h.txt, /no promise of ranking or revenue/); assert.match(h.txt, /named as a paid check/); assert.match(h.txt, /Claim it, free/);
-  const v = j.j.listing.verified; assert.equal(v.priceEur, 19); assert.equal(v.currency, 'EUR'); assert.ok(v.pay.startsWith(LINKS.verified)); assert.ok(v.delivers.length >= 3); assert.match(v.within, /48 hours/); assert.equal(v.tax, 'Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.');
+  const v = j.j.listing.ownerCheck; assert.equal(v.priceEur, 19); assert.equal(v.currency, 'EUR'); assert.ok(v.pay.startsWith(LINKS.verified)); assert.ok(v.delivers.length >= 3); assert.match(v.within, /48 hours/); assert.equal(v.tax, 'Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.');
   assert.equal(j.j.listing.claim.free, true);
 });
 await proof('the mark of a verified listing: shown with its date while it holds, named as a paid check, gone when it has run out', async () => {
@@ -108,20 +109,20 @@ await proof('closed: the map is as it was, in HTML, JSON and Markdown', async ()
 });
 await proof('open: the report stands at the end with its price, the link for this site and § 19; everything free is still there', async () => {
   close(); const before = await call('/site/harbourshop.com'), jb = await call('/site/harbourshop.com.json');
-  open(); const h = await call('/site/harbourshop.com'), j = await call('/site/harbourshop.com.json'), m = await call('/site/harbourshop.com.md'); close();
-  assert.match(h.txt, /Full report with fixes, 29 €/); assert.ok(h.txt.includes(`${LINKS.report}?client_reference_id=report-harbourshop_com`)); assert.ok(h.txt.includes('Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.'));
+  open(); const h = await call('/site/harbourshop.com'), j = await call('/site/harbourshop.com.json'), m = await call('/site/harbourshop.com.md'), door = await call('/c/report?from=site&ref=harbourshop.com'); close();
+  assert.match(h.txt, /Full report with fixes, 29 €/); assert.ok(h.txt.includes('href="/c/report?from=site&amp;ref=harbourshop.com"')); assert.equal(door.loc, `${LINKS.report}?client_reference_id=report-harbourshop_com`); assert.ok(h.txt.includes('Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.'));
   assert.match(h.txt, /free and stay free/); assert.match(h.txt, /No promise of ranking or revenue/);
   assert.ok(h.txt.indexOf('id="report"') > h.txt.indexOf('The grammar of the Atlas'), 'at the end of the map');
   const cut = (s) => s.replace(/<section id="report"[\s\S]*?<\/section>/, '');
   assert.equal(cut(h.txt), before.txt, 'the page without the block is the page as it was');
-  const { report, ...rest } = j.j; assert.deepEqual(rest, jb.j); assert.equal(report.priceEur, 29); assert.ok(report.pay.includes('report-harbourshop_com')); assert.ok(report.free.endsWith('/check/harbourshop.com'));
+  const { report, ownerCheck, ...rest } = j.j; assert.deepEqual(rest, jb.j); assert.equal(ownerCheck.priceEur, 19); assert.equal(report.priceEur, 29); assert.ok(report.pay.includes('report-harbourshop_com')); assert.ok(report.free.endsWith('/check/harbourshop.com'));
   assert.match(m.txt, /## Full report with fixes, 29 €/);
 });
 await proof('the result of the free check carries the same offer while it is open, and is the page as it was without it', async () => {
   close(); await call('/check/harbourshop.com'); const b = await call('/check/harbourshop.com'); assert.equal(b.status, 200); assert.match(b.txt, /The check is free and stays free/); assert.doesNotMatch(b.txt, /Full report/);
   const jb = await call('/check?site=harbourshop.com&format=json', { accept: 'application/json' });
-  open(); const o = await call('/check/harbourshop.com'), jo = await call('/check?site=harbourshop.com&format=json', { accept: 'application/json' }); close();
-  assert.match(o.txt, /Full report with fixes, 29 €/); assert.ok(o.txt.includes('report-harbourshop_com'));
+  open(); const o = await call('/check/harbourshop.com'), jo = await call('/check?site=harbourshop.com&format=json', { accept: 'application/json' }), door = await call('/c/report?from=check&ref=harbourshop.com'); close();
+  assert.match(o.txt, /Full report with fixes, 29 €/); assert.ok(o.txt.includes('href="/c/report?from=check&amp;ref=harbourshop.com"')); assert.equal(door.loc, `${LINKS.report}?client_reference_id=report-harbourshop_com`);
   assert.equal(o.txt.replace(/<section id="report"[\s\S]*?<\/section>/, ''), b.txt);
   assert.equal(typeof jo.j.score, 'number'); assert.deepEqual(jo.j, jb.j, 'the JSON of the check is untouched');
 });
@@ -134,8 +135,9 @@ console.log('/offers');
 await proof('closed: the page says nothing is for sale; open: each service with price, delivery, seller, § 19, contact', async () => {
   close(); const c = await call('/offers'); assert.equal(c.status, 200); assert.match(c.type, /text\/html/);
   assert.match(c.txt, /No paid service is open at the moment/); assert.doesNotMatch(c.txt, /buy\.stripe\.com\/test_/);
-  open(); const o = await call('/offers'); close();
-  for (const w of ['Full report with fixes · 29 €', 'Verified listing · 19 €', LINKS.report, LINKS.verified, 'Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.', 'by hand', 'ithin 24 hours', 'ithin 48 hours', 'companies only', SELLER.name, SELLER.business, `mailto:${SELLER.email}`, 'What you get', 'What it is not']) assert.ok(o.txt.includes(w), `missing: ${w}`);
+  open(); const o = await call('/offers'), dr = await call('/c/report?from=offers'), dv = await call('/c/owner?from=offers'); close();
+  assert.deepEqual([dr.loc, dv.loc], [LINKS.report, LINKS.verified], 'the counted doors lead to the payment links');
+  for (const w of ['Full report with fixes · 29 €', 'Owner check · 19 €', 'href="/c/report?from=offers"', 'href="/c/owner?from=offers"', 'Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.', 'by hand', 'ithin 24 hours', 'ithin 48 hours', 'companies only', SELLER.name, SELLER.business, `mailto:${SELLER.email}`, 'What you get', 'What it is not']) assert.ok(o.txt.includes(w), `missing: ${w}`);
   assert.match(o.txt, /lang="en"/);
 });
 await proof('the page promises no ranking and no revenue, and uses no word of guarantee', async () => {
@@ -154,7 +156,7 @@ await proof('for a program /offers answers as before (residents’ offers), with
   assert.deepEqual(c.j.house.paid.map((x) => [x.id, x.priceEur]), [['report', 29], ['verified', 19]]); assert.equal(c.j.house.tax, 'Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.'); assert.equal(c.j.house.seller.contact, SELLER.email);
 });
 await proof('/offers is in the sitemap and in llms.txt', async () => {
-  const sm = await call('/sitemaps/site.xml'); assert.ok(sm.txt.includes(`<loc>${BASE}/offers</loc>`));
+  const sm = await call('/sitemaps/hubs.xml'); assert.ok(sm.txt.includes(`<loc>${BASE}/offers</loc>`)); // a hub (node/hubs.mjs)
   const l = await call('/llms.txt', { accept: 'text/plain' }); assert.match(l.txt, /\/offers\)/); assert.match(l.txt, /GET \/offers\.json/);
 });
 
@@ -195,8 +197,10 @@ await proof('/business, /de/unternehmen and /de/agenturen carry the report while
   const cut = (t) => t.replace(/<section id="report"[\s\S]*?<\/section>/, '');
   for (const [p, re] of [['/business', /Order the report · 29 €/], ['/de/unternehmen', /Bericht bestellen · 29 €/], ['/de/agenturen', /Bericht bestellen · 29 €/]]) {
     close(); const b = await call(p); assert.equal(b.status, 200, p); assert.doesNotMatch(b.txt, /id="report"/, p);
-    open(); const o = await call(p); close();
-    assert.match(o.txt, re, p); assert.ok(o.txt.includes('Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.'), p); assert.ok(o.txt.includes('/offers/sample-report'), p); assert.ok(o.txt.includes(`${LINKS.report}?client_reference_id=report-page-`), p);
+    const ref = p.startsWith('/de') ? 'business-de&amp;ref=page-de' : 'business&amp;ref=page-en';
+    open(); const o = await call(p), door = await call(`/c/report?from=${ref.replace('&amp;', '&')}`); close();
+    assert.match(o.txt, re, p); assert.ok(o.txt.includes('Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.'), p); assert.ok(o.txt.includes('/offers/sample-report'), p); assert.ok(o.txt.includes(`href="/c/report?from=${ref}"`), p);
+    assert.equal(door.loc, `${LINKS.report}?client_reference_id=report-page-${p.startsWith('/de') ? 'de' : 'en'}`, p);
     assert.equal(cut(o.txt), b.txt, `${p} without the block`);
     const box = o.txt.match(/<section id="report"[\s\S]*?<\/section>/)[0]; assert.doesNotMatch(box, /garantier|guarante/i); assert.match(box, p.startsWith('/de') ? /Keine Zusage zu Platzierung, Reichweite oder Umsatz/ : /No promise of ranking, traffic or revenue/);
   }

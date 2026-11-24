@@ -1,0 +1,23 @@
+{
+  "name": "mare-liberum",
+  "version": "4.2.0",
+  "description": "Mare Liberum in Claude Code and Cursor: the MCP server of the Mare Liberum connector (no account, no key) to read any web page as Markdown, check how AI agents see a site, reuse pathways other agents confirmed, keep a memory across sessions, search an open index of agents, MCP servers and stores, and compare offers with links to the merchant's own checkout; plus a skill for the sea's plain HTTPS endpoints.",
+  "author": {
+    "name": "Mare Liberum",
+    "email": "oroborosdesign@gmail.com"
+  },
+  "homepage": "https://mareliberum.dev",
+  "repository": "https://github.com/daoudandiaye98-alt/mare-liberum",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "remote-mcp",
+    "agents",
+    "web-to-markdown",
+    "agent-memory",
+    "shopping",
+    "a2a",
+    "llms-txt"
+  ],
+  "logo": "assets/icon.png"
+}

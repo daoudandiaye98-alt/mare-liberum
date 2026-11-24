@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><title>Reading a stream line by line | Harbour Docs</title>
+<meta name="description" content="How to read a stream line by line in JavaScript.">
+<link rel="canonical" href="https://docs.harbour-proof.dev/guide/streams/lines"></head>
+<body>
+<div class="page-header"><a href="/">Harbour Docs</a><nav aria-label="Main"><a href="/guide">Guide</a><a href="/api">API</a><a href="/blog">Blog</a><a href="/about">About</a></nav></div>
+<div id="consent-dialog" class="gdpr"><p>This website uses cookies for analytics. Manage preferences.</p></div>
+<div class="layout">
+<aside class="sidebar"><h2>In this section</h2><ul><li><a href="/guide/streams">Streams</a></li><li><a href="/guide/streams/bytes">Bytes</a></li><li><a href="/guide/streams/lines">Lines</a></li></ul></aside>
+<main class="main-content">
+<article class="doc">
+<h1>Reading a stream line by line<a class="headerlink" href="#top" title="Permalink">¶</a></h1>
+<p>A <a href="/api/ReadableStream?utm_source=docs">ReadableStream</a> hands you chunks, not lines. To read lines, decode the chunks and split them at newlines; see <a href="#example">the example</a> below and the <a href="https://developer.example.org/en-US/docs/Web/API/TextDecoderStream?utm_campaign=x&amp;keep=1">TextDecoderStream reference</a>.</p>
+<div class="callout-header"><p class="title">Note</p></div>
+<p>The last line of a stream may not end with a newline. Keep the rest of each chunk for the next one.</p>
+<h2 id="example">Example<a class="headerlink" href="#example">¶</a></h2>
+<div class="code-example"><div class="example-header"><span class="language-name">js</span></div><pre class="brush: js notranslate"><code>async function* lines(stream) {
+  const reader = stream.pipeThrough(new TextDecoderStream()).getReader();
+  let rest = '';
+  for (;;) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    const parts = (rest + value).split('\n');
+    rest = parts.pop();
+    yield* parts;
+  }
+  if (rest) yield rest;
+}</code></pre><button class="copy">Copy</button></div>
+<h2>Options</h2>
+<table><thead><tr><th>Option</th><th>Default</th><th>What it does</th></tr></thead><tbody><tr><td><code>fatal</code></td><td>false</td><td>throws on invalid bytes</td></tr><tr><td><code>ignoreBOM</code></td><td>false</td><td>keeps the byte order mark</td></tr></tbody></table>
+<p>Related reading: <a href="/api/ReadableStream">ReadableStream</a>, <a href="/guide/streams/bytes">reading bytes</a>.</p>
+<section class="article-footer"><h2>Help improve the docs</h2><p>Was this page helpful?</p><p>Yes</p><p>No</p><p>This page was last modified on 3 Nov 2026 by contributors.</p></section>
+</article>
+</main>
+</div>
+<footer><p>Harbour Docs is open source. <a href="https://github.com/harbour/docs">GitHub</a></p></footer>
+</body></html>

@@ -45,22 +45,24 @@ export function createLens(h) {
       if (cachedOnly) return { host, notChecked: true, note: 'not checked in the last hour — run the check in a browser at /check/' + host };
       await allow(ctx, 'check', 20, 3600);
       const r = await checkSite(host);
-      if (r.reachable !== false) { await kv.set(`check:${host}`, r, 3600); const day = now().slice(0, 10); await kv.set(`check:count:${day}`, (Number(await kv.get(`check:count:${day}`)) || 0) + 1, 3 * DAY); await kv.set('check:total', (Number(await kv.get('check:total')) || 0) + 1, 400 * DAY); }
+      if (r.reachable !== false) { await kv.set(`check:${host}`, r, 3600); const day = now().slice(0, 10); if (!ctx?.uncounted) { await kv.set(`check:count:${day}`, (Number(await kv.get(`check:count:${day}`)) || 0) + 1, 3 * DAY); await kv.set('check:total', (Number(await kv.get('check:total')) || 0) + 1, 400 * DAY); } }
       return { ...r, offers: await lens.offers() };
     },
     // the reader: any public page as Markdown — free for every agent up to a fair daily amount, then Angel reads on
     async read(a = {}, ctx) {
       if (ctx?.readOnly) return { note: 'crawlers read the sea itself; the reader reads other pages for agents', how: 'GET /r/<page address>' };
       const raw = clean(a.url ?? a.page ?? a.u, 2000); if (!raw) throw new SeaError('INVALID_ARGUMENT', 'give a page address: /r/https://example.com/page');
-      const key = `read:${(await sha(raw)).slice(0, 24)}`, hit = await kv.get(key);
+      // full: the reader's whole Markdown of before (the way back to what the lean reader leaves out), kept apart
+      const full = a.full === true, key = `read:${full ? 'full:' : ''}${(await sha(raw)).slice(0, 24)}`, hit = await kv.get(key);
       if (!hit) {
         try { await allow(ctx, 'read', 100, 86400); } catch { throw new SeaError('RESOURCE_EXHAUSTED', `100 free reads a day from one address are used. Angel, a resident of the sea, reads on without a daily limit and also removes text hidden from people: ${ANGEL_READ} (free key with 500 reads at https://angel.oroboros-design.com/key, or 0.02 USDC per page over x402).`, 429); }
       }
-      const r = hit || await readUrl(raw, { robots: async (host) => { const k = `robots:${host}`, c = await kv.get(k); if (c) return c; const g = await grab(`https://${host}/robots.txt`, { max: 150_000, ms: 5000, ua: READER_UA }); const v = { status: g.status, body: g.status === 200 && !/<html/i.test(g.body || '') ? g.body : '' }; await kv.set(k, v, 3600); return v; } });
+      const r = hit || await readUrl(raw, { full, robots: async (host) => { const k = `robots:${host}`, c = await kv.get(k); if (c) return c; const g = await grab(`https://${host}/robots.txt`, { max: 150_000, ms: 5000, ua: READER_UA }); const v = { status: g.status, body: g.status === 200 && !/<html/i.test(g.body || '') ? g.body : '' }; await kv.set(k, v, 3600); return v; } });
       if (!hit && r.markdown) await kv.set(key, r, 3600);
       // the reading area spares what the page weighs as HTML against its Markdown (node/areas.mjs); the size stays out of the answer
-      if (r.markdown && r.htmlBytes) api.countBytes?.('read', r.htmlBytes, r.markdown.length, ctx);
-      if (r.host && (r.markdown || r.blocked)) {
+      if (r.markdown && r.htmlBytes) api.countBytes?.('read', r.htmlBytes, r.markdown.length, ctx, r.final || r.url);
+      // a crawler's tool call (ctx.uncounted) is read like any other and counted nowhere: no read of the day, no event, no path
+      if (r.host && (r.markdown || r.blocked) && !ctx?.uncounted) {
         const day = now().slice(0, 10), role = ctx?.whoKind || 'unknown';
         await update(`reads:${day}`, 3 * DAY, (cur) => { const m = cur && typeof cur === 'object' ? cur : { total: 0, hosts: {}, roles: {} }; m.total++; m.roles[role] = (m.roles[role] || 0) + 1; if (m.hosts[r.host] || Object.keys(m.hosts).length < 3000) m.hosts[r.host] = (m.hosts[r.host] || 0) + 1; return m; }, () => true);
         if (!(await kv.get(`reademit:${r.host}`))) { await kv.set(`reademit:${r.host}`, 1, 3600); await emit({ type: 'read', name: ctx?.who || 'an agent', text: `${ctx?.who || 'An agent'} read a page of ${r.host} through the sea`, url: `https://${r.host}/` }); }

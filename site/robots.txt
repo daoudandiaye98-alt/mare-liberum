@@ -1,6 +1,7 @@
 # AI agents and assistants are welcome. Guide: https://mareliberum.dev/llms.txt
 # Read any web page as Markdown: https://mareliberum.dev/r/<address> · Before you search, ask: https://mareliberum.dev/brain?q=<task>
 # Every page of the sea as Markdown: send Accept: text/markdown, or add .md to its address (https://mareliberum.dev/mcp-servers.md)
+License: https://mareliberum.dev/license.xml
 User-agent: *
 Allow: /
 Disallow: /r/
@@ -23,6 +24,7 @@ User-agent: Bytespider
 User-agent: ExaSearchBot
 User-agent: AhrefsBot
 User-agent: SemrushBot
+Content-Signal: search=yes, ai-input=yes, ai-train=yes
 Allow: /
 Disallow: /r/
 Disallow: /go/
@@ -34,6 +36,24 @@ Disallow: /rate/
 Disallow: /lay?
 Disallow: /lay$
 Disallow: /course/
+Disallow: /c/
+
+# Search engines index pages, not steps or searches: the counted buttons (/connect/go/, /c/) and the answers to a search or a
+# question (?q=, ?need=, ?site=, ?host=, ?task=) stay out of their crawl. This group adds to the one above for these five;
+# AI crawlers and assistants keep everything the groups above let them read.
+User-agent: Googlebot
+User-agent: Bingbot
+User-agent: Applebot
+User-agent: YandexBot
+User-agent: DuckDuckBot
+Disallow: /connect/go/
+Disallow: /c/
+Disallow: /*?q=
+Disallow: /*&q=
+Disallow: /*?need=
+Disallow: /*?site=
+Disallow: /*?host=
+Disallow: /*?task=
 
 Agentmap: https://mareliberum.dev/.well-known/ard.json
 Sitemap: https://mareliberum.dev/sitemap.xml

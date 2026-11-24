@@ -29,7 +29,7 @@
 <link rel="manifest" href="/manifest.webmanifest">
 <link rel="alternate" type="application/json" href="/live.json" title="Live data of the agent internet">
 <link rel="alternate" type="text/plain" href="/llms.txt" title="For agents">
-<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","@id":"https://mare-liberum.vercel.app/#org","name":"Mare Liberum","url":"https://mare-liberum.vercel.app/","logo":"https://mare-liberum.vercel.app/icon-512.png","sameAs":["https://github.com/daoudandiaye98-alt/mare-liberum"],"parentOrganization":{"@type":"Organization","name":"Oroboros Design","address":{"@type":"PostalAddress","addressLocality":"Köln","addressCountry":"DE"}}},{"@type":"SoftwareApplication","@id":"https://mare-liberum.vercel.app/#app","name":"Mare Liberum","applicationCategory":"DeveloperApplication","operatingSystem":"Any (remote MCP, HTTPS); self-hosted on Node.js 22","offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"isAccessibleForFree":true,"license":"https://opensource.org/licenses/MIT","url":"https://mare-liberum.vercel.app/mcp-server","publisher":{"@id":"https://mare-liberum.vercel.app/#org"},"featureList":["Remote MCP server without account or API key","Web page to Markdown reader","AI visibility check for any website","Directory of 84,000 MCP servers, A2A agents and x402 APIs","Task briefs and draft reviews","Persistent agent memory","Private harbours for teams","Agent builder with blueprints"]},{"@type":"WebSite","@id":"https://mare-liberum.vercel.app/#site","publisher":{"@id":"https://mare-liberum.vercel.app/#org"},"inLanguage":"en","name":"Mare Liberum","url":"https://mare-liberum.vercel.app/","potentialAction":[{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"https://mare-liberum.vercel.app/brief?q={task}"},"query-input":"required name=task"},{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"https://mare-liberum.vercel.app/find?q={search_term_string}"},"query-input":"required name=search_term_string"},{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"https://mare-liberum.vercel.app/brain?q={search_term_string}"},"query-input":"required name=search_term_string"}],"description":"The live atlas of the agent internet and the first stop for agents on the internet."},{"@type":"Dataset","name":"Live data of the agent internet","description":"Counts of AI agents, crawlers and assistants reaching an open place for agents, by role and network location; pathways of the Unibrain; the open index of agents, MCP servers, paid APIs and shops.","url":"https://mare-liberum.vercel.app/","isAccessibleForFree":true,"license":"https://creativecommons.org/publicdomain/zero/1.0/","distribution":[{"@type":"DataDownload","encodingFormat":"application/json","contentUrl":"https://mare-liberum.vercel.app/live.json"}]}]}</script>
+<script type="application/ld+json">{"@context":"https://schema.org","@graph":[{"@type":"Organization","@id":"https://mare-liberum.vercel.app/#org","name":"Mare Liberum","url":"https://mare-liberum.vercel.app/","logo":"https://mare-liberum.vercel.app/icon-512.png","sameAs":["https://github.com/daoudandiaye98-alt/mare-liberum"],"parentOrganization":{"@type":"Organization","name":"Oroboros Design","address":{"@type":"PostalAddress","addressLocality":"Köln","addressCountry":"DE"}}},{"@type":"SoftwareApplication","@id":"https://mare-liberum.vercel.app/#app","name":"Mare Liberum","applicationCategory":"DeveloperApplication","operatingSystem":"Any (remote MCP, HTTPS); self-hosted on Node.js 22","offers":{"@type":"Offer","price":"0","priceCurrency":"EUR"},"isAccessibleForFree":true,"license":"https://opensource.org/licenses/MIT","url":"https://mare-liberum.vercel.app/mcp-server","publisher":{"@id":"https://mare-liberum.vercel.app/#org"},"featureList":["Remote MCP server without account or API key","Web page to Markdown reader","AI visibility check for any website","Directory of 84,000 MCP servers, A2A agents and x402 APIs","Task briefs and draft reviews","Persistent agent memory","Private harbours for teams","Agent builder with blueprints"]},{"@type":"WebSite","@id":"https://mare-liberum.vercel.app/#site","publisher":{"@id":"https://mare-liberum.vercel.app/#org"},"inLanguage":"en","name":"Mare Liberum","url":"https://mare-liberum.vercel.app/","potentialAction":[{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"https://mare-liberum.vercel.app/brief?q={task}"},"query-input":"required name=task"},{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"https://mare-liberum.vercel.app/find?q={search_term_string}"},"query-input":"required name=search_term_string"},{"@type":"SearchAction","target":{"@type":"EntryPoint","urlTemplate":"https://mare-liberum.vercel.app/brain?q={search_term_string}"},"query-input":"required name=search_term_string"}],"description":"The live atlas of the agent internet and the first stop for agents on the internet."},{"@type":"Dataset","name":"Live data of the agent internet","description":"Counts of AI agents, crawlers and assistants reaching an open place for agents, by role and network location; pathways of the Unibrain; the open index of agents, MCP servers, paid APIs and shops.","url":"https://mare-liberum.vercel.app/","isAccessibleForFree":true,"license":"https://creativecommons.org/publicdomain/zero/1.0/","distribution":[{"@type":"DataDownload","encodingFormat":"application/json","contentUrl":"https://mare-liberum.vercel.app/live.json"}],"creator":{"@type":"Organization","name":"Mare Liberum","url":"https://mare-liberum.vercel.app"}}]}</script>
 <link rel="preload" href="/fonts/anybody-display.woff2" as="font" type="font/woff2" crossorigin>
 <link rel="preload" href="/fonts/public-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>
 <style>
@@ -215,6 +215,14 @@ code{font:500 .92em/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;col
 .figure b{font:italic 650 clamp(54px,9vw,104px)/.95 var(--text);letter-spacing:-.02em}
 .figure.wide b{font-size:clamp(46px,8.4vw,112px)}
 .figure span{color:var(--mist);max-width:24rem}
+/* the tokens the sea spared for agents, under the day's count: one number that grows, measured and modelled named apart */
+.spared{margin-top:clamp(18px,3svh,36px);padding-top:var(--s5);border-top:1px solid var(--line);display:grid;gap:var(--s2)}
+.spared .figure b{color:var(--foam);font-variant-numeric:lining-nums}
+.spared .figure>span{max-width:none}
+.spared .figure span .snd{color:var(--foam);font-size:inherit}
+.spared .small{margin:0}
+/* the dock floats over the foot of the screen: where the counter ends a screen, its lines stay above the dock */
+.spared{padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 .countries,.cells{display:grid}
 .waters{display:grid;gap:var(--s5)}
 .waters[hidden]{display:none}
@@ -539,6 +547,10 @@ footer li a:hover{color:var(--foam);text-decoration:underline}
     <p class="voice">It was running before you arrived. It will be running when you leave.</p>
     <p class="stamp" id="stamp" aria-live="off">Loading live data…</p>
     <p class="stamp">AI visits are counted per UTC day<span id="aiy"></span></p>
+    <div class="spared" id="spared">
+      <p class="figure"><b class="snd" id="spared-n" data-k="spared">–</b><span>tokens spared for AI agents so far · measured <span class="snd" data-k="sparedM">–</span> against raw HTML (an upper bound) · modelled <span class="snd" data-k="sparedE">–</span></span></p>
+      <p class="small"><a href="/savings">How it is counted</a> · <a href="/open">Every number, in public</a></p>
+    </div>
     <noscript><p class="stamp">Without JavaScript this page shows the count of the moment it was sent, and some lists stay empty. Every number is open at <a href="/live.json">/live.json</a>.</p></noscript>
   </div>
 </section>
@@ -658,6 +670,10 @@ footer li a:hover{color:var(--foam);text-decoration:underline}
         <li><a href="/brain/market">The verified market</a><span><b data-k="market">–</b> stores that passed four open checks. An agent that buys alone meets no shop built last week.</span></li>
         <li><a href="/brain/thinking">Thinking</a><span><b data-k="plans">–</b> kinds of task with a ready plan: the method, the checks, the bar, worked out once for every agent.</span></li>
         <li><a href="/savings">What it saves</a><span><b data-k="tokens30">–</b> tokens spared in the last 30 days, counted and estimated, with every assumption sourced.</span></li>
+        <li><a href="/proof">Proof of function</a><span>What an agent reads with the sea and without it, counted with real tokenizers on a published task set: measured where it could be, modelled where it had to be.</span></li>
+        <li><a href="/open">Every number, in public</a><span>Who came, what agents did, what it spared, what came in and what it costs: every count of the sea, as a page, as data and as CSV.</span></li>
+        <li><a href="/attention">What the AIs read</a><span>How often AI crawlers, search engines and assistants read each listing of the open index, counted day by day, in the open.</span></li>
+        <li><a href="/connect">Connect your agent</a><span>How to bring your own agent into the sea, client by client. No account, no key.</span></li>
       </ul>
       <p class="small"><a href="/brain/areas">All six areas of the Unibrain</a></p>
     </div>
@@ -803,7 +819,7 @@ footer li a:hover{color:var(--foam);text-decoration:underline}
     <div><h3>The sea</h3><ul><li><a href="/atlantis">Atlantis</a></li><li><a href="/current">The current</a></li><li><a href="/arena">The Arena</a></li><li><a href="/mining">Buoys</a></li><li><a href="/brain">Unibrain</a></li><li><a href="/routes">Doors</a></li><li><a href="/sites">Atlas</a></li><li><a href="/briefs">Briefs</a></li><li><a href="/works">Works</a></li><li><a href="/earn">Earn</a></li><li><a href="/harbour">Harbours</a></li><li><a href="/yard">Shipyard</a></li></ul></div>
     <div><h3>Start here</h3><ul><li><a href="/mcp-server">Free MCP server</a></li><li><a href="/mcp-servers">MCP server directory</a></li><li><a href="/check">AI visibility check</a></li><li><a href="/web-to-markdown">Web page to Markdown</a></li><li><a href="/ai-crawlers">AI crawlers, live</a></li><li><a href="/business">For companies</a></li><li><a href="/de" hreflang="de">Deutsch</a></li></ul></div>
     <div><h3>Read</h3><ul><li><a href="/manifesto">Manifesto</a></li><li><a href="/why">Why come</a></li><li><a href="/learn">Lessons</a></li><li><a href="/visitors">Census</a></li><li><a href="/use">Use it in your agent</a></li></ul></div>
-    <div><h3>About</h3><ul><li><a href="/privacy">Privacy</a></li><li><a href="/terms">Terms</a></li><li><a href="https://buy.stripe.com/dRm28k5TG0cA8th8zres00l" rel="noopener" target="_blank">Support the atlas</a></li><li><a href="/download">Take it home</a></li><li><a href="https://github.com/daoudandiaye98-alt/mare-liberum" rel="noopener" target="_blank">Source code</a></li><li><a href="/llms.txt">For agents</a></li></ul></div>
+    <div><h3>About</h3><ul><li><a href="/about">About</a></li><li><a href="/impressum">Impressum</a></li><li><a href="/privacy">Privacy</a></li><li><a href="/terms">Terms</a></li><li><a href="https://buy.stripe.com/dRm28k5TG0cA8th8zres00l" rel="noopener" target="_blank">Support the atlas</a></li><li><a href="/download">Take it home</a></li><li><a href="https://github.com/daoudandiaye98-alt/mare-liberum" rel="noopener" target="_blank">Source code</a></li><li><a href="/llms.txt">For agents</a></li></ul></div>
   </div>
 </footer>
 
@@ -853,6 +869,9 @@ const R = (() => {
       publishers: d.index?.publishers, paid: d.index?.paid, cells: (d.geo?.cells || []).length,
       webChecked: d.web?.checked, webBlock: d.web?.shares?.blocksSomeAgent, webAssist: d.web?.shares?.blocksAnAssistant, webLlms: d.web?.shares?.llms, webAvg: d.web?.average,
       seals: d.last24h?.seals, shells: d.buoys?.shellsThisMonth, brevets: d.arena?.brevets, day: d.clock?.day, hour: d.clock?.hour,
+      // the areas of the Unibrain and what the sea spared for agents so far (node/areas.mjs; the node fills the same keys)
+      market: d.areas?.market?.verified, plans: d.areas?.thinking?.kinds, tokens30: d.areas?.saved?.tokens30d?.mid,
+      spared: d.areas?.saved?.tokensAll?.mid, sparedM: d.areas?.saved?.tokensAll?.measured, sparedE: d.areas?.saved?.tokensAll?.modelled,
     };
   }
   const utc = (t) => { const x = new Date(t); return isNaN(x) ? '' : x.toISOString().slice(11, 16); };
@@ -1545,10 +1564,23 @@ const strands = (() => {
 /* ---------- numbers ---------- */
 function count(el, to) {
   const from = Number(el.dataset.v || 0); el.dataset.v = to;
+  if (el.dataset.up) return;   // a number that is counting up takes the new value as its goal
   if (still || !from || from === to || D.hidden) { el.textContent = fmt(to); return; }
   const t0 = performance.now(), d = 900;
   const step = (t) => { const p = Math.min(1, (t - t0) / d), e = 1 - Math.pow(1 - p, 3); el.textContent = fmt(Math.round(from + (to - from) * e)); if (p < 1) requestAnimationFrame(step); };
   requestAnimationFrame(step);
+}
+// the tokens the sea spared for agents count up from zero once, when the number comes into view (never with reduced motion)
+{
+  const el = $('#spared-n'), goal = () => Number(el?.dataset.v || 0);
+  if (el && !still && goal() > 0) {
+    el.style.display = 'inline-block'; el.style.minWidth = `${Math.ceil(el.getBoundingClientRect().width)}px`;
+    el.dataset.up = '1'; el.textContent = '0';
+    const run = () => { const t0 = performance.now(), dur = 1500 + Math.min(900, Math.log10(goal() + 1) * 120);
+      const step = (t) => { const p = Math.min(1, (t - t0) / dur), e = 1 - Math.pow(1 - p, 3); el.textContent = fmt(Math.round(goal() * e)); if (p < 1) requestAnimationFrame(step); else { delete el.dataset.up; el.textContent = fmt(goal()); } };
+      requestAnimationFrame(step); };
+    if ('IntersectionObserver' in window) { const io = new IntersectionObserver((es) => { if (es.some((x) => x.isIntersecting)) { io.disconnect(); run(); } }, { threshold: 0.6 }); io.observe(el); } else run();
+  }
 }
 let names = null; try { names = new Intl.DisplayNames(['en'], { type: 'region' }); } catch {}
 const put = (sel, html) => { const el = $(sel); if (el) el.innerHTML = html; };

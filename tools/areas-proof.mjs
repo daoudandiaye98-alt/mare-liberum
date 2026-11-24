@@ -11,7 +11,7 @@ import { createFlow, memoryKv } from '../node/flow.mjs';
 import { createMem, hayOf, metaOf } from '../node/mem.mjs';
 import { createLedger } from '../node/ledger.mjs';
 import { payConfig } from '../node/pay.mjs';
-import { scanInjection, readable, registrable, levelOf, savingsOf, scenario, perReuse, MARKET, SAVE } from '../node/areas.mjs';
+import { scanInjection, readable, registrable, levelOf, savingsOf, scenario, perReuse, tokensOfBytes, MARKET, SAVE } from '../node/areas.mjs';
 
 let passed = 0, failed = 0;
 const proof = async (name, fn) => { try { await fn(); passed++; console.log(`  ok   ${name}`); } catch (e) { failed++; console.log(`  FAIL ${name}\n       ${String(e?.stack || e).split('\n').slice(0, 4).join('\n       ')}`); } };
@@ -165,7 +165,9 @@ await proof('/brain/areas shows six areas, each with its job, its door and live 
 });
 await proof('the savings follow from the counts by the stated rule: low, mid and high, measured Markdown, and scenarios', () => {
   const s = savingsOf({ path: 2, plan: 1, market: 1, readBytes: 4000, mdBytes: 4000 });
-  assert.equal(s.reuses, 4); assert.equal(s.tokens.measured, 2000); assert.equal(s.tokens.mid, 2 * 15000 + 5000 + 20000 + 2000); assert.equal(s.wh.mid, 2 * 1.5 + 1.5 + 2);
+  // (3.33.0: counts from before 3.33.0 were characters; they become tokens by the one rule, with the measured Markdown ratio)
+  const m = 2 * tokensOfBytes('md', 4000, 'chars');
+  assert.equal(s.reuses, 4); assert.equal(s.tokens.measured, m); assert.equal(s.tokens.mid, 2 * 15000 + 5000 + 20000 + m); assert.equal(s.wh.mid, 2 * 1.5 + 1.5 + 2);
   const p = perReuse(); assert.deepEqual(p.tokens, [3800, 13000, 34500]); assert.deepEqual(p.wh, [0.44, 1.6, 4.37]);
   assert.equal(scenario(1e9).mwhPerYear[1], 584000); assert.ok(SAVE.sources.length >= 4 && SAVE.sources.every((x) => /^https:\/\//.test(x.url)));
 });
@@ -204,8 +206,9 @@ await proof('topic pages of the brain still answer; the areas take only their ow
 });
 await proof('llms.txt, the sitemap and the version carry the areas', async () => {
   const l = SITE['/llms.txt'].body; for (const x of ['/brain/areas', '"verified": true', '/brain/thinking?q=', '/savings']) assert.ok(l.includes(x), x);
-  const sm = await call('/sitemaps/site.xml'); for (const x of ['/brain/areas', '/brain/market', '/brain/thinking', '/savings']) assert.ok(sm.text.includes(`${BASE}${x}<`), x);
-  assert.equal(VERSION, '3.32.0');
+  const sm = await call('/sitemaps/hubs.xml'); for (const x of ['/brain/areas', '/brain/market', '/brain/thinking', '/savings']) assert.ok(sm.text.includes(`${BASE}${x}<`), x);
+  // the areas came with 3.32.0; every release after carries them (3.33.0 is the integrator's bump)
+  const [ma, mi] = VERSION.split('.').map(Number); assert.ok(ma > 3 || (ma === 3 && mi >= 32), `VERSION ${VERSION} carries the areas`);
 });
 
 rmSync(dir, { recursive: true, force: true });

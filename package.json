@@ -27,7 +27,15 @@
     "proof:shore": "node tools/shore-proof.mjs",
     "proof:seed": "node tools/seed-proof.mjs",
     "proof:find": "node tools/find-proof.mjs",
-    "proof:areas": "node tools/areas-proof.mjs"
+    "proof:areas": "node tools/areas-proof.mjs",
+    "proof:open": "node tools/open-proof.mjs",
+    "proof:bench": "node tools/bench-proof.mjs",
+    "proof:attention": "node --expose-gc tools/attention-proof.mjs",
+    "proof:connect": "node tools/connect-proof.mjs",
+    "proof:reach": "node tools/reach-proof.mjs",
+    "proof:offers": "node tools/offers-proof.mjs",
+    "proof:lean": "node tools/lean-proof.mjs",
+    "proof:fixes": "node tools/fixes-proof.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.9.0",

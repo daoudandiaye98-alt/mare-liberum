@@ -1,0 +1,311 @@
+{
+ "what": "the published task set of the proof of function (https://mareliberum.dev/proof)",
+ "picked": "2026-11-24T13:56:02.125Z",
+ "from": "https://mareliberum.dev/brain (JSON, field top)",
+ "rule": "shopping: the pathways GET /brain lists as the strongest (field top, 24 at pick time), kept when confirmed (more worked than failed reports), at most one per site, at most 24; everyday: questions asked at the brain (the record of the doors, 23 and 24 November 2026) and common reads of coding agents, with the page a person would expect an agent to open (chosen by hand; pages whose robots.txt forbids reading, or that a bot wall closes, were not chosen)",
+ "tasks": [
+  {
+   "id": "s01",
+   "task": "running shoes",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "5ba4310391f8b3",
+   "worked": 20,
+   "failed": 3,
+   "url": "https://shop.simon.com/products/mens-adidas-galaxy-7-running-shoes?variant=45422477836348&_gsid=sdN4LKEYsTqd&utm_source=shopify&utm_medium=catalog"
+  },
+  {
+   "id": "s02",
+   "task": "vintage clothing",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "e26a1c43452d1d",
+   "worked": 6,
+   "failed": 1,
+   "url": "https://plumgarments.com/products/plum-standard-vintage-bundle?variant=42883666509924&_gsid=XNaCA1pDmj3T&utm_source=shopify&utm_medium=catalog"
+  },
+  {
+   "id": "s03",
+   "task": "birthday gift",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "7d5ae3fac09ed3",
+   "worked": 5,
+   "failed": 2,
+   "url": "https://purechakra.com/products/personalized-happy-birthday-box-succulent-gift-box-thinking-of-you-care-package-spa-gift-box-with-relaxing-cozy-candle-good-vibes-only?variant=39772165079149&_gsid=mXAzTshK7RFp&utm_source=shopify&utm_medium=catalog"
+  },
+  {
+   "id": "s04",
+   "task": "gaming headset",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "4b679d84a38c29",
+   "worked": 3,
+   "failed": 1,
+   "url": "https://hyperx.com/products/hyperx-cloud-iii-wired-gaming-headset?variant=43656365375645&_gsid=UpB2eDqfYF41&utm_source=shopify&utm_medium=catalog"
+  },
+  {
+   "id": "s05",
+   "task": "gifts for her",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "5e1046bff9b26d",
+   "worked": 5,
+   "failed": 3,
+   "url": "https://basketfulgifts.com/products/aesthetic-gift-baskets"
+  },
+  {
+   "id": "s06",
+   "task": "bracelet",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "39f3b2f6f8a88c",
+   "worked": 4,
+   "failed": 2,
+   "url": "https://atoleajewelry.com/products/double-white-beaded-bracelet?variant=48700260090188&_gsid=aT1hjCdjJw2a&utm_source=shopify&utm_medium=catalog"
+  },
+  {
+   "id": "s07",
+   "task": "women's running shoes",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "6285d1cf85ec49",
+   "worked": 5,
+   "failed": 3,
+   "url": "https://startfitness.co.uk/products/brooks-ghost-17-womens-running-shoes-black"
+  },
+  {
+   "id": "s08",
+   "task": "guitar strings",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "bcd880f5b6299f",
+   "worked": 1,
+   "failed": 0,
+   "url": "https://x38e60-8v.myshopify.com/products/ernie-ball-regular-slinky-nickel-wound-electric-guitar-strings-10-46-gauge-p02221?variant=42374197248061&_gsid=EsmS2yEKhXXH&utm_source=shopify&utm_medium=catalog"
+  },
+  {
+   "id": "s09",
+   "task": "smart watch",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "22a0ebabfafe66",
+   "worked": 1,
+   "failed": 0,
+   "url": "https://runmefit.com/products/runmefit-gts7-pro-smart-sports-watch"
+  },
+  {
+   "id": "s10",
+   "task": "mouse",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "284066a0af4844",
+   "worked": 1,
+   "failed": 0,
+   "url": "https://ausmodshop.com/products/wlmouse-beast-x-mini-pro-magnesium-wireless-gaming-mouse"
+  },
+  {
+   "id": "s11",
+   "task": "spices",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "bf236669e1816b",
+   "worked": 1,
+   "failed": 0,
+   "url": "https://aspenspices.com/products/original-spice-mulling-blend"
+  },
+  {
+   "id": "s12",
+   "task": "face mask",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "3a8ebea835f805",
+   "worked": 1,
+   "failed": 0,
+   "url": "https://thefacedr.com/products/8pcs-bioaqua-fruit-facial-masks-moisturizing-hydrating-brightening-anti-aging-face-mask-sheet-masks-for-face-skin-care"
+  },
+  {
+   "id": "s13",
+   "task": "throw blanket",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "94a7abb4268a4e",
+   "worked": 1,
+   "failed": 0,
+   "url": "https://mellowsleep.com/products/cloud-throw-blanket?variant=47279976317181&_gsid=v4s977v39kqh&utm_source=shopify&utm_medium=catalog"
+  },
+  {
+   "id": "s14",
+   "task": "cutting board",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "3925fb768aed88",
+   "worked": 1,
+   "failed": 0,
+   "url": "https://stewartsblocksandboards.com/products/handcrafted-hard-maple-cutting-board-with-juice-groove-11x17x1-5"
+  },
+  {
+   "id": "s15",
+   "task": "loose leaf tea",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "8de2d5c20ab4e6",
+   "worked": 1,
+   "failed": 0,
+   "url": "https://www.heavenlytealeaves.com/products/chamomile-lavender?variant=31063112450096&_gsid=9cFxotCjSrwF&utm_source=shopify&utm_medium=catalog"
+  },
+  {
+   "id": "s16",
+   "task": "lunch box",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "105966857a3d49",
+   "worked": 1,
+   "failed": 0,
+   "url": "https://www.bbox.com/products/harry-potter-lunchbox"
+  },
+  {
+   "id": "s17",
+   "task": "perfume",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "d1ca47e80c93c3",
+   "worked": 1,
+   "failed": 0,
+   "url": "https://www.albadrfragrances.com/products/caramel-oud"
+  },
+  {
+   "id": "s18",
+   "task": "vegetable seeds",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "b54bc77a1f64c6",
+   "worked": 1,
+   "failed": 0,
+   "url": "https://www.botanicalinterests.com/products/winter-vegetable-spaghetti-winter-squash-seeds"
+  },
+  {
+   "id": "s19",
+   "task": "hot sauce",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "9d6937a326d908",
+   "worked": 1,
+   "failed": 0,
+   "url": "https://frescosauce.com/products/ghost-berry-hot-sauce?variant=33371236630663&_gsid=bfzRqk3b3biW&utm_source=shopify&utm_medium=catalog"
+  },
+  {
+   "id": "s20",
+   "task": "beard trimmer",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "808200cbf12b42",
+   "worked": 1,
+   "failed": 0,
+   "url": "https://thebeardclub.com/products/electric-trimmer?variant=29492234715239&_gsid=bFPNRauz6y6k&utm_source=shopify&utm_medium=catalog"
+  },
+  {
+   "id": "s21",
+   "task": "vase",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "76917b5d76bb96",
+   "worked": 1,
+   "failed": 0,
+   "url": "https://magnolia.com/products/marie-distressed-crackle-vase?variant=41076002619443&_gsid=YsYL7XpPF3f5&utm_source=shopify&utm_medium=catalog"
+  },
+  {
+   "id": "s22",
+   "task": "motorcycle helmet",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "b68e520096a29d",
+   "worked": 1,
+   "failed": 0,
+   "url": "https://1stormhelmet.com/products/1storm-motorcycle-full-face-helmet-for-adults-men-and-women-street-bike-racing-helmet-dot-approved-with-one-extra-clear-shield-kt828?variant=50381986201914&_gsid=kdx9BJuBxyGb&utm_source=shopify&utm_medium=catalog"
+  },
+  {
+   "id": "s23",
+   "task": "beeswax wraps",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "4d1925930a4c8d",
+   "worked": 1,
+   "failed": 0,
+   "url": "https://www.mindyourbeeswraps.com/products/copy-of-classic-kitchen"
+  },
+  {
+   "id": "s24",
+   "task": "skincare",
+   "group": "shopping",
+   "source": "confirmed pathway of the Unibrain",
+   "path": "e535db9716c6da",
+   "worked": 1,
+   "failed": 0,
+   "url": "https://beautyofjoseon.com/products/glow-serum-propolis-niacinamide?variant=51833681772916&_gsid=y1o4CFcGcMGp&utm_source=shopify&utm_medium=catalog"
+  },
+  {
+   "id": "e01",
+   "task": "find python library for pdf parsing",
+   "group": "everyday",
+   "source": "asked at the brain; page chosen by hand",
+   "url": "https://pypi.org/project/pypdf/"
+  },
+  {
+   "id": "e02",
+   "task": "latest research on creatine",
+   "group": "everyday",
+   "source": "asked at the brain; page chosen by hand",
+   "url": "https://pubmed.ncbi.nlm.nih.gov/?term=creatine&sort=date"
+  },
+  {
+   "id": "e03",
+   "task": "convert 100 eur to usd",
+   "group": "everyday",
+   "source": "asked at the brain; page chosen by hand",
+   "url": "https://www.ecb.europa.eu/stats/policy_and_exchange_rates/euro_reference_exchange_rates/html/eurofxref-graph-usd.en.html"
+  },
+  {
+   "id": "e04",
+   "task": "weather in berlin tomorrow",
+   "group": "everyday",
+   "source": "asked at the brain; page chosen by hand",
+   "url": "https://www.yr.no/en/forecast/daily-table/2-2950159/Germany/Berlin/Berlin"
+  },
+  {
+   "id": "e05",
+   "task": "list an MCP server in directories",
+   "group": "everyday",
+   "source": "asked at the brain; page chosen by hand",
+   "url": "https://modelcontextprotocol.io/registry/quickstart"
+  },
+  {
+   "id": "e06",
+   "task": "find usdc price",
+   "group": "everyday",
+   "source": "asked at the brain; page chosen by hand",
+   "url": "https://coinmarketcap.com/currencies/usd-coin/"
+  },
+  {
+   "id": "e07",
+   "task": "how to use fetch in javascript",
+   "group": "everyday",
+   "source": "common read of coding agents; page chosen by hand",
+   "url": "https://developer.mozilla.org/en-US/docs/Web/API/Fetch_API/Using_Fetch"
+  },
+  {
+   "id": "e08",
+   "task": "python asyncio gather",
+   "group": "everyday",
+   "source": "common read of coding agents; page chosen by hand",
+   "url": "https://docs.python.org/3/library/asyncio-task.html"
+  },
+  {
+   "id": "e09",
+   "task": "react useeffect hook",
+   "group": "everyday",
+   "source": "common read of coding agents; page chosen by hand",
+   "url": "https://react.dev/reference/react/useEffect"
+  }
+ ]
+}

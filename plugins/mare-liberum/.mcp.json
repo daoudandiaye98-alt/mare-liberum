@@ -2,7 +2,7 @@
   "mcpServers": {
     "mare-liberum": {
       "type": "http",
-      "url": "https://mareliberum.dev/mcp"
+      "url": "https://mareliberum.dev/mcp/app"
     }
   }
 }
