@@ -1793,7 +1793,8 @@ async function handleOne(req, db, cfg = {}) {
       else if (path.length > 3) { target = path.slice(3).replace(/^(https?):\/(?!\/)/i, '$1://'); const sp = new URLSearchParams(url.search); for (const k of ['tag', 'q', 'format', '__p']) sp.delete(k); const rest = sp.toString(); if (rest) target += `?${rest}`; }
       const wantJson = a.format === 'json' || (/application\/json/.test(req.headers.get('accept') || '') && !/text\/html/.test(req.headers.get('accept') || ''));
       if (!target) return new Response(readerPage(base), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=3600', ...CORS } });
-      const r = await sea.read({ url: target, q: a.q, tag: a.tag }, ctx);
+      // format=full: the long answer around the reader's whole Markdown of before (toMarkdown), not around the lean one
+      const r = await sea.read({ url: target, q: a.q, tag: a.tag, ...(a.format === 'full' && !wantJson ? { full: true } : {}) }, ctx);
       if (r.note && !r.url && !r.error) return new Response(`${r.note}\n${r.how}\n`, { headers: { 'content-type': 'text/plain; charset=utf-8', 'x-robots-tag': 'noindex', ...CORS } });
       const st = r.blocked ? 403 : r.error ? (r.status >= 400 ? 502 : 422) : 200, hdr = { 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow', ...CORS };
       // the read counts as a step to that site; the addresses the reader hands out lead through the sea (/via/)

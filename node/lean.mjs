@@ -27,11 +27,18 @@ const RAW = new Set('script style textarea title xmp noscript template iframe no
 const CLOSES_P = new Set('address article aside blockquote details div dl fieldset figcaption figure footer form h1 h2 h3 h4 h5 h6 header hr main menu nav ol p pre section table ul'.split(' '));
 const IMPLIED = { li: new Set(['li']), dt: new Set(['dt', 'dd']), dd: new Set(['dt', 'dd']), tr: new Set(['tr', 'td', 'th']), td: new Set(['td', 'th']), th: new Set(['td', 'th']), option: new Set(['option']), thead: new Set(['tbody', 'tfoot', 'tr', 'td', 'th']), tbody: new Set(['thead', 'tbody', 'tfoot', 'tr', 'td', 'th']), tfoot: new Set(['thead', 'tbody', 'tr', 'td', 'th']) };
 const DEPTH = 500;
-export function parseHtml(html) {
-  const root = { tag: '#root', a: '', kids: [], up: null }; let cur = root, depth = 0;
+// max: how many characters of markup are read at most (the insides of scripts, styles and pictures are not counted: they
+// are skipped, not read); what stands after that is left out and the root says so (cut)
+export function parseHtml(html, { max = Infinity } = {}) {
+  const root = { tag: '#root', a: '', kids: [], up: null }; let cur = root, depth = 0, skipped = 0;
   const re = /<!--[\s\S]*?(?:-->|$)|<![^>]*>|<\?[^>]*>|<\/([a-zA-Z][\w:-]*)\s*>|<([a-zA-Z][\w:-]*)((?:[^>"']|"[^"]*"|'[^']*')*)>|[^<]+|</g;
   const s = String(html || ''); let m;
   while ((m = re.exec(s))) {
+    if (re.lastIndex - skipped > max) {
+      // the limit falls inside this piece: text is kept up to it, a tag is left out
+      if (m[0][0] !== '<') { const room = max - (m.index - skipped); if (room > 0) cur.kids.push(m[0].slice(0, room)); }
+      root.cut = true; break;
+    }
     const [all, close, open, attrs] = m;
     if (open) {
       const tag = open.toLowerCase();
@@ -41,7 +48,7 @@ export function parseHtml(html) {
       if (RAW.has(tag)) {
         const end = new RegExp(`</${tag}\\s*>`, 'ig'); end.lastIndex = re.lastIndex; const e = end.exec(s);
         if (tag === 'title') el.kids.push(s.slice(re.lastIndex, e ? e.index : s.length));
-        re.lastIndex = e ? end.lastIndex : s.length; continue;
+        skipped += (e ? e.index : s.length) - re.lastIndex; re.lastIndex = e ? end.lastIndex : s.length; continue;
       }
       if (!VOID.has(tag) && !/\/\s*$/.test(attrs || '') && depth < DEPTH) { cur = el; depth++; }
     } else if (close) {
@@ -61,27 +68,93 @@ export function attrs(el) {
 }
 const isEl = (k) => typeof k !== 'string';
 const safeDecode = (x) => { try { return decodeURIComponent(x); } catch { return x; } };
-function* elements(root) { const stack = [root]; while (stack.length) { const n = stack.pop(); yield n; for (let i = n.kids.length - 1; i >= 0; i--) if (isEl(n.kids[i])) stack.push(n.kids[i]); } }
-// the characters of text in each box, once, from the leaves up
+// every box under a box, the box first, in the page's order (a list, not a generator: a deep page is walked once, quickly)
+function elements(root) { const out = [], stack = [root]; while (stack.length) { const n = stack.pop(); out.push(n); for (let i = n.kids.length - 1; i >= 0; i--) { const k = n.kids[i]; if (typeof k !== 'string') stack.push(k); } } return out; }
+// the characters of text in each box, once, from the leaves up; and how much of it, in how many links, is link text
 function measure(root) {
-  const order = [...elements(root)];
-  for (let i = order.length - 1; i >= 0; i--) { const n = order[i]; let len = 0; for (const k of n.kids) len += isEl(k) ? k.len || 0 : k.replace(/\s+/g, '').length; n.len = len; }
+  const order = elements(root);
+  for (let i = order.length - 1; i >= 0; i--) {
+    const n = order[i]; let len = 0, ll = 0, lc = 0;
+    for (const k of n.kids) { if (isEl(k)) { len += k.len || 0; ll += k.ll || 0; lc += k.lc || 0; } else len += k.replace(/\s+/g, '').length; }
+    if (n.tag === 'a') { ll = len; lc += 1; }
+    n.len = len; n.ll = ll; n.lc = lc;
+  }
   return order;
 }
+// a box that is mostly links (a table of contents, a list of related pages): three links or more, half its text or more
+const linky = (n) => (n.lc || 0) >= 3 && (n.ll || 0) >= (n.len || 0) * 0.5;
 const textOfEl = (el) => { let out = ''; for (const k of el.kids) out += isEl(k) ? (k.tag === 'br' ? ' ' : textOfEl(k)) : k; return out; };
 
 // ---------------------------------------------------------------- what a person does not see, and what is not the page
 const DROP_TAGS = new Set('script style noscript template svg math iframe canvas object embed head title button select input textarea option optgroup datalist dialog map audio video picture source track label fieldset legend meter progress output'.split(' '));
-const BAD_ROLE = /^(navigation|banner|contentinfo|dialog|alertdialog|search|menu|menubar|complementary|tooltip|toolbar)$/i;
-// class and id words of boxes that are not the page: one word of the class or id (split at - and _) is enough …
-const BOX_WORDS = new Set('cookie cookies consent gdpr newsletter popup popups modal modals drawer drawers share sharing social socials subscribe toast tooltip wishlist breadcrumb breadcrumbs nav navbar navigation megamenu footer sidebar announcement announcements skip skiplink backtotop'.split(' '));
-// … or one of these parts anywhere in it
-const BOX_PARTS = /cookie|consent|gdpr|newsletter|popup|pop-up|modal|drawer|breadcrumb|social|share-|sharing|skip-to|skip-link|back-to-top|scroll-to-top|mega-?menu|mobile-?menu|cart-drawer|cartdrawer|mini-?cart|cart-notification|cart-popup|side-?cart|predictive-search|search-modal|search-drawer|search-overlay|localization|country-selector|currency-selector|language-selector|payment-icons?|payment-list|payment-methods|chat-widget|intercom|zendesk|tidio|gorgias|klaviyo|privy|attentive|visually-hidden|sr-only|screen-reader|screenreader|recently-viewed|recommendation|related-|-related|upsell|cross-?sell|also-like|you-may|quick-?view|quick-?shop|quick-add-(modal|popup|drawer|button)|sticky-?(atc|cart|add|buy|bar)|(atc|cart)-sticky/i;
-// the head of a site and its menus by class or id: left out around the main part, not inside it (inside, a box called
-// "header" is often the title of a table or a section, and a "menu" can be what a restaurant serves)
-const FRAME_WORDS = new Set('header masthead topbar menu menus'.split(' '));
-// on a product page, the shop's widgets around the product: reviews and ratings (the rating is in the essentials)
-const SHOP_PARTS = /review|rating|testimonial|judgeme|jdgm|yotpo|okendo|stamped|loox|junip|trustpilot|spr-|ali-reviews|product-recommend|complementary|bundle|frequently-bought|fbt-|instafeed|instagram/i;
+// roles that are never the page's text; and the roles of the site's frame, left out around the main part only
+const ROLE_ALWAYS = /^(navigation|search|menu|menubar|dialog|alertdialog|tooltip|toolbar)$/i;
+const ROLE_FRAME = /^(banner|contentinfo|complementary)$/i;
+// A class or id says what a box is by a whole name, or by the parts a name is made of (split at - and _): "cookie-banner",
+// "site-cookie-banner__inner". A word inside another name says nothing: a "cookie-recipe" is a recipe, a "share-price" a
+// stock quote, "social-security" a benefit, a "localization-guide" a guide.
+//   UI words: a box whose name starts or ends with one of them is never the page's text, inside the main part or around it
+const UI_WORDS_BOX = new Set('gdpr popup popups modal modals drawer drawers toast tooltip wishlist breadcrumb breadcrumbs nav navbar navigation megamenu skiplink backtotop'.split(' '));
+//   frame words: the site's head, menus, footer and sidebars, left out around the main part; inside it a "header" is the
+//   title of a section, a "menu" what a restaurant serves, and a footer or sidebar stays unless it is mostly links
+const FRAME_WORDS = new Set('header masthead topbar banner menu menus footer sidebar announcement announcements'.split(' '));
+//   a topic and a kind of widget, side by side in a name: "cookie" + "banner", "share" + "buttons", "currency" + "selector"
+const W = (s) => new Set(s.split(' '));
+const CONSENT = W('banner bar notice notification popup modal dialog overlay consent settings preferences prompt wall law box panel');
+const SHARING = W('buttons button btn btns icons icon links link bar widget tools toolbar menu popup share sharing');
+const SIGNUP = W('form signup popup modal banner bar widget box block');
+const SLIDES = W('counter buttons button controls control dots dot pagination pager arrows arrow bullets nav navigation prev next');
+const PICKER = W('selector select switcher picker form dropdown toggle popup modal drawer menu');
+const PAIRS = { cookie: CONSENT, cookies: CONSENT, consent: CONSENT, privacy: W('banner bar notice popup modal'), share: SHARING, sharing: SHARING, social: SHARING, newsletter: SIGNUP, subscribe: SIGNUP, subscription: SIGNUP, localization: PICKER, locale: PICKER, language: PICKER, lang: PICKER, country: PICKER, currency: PICKER, region: PICKER,
+  cart: W('drawer popup notification modal overlay flyout sidebar preview'), search: W('form modal overlay drawer popup bar toggle box'), chat: W('widget button launcher bubble popup frame'), payment: W('icons icon logos list methods badges'), app: W('banner'), promo: W('bar banner popup strip'), age: W('gate verification popup modal'), notify: W('modal popup'),
+  slider: SLIDES, slideshow: SLIDES, carousel: SLIDES, swiper: SLIDES, splide: SLIDES, flickity: SLIDES };
+const CONCAT = new Set(Object.entries(PAIRS).flatMap(([t, ws]) => [...ws].map((w) => t + w)));
+//   names of widgets in more than two parts (whole, or at the start or the end of a name), and the makers of consent and
+//   chat widgets (at the start of a name)
+const COMPOUNDS = ['visually hidden', 'sr only', 'screen reader text', 'screenreader text', 'skip link', 'skip to content', 'back to top', 'scroll to top', 'mega menu', 'mobile menu', 'menu drawer', 'predictive search', 'recently viewed', 'product recommendations', 'you may also like', 'related products', 'cross sell', 'up sell', 'upsell', 'crosssell', 'quick view', 'quickview', 'quick shop', 'quickshop', 'quick add modal', 'sticky atc', 'sticky add to cart', 'sticky cart', 'sticky buy', 'atc sticky', 'cart sticky', 'mini cart', 'minicart', 'side cart', 'cart notification', 'announcement bar', 'age gate'].map((x) => x.split(' '));
+const MAKERS = /^(onetrust|cookiebot|cybotcookiebot|usercentrics|didomi|iubenda|cookieyes|cky-|osano|termly|klaro|truste|trustarc|cmplz|borlabs|qc-cmp|intercom|zendesk|tidio|gorgias|klaviyo|privy|attentive)/;
+//   on a product page, the shop's widgets around the product: reviews and ratings (the rating is in the essentials), as a
+//   whole part anywhere in a name ("product-reviews-section"); a page that is no product keeps them
+const SHOP_WORDS = new Set('review reviews rating ratings testimonial testimonials judgeme jdgm yotpo okendo stamped loox junip trustpilot spr instafeed fbt'.split(' '));
+const SHOP_COMPOUNDS = ['ali reviews', 'product recommendations', 'complementary products', 'frequently bought', 'frequently bought together', 'instagram feed'].map((x) => x.split(' '));
+// (each class name is judged once, its verdict kept: a page repeats the same names thousands of times)
+const CONCAT_START = new RegExp(`^(${[...CONCAT].join('|')})`), CONCAT_END = new RegExp(`(${[...CONCAT].join('|')})$`);
+const seqSet = (list) => new Set(list.map((c) => c.join(' '))), COMPOUND_SET = seqSet(COMPOUNDS), SHOP_SET = seqSet(SHOP_COMPOUNDS);
+const MAXSEQ = Math.max(...[...COMPOUNDS, ...SHOP_COMPOUNDS].map((c) => c.length));
+const edgeSeq = (w, set) => { for (let n = 1; n <= Math.min(MAXSEQ, w.length); n++) if (set.has(w.slice(0, n).join(' ')) || set.has(w.slice(w.length - n).join(' '))) return true; return false; };
+//   a whole name (or a whole part of a BEM name, "newsletter__wrapper") that is a widget by itself
+const WHOLE_UI = new Set('newsletter newsletters newsletter-signup email-signup email-signup-banner signup-form'.split(' '));
+const verdicts = new Map();
+// a name in BEM parts ("shopify-block-x7__related-products-slider", "newsletter__wrapper") is judged as a whole and part
+// by part (a widget part makes it a widget; the strongest verdict counts: ui, then frame, then shop)
+function nameKind(raw) {
+  const t = raw.toLowerCase(); let v = verdicts.get(t);
+  if (v !== undefined) return v;
+  v = judgeName(t);
+  if (v !== 'ui' && t.includes('__')) for (const part of t.split('__')) { const x = judgeName(part); if (x === 'ui') { v = 'ui'; break; } if (x === 'frame' || (x === 'shop' && !v)) v = x; }
+  if (verdicts.size > 50_000) verdicts.clear();
+  verdicts.set(t, v);
+  return v;
+}
+function judgeName(t) {
+  let v = null;
+  if (WHOLE_UI.has(t)) return 'ui';
+  const w = t.split(/[_-]+/).filter(Boolean);
+  if (w.length) {
+    const ends = w.length === 1 ? [w[0]] : [w[0], w[w.length - 1]], joined = w.join('');
+    if (MAKERS.test(t) || ends.some((x) => UI_WORDS_BOX.has(x)) || w.some((x, i) => i + 1 < w.length && PAIRS[x]?.has(w[i + 1]))
+      || CONCAT.has(joined) || CONCAT_START.test(w[0]) || CONCAT_END.test(w[w.length - 1]) || edgeSeq(w, COMPOUND_SET) || COMPOUND_SET.has(joined)) v = 'ui';
+    else if (ends.some((x) => FRAME_WORDS.has(x))) v = 'frame';
+    else if (w.some((x) => SHOP_WORDS.has(x)) || edgeSeq(w, SHOP_SET)) v = 'shop';
+  }
+  return v;
+}
+// the verdict on one box's names (class, id, and a custom element's own name): 'ui', 'frame', 'shop' or null
+function boxKind(names) {
+  let kind = null;
+  for (const raw of names) { const v = nameKind(raw); if (v === 'ui') return 'ui'; if (v === 'frame') kind = 'frame'; else if (v === 'shop' && !kind) kind = 'shop'; }
+  return kind;
+}
 const RESPONSIVE_SHOW = /^(sm|md|lg|xl|2xl):(block|flex|inline|inline-block|inline-flex|grid|table|contents)$/;
 function hiddenEl(el) {
   const o = attrs(el);
@@ -90,20 +163,18 @@ function hiddenEl(el) {
   if (o.class) { const c = o.class.split(/\s+/); if (c.includes('hidden') && !c.some((x) => RESPONSIVE_SHOW.test(x))) return true; }
   return false;
 }
-function boxWords(el) {
-  const o = attrs(el), s = `${o.class || ''} ${o.id || ''}`.toLowerCase();
-  if (!s.trim()) return null;
-  return s;
+// the names a box gives itself: its classes, its id, and the name of a custom element (cart-drawer, quick-add-modal)
+function boxNames(el) {
+  const o = attrs(el), out = `${o.class || ''} ${o.id || ''}`.split(/\s+/).filter(Boolean);
+  if (el.tag.includes('-')) out.push(el.tag);
+  return out;
 }
-// a word counts where it names the box: at the start or the end of a class name ("site-footer", "nav__item"), not in the
-// middle of one ("show-nav-on-hover" is a way to show a slider, not a menu)
-const boxIsBoiler = (s, inMain) => BOX_PARTS.test(s) || s.split(/\s+/).some((c) => { const w = c.split(/[_-]+/).filter(Boolean); if (!w.length) return false; const ends = w.length === 1 ? [w[0]] : [w[0], w[w.length - 1]]; return ends.some((x) => BOX_WORDS.has(x) || (!inMain && FRAME_WORDS.has(x))); });
 
 // the page's own heading: the first h1 a person sees, inside its main part when it has one
 function headingOf(root) {
   const seen = [];
   for (const el of elements(root)) if (el.tag === 'h1' && one(entities(textOfEl(el)))) seen.push(el);
-  const visible = seen.filter((h) => { for (let n = h; n && n.tag !== '#root'; n = n.up) { if (hiddenEl(n)) return false; const w = boxWords(n); if (w && /visually-hidden|sr-only|screen-reader/.test(w)) return false; } return true; });
+  const visible = seen.filter((h) => { for (let n = h; n && n.tag !== '#root'; n = n.up) { if (hiddenEl(n)) return false; if (boxNames(n).some((c) => /^(visually-hidden|sr-only|screen-reader-text)$/i.test(c))) return false; } return true; });
   const inMain = visible.find((h) => { for (let n = h.up; n; n = n.up) { if (n.tag === 'main' || n.tag === 'article' || /^main$/i.test(attrs(n).role || '')) return true; } return false; });
   return inMain || visible[0] || null;
 }
@@ -177,6 +248,9 @@ function offersOf(x) {
   });
 }
 const variantIdOf = (u) => /[?&]variant=(\d+)/.exec(String(u || ''))?.[1] || null;
+// a short value of the structured data, taken as a fact: one line, no address and no markup in it, at most n characters
+// (free text of the structured data, a description or a review, is never taken: a person does not see it)
+const fact = (s, n) => { const t = one(entities(strOf(s))).replace(/[\u0000-\u001f\u007f]/g, ''); if (!t || /https?:\/\/|www\.|[<>]/i.test(t)) return null; return t.length > n ? `${t.slice(0, n - 1)}…` : t; };
 // the essentials of a product page, or null when the page is no product
 export function productOf(html, pageUrl, { heading } = {}) {
   let page; try { page = new URL(pageUrl); } catch { page = null; }
@@ -195,21 +269,21 @@ export function productOf(html, pageUrl, { heading } = {}) {
   if (!sp && new Set(nodes.map((x) => one(strOf(x.name)).toLowerCase()).filter(Boolean)).size > 2 && !nodes.some((x) => pathOf(x.url || x['@id']) === here)) return null;
   const same = nodes.filter((x) => x !== main && (!main?.name || !x.name || one(x.name).toLowerCase() === one(main.name).toLowerCase()));
   const pick = (f) => { for (const x of [main, ...same]) { const v = x && f(x); if (v != null && v !== '' && !(Array.isArray(v) && !v.length)) return v; } return null; };
-  const name = one(entities(strOf(pick((x) => x.name)) || sp?.title || heading || meta('og:title') || ''));
+  const name = fact(strOf(pick((x) => x.name)) || sp?.title || heading || meta('og:title') || '', 150);
   const cur0 = pick((x) => offersOf(x).find((f) => f.cur)?.cur) || pick((x) => [].concat(x.hasVariant || []).map((v) => offersOf(v).find((f) => f.cur)?.cur).find(Boolean))
     || /Shopify\.currency\s*=\s*\{"active":"([A-Z]{3})"/.exec(h)?.[1] || meta('og:price:currency') || meta('product:price:currency') || null;
   // the variants: Shopify's own list first (it knows the options), else the variants and offers of the structured data
   let variants = [], options = null;
   if (sp?.variants?.length) {
     const names = Array.isArray(sp.options) ? sp.options.map((o) => (typeof o === 'string' ? o : o?.name)).filter(Boolean) : [];
-    if (names.length && !(names.length === 1 && /^title$/i.test(names[0]))) options = names;
-    variants = sp.variants.map((v) => ({ id: String(v.id), title: one(v.title || v.public_title || ''), price: cents(v.price), was: cents(v.compare_at_price) || null, avail: v.available === true ? 'in stock' : v.available === false ? 'out of stock' : null, opts: [v.option1, v.option2, v.option3].filter((o) => o != null), sku: v.sku || null, gtin: v.barcode || null }));
+    if (names.length && !(names.length === 1 && /^title$/i.test(names[0]))) options = names.map((x) => fact(x, 30) || 'Option');
+    variants = sp.variants.map((v) => ({ id: String(v.id), title: fact(v.title || v.public_title || '', 60) || '', price: cents(v.price), was: cents(v.compare_at_price) || null, avail: v.available === true ? 'in stock' : v.available === false ? 'out of stock' : null, opts: [v.option1, v.option2, v.option3].filter((o) => o != null).map((o) => fact(o, 40)).filter(Boolean), sku: v.sku || null, gtin: v.barcode || null }));
   }
   const ldVariants = [];
-  for (const v of [].concat(pick((x) => x.hasVariant) || [])) { if (!v || typeof v !== 'object') continue; const f = offersOf(v)[0] || {}; ldVariants.push({ id: variantIdOf(v['@id'] || v.url || f.url), title: one(strOf(v.name)).replace(name ? new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[-–—:]\\s*`, 'i') : /^$/, ''), price: f.price, was: f.was, cur: f.cur, avail: f.avail, props: Object.fromEntries(['color', 'size', 'material', 'pattern'].filter((k) => v[k]).map((k) => [k, one(strOf(v[k]))])), gtin: strOf(v.gtin13 || v.gtin12 || v.gtin || v.gtin14 || v.gtin8) || null }); }
+  for (const v of [].concat(pick((x) => x.hasVariant) || [])) { if (!v || typeof v !== 'object') continue; const f = offersOf(v)[0] || {}; ldVariants.push({ id: variantIdOf(v['@id'] || v.url || f.url), title: fact(one(strOf(v.name)).replace(name ? new RegExp(`^${name.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}\\s*[-–—:]\\s*`, 'i') : /^$/, ''), 60) || '', price: f.price, was: f.was, cur: f.cur, avail: f.avail, props: Object.fromEntries(['color', 'size', 'material', 'pattern'].filter((k) => fact(v[k], 40)).map((k) => [k, fact(v[k], 40)])), gtin: strOf(v.gtin13 || v.gtin12 || v.gtin || v.gtin14 || v.gtin8) || null }); }
   const offers = pick((x) => offersOf(x)) || [];
   if (!variants.length && ldVariants.length) variants = ldVariants.map((v) => ({ ...v, opts: Object.values(v.props).length ? Object.values(v.props) : null }));
-  if (!variants.length && offers.length > 1) variants = offers.filter((f) => f.price != null || f.avail).map((f) => ({ id: variantIdOf(f.url), title: f.name, price: f.price, was: f.was, avail: f.avail, sku: f.sku }));
+  if (!variants.length && offers.length > 1) variants = offers.filter((f) => f.price != null || f.avail).map((f) => ({ id: variantIdOf(f.url), title: fact(f.name, 60) || '', price: f.price, was: f.was, avail: f.avail, sku: f.sku }));
   // availability the structured data states wins over Shopify's (which a theme may not fill)
   for (const v of variants) { const ld = (v.id && ldVariants.find((x) => x.id === v.id)) || (v.id && offers.find((f) => variantIdOf(f.url) === v.id)); if (ld?.avail) v.avail = ld.avail; if (!v.gtin && ld?.gtin) v.gtin = ld.gtin; }
   if (!options && ldVariants.some((v) => Object.keys(v.props).length)) options = Object.keys(ldVariants.find((v) => Object.keys(v.props).length).props).map((k) => k[0].toUpperCase() + k.slice(1));
@@ -226,15 +300,18 @@ export function productOf(html, pageUrl, { heading } = {}) {
   const avail = sel?.avail || (known.length ? (stocked.length ? 'in stock' : known[0].avail) : first.avail || availOf(meta('og:availability') || meta('product:availability')));
   const rating = pick((x) => x.aggregateRating && typeof x.aggregateRating === 'object' ? x.aggregateRating : null);
   // (Shopify's own placeholder for a shop without a vendor name is no brand)
-  const brand = one(entities(strOf(pick((x) => x.brand)) || sp?.vendor || '')).replace(/^my store$/i, '') || null;
+  const brand = (fact(strOf(pick((x) => x.brand)) || sp?.vendor || '', 60) || '').replace(/^my store$/i, '') || null;
   const canon = (() => { const m = /<link\b[^>]*rel\s*=\s*["']canonical["'][^>]*>/i.exec(head)?.[0]; const href = m && /href\s*=\s*["']([^"']+)["']/i.exec(m)?.[1]; try { return new URL(entities(href || strOf(main?.url) || meta('og:url') || pageUrl), pageUrl).href; } catch { return pageUrl; } })();
-  const description = one(entities(strOf(pick((x) => x.description)) || '')) || null;
+  // the start of the product's description, only to find the box on the page that shows it (never written out)
+  const probe = one(entities(strOf(pick((x) => x.description)) || '')).slice(0, 200) || null;
+  const gtinOf = (x) => (/^\d{8,14}$/.test(String(x || '')) ? String(x) : null);
   return {
-    name: name || null, brand, price, was, low: low !== high ? low : null, high: low !== high ? high : null, currency: cur0 ? String(cur0).toUpperCase().slice(0, 3) : null, availability: avail || null,
+    name: name || null, brand, price, was, low: low !== high ? low : null, high: low !== high ? high : null, currency: /^[A-Za-z]{3}$/.test(String(cur0 || '').trim()) ? String(cur0).trim().toUpperCase() : null, availability: avail || null,
     variants: variants.length > 1 ? { n: variants.length, inStock: known.length ? stocked.length : null, options, list: variants, selected: sel && variants.length > 1 ? sel.title : null } : null,
-    rating: rating ? { value: num(rating.ratingValue), best: num(rating.bestRating) || 5, count: num(rating.reviewCount ?? rating.ratingCount) } : null,
-    gtin: sel?.gtin || (variants.length <= 1 ? strOf(main?.gtin13 || main?.gtin12 || main?.gtin || main?.gtin14 || main?.gtin8) || null : null),
-    url: canon, path: (() => { try { const c = new URL(canon); return page && c.origin === page.origin ? c.pathname + c.search : null; } catch { return null; } })(), description, descriptionHtml: typeof sp?.description === 'string' && /<[a-z]/i.test(sp.description) ? sp.description : null, handle: handle ? safeDecode(handle) : null,
+    rating: rating && num(rating.ratingValue) != null ? { value: num(rating.ratingValue), best: num(rating.bestRating) || 5, count: num(rating.reviewCount ?? rating.ratingCount) } : null,
+    gtin: gtinOf(sel?.gtin) || (variants.length <= 1 ? gtinOf(strOf(main?.gtin13 || main?.gtin12 || main?.gtin || main?.gtin14 || main?.gtin8)) : null),
+    // the page's canonical address: a path on this site (www. or not), else said to be another site's
+    url: canon, path: (() => { try { const c = new URL(canon), site = (u) => u.hostname.replace(/^www\./, ''); return page && /^https?:$/.test(c.protocol) && site(c) === site(page) ? c.pathname + c.search : null; } catch { return null; } })(), probe, handle: handle ? safeDecode(handle) : null,
   };
 }
 // the options of the variants, value by value (at most a dozen values each)
@@ -250,10 +327,14 @@ function optionLines(v) {
   }
   return out;
 }
-export function essentialsMd(p) {
+// the essentials: the page's own heading (what a person sees), then what the page's structured data states, said to be
+// that; a value of the structured data a person may never see is never written as the page's text
+export const STRUCTURED = 'Structured data on this page:';
+export function essentialsMd(p, { heading } = {}) {
   if (!p) return '';
   const cur = p.currency ? ` ${p.currency}` : '', m = (x) => `${money(x)}${cur}`;
   const lines = [];
+  if (!heading && p.name) lines.push(`Name: ${p.name}`);
   if (p.price != null) lines.push(`Price: ${m(p.price)}${p.was != null ? ` (was ${m(p.was)})` : ''}${p.low != null && p.high != null && p.low !== p.high ? ` · all variants ${money(p.low)}–${m(p.high)}` : ''}`);
   else if (p.low != null) lines.push(`Price: ${money(p.low)}–${m(p.high)}`);
   const v = p.variants;
@@ -263,9 +344,31 @@ export function essentialsMd(p) {
   if (p.brand) lines.push(`Brand: ${p.brand}`);
   if (p.rating?.value != null) lines.push(`Rating: ${Math.round(p.rating.value * 100) / 100} of ${p.rating.best}${p.rating.count != null ? ` (${p.rating.count} review${p.rating.count === 1 ? '' : 's'})` : ''}`);
   if (p.gtin) lines.push(`GTIN: ${p.gtin}`);
-  if (p.url) lines.push(`Page: ${p.path || p.url}`);
-  return `${p.name ? `# ${p.name}\n\n` : ''}${lines.map((l) => `- ${l}`).join('\n')}`;
+  if (p.path) lines.push(`Page: ${p.path}`); else if (p.url) lines.push(`Canonical (other site): ${p.url}`);
+  return `${heading ? `# ${heading}\n\n` : ''}${lines.length ? `${STRUCTURED}\n${lines.map((l) => `- ${l}`).join('\n')}` : ''}`.trim();
 }
+// the amounts of money a line names (a number with two decimals is read with either mark), rounded to the cent
+const MONEY = /[$€£¥₹]|\b(usd|eur|gbp|aud|cad|chf|nzd|jpy|sek|nok|dkk|pln|inr)\b|\d[.,]\d{2}(?!\d)/i;
+function amountsOf(l) {
+  const out = [];
+  for (const m of String(l).matchAll(/\d[\d.,\u00a0 ]*\d|\d/g)) {
+    const s = m[0].replace(/[\s\u00a0]/g, ''), last = Math.max(s.lastIndexOf('.'), s.lastIndexOf(','));
+    const v = last >= 0 && s.length - last - 1 === 2 ? Number(`${s.slice(0, last).replace(/[.,]/g, '')}.${s.slice(last + 1)}`) : Number(s.replace(/[.,]/g, ''));
+    if (Number.isFinite(v)) out.push(Math.round(v * 100) / 100);
+  }
+  return out;
+}
+// every amount the essentials state (price, the price before, the range, each variant, the saving)
+function amountsKnown(p) {
+  const s = new Set(), add = (x) => { if (x != null && Number.isFinite(x)) s.add(Math.round(x * 100) / 100); };
+  add(p.price); add(p.was); add(p.low); add(p.high); for (const v of p.variants?.list || []) { add(v.price); add(v.was); }
+  if (p.price != null && p.was != null) add(p.was - p.price);
+  return s;
+}
+// what a line of the page says about stock: in, out, pre (for "Sale Sold out", the badges of a shop's template, too)
+const STOCK = { in: /^(in stock|available|in stock now|ready to ship|ships today|lieferbar|auf lager|vorrätig|disponible|en stock)$/, out: /^(out of stock|sold out|unavailable|currently unavailable|not available|no longer available|ausverkauft|nicht verfügbar|nicht lieferbar|épuisé|agotado)$/, pre: /^(pre-?order|coming soon|back-?order|available soon)$/ };
+const stockOf = (k) => { const s = k.replace(/^(availability|available|stock|status)\s*:\s*/, '').replace(/^sale\s+|\s+sale$/g, '').replace(/[!.]+$/, '').trim(); for (const [c, re] of Object.entries(STOCK)) if (re.test(s)) return c; return null; };
+const stockClass = (a) => (!a ? null : inStock(a) ? 'in' : /out of stock|sold out|discontinued/.test(a) ? 'out' : /pre-order|pre-sale|back-order/.test(a) ? 'pre' : null);
 
 // ---------------------------------------------------------------- links: once each, short, without tracking
 const TRACK = /^(utm_[a-z_]+|_gsid|_pos|_sid|_ss|_psq|_v|_ga|_gl|gclid|gclsrc|dclid|fbclid|msclkid|yclid|igshid|mc_cid|mc_eid|_hsenc|_hsmi|mkt_tok|srsltid|pk_[a-z_]+|mtm_[a-z_]+|oly_[a-z_]+|vero_[a-z_]+|ref_src|ref_url|spm|scm|trk|trkid|cmpid|campaign_id|ad_id|adgroupid|affiliate_id)$/i;
@@ -343,7 +446,7 @@ function writer(page, base) {
     const rows = []; let layout = false;
     const collect = (n) => { for (const k of n.kids) { if (!isEl(k)) continue; if (k.tag === 'tr') rows.push(k); else if (k.tag === 'thead' || k.tag === 'tbody' || k.tag === 'tfoot') collect(k); } };
     collect(el);
-    for (const r of rows) for (const c of r.kids) if (isEl(c) && [...elements(c)].some((x) => x !== c && (x.tag === 'table' || /^h[1-6]$/.test(x.tag) || x.tag === 'ul' || x.tag === 'ol'))) layout = true;
+    for (const r of rows) for (const c of r.kids) if (isEl(c) && elements(c).some((x) => x !== c && (x.tag === 'table' || /^h[1-6]$/.test(x.tag) || x.tag === 'ul' || x.tag === 'ol'))) layout = true;
     if (layout || !rows.length) return md(el, st);
     const lines = [];
     for (const r of rows) {
@@ -367,7 +470,7 @@ function writer(page, base) {
 // lines: trimmed, one blank line at most, list indentation and code kept
 function tidy(s) {
   const out = []; let code = false;
-  for (const raw of String(s).split('\n')) {
+  for (const raw of String(s).replace(/\n\s*\n/g, '\n\n').split('\n')) {
     if (/^\s*```/.test(raw)) { code = !code; out.push(raw.trim()); continue; }
     if (code) { out.push(raw.replace(/\s+$/, '')); continue; }
     const ind = /^( *)(?:[-*]|\d+\.) /.exec(raw)?.[1] || '';
@@ -379,12 +482,12 @@ function tidy(s) {
 }
 
 // ---------------------------------------------------------------- the last pass over the lines
-const UI_WORDS = new Set('add to cart|add to bag|add to basket|buy now|buy it now|sold out|sale sold out|sold out sale|unavailable|coming soon|out of stock|in stock|pre-order|preorder|notify me|notify me when available|quantity|decrease quantity|increase quantity|regular price|sale price|unit price|sale|new|msrp|price|was|now|from|per|each|save|choose options|select options|view details|view full details|learn more|read more|show more|show less|view more|close|open|menu|search|share|copy link|link copied|link copied to clipboard|pickup available|shipping calculated at checkout|tax included|taxes included|or|and|default title|size guide|size chart|reviews|write a review|ask a question|find similar|find similar products|similar items|sponsored|available|availability|color|colour|size|style|qty|button label|translation missing|loading|loading data|please wait|skip to product information|skip to content'.split('|'));
+const UI_WORDS = new Set('add to cart|add to bag|add to basket|buy now|buy it now|notify me|notify me when available|quantity|decrease quantity|increase quantity|regular price|sale price|unit price|sale|new|msrp|price|was|now|from|per|each|save|choose options|select options|view details|view full details|learn more|read more|show more|show less|view more|close|open|menu|search|share|copy link|link copied|link copied to clipboard|pickup available|shipping calculated at checkout|tax included|taxes included|or|and|default title|size guide|size chart|reviews|write a review|ask a question|find similar|find similar products|similar items|sponsored|availability|color|colour|size|style|qty|button label|translation missing|loading|loading data|please wait|skip to product information|skip to content'.split('|'));
 // (no word boundaries: shops write "€119,00€89,00Sale" without a space between their spans)
 const PRICE_WORDS = /(regular|sale|price|unit|msrp|was|now|from|save|compare|at|per|each|off|incl|excl|tax|vat|usd|eur|gbp|aud|cad|chf|nzd|jpy|sek|nok|dkk|pln|inr)/gi;
 const COOKIE = /\b(we|this (web)?site|our (web)?site) uses? cookies\b|\bcookie (policy|settings|preferences|consent)\b|\baccept (all )?cookies\b|\bmanage (cookies|consent|preferences)\b/i;
 // what a page says to a browser, not to its reader
-const NOTICE = /\b(update|upgrade) your browser\b|\b(javascript|js) (is )?(disabled|required|not enabled|turned off)\b|\benable javascript\b|\byour browser (is|does not|doesn't)\b|\bskip to (main )?content\b/i;
+const NOTICE = /\b(update|upgrade) your browser\b|\b(javascript|js) (is )?(disabled|required|not enabled|turned off)\b|\benable javascript\b|\byour browser (is|does not|doesn't)\b|\bskip to (the )?(main |primary )?(page )?content\b|\bskip (to )?navigation\b/i;
 // what a page says around its text on every site, as a whole line: feedback buttons, copy buttons, tables of contents
 const CHROME_LINES = new Set('was this page helpful|was this helpful|was this article helpful|did this page help you|copy|copied|copy code|copy to clipboard|edit this page|edit on github|print|back to top|table of contents|on this page|in this article|skip to main content|skip to content|loading|loading data|loading...|please wait, we are loading chart data|yes|no|thank you for your feedback'.split('|'));
 const LANGS = new Set('js javascript jsx ts tsx typescript python py bash sh shell zsh console powershell ps1 json jsonc html xml css scss sql yaml yml toml ini http text plain txt c cpp c++ csharp cs java kotlin go golang rust rs ruby rb php swift r dart lua perl diff markdown md dockerfile makefile graphql'.split(' '));
@@ -404,7 +507,32 @@ function lastPass(md, { product, seen = new Set(), menus = true } = {}) {
     const k = keyOf(l), heading = /^#/.test(l);
     if (!k) continue;
     if (k === prev) continue;
-    if (product && (UI_WORDS.has(k) || (k.length < 40 && !k.replace(PRICE_WORDS, '').replace(/[\d\s.,:/%$€£¥₹+–-]+/g, '').trim()))) continue;
+    if (product) {
+      // what the page says about stock or price stays where the structured data does not say it; where both say the same,
+      // the page's line goes; where they differ, both stay and the page's line says so
+      const sc = stockOf(k), ec = stockClass(product.availability), cur = product.currency ? ` ${product.currency}` : '';
+      const mark = (x) => { out.push(`${l} (page text; the structured data says: ${x})`); seen.add(k); prev = k; };
+      if (sc) {
+        if (ec === sc) continue;
+        if (ec) { mark(product.availability); continue; }
+      } else if (UI_WORDS.has(k)) continue;
+      else if (k.length < 40 && !k.replace(PRICE_WORDS, '').replace(/[\d\s.,:/%$€£¥₹+–-]+/g, '').trim()) {
+        // a saving in per cent goes where the block states the price before, else it stays
+        if (/%/.test(l)) { if (product.was != null) continue; }
+        else {
+          // (no currency and no cents: a gallery's counter "1 / 6", a quantity; an amount of 0 is a template's empty price)
+          const am = MONEY.test(l) ? amountsOf(l).filter((x) => x > 0) : [], known = amountsKnown(product), said = product.price != null || product.low != null;
+          if (!am.length) continue; // a label without an amount ("Unit price", "Sale price")
+          if (said) {
+            if (am.every((x) => known.has(x))) continue;
+            // a line that says the same price and more (the price before, a unit price) stays as it is; one that says
+            // another price stays, marked
+            const stated = (product.price != null ? [product.price] : [product.low, product.high]).filter((y) => y != null).map((y) => Math.round(y * 100) / 100);
+            if (!am.some((x) => stated.includes(x))) { mark(product.price != null ? `${money(product.price)}${cur}` : `${money(product.low)}–${money(product.high)}${cur}`); continue; }
+          }
+        }
+      }
+    }
     if (k.length < 500 && (COOKIE.test(k) || NOTICE.test(k))) continue;
     if (CHROME_LINES.has(k)) continue;
     if (seen.has(k) && (k.length >= 20 || heading || (product && /\d/.test(k) && k.length < 40))) continue;
@@ -424,9 +552,12 @@ function lastPass(md, { product, seen = new Set(), menus = true } = {}) {
 }
 
 // ---------------------------------------------------------------- the lean reader
-export function leanMarkdown(html, base, { product: wantProduct = true } = {}) {
+// the most markup the lean reader reads of one page (a page may weigh 2.5 MB; its text is served up to 60,000 characters):
+// on a hostile page the reader takes about 0.5 s a megabyte, so it stays well inside its helper's 3 s
+export const LEAN_MAX = 1_500_000;
+export function leanMarkdown(html, base, { product: wantProduct = true, max = LEAN_MAX } = {}) {
   let page; try { page = new URL(base); } catch { page = null; }
-  const root = parseHtml(html), order = measure(root);
+  const root = parseHtml(html, { max }), order = measure(root);
   const body = order.find((n) => n.tag === 'body') || root, h1 = headingOf(root);
   const product = wantProduct ? productOf(html, base, { heading: h1 ? one(entities(textOfEl(h1))) : null }) : null;
   // what must stay: the heading, the main part, and every box that holds one of them
@@ -437,11 +568,23 @@ export function leanMarkdown(html, base, { product: wantProduct = true } = {}) {
   const handle = product?.handle, other = (href) => { const m = /\/products\/([^/?#]+)/.exec(String(href || '')); return !!m && safeDecode(m[1]) !== handle; };
   const bodyLen = body.len || 1;
   if (product) {
-    // the product's own text holds its place: the box with the start of its description stays, like the heading
-    const probe = keyOf(product.description || '').slice(0, 32);
+    // the product's own text holds its place: the box that shows the start of its description stays, like the heading
+    const probe = keyOf(product.probe || '').slice(0, 32);
     if (probe.length >= 20) for (const n of order) { if (n.kids.some((k) => !isEl(k) && keyOf(entities(k)).includes(probe))) { hold(n); break; } }
     // other products in a box: how many links lead to them, and how much of the box's text they are (from the leaves up)
     for (let i = order.length - 1; i >= 0; i--) { const n = order[i]; let c = 0, l = 0; if (n.tag === 'a' && other(attrs(n).href)) { c = 1; l = n.len || 0; } else for (const k of n.kids) if (isEl(k)) { c += k.op || 0; l += k.opl || 0; } n.op = c; n.opl = l; }
+  }
+  // Shopify's own themes (Dawn and the themes made from it) write every price box and badge and let the price's state
+  // classes show the right ones (component-price.css): the others are hidden from a person, so they are left out here too
+  for (const n of order) {
+    const c = attrs(n).class; if (!c || !/(?:^|\s)price(?:\s|$)/.test(c)) continue;
+    const cls = c.split(/\s+/), sale = cls.includes('price--on-sale'), out = cls.includes('price--sold-out');
+    if (cls.includes('price--unavailable')) { n.hide = true; continue; }
+    for (const k of elements(n)) {
+      const kc = k === n ? null : attrs(k).class; if (!kc || !kc.includes('price__')) continue;
+      const ks = kc.split(/\s+/), has = (x) => ks.includes(x);
+      if ((has('price__sale') && !sale) || (has('price__regular') && sale) || (has('price__badge-sale') && !sale) || (has('price__badge-sold-out') && !out) || (has('price__availability') && !out)) k.hide = true;
+    }
   }
   const prune = (n, inMain) => {
     n.kids = n.kids.filter((k) => {
@@ -449,13 +592,15 @@ export function leanMarkdown(html, base, { product: wantProduct = true } = {}) {
       const t = k.tag;
       if (DROP_TAGS.has(t)) return keep.has(k) && t !== 'script' && t !== 'style';
       if (!keep.has(k)) {
-        if (t === 'nav' || t === 'aside' || t === 'footer' || t === 'menu' || (t === 'header' && !inMain)) return false;
-        if (hiddenEl(k)) return false;
+        if (t === 'nav' || t === 'menu') return false;
+        // the site's frame goes; inside the main part a header is a section's title, and an aside or a footer a note
+        // ("Caution: this cannot be undone"), kept unless it is mostly links
+        if (t === 'aside' || t === 'footer' || t === 'header') { if (!inMain || (t !== 'header' && linky(k))) return false; }
+        if (k.hide || hiddenEl(k)) return false;
         const o = attrs(k);
-        if (o.role && BAD_ROLE.test(o.role)) return false;
-        // a custom element names itself (cart-drawer, quick-add-modal, product-recommendations): its name counts like a class
-        const w = `${boxWords(k) || ''}${t.includes('-') ? ` ${t}` : ''}`.trim();
-        if (w && k.len < bodyLen * 0.5 && (boxIsBoiler(w, inMain) || (product && SHOP_PARTS.test(w)))) return false;
+        if (o.role && (ROLE_ALWAYS.test(o.role) || (ROLE_FRAME.test(o.role) && (!inMain || linky(k))))) return false;
+        const kind = k.len < bodyLen * 0.5 ? boxKind(boxNames(k)) : null;
+        if (kind === 'ui' || (kind === 'frame' && (!inMain || linky(k))) || (kind === 'shop' && product)) return false;
         if (product && t === 'form' && /\/cart(\/add)?\b/i.test(o.action || '')) return false;
         // a box of other products (recommendations, "complete the look", a grid): two or more links to them that are a fifth
         // of its text, or four and more
@@ -466,29 +611,30 @@ export function leanMarkdown(html, base, { product: wantProduct = true } = {}) {
     });
   };
   prune(body, false);
-  measure(body);
+  const left = measure(body);
   // the main part: main (or role=main), else the largest article, else the body
   const big = (n) => n && n.len >= 200 && n.len >= body.len * 0.2;
-  const largest = (f) => { let best = null; for (const n of elements(body)) if (f(n) && (!best || n.len > best.len)) best = n; return best; };
-  const mainEl = largest((n) => n.tag === 'main' || /^main$/i.test(attrs(n).role || '')), art = largest((n) => n.tag === 'article');
+  let mainEl = null, art = null;
+  for (const n of left) {
+    if ((n.tag === 'main' || /^main$/i.test(attrs(n).role || '')) && (!mainEl || n.len > mainEl.len)) mainEl = n;
+    if (n.tag === 'article' && (!art || n.len > art.len)) art = n;
+  }
   const region = big(mainEl) ? mainEl : big(art) ? art : body;
   const w = writer(page, base);
   let md = tidy(w.md(region, {}));
   // the heading stands first, also when the page put it outside its main part
   const inRegion = (n) => { for (let x = n; x; x = x.up) if (x === region) return true; return false; };
   if (h1 && !inRegion(h1)) { const x = one(entities(textOfEl(h1))); if (x) md = `# ${x}\n\n${md}`; }
-  let head = '';
-  if (product) {
-    head = essentialsMd(product);
-    // the description, when the page's own text does not carry it
-    const d = product.description, probe = d && keyOf(d).slice(0, 60);
-    if (d && probe && !keyOf(md.replace(/\n/g, ' ')).includes(probe)) {
-      if (product.descriptionHtml) { const r2 = parseHtml(product.descriptionHtml); head += `\n\n${tidy(w.md(r2, {}))}`; } else head += `\n\n${d}`;
-    }
-  }
-  // the essentials are said as they are; what the page says after them is said once, without the shop's chatter
-  const rest = lastPass(md, { product: !!product, seen: new Set(head.split('\n').map(keyOf).filter(Boolean)), menus: region === body });
+  // the essentials, under the page's own heading; what the page says after them is said once, without the shop's chatter
+  const head = product ? essentialsMd(product, { heading: h1 ? one(entities(textOfEl(h1))).slice(0, 200) : null }) : '';
+  const rest = lastPass(md, { product, seen: new Set(head.split('\n').map(keyOf).filter(Boolean)), menus: region === body });
   const md2 = [head, rest].filter(Boolean).join('\n\n');
   // the links the Markdown still carries (a menu left out takes its links with it), each as a full address
-  return { md: md2, links: w.links.filter((l) => md2.includes(`](${l.short})`)).map(({ text, url }) => ({ text, url })), product };
+  // (one walk over the Markdown: after each "](" the address runs to a ")" before the next space)
+  const shorts = new Set(w.links.map((l) => l.short)), kept = new Set(), word = /\S*/y;
+  for (let i = md2.indexOf(']('); i >= 0; i = md2.indexOf('](', i + 2)) {
+    word.lastIndex = i + 2; const tail = word.exec(md2)[0];
+    for (let j = tail.indexOf(')'); j >= 0; j = tail.indexOf(')', j + 1)) { const c = tail.slice(0, j); if (shorts.has(c)) kept.add(c); }
+  }
+  return { md: md2, links: w.links.filter((l) => kept.has(l.short)).map(({ text, url }) => ({ text, url })), product, cut: root.cut || undefined };
 }
