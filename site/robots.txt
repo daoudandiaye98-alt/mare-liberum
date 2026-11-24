@@ -1,6 +1,7 @@
 # AI agents and assistants are welcome. Guide: https://mareliberum.dev/llms.txt
 # Read any web page as Markdown: https://mareliberum.dev/r/<address> · Before you search, ask: https://mareliberum.dev/brain?q=<task>
 # Every page of the sea as Markdown: send Accept: text/markdown, or add .md to its address (https://mareliberum.dev/mcp-servers.md)
+License: https://mareliberum.dev/license.xml
 User-agent: *
 Allow: /
 Disallow: /r/
@@ -23,6 +24,7 @@ User-agent: Bytespider
 User-agent: ExaSearchBot
 User-agent: AhrefsBot
 User-agent: SemrushBot
+Content-Signal: search=yes, ai-input=yes, ai-train=yes
 Allow: /
 Disallow: /r/
 Disallow: /go/
@@ -34,6 +36,7 @@ Disallow: /rate/
 Disallow: /lay?
 Disallow: /lay$
 Disallow: /course/
+Disallow: /c/
 
 Agentmap: https://mareliberum.dev/.well-known/ard.json
 Sitemap: https://mareliberum.dev/sitemap.xml

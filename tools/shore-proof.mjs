@@ -59,10 +59,11 @@ await proof('the imprint (§ 5 DDG) names owner, business, street, town, country
   assert.match(p, /<html[^>]* lang="de"/);
   const r = await call('/imprint'); assert.equal(r.status, 308); assert.equal(r.headers.get('location'), `${BASE}/impressum`);
 });
-await proof('/pricing: a program gets the price line, the paid route and the house offers; a person is sent to /offers', async () => {
+await proof('/pricing: a program gets the price line, the paid route and the house offers; a person gets every price in one table (since 3.33.0), the offers one click away', async () => {
   const p = await j(await call('/pricing'));
   assert.equal(p.price, 'POST /route costs 0.02 USDC on Base, no account, settle with POST /settle'); assert.equal(p.paid_route.pricing.amount_usd, '0.02'); assert.ok(p.house); assert.equal(p.how_to_pay, `${BASE}/pay/howto`);
-  const h = await call('/pricing', { accept: 'text/html' }); assert.equal(h.status, 303); assert.equal(h.headers.get('location'), `${BASE}/offers`);
+  const h = await call('/pricing', { accept: 'text/html' }); assert.equal(h.status, 200); const t = await h.text();
+  assert.match(t, /<h1[^>]*>Prices of the open sea<\/h1>/); assert.ok(t.includes('href="/offers"'), 'the offers in detail are one click away');
 });
 
 console.log('protocol doors');

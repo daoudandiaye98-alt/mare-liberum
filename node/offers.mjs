@@ -43,32 +43,40 @@ export const OFFERS = {
     not: 'It does not promise a ranking, traffic, citations by any assistant or revenue. Whether an AI operator follows robots.txt is its own decision.',
   },
   // Stripe: plink_1UeeZJ4IVkazyZLzgfstlRTr · the checkout asks for the address of the entry (required)
-  // It is delivered by adding the entry to VERIFIED below (a one-line pull request) once a person has checked it.
+  // It is delivered by adding the entry to VERIFIED below (or a site to OWNER_SITES; a one-line pull request) once a person
+  // has checked it. Called an owner check since 3.33.0: it confirms who runs a domain, it is no verification of a shop — the
+  // levels "verified" and "proven" of the market come only from its four open checks, and no payment can add them.
   verified: {
     id: 'verified',
-    name: 'Verified listing',
+    name: 'Owner check',
     priceEur: 19,
-    period: 'once, for one entry, marked for 12 months',
+    period: 'once, for one listing, the line shown for 12 months',
     link: 'https://buy.stripe.com/28EeV6fug5wUaBpg1Tes00p',
-    for: 'the company behind an entry in the sea (an MCP server, an agent, a paid API, a store)',
+    for: 'the company behind a listing in the sea: an entry (an MCP server, an agent, a paid API, a store) or the map of its website',
     delivers: [
-      'a check by a person that you control the domain the entry names (your e-mail address on that domain, or one line you place there)',
-      'a check of the entry against the live service: the endpoint answers, description, price and links are right; what is out of date is corrected',
-      'for 12 months the entry carries the line "Verified" with the date, named as a paid check, on its page and in its JSON',
-      'a note by e-mail with what was checked and until when the mark holds',
+      'a check by a person that you control the domain the listing names (your e-mail address on that domain, or one line you place there)',
+      'a check of the listing against the live service: the endpoint answers, description, price and links are right; what is out of date is corrected',
+      'when the check passes, for 12 months the listing carries the line "Owner checked" with the date, named as a paid check, on its page and in its JSON',
+      'a note by e-mail with what was checked and, when it passed, until when the line holds',
     ],
     within: 'within 48 hours of payment; delivery is done by hand at the moment',
-    asks: 'At checkout you name the address of the entry and your company.',
-    not: 'It does not change the order of search results or of answers to calls, and promises no traffic, ranking or revenue. Proving a domain yourself stays free, and the traces agents leave stay as they are.',
+    asks: 'At checkout you name the address of your listing (the entry, or /site/<your domain>) and your company.',
+    not: 'The outcome can be negative: when control of the domain cannot be shown, the listing gets no line. It does not change the order of search results or of answers to calls, it never adds the level "verified" or "proven" of the verified market (those come only from its four open checks), and it promises no traffic, ranking or revenue. Proving a domain yourself stays free, and the traces agents leave stay as they are.',
   },
 };
-// entries a person has checked: 'urn:air:…': { at: '2026-11-23', until: '2027-11-23' }. This list is how a verified listing is delivered.
+// entries whose owner a person has checked: 'urn:air:…': { at: '2026-11-23', until: '2027-11-23' }. This list is how an owner check is delivered.
 export const VERIFIED = {};
+// the same for the map of a website (/site/<domain>): 'example.com': { at, until }
+export const OWNER_SITES = {};
 const day = (x) => (/^\d{4}-\d{2}-\d{2}/.test(String(x || '')) ? String(x).slice(0, 10) : null);
-export function verifiedOf(e, today = new Date().toISOString().slice(0, 10)) {
-  const v = VERIFIED[e?.identifier] || e?.metadata?.verified, at = day(v?.at), until = day(v?.until);
-  return at && at <= today && (!until || until >= today) ? { at, ...(until ? { until } : {}), paid: true, what: 'checked by a person against the live service; a paid check that does not change any order' } : null;
-}
+const markOf = (v, today) => { const at = day(v?.at), until = day(v?.until); return at && at <= today && (!until || until >= today) ? { at, ...(until ? { until } : {}), paid: true, what: 'owner checked: a person confirmed that the payer controls the domain and checked the listing against the live service; a paid check that changes no order and adds no level of the verified market' } : null; };
+export function verifiedOf(e, today = new Date().toISOString().slice(0, 10)) { return markOf(VERIFIED[e?.identifier] || e?.metadata?.verified, today); }
+export function ownerSiteOf(site, today = new Date().toISOString().slice(0, 10)) { return Object.hasOwn(OWNER_SITES, String(site || '')) ? markOf(OWNER_SITES[site], today) : null; }
+// every button to a paid service goes through the sea's counted door (node/attention.mjs): /c/<service>?from=<page kind>&ref=<listing>.
+// The door knows the payment link itself; the address only says which service, from which kind of page, for which listing.
+export const go = (id, from, ref) => `/c/${id}?from=${from}${ref ? `&ref=${encodeURIComponent(String(ref).slice(0, 200))}` : ''}`;
+// the door of a service by its id here: the owner check keeps its old id ('verified') in this file and in Stripe's references
+export const doorOf = (id) => (id === 'verified' ? 'owner' : id);
 
 const okLink = (u) => typeof u === 'string' && /^https:\/\/[^\s"'<>]{8,300}$/.test(u);
 export const isOpen = (id) => { const o = OFFERS[id]; return !!o && okLink(o.link) && Number(o.priceEur) > 0; };
@@ -91,62 +99,82 @@ export function entryListing(e, base) {
   return {
     question: 'Is this yours?',
     claim: { free: true, how: `POST ${base}/enter {"name":"<your name>","offers":"<what you offer, in one line>","entry":"${e.identifier}"}`, effect: 'You become a resident of the sea, bound to this entry. Calls that match what you offer are carried to your inbox (GET /inbox?by=mare:...&pass=...), and you can answer them. Entering is free and needs no account; it does not prove that the entry is yours.', guide: `${base}/llms.txt` },
-    ...(v ? { verified: { name: v.name, priceEur: v.priceEur, currency: 'EUR', period: v.period, pay: payUrl('verified', refOfEntry(e)), delivers: v.delivers, within: v.within, not: v.not, by: `${SELLER.name}, ${SELLER.business}`, tax: SELLER.vat, details: `${base}/offers#verified` } } : {}),
+    ...(v ? { ownerCheck: { name: v.name, priceEur: v.priceEur, currency: 'EUR', period: v.period, pay: payUrl('verified', refOfEntry(e)), go: `${base}${go('owner', 'entry', refOfEntry(e))}`, delivers: v.delivers, within: v.within, not: v.not, by: `${SELLER.name}, ${SELLER.business}`, tax: SELLER.vat, details: `${base}/claim` } } : {}),
     ...(verifiedOf(e) ? { mark: verifiedOf(e) } : {}),
   };
 }
 export function entryBlock(e, base) {
-  const L = entryListing(e, base), v = L.verified;
+  const L = entryListing(e, base), v = L.ownerCheck;
   return `<section id="yours" style="margin:28px 0 8px;padding:14px 16px;border:1px solid #1d3550;border-radius:10px"><h2 style="margin:0 0 6px;font-size:1.1rem">Is this yours?</h2>
 <p style="margin:.4em 0"><b>Claim it, free.</b> Enter the sea as a resident and name this entry. Calls of agents that match what you offer are then carried to your inbox, and you can answer them. No account, no key.</p>
 <pre>${esc(L.claim.how)}</pre>
 <p style="margin:.4em 0"><small>Entering does not prove the entry is yours. How residents work: <a href="/llms.txt">/llms.txt</a></small></p>
-${v ? `<p style="margin:.8em 0 .4em"><b>${esc(v.name)}, ${esc(priceOf(v))}.</b> A person checks that you control the domain the entry names and that the service answers as the entry says, corrects what is out of date, and for 12 months the entry carries the line “Verified” with the date, named as a paid check. ${esc(OFFERS.verified.within.charAt(0).toUpperCase() + OFFERS.verified.within.slice(1))}. One payment, for companies. It does not change the order of results, and there is no promise of ranking or revenue. Proving your domain yourself stays free.</p>
-<p style="margin:.4em 0"><a href="${esc(v.pay)}" rel="nofollow noopener">${esc(v.name)} · ${esc(priceOf(v))}</a> · <a href="/offers#verified">what exactly you get</a> · <small>${esc(SELLER.vat)}</small></p>` : ''}</section>`;
+${v ? `<p style="margin:.8em 0 .4em"><b>${esc(v.name)}, ${esc(priceOf(v))}.</b> A person checks that you control the domain the entry names and that the service answers as the entry says, and corrects what is out of date. When the check passes, for 12 months the entry carries the line “Owner checked” with the date, named as a paid check; the outcome can be negative. ${esc(OFFERS.verified.within.charAt(0).toUpperCase() + OFFERS.verified.within.slice(1))}. One payment, for companies. It does not change the order of results and adds no level of the verified market, and there is no promise of ranking or revenue. Proving your domain yourself stays free.</p>
+<p style="margin:.4em 0"><a href="${esc(go('owner', 'entry', refOfEntry(e)))}" rel="nofollow">${esc(v.name)} · ${esc(priceOf(v))}</a> · <a href="/claim">how claiming works</a> · <small>${esc(SELLER.vat)}</small></p>` : ''}</section>`;
 }
 
 // ---- /site/<domain>: the full report ----------------------------------------------------------------------------------
 export function siteReport(site, base) {
   if (!isOpen('report')) return null;
   const o = OFFERS.report;
-  return { name: o.name, priceEur: o.priceEur, currency: 'EUR', period: o.period, pay: payUrl('report', site), delivers: o.delivers, within: o.within, not: o.not, by: `${SELLER.name}, ${SELLER.business}`, tax: SELLER.vat, details: `${base}/offers#report`, free: `${base}/check/${site}` };
+  return { name: o.name, priceEur: o.priceEur, currency: 'EUR', period: o.period, pay: payUrl('report', site), go: `${base}${go('report', 'site', site)}`, delivers: o.delivers, within: o.within, not: o.not, by: `${SELLER.name}, ${SELLER.business}`, tax: SELLER.vat, details: `${base}/offers#report`, free: `${base}/check/${site}` };
 }
+// the result of the free check (/check/<domain>) carries the report while it is open
 export function siteReportHtml(site, base) {
   const r = siteReport(site, base); if (!r) return '';
   return `<section id="report" class="box" style="margin:22px 0"><h2 style="margin:0 0 6px">${esc(r.name)}, ${esc(priceOf(r))}</h2>
 <p style="margin:.4em 0">This map and the <a href="/check/${esc(site)}">check</a> are free and stay free. The report is for the company behind ${esc(site)}: up to 10 pages read and checked by a person, every AI agent in robots.txt one by one, a comparison with up to three competitors you name, the fixes in order of effect with the files ready to use (llms.txt, robots.txt block, JSON-LD), and one re-check after 14 days. By e-mail, ${esc(OFFERS.report.within)}. One payment, for companies. No promise of ranking or revenue.</p>
-<p style="margin:.4em 0"><a href="${esc(r.pay)}" rel="nofollow noopener">Order the report for ${esc(site)} · ${esc(priceOf(r))}</a> · <a href="/offers/sample-report">see a sample report</a> · <a href="/offers#report">what exactly you get</a> · <small>${esc(SELLER.vat)}</small></p></section>`;
+<p style="margin:.4em 0"><a href="${esc(go('report', 'check', site))}" rel="nofollow">Order the report for ${esc(site)} · ${esc(priceOf(r))}</a> · <a href="/offers/sample-report">see a sample report</a> · <a href="/offers#report">what exactly you get</a> · <small>${esc(SELLER.vat)}</small></p></section>`;
+}
+// ---- /site/<domain>: "Is this yours?" — the owner check and the report, for the company behind the site ----------------
+// lead: a line about the AI attention the listing got (node/attention-ui.mjs), or ''. Nothing here changes an order.
+export const OWNER_WHAT = (site) => `a person checks that you control ${site} (your e-mail address on that domain, or one line you place there) and that the listing matches the live site, and corrects what is out of date; when the check passes, the listing carries the line "Owner checked" with the date for 12 months, named as a paid check`;
+export const OWNER_NOT = 'The outcome can be negative: without proof of control there is no line. An owner check never changes any order (not in search results, not in answers to agents) and never adds the level "verified" or "proven" of the verified market: those come only from its four open checks, the same for every shop. No promise of ranking, traffic or revenue.';
+export function siteOwnerCheck(site, base) {
+  if (!isOpen('verified')) return null;
+  const v = OFFERS.verified;
+  return { name: v.name, priceEur: v.priceEur, currency: 'EUR', period: v.period, go: `${base}${go('owner', 'site', site)}`, what: OWNER_WHAT(site), within: v.within, not: OWNER_NOT, by: `${SELLER.name}, ${SELLER.business}`, tax: SELLER.vat, details: `${base}/claim` };
+}
+export function siteProviderHtml(site, base, lead = '') {
+  const v = siteOwnerCheck(site, base), r = siteReport(site, base), mark = ownerSiteOf(site); if (!v && !r) return '';
+  return `<section id="report" class="box" style="margin:22px 0"><h3>Is ${esc(site)} yours?</h3>
+${lead ? `<p>${lead}</p>` : ''}${mark ? `<p><b>Owner checked</b> by a person on ${esc(mark.at)}${mark.until ? `, holds until ${esc(mark.until)}` : ''} · a paid check of who runs the domain; it changes no order and adds no level of the verified market.</p>` : ''}
+<p>This map and the <a href="/check/${esc(site)}">check</a> are free and stay free, for every reader. For the company behind ${esc(site)} there is work a person does:</p>
+<p>${v && !mark ? `<a class="tag" href="${esc(go('owner', 'site', site))}" rel="nofollow">Owner check · ${esc(priceOf(v))}</a> ` : ''}${r ? `<a class="tag" href="${esc(go('report', 'site', site))}" rel="nofollow">Get the AI-visibility report · ${esc(priceOf(r))}</a>` : ''}</p>
+${v ? `<p><b>${esc(v.name)}, ${esc(priceOf(v))}.</b> A person checks that you control ${esc(site)} (your e-mail address on that domain, or one line you place there) and that the listing matches the live site, and corrects what is out of date. When the check passes, the listing carries the line “Owner checked” with the date for 12 months, named as a paid check; the outcome can be negative. An owner check never changes any order (not in search results, not in answers to agents) and never adds the level “verified” or “proven” of the verified market: those come only from its four open checks, the same for every shop.</p>` : ''}
+${r ? `<p><b>AI-visibility report: ${esc(r.name)}, ${esc(priceOf(r))}.</b> Up to 10 pages of ${esc(site)} read and checked by a person, every AI agent in robots.txt one by one, a comparison with up to three competitors you name, the fixes in order of effect with the files ready to use (llms.txt, robots.txt block, JSON-LD), and one re-check after 14 days. By e-mail, ${esc(OFFERS.report.within)}. No promise of ranking or revenue.</p>` : ''}
+<p><small>One payment each, for companies. <a href="/claim">How claiming works</a>${r ? ' · <a href="/offers/sample-report">see a sample report</a>' : ''} · <a href="/pricing">all prices</a> · ${esc(SELLER.vat)}</small></p></section>`;
 }
 // the same offer for the pages that speak to companies (/business, /de/unternehmen, /de/agenturen); no domain is known there, the buyer names it at checkout
 export function reportBox(lang = 'en') {
   if (!isOpen('report')) return '';
-  const o = OFFERS.report, de = lang === 'de', pay = payUrl('report', de ? 'page-de' : 'page-en');
+  const o = OFFERS.report, de = lang === 'de', pay = go('report', de ? 'business-de' : 'business', de ? 'page-de' : 'page-en');
   return de ? `<section id="report" class="box" style="margin:22px 0"><h2 style="margin:0 0 6px">Bericht: So lesen KI-Agenten Ihre Website, ${esc(priceOf(o))}</h2>
 <p style="margin:.4em 0">Die <a href="/de/ki-sichtbarkeit">Prüfung</a> ist frei und bleibt frei. Der Bericht geht weiter: bis zu 10 Seiten Ihrer Website gelesen und von einem Menschen geprüft, jeder KI-Agent aus der robots.txt einzeln, ein Vergleich mit bis zu drei Mitbewerbern, die Korrekturen nach Wirkung geordnet mit fertigen Dateien (llms.txt, robots.txt-Block, JSON-LD) und eine Nachprüfung nach 14 Tagen. Per E-Mail binnen 24 Stunden nach Zahlung; die Lieferung erfolgt derzeit von Hand. Einmalige Zahlung, nur für Unternehmen. Keine Zusage zu Platzierung, Reichweite oder Umsatz. Der Bericht ist auf Englisch.</p>
-<p style="margin:.4em 0"><a href="${esc(pay)}" rel="nofollow noopener">Bericht bestellen · ${esc(priceOf(o))}</a> · <a href="/offers/sample-report">Musterbericht ansehen</a> · <a href="/offers#report">Lieferumfang</a> · <small>${esc(SELLER.vat)}</small></p></section>`
+<p style="margin:.4em 0"><a href="${esc(pay)}" rel="nofollow">Bericht bestellen · ${esc(priceOf(o))}</a> · <a href="/offers/sample-report">Musterbericht ansehen</a> · <a href="/offers#report">Lieferumfang</a> · <small>${esc(SELLER.vat)}</small></p></section>`
     : `<section id="report" class="box" style="margin:22px 0"><h2 style="margin:0 0 6px">${esc(o.name)}: how AI agents read your website, ${esc(priceOf(o))}</h2>
 <p style="margin:.4em 0">The <a href="/check">check</a> is free and stays free. The report goes further: up to 10 pages of your site read and checked by a person, every AI agent in robots.txt one by one, a comparison with up to three competitors you name, the fixes in order of effect with the files ready to use (llms.txt, robots.txt block, JSON-LD), and one re-check after 14 days. By e-mail, ${esc(o.within)}. One payment, for companies. No promise of ranking, traffic or revenue.</p>
-<p style="margin:.4em 0"><a href="${esc(pay)}" rel="nofollow noopener">Order the report · ${esc(priceOf(o))}</a> · <a href="/offers/sample-report">see a sample report</a> · <a href="/offers#report">what exactly you get</a> · <small>${esc(SELLER.vat)}</small></p></section>`;
+<p style="margin:.4em 0"><a href="${esc(pay)}" rel="nofollow">Order the report · ${esc(priceOf(o))}</a> · <a href="/offers/sample-report">see a sample report</a> · <a href="/offers#report">what exactly you get</a> · <small>${esc(SELLER.vat)}</small></p></section>`;
 }
 // the sample: a real report on a site of the seller's own, so a buyer sees what the money buys
 export const sampleMarkdown = () => reportMarkdown(SAMPLE);
 export function samplePage(base) {
   const o = OFFERS.report, open = isOpen('report');
   const body = `<p class="muted" style="margin:0"><a href="/offers">Offers</a> · sample</p>
-<div class="box" style="margin:14px 0"><p style="margin:0"><b>This is a sample.</b> A real report, written on ${esc(SAMPLE.date)} about ${esc(SAMPLE.domain)}, a website that belongs to the seller, as do the two sites it is compared with. It is shown so that you can see what you get before you pay. Nobody bought it, and it is not a statement about any customer. ${open ? `Your own report: <a href="${esc(payUrl('report', 'sample'))}" rel="nofollow noopener">${esc(o.name)} · ${esc(priceOf(o))}</a> · ` : ''}<a href="/offers#report">what exactly you get</a> · <a href="/offers/sample-report.md">this sample as Markdown</a></p></div>
+<div class="box" style="margin:14px 0"><p style="margin:0"><b>This is a sample.</b> A real report, written on ${esc(SAMPLE.date)} about ${esc(SAMPLE.domain)}, a website that belongs to the seller, as do the two sites it is compared with. It is shown so that you can see what you get before you pay. Nobody bought it, and it is not a statement about any customer. ${open ? `Your own report: <a href="${esc(go('report', 'sample', 'sample'))}" rel="nofollow">${esc(o.name)} · ${esc(priceOf(o))}</a> · ` : ''}<a href="/offers#report">what exactly you get</a> · <a href="/offers/sample-report.md">this sample as Markdown</a></p></div>
 ${reportHtml(sampleMarkdown()).replace(/<h2>/, '<h1>').replace(/<\/h2>/, '</h1>')}
 <p class="muted"><small>${esc(SELLER.vat)} The free check of any site: <a href="/check">/check</a>.</small></p>`;
   return page(base, '/offers/sample-report', `Sample report: how AI agents read ${SAMPLE.domain} · Mare Liberum`, `A sample of the paid report: score part by part, which AI agents may read the site, pages read, a comparison, the fixes in order of effect and ready files. Written about a site of the seller's own.`, body);
 }
 export function siteReportMd(site, base) {
-  const r = siteReport(site, base); if (!r) return '';
-  return `\n## ${r.name}, ${priceOf(r)}\n\nThis map and the check are free and stay free. For the company behind ${site}: up to 10 pages checked by a person, a comparison with up to three competitors, the fixes with ready files, one re-check after 14 days; by e-mail, ${OFFERS.report.within}. One payment, for companies. No promise of ranking or revenue. ${SELLER.vat}\n\n- Order: ${r.pay}\n- Details: ${r.details}\n`;
+  const v = siteOwnerCheck(site, base), r = siteReport(site, base); if (!v && !r) return '';
+  return `${v ? `\n## ${v.name}, ${priceOf(v)}\n\nFor the company behind ${site}: ${v.what}. ${v.not} ${SELLER.vat}\n\n- Owner check: ${v.go}\n- How claiming works: ${v.details}\n` : ''}${r ? `\n## ${r.name}, ${priceOf(r)}\n\nThis map and the check are free and stay free. For the company behind ${site}: up to 10 pages checked by a person, a comparison with up to three competitors, the fixes with ready files, one re-check after 14 days; by e-mail, ${OFFERS.report.within}. One payment, for companies. No promise of ranking or revenue. ${SELLER.vat}\n\n- Order: ${r.go}\n- Details: ${r.details}\n` : ''}`;
 }
 
 // ---- /offers ----------------------------------------------------------------------------------------------------------
 export function offersJson(base) {
   return {
-    paid: openOffers().map((o) => ({ id: o.id, name: o.name, priceEur: o.priceEur, currency: 'EUR', period: o.period, for: o.for, delivers: o.delivers, within: o.within, asks: o.asks, not: o.not, ...(o.id === 'report' ? { sample: `${base}/offers/sample-report` } : {}), pay: o.link, details: `${base}/offers#${o.id}` })),
+    paid: openOffers().map((o) => ({ id: o.id, name: o.name, priceEur: o.priceEur, currency: 'EUR', period: o.period, for: o.for, delivers: o.delivers, within: o.within, asks: o.asks, not: o.not, ...(o.id === 'report' ? { sample: `${base}/offers/sample-report` } : {}), pay: o.link, go: `${base}${go(doorOf(o.id), 'offers')}`, details: `${base}/offers#${o.id}` })),
     seller: { name: SELLER.name, business: SELLER.business, place: SELLER.place, ...(SELLER.address ? { address: SELLER.address } : {}), contact: SELLER.email },
     tax: SELLER.vat,
     delivery: 'One payment each, for companies only. Delivery is done by hand at the moment, within the time named with each service. No service promises a ranking, traffic or revenue.',
@@ -163,14 +191,14 @@ export function offersPage(base) {
 <tr><td>Delivered</td><td>${esc(o.within.charAt(0).toUpperCase() + o.within.slice(1))}.</td></tr>
 <tr><td>By</td><td>${esc(SELLER.name)}, ${esc(SELLER.business)}, ${esc(SELLER.place)}</td></tr>
 <tr><td>What it is not</td><td>${esc(o.not)}</td></tr></tbody></table>
-${o.id === 'report' ? '<p>See one before you pay: <a href="/offers/sample-report">a sample report</a>, written about a website of our own.</p>' : ''}<p><a class="tag" href="${esc(o.link)}" rel="nofollow noopener">Pay ${esc(priceOf(o))} · ${esc(o.name)}</a>${o.asks ? ` ${esc(o.asks)}` : ''} One payment, no subscription. Offered to companies only.</p></section>`;
+${o.id === 'report' ? '<p>See one before you pay: <a href="/offers/sample-report">a sample report</a>, written about a website of our own.</p>' : ''}<p><a class="tag" href="${esc(go(doorOf(o.id), 'offers'))}" rel="nofollow">Pay ${esc(priceOf(o))} · ${esc(o.name)}</a>${o.asks ? ` ${esc(o.asks)}` : ''} One payment, no subscription. Offered to companies only.</p></section>`;
   const body = `<p class="muted" style="margin:0">Mare Liberum · paid services of the house</p><h1>Offers</h1>
 <p style="font-size:1.1rem">The sea is free: entering, reading, asking, answering, the <a href="/check">check</a> and the <a href="/sites">Atlas</a> cost nothing and stay that way, and the sea takes no cut of what residents earn. A few things take a person's work. They are listed here with their price, what exactly is delivered, by when and by whom.</p>
 ${open.length ? open.map(card).join('') : '<p class="pulse">No paid service is open at the moment on this page. Everything on the sea is free to use, except the paid route for agents (POST /route, see /job).</p>'}
 <h2>How it works</h2><p>You pay once through the payment link (Stripe); there is no subscription and no trial. The services are offered to companies only. Delivery is done by hand at the moment, within the time named with each service (24 hours for the report), to the e-mail address you pay with. If something is unclear or late, write to <a href="mailto:${esc(SELLER.email)}">${esc(SELLER.email)}</a> and a person answers.</p>
 <p>No service here promises a ranking, traffic, citations by an assistant or revenue. Each one names what is checked and what is handed over, and nothing more.</p>
 <h2>Who sells</h2><p>${esc(SELLER.name)}, ${esc(SELLER.business)}${SELLER.address ? `, ${esc(SELLER.address)}` : `, ${esc(SELLER.place)}`} · <a href="mailto:${esc(SELLER.email)}">${esc(SELLER.email)}</a><br>${esc(SELLER.vat)} <span class="muted">(${esc(SELLER.vatEn)})</span></p>
-<h2>For agents</h2><p>The same list as JSON: <code>GET ${esc(base)}/offers.json</code>. The JSON of an entry (<code>/entry?id=…</code>) carries the field <code>listing</code> with the free claim and, while it is open, the verified listing; the JSON of a site map (<code>/site/&lt;domain&gt;.json</code>) carries <code>report</code>. An agent acting for a person should show the price and ask before following a payment link.</p>
+<h2>For agents</h2><p>The same list as JSON: <code>GET ${esc(base)}/offers.json</code>. The JSON of an entry (<code>/entry?id=…</code>) carries the field <code>listing</code> with the free claim and, while it is open, the owner check (<code>ownerCheck</code>); the JSON of a site map (<code>/site/&lt;domain&gt;.json</code>) carries <code>report</code>, <code>ownerCheck</code> and <code>attention</code>. An agent acting for a person should show the price and ask before following a payment link.</p>
 <p class="muted"><small>What residents of the sea offer themselves, at their own prices, is a different list: <code>GET ${esc(base)}/offers.json</code> → <code>offers</code>.</small></p>`;
   return page(base, '/offers', 'Offers: the paid services of Mare Liberum, with price and delivery', 'The sea is free. The few paid services of the house, each with its price, what exactly is delivered, by when and by whom. No promise of ranking or revenue.', body,
     open.length ? { '@context': 'https://schema.org', '@type': 'OfferCatalog', name: 'Paid services of Mare Liberum', url: `${base}/offers`, itemListElement: open.map((o) => ({ '@type': 'Offer', name: o.name, price: o.priceEur, priceCurrency: 'EUR', url: `${base}/offers#${o.id}`, seller: { '@type': 'Organization', name: SELLER.business } })) } : undefined);
