@@ -117,16 +117,17 @@ export function createMem({ file, base, blobToken } = {}) {
     },
     // identifiers that carry a description and an endpoint: they get a page of their own in the agent-readable web (the
     // thin registrations of THIN_LAKES keep their page, but not a place in the sitemaps)
+    // (days: also the day each entry last changed at its source, updated_at, for the sitemaps; read from the row's text)
     async mare_pages(p) {
-      const off = Math.max(Number(p?.offset) || 0, 0), lim = Math.min(Math.max(Number(p?.limit) || 45000, 1), 50000), out = [];
+      const off = Math.max(Number(p?.offset) || 0, 0), lim = Math.min(Math.max(Number(p?.limit) || 45000, 1), 50000), out = [], days = p?.days ? [] : null;
       let seen = 0;
       for (let i = 0; i < n && out.length < lim; i++) {
         if (!ep[i]) continue; const h = hays[i], b2 = h.indexOf('\u0001', h.indexOf('\u0001') + 1);
         if (h.length - b2 < 40) continue;
         if (THIN_LAKES.has(lakes[lake[i]]) && !paid[i] && !dom[i]) continue;
-        if (seen++ >= off) out.push(ids[i]);
+        if (seen++ >= off) { out.push(ids[i]); if (days) days.push((/"updated_at":"(\d{4}-\d{2}-\d{2})/.exec(buf.toString('utf8', jOff[i], jOff[i] + jLen[i])) || [])[1] || null); }
       }
-      return { ids: out };
+      return days ? { ids: out, days } : { ids: out };
     },
     async mare_pages_count() { let c = 0; for (let i = 0; i < n; i++) { if (!ep[i] || (THIN_LAKES.has(lakes[lake[i]]) && !paid[i] && !dom[i])) continue; const h = hays[i], b2 = h.indexOf('\u0001', h.indexOf('\u0001') + 1); if (h.length - b2 >= 40) c++; } return { count: c }; },
     async mare_get(p) { await syncExtra(); const x = extra.get(p?.id); if (x) return pub(x.r, true); const i = find(String(p?.id || '')); return i < 0 ? null : pub(row(i), true); },

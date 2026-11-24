@@ -19,6 +19,11 @@ const text = (html) => entities(String(html || '').replace(/<[^>]+>/g, ' ')).rep
 const abs = (href, base) => { try { const u = new URL(href, base); return /^https?:$/.test(u.protocol) ? u : null; } catch { return null; } };
 // the site a URL belongs to: the host without www, so www.ebay.com and ebay.com are one site
 export const siteOf = (h) => String(h || '').toLowerCase().replace(/^www\d?\./, '');
+// sites the Atlas keeps out of everything a search engine reads (its sitemaps, IndexNow, the lists on its pages; their own
+// pages say noindex): adult and gambling sites, by the words in their names. The build picks the country lists with the
+// same rule (tools/build.mjs), there together with public block lists. An agent that asks for such a site still gets its map.
+export const ADULT = /porn|xxx|xvideo|xnxx|xhamster|(?<!es|sus|middle)sex|hentai|hentas|nude|nudi|nsfw|onlyfans|fansly|chaturbate|stripchat|bongacams|bonga-cams|cam4|camsoda|livejasmin|spankbang|youporn|redtube|tube8|eporner|brazzers|fapello|xfap|fapster|faphouse|milf|escort|acompanhantes|erotic|erotik|(^|[.-])ero|darkero|zettai-ero|maturetube|rule34|booru|hanime|camgirl|camwhore|camrip|cameraprive|fetish|bdsm|naked|swinger|jizz|hookup|horny|beeg|tnaflix|motherless|thumbzilla|youjizz|txxx|hclips|vporn|porntrex|missav|javhd|jable|supjav|^jav|jav\.|javdock|javmix|javsek|javsub|javtiful|njavtv|91porn|avgle|lesbian|bokep|desi(?!re|gn)|leak|(?<!you|ru)tube|pinay|kantot|sulasok|(?<!news|\d)18(?!\d)|(?<!\d)69(?!\d)|nudo|hotx|madura|eroge|casino|toto|huren|hoki|petir|naga-|ledak|sorte|bingo|hotxv|hotebony|hotindian|hotpic|noodlemagazine|(^|\.)fans\.|\.fans$|myfans|fatalfans|vide[yiq]|vidkle|vidsey|vidayo|vidayu|ratuvid|saluranvid|dayonvid|indovid|babe|choti|beurette|bfvideo|mms(\.|$)|dropmms|spicymms|momvid|thisvid|thot|videocelebs|xgay|videosx|tamilprint|\.cam$|\.webcam$|(?<!maxx|cinem|brix|ne|scine)xx(?!l)|slot|togel|gacor|toto\d|188|69plus|cair\d/;
+export const leftOut = (host) => ADULT.test(siteOf(host));
 const sameSite = (u, host) => { const a = siteOf(u.hostname), b = siteOf(host); return a === b || a.endsWith(`.${b}`) || b.endsWith(`.${a}`); };
 
 // fnv-1a: the same small number in the crawler and in the sea, no crypto needed

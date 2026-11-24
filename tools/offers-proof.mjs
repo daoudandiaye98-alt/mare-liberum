@@ -156,7 +156,7 @@ await proof('for a program /offers answers as before (residents’ offers), with
   assert.deepEqual(c.j.house.paid.map((x) => [x.id, x.priceEur]), [['report', 29], ['verified', 19]]); assert.equal(c.j.house.tax, 'Gemäß § 19 UStG wird keine Umsatzsteuer berechnet.'); assert.equal(c.j.house.seller.contact, SELLER.email);
 });
 await proof('/offers is in the sitemap and in llms.txt', async () => {
-  const sm = await call('/sitemaps/site.xml'); assert.ok(sm.txt.includes(`<loc>${BASE}/offers</loc>`));
+  const sm = await call('/sitemaps/hubs.xml'); assert.ok(sm.txt.includes(`<loc>${BASE}/offers</loc>`)); // a hub (node/hubs.mjs)
   const l = await call('/llms.txt', { accept: 'text/plain' }); assert.match(l.txt, /\/offers\)/); assert.match(l.txt, /GET \/offers\.json/);
 });
 

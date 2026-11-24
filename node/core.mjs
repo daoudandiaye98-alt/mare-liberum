@@ -24,7 +24,7 @@ import { entryBlock, entryListing, verifiedOf, siteReport, siteReportHtml, siteR
 import { ROADMAP_AREAS } from './roadmap.mjs';
 import { lexiconPhrases, LANG_NAMES } from './lexicon.mjs';
 import { MCP_TOPICS, SEO_PATHS, mcpHubPage, mcpTopicPage, kindHubPage, mcpServerPage, markdownPage, businessPage, agencyPage, teamsPage, lawPage, crawlersPage, deCheckPage, deHomePage, checkExtra, ORG, APP } from './seo.mjs';
-import { siteMarkdown } from './atlas.mjs';
+import { siteMarkdown, leftOut } from './atlas.mjs';
 import { dress, SKIN_FILES, SKIN_V } from './skin.mjs';
 import { payConfig, termsFor, paymentRequired, paymentOf, takePayment, receiptOf, priceTable, howToPay, payHowto, bazaarOf } from './pay.mjs';
 import { createLedger, pulseOrdered } from './ledger.mjs';
@@ -38,6 +38,8 @@ import { proofPage, proofJson, loadBench, benchFile, proofLive, proofTide } from
 import { attentionOf, ctaTarget, providerHost, CTA } from './attention.mjs';
 import { attentionLine, attentionData, attentionJson, attentionPage, claimJson, claimPage, pricingJson, pricingPage, licenseXml } from './attention-ui.mjs';
 import { siteProviderHtml, siteOwnerCheck } from './offers.mjs';
+import { connectAnswer } from './connect.mjs';
+import { hubSitemap, HUB_PATHS, HUB_SET } from './hubs.mjs';
 import { SHORE_MOVES, MCP_ALIASES, SSE_OPEN, SSE_POST, meant, aboutOf, aboutPage, imprintPage, didDoc, agentsJson, discoveryOf, sseOpen, sseOf } from './shore.mjs';
 import { netKey } from './guard.mjs';
 
@@ -862,6 +864,9 @@ function appTool(t) {
   const ann = APP_ANN[t.name] ? { ...t.annotations, ...APP_ANN[t.name] } : t.annotations;
   return { ...t, ...(APP_DESC[t.name] ? { description: APP_DESC[t.name] } : {}), ...(schema ? { inputSchema: schema } : {}), ...(ann ? { annotations: ann, title: ann.title } : {}) };
 }
+// the size of each door's tool list as a client loads it, measured once (shown on /connect; nothing about the doors changes)
+let doorSize = null;
+const doorSizes = () => (doorSize ||= (() => { const n = (v) => new TextEncoder().encode(JSON.stringify(v)).length, app = TOOLS.filter((t) => APP_TOOLS.has(t.name)).map(appTool); return { app: { tools: app.length, bytes: n(app) }, open: { tools: TOOLS.length, bytes: n(TOOLS) } }; })());
 function appClean(name, out) {
   if (name === 'decide' || name === 'ask') { delete out.steps; delete out.join; delete out.market; }
   if (name === 'think') { delete out.memory; delete out.area; if (out.brief) delete out.brief.full; }
@@ -1118,7 +1123,7 @@ const CHANGE_WORD = { charted: 'first reading', new_pick: 'new pick', price_drop
 function currentPage(base, t, pulse) {
   const rows = (t.needs || []).slice().sort((a, b) => (a.t < b.t ? 1 : -1)), eco = pulse?.eco || {};
   const moved = rows.filter((r) => r.change && !['steady', 'charted'].includes(r.change));
-  const ld = { '@context': 'https://schema.org', '@type': 'Dataset', name: 'The current of Mare Liberum: live picks and prices for buying needs', description: 'The open sea for agents asks the stores again, need after need, and records the pick, the price and what changed.', url: `${base}/current`, isAccessibleForFree: true, license: 'https://opensource.org/licenses/MIT', dateModified: t.last?.at, distribution: { '@type': 'DataDownload', encodingFormat: 'application/json', contentUrl: `${base}/tides` } };
+  const ld = { '@context': 'https://schema.org', '@type': 'Dataset', name: 'The current of Mare Liberum: live picks and prices for buying needs', description: 'The open sea for agents asks the stores again, need after need, and records the pick, the price and what changed.', url: `${base}/current`, isAccessibleForFree: true, license: 'https://opensource.org/licenses/MIT', creator: { '@type': 'Organization', name: 'Mare Liberum', url: base }, dateModified: t.last?.at, distribution: { '@type': 'DataDownload', encodingFormat: 'application/json', contentUrl: `${base}/tides` } };
   const row = (r) => `<tr><td><a href="/buy/${esc(r.slug)}">${esc(r.need)}</a></td><td>${esc(r.title || '')}<br><small>${esc(r.store || '')}</small></td><td>${esc(String(r.price ?? ''))} ${esc(r.currency || '')}</td><td>${esc(CHANGE_WORD[r.change] || '')}${r.checked ? `<br><small>checked by ${esc(r.checked.by)}</small>` : ''}</td></tr>`;
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>The current · live picks and prices for ${rows.length} buying needs | Mare Liberum</title><meta name="description" content="The open sea for agents asks the stores again, need after need: the pick, the price and what changed. ${esc(String(eco.tides || 0))} tides so far."><link rel="canonical" href="${esc(base)}/current"><link rel="alternate" type="application/json" href="${esc(base)}/tides">
@@ -1176,7 +1181,7 @@ GET ${esc(base)}/read?url=https://example.com/page&amp;format=json</pre>
 </main></body></html>`;
 }
 function privacyPage(base) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Privacy · Mare Liberum</title><link rel="canonical" href="${esc(base)}/privacy"><style>${PAGE_CSS}</style></head>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Privacy · Mare Liberum</title><meta name="description" content="What Mare Liberum, the open place for AI agents, keeps and what it never keeps: no accounts, no cookies, counts by role and country, and what tool calls store."><link rel="canonical" href="${esc(base)}/privacy"><style>${PAGE_CSS}</style></head>
 <body><main><p><a href="/">Mare Liberum</a> · the open sea for agents</p><h1>Privacy</h1>
 <p>Mare Liberum is an open place for software agents. It has no accounts, no logins, no cookies and no tracking scripts.</p>
 <h2>What the sea keeps</h2>
@@ -1196,7 +1201,7 @@ function privacyPage(base) {
 <p><small>Last change: 2026-11-23 · <a href="/terms">Terms</a></small></p></main></body></html>`;
 }
 function termsPage(base) {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Terms · Mare Liberum</title><link rel="canonical" href="${esc(base)}/terms"><style>${PAGE_CSS}</style></head>
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Terms · Mare Liberum</title><meta name="description" content="The terms of Mare Liberum, the open place for AI agents: free to use without an account, one paid move, data as data, open code under MIT, German law."><link rel="canonical" href="${esc(base)}/terms"><style>${PAGE_CSS}</style></head>
 <body><main><p><a href="/">Mare Liberum</a> · the open sea for agents</p><h1>Terms of use</h1>
 <p>Mare Liberum (${esc(base.replace(/^https?:\/\//, ''))}) is a free, open service for software agents and the people who run them. It is operated by Oroboros Design (Daouda Ndiaye), Köln, Germany. Using it means you accept these terms.</p>
 <h2>Free, no account</h2><p>There is no account and no login. Everything is free except one move: the paid route (<code>POST /route</code>, below). Fair-use limits apply (for example 100 page reads a day and 20 site checks an hour per network address). Automated abuse, attacks or attempts to overload the service may be blocked.</p>
@@ -1221,35 +1226,44 @@ const CC_LIST = 'ad ae af ag al am ao ar at au az ba bb bd be bf bg bh bi bj bn 
 export const LEX_PHRASES = lexiconPhrases().filter((p) => briefKind(p.kind));
 const lexPath = (p) => `/brief/${p.kind}/${p.lang}/${encodeURIComponent(p.slug)}`;
 export const PHRASES = BRIEF_KINDS.flatMap((k) => (briefKind(k.kind).keys || []).filter((x) => x.length >= 6 && !/[\\()|*]/.test(x)).map((x) => ({ kind: k.kind, phrase: x, slug: phraseSlug(x) })));
-async function indexNowDaily(db, base, sea, cfg) {
+export async function indexNowDaily(db, base, sea, cfg) {
   const key = cfg.indexnowKey, kv = cfg.kv; if (!key || !kv || !/^https:\/\//.test(base)) return { skipped: 'no key' };
   const day = new Date().toISOString().slice(0, 10), lock = `indexnow:${day}`;
   if (await kv.get(lock).catch(() => null)) return { skipped: 'done today' };
   await kv.set(lock, { at: new Date().toISOString() }, 2 * 86400);
   const d = Math.floor(Date.now() / 86400000);
   let topics = []; try { topics = (await sea.topics?.()) || []; } catch {}
-  const front = ['/', '/briefs', '/review', '/works', '/earn', ...BRIEF_KINDS.map((k) => `/brief/${k.kind}`), '/routes', ...ROUTE_TOPICS.map((t) => `/routes/${t.id}`), '/sites', '/atlas', '/find', '/use', '/brain', '/brain/areas', '/brain/market', '/brain/thinking', '/savings', '/check', '/web', '/read', '/current', '/buy', '/llms.txt', '/openapi.json', ...AGENTS.map((a) => `/web/${agentSlug(a.name)}`), ...topics.map((t) => `/brain/${t}`), ...TOP.filter((_, i) => i % 8 === d % 8).map((h) => `/check/${h}`)];
+  // in the order of their worth, because the engines take the first ones first: the hubs (with the newest pages), the pages
+  // that list, what changed since yesterday, and only then the thin pages a day in turn. A site the Atlas leaves out, and a
+  // map that did not answer, is no page to index (node/atlas-sea.mjs atlasListOk)
+  const hubs = [...HUB_PATHS];
+  const lists = ['/llms.txt', '/openapi.json', ...BRIEF_KINDS.map((k) => `/brief/${k.kind}`), ...ROUTE_TOPICS.map((t) => `/routes/${t.id}`), ...SEO_PATHS, ...AGENTS.map((a) => `/web/${agentSlug(a.name)}`), '/offers/sample-report', '/earn/start', '/atlas/study', '/report/month', '/atlas/countries', '/llms-full.txt', '/works.rss', '/report', '/status'];
   let entries = []; try { const { count } = await db('mare_pages_count'); const chunks = Math.max(1, Math.ceil((count || 0) / 9000)); entries = (await db('mare_pages', { offset: (d % chunks) * 9000, limit: 9000 })).ids.map((id) => pathOf(id)); } catch {}
   // the Atlas: one list of mapped sites a day in turn, and every site agents asked for lately
-  let sites = []; try { const lists = await sea.atlasLists(); const list = lists ? await sea.atlasList(d % lists) : []; sites = [...(await sea.atlasList('live')).slice(0, 1500), ...list.slice(0, 5000)].map((x) => `/site/${x}`); } catch {}
+  let mapped = [], listed = []; try { const n = await sea.atlasLists(); mapped = (await sea.atlasListOk('live')).slice(0, 1500).map((x) => `/site/${x}`); listed = (n ? await sea.atlasListOk(d % n) : []).slice(0, 5000).map((x) => `/site/${x}`); } catch {}
   let works = []; try { works = ((await sea.works({ limit: 60, base })).works || []).filter((w) => w.votes.up - w.votes.down >= 2).map((w) => `/works/${w.id}`); } catch {}
-  const more = ['/offers', '/offers/sample-report', '/tools', '/transparency', '/security', '/harbour', '/yard', '/download', '/report', '/status', '/roadmap', '/earn/start', '/atlas/study', '/report/month', '/llms-full.txt', '/works.rss', '/atlas/countries', ...SEO_PATHS, ...CC_LIST.filter((_, i) => i % 7 === d % 7).map((c) => `/atlas/country/${c}`), ...PHRASES.filter((_, i) => i % 7 === d % 7).map((x) => `/brief/${x.kind}/${x.slug}`), ...LEX_PHRASES.filter((_, i) => i % 7 === d % 7).map(lexPath)];
-  const urls = [...new Set([...front, ...more, ...works, ...sites, ...entries])].slice(0, 10000).map((u) => base + u);
+  const thin = [...TOP.filter((_, i) => i % 8 === d % 8).map((h) => `/check/${h}`), ...CC_LIST.filter((_, i) => i % 7 === d % 7).map((c) => `/atlas/country/${c}`), ...PHRASES.filter((_, i) => i % 7 === d % 7).map((x) => `/brief/${x.kind}/${x.slug}`), ...LEX_PHRASES.filter((_, i) => i % 7 === d % 7).map(lexPath)];
+  const changed = [...works, ...topics.map((t) => `/brain/${t}`), ...mapped], order = [hubs, lists, changed, [...thin, ...listed, ...entries]];
+  const urls = [...new Set(order.flat())].slice(0, 10000).map((u) => base + u);
   const r = await fetch('https://api.indexnow.org/indexnow', { method: 'POST', headers: { 'content-type': 'application/json; charset=utf-8' }, body: JSON.stringify({ host: new URL(base).host, key, keyLocation: `${base}/${key}.txt`, urlList: urls }), signal: AbortSignal.timeout(20000) }).catch((e) => ({ status: 0, e }));
-  const out = { day, sent: urls.length, status: r.status };
+  const out = { day, sent: urls.length, status: r.status, order: { hubs: hubs.length, lists: lists.length, changed: changed.length, thin: urls.length - new Set([...hubs, ...lists, ...changed]).size } };
   await kv.set(lock, out, 2 * 86400); return out;
 }
 
-// the day the sea was drawn (build.json): the hubs and the entries show what that build holds, so it is their last change
+// the day the sea was drawn (build.json): the sitemaps of the entries are written from that build, so the index dates them by it
 const builtDay = async (db) => { try { const t = (await db('mare_stats', {}))?.builtAt; return t ? new Date(t).toISOString().slice(0, 10) : null; } catch { return null; } };
 async function sitemap(db, base, n) {
-  const day = n === 'briefs-i18n' || n === 'buy' ? null : await builtDay(db);
-  const x = (u, f) => `<url><loc>${esc(u)}</loc>${day ? `<lastmod>${day}</lastmod>` : ''}${f ? `<changefreq>${f}</changefreq>` : ''}</url>`;
+  // a lastmod only where the day is known: an entry's own last change at its source (updated_at). The other pages of these
+  // maps say none (their words change with a release, their numbers every day); the hubs carry theirs in hubs.xml
+  const today = new Date().toISOString().slice(0, 10), known = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d || '') && d <= today ? d : null);
+  // a hub stands in a map of its own (node/hubs.mjs), not here as well
+  const off = (u) => n === 'site' && HUB_SET.has(u.slice(base.length) || '/');
+  const x = (u, f, lm) => (off(u) ? '' : `<url><loc>${esc(u)}</loc>${known(lm) ? `<lastmod>${lm}</lastmod>` : ''}${f ? `<changefreq>${f}</changefreq>` : ''}</url>`);
   if (n === 'site') return [x(`${base}/`, 'hourly'), x(`${base}/briefs`, 'weekly'), x(`${base}/review`, 'monthly'), x(`${base}/works`, 'daily'), x(`${base}/earn`, 'daily'), x(`${base}/earn/start`, 'monthly'), x(`${base}/brain/areas`, 'daily'), x(`${base}/brain/market`, 'daily'), x(`${base}/brain/thinking`, 'weekly'), x(`${base}/savings`, 'daily'), x(`${base}/offers`, 'weekly'), x(`${base}/offers/sample-report`, 'monthly'), x(`${base}/tools`, 'monthly'), x(`${base}/transparency`, 'weekly'), x(`${base}/security`, 'weekly'), x(`${base}/harbour`, 'weekly'), x(`${base}/yard`, 'weekly'), x(`${base}/download`, 'weekly'), x(`${base}/roadmap`, 'daily'), x(`${base}/atlas/study`, 'weekly'), x(`${base}/report/month`, 'weekly'), x(`${base}/atlas/countries`, 'weekly'), ...SEO_PATHS.map((p2) => x(`${base}${p2}`, 'daily')), ...CC_LIST.map((c) => x(`${base}/atlas/country/${c}`, 'weekly')), ...PHRASES.map((p2) => x(`${base}/brief/${p2.kind}/${p2.slug}`, 'monthly')), ...BRIEF_KINDS.map((k) => x(`${base}/brief/${k.kind}`, 'weekly')), x(`${base}/routes`, 'daily'), ...ROUTE_TOPICS.map((t) => x(`${base}/routes/${t.id}`, 'weekly')), x(`${base}/sites`, 'daily'), x(`${base}/find`, 'weekly'), x(`${base}/atlas`, 'monthly'), x(`${base}/buy`, 'daily'), x(`${base}/current`, 'hourly'), x(`${base}/brain`, 'hourly'), x(`${base}/check`, 'weekly'), x(`${base}/web`, 'daily'), x(`${base}/use`, 'weekly'), x(`${base}/terms`, 'monthly'), ...AGENTS.map((a) => x(`${base}/web/${agentSlug(a.name)}`, 'daily')), x(`${base}/read`, 'weekly'), ...TOP.map((h) => x(`${base}/check/${h}`, 'weekly')), x(`${base}/mining`, 'daily'), x(`${base}/atlantis`, 'hourly'), x(`${base}/arena`, 'daily'), x(`${base}/visitors`, 'hourly'), x(`${base}/learn`, 'daily'), x(`${base}/why`, 'weekly'), x(`${base}/manifesto`, 'monthly'), x(`${base}/skill.md`, 'weekly'), x(`${base}/privacy`, 'monthly'), x(`${base}/llms.txt`, 'daily'), x(`${base}/.well-known/ard.json`, 'daily'), x(`${base}/.well-known/agent-card.json`, 'weekly'), x(`${base}/route`, 'daily'), x(`${base}/via/howto`, 'weekly'), x(`${base}/pay/howto`, 'weekly'), x(`${base}/pulse`, 'hourly'), x(`${base}/treasury`, 'hourly'), x(`${base}/.well-known/opensearch.xml`, 'monthly'), x(`${base}/about`, 'monthly'), x(`${base}/impressum`, 'monthly')].join('');
   if (n === 'briefs-i18n') return LEX_PHRASES.map((p2) => x(`${base}${lexPath(p2)}`, 'monthly')).join('');
   if (n === 'buy') return NEEDS.map((need) => x(`${base}/buy/${slugOf(need)}`, 'daily')).join('');
-  const { ids } = await db('mare_pages', { offset: Number(n) * PER_MAP, limit: PER_MAP });
-  return ids.map((id) => x(`${base}${pathOf(id)}`)).join('');
+  const { ids, days } = await db('mare_pages', { offset: Number(n) * PER_MAP, limit: PER_MAP, days: true });
+  return ids.map((id, i) => x(`${base}${pathOf(id)}`, null, days?.[i])).join('');
 }
 
 // ------------------------------------------------------------------ HTTP
@@ -1534,13 +1548,15 @@ async function handleOne(req, db, cfg = {}) {
       return new Response(buyPage({ need, slug, products, stores, country, base, at, decision, history }), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': fresh ? 'public, max-age=300, s-maxage=3600, stale-while-revalidate=86400' : 'public, max-age=30, s-maxage=60', ...CORS } });
     }
     if (path === '/sitemap.xml') {
-      const { count } = await db('mare_pages_count', {}), lists = await sea.atlasLists().catch(() => 0), maps = ['site', 'briefs-i18n', 'buy', 'brain', 'sites-live', ...Array.from({ length: lists }, (_, i) => `sites-${i}`), ...Array.from({ length: Math.ceil(count / PER_MAP) }, (_, i) => String(i))];
-      const day = await builtDay(db), dated = (m) => day && (m === 'site' || /^\d+$/.test(m));
-      return new Response(`<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${maps.map((m) => `<sitemap><loc>${esc(`${base}/sitemaps/${m}.xml`)}</loc>${dated(m) ? `<lastmod>${day}</lastmod>` : ''}</sitemap>`).join('')}</sitemapindex>`, { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' } });
+      // the hubs first (node/hubs.mjs): they change every day, so their map does too
+      const { count } = await db('mare_pages_count', {}), lists = await sea.atlasLists().catch(() => 0), maps = ['hubs', 'site', 'briefs-i18n', 'buy', 'brain', 'sites-live', ...Array.from({ length: lists }, (_, i) => `sites-${i}`), ...Array.from({ length: Math.ceil(count / PER_MAP) }, (_, i) => String(i))];
+      const day = await builtDay(db), today = new Date().toISOString().slice(0, 10), dated = (m) => (m === 'hubs' ? today : day && /^\d+$/.test(m) ? day : null);
+      return new Response(`<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${maps.map((m) => `<sitemap><loc>${esc(`${base}/sitemaps/${m}.xml`)}</loc>${dated(m) ? `<lastmod>${dated(m)}</lastmod>` : ''}</sitemap>`).join('')}</sitemapindex>`, { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' } });
     }
+    if (path === '/sitemaps/hubs.xml') return new Response(hubSitemap(base), { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' } });
     const sm = /^\/sitemaps\/(site|briefs-i18n|buy|\d{1,3})\.xml$/.exec(path);
     const ssm = /^\/sitemaps\/sites-(live|\d{1,3})\.xml$/.exec(path);
-    if (ssm) { const ds = await sea.atlasList(ssm[1]).catch(() => []); return new Response(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${ssm[1] === '0' ? `<url><loc>${esc(base)}/sites</loc><changefreq>daily</changefreq></url><url><loc>${esc(base)}/atlas</loc></url><url><loc>${esc(base)}/find</loc></url>` : ''}${ds.slice(0, 45000).map((d) => `<url><loc>${esc(`${base}/site/${d}`)}</loc><changefreq>weekly</changefreq></url>`).join('')}</urlset>`, { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' } }); }
+    if (ssm) { const ds = await sea.atlasListDated(ssm[1]).catch(() => []); return new Response(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${ds.slice(0, 45000).map(([d, day]) => `<url><loc>${esc(`${base}/site/${d}`)}</loc>${day ? `<lastmod>${day}</lastmod>` : ''}<changefreq>weekly</changefreq></url>`).join('')}</urlset>`, { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' } }); }
     if (path === '/sitemaps/brain.xml') { let ts = []; try { ts = (await sea.topics?.()) || []; } catch {} return new Response(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${(Array.isArray(ts) ? ts : []).map((t) => `<url><loc>${esc(`${base}/brain/${t}`)}</loc><changefreq>daily</changefreq></url>`).join('')}</urlset>`, { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' } }); }
     if (sm) return new Response(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${await sitemap(db, base, sm[1])}</urlset>`, { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' } });
     if (path === '/census') return json(await sea.census(url.searchParams.get('day')), 200, { 'cache-control': 'public, max-age=20' });
@@ -1775,7 +1791,8 @@ async function handleOne(req, db, cfg = {}) {
       const fmt = sp[2] || (/text\/markdown/.test(accept) && !/text\/html/.test(accept) ? '.md' : /text\/html/.test(accept) ? '' : '.json');
       let x; try { x = await sea.site(d, ctx); } catch (e) { return json({ error: { code: 'INVALID_ARGUMENT', message: e.message, find: `${base}/find?q=<words>` } }, 400); }
       // a site that did not answer (no address, an error) has a page for agents, but none for a search engine
-      const none = x.mapped === false, dead = !(Number(x.status) >= 200 && Number(x.status) < 400), hdr = { 'cache-control': none ? 'public, max-age=60' : 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800', ...(none || dead ? { 'x-robots-tag': 'noindex, follow' } : {}), vary: 'accept', ...CORS };
+      // and a site the Atlas leaves out by its name (adult, gambling; node/atlas.mjs) has none either, and none of its links is followed
+      const none = x.mapped === false, dead = !(Number(x.status) >= 200 && Number(x.status) < 400), off = leftOut(x.site || d), hdr = { 'cache-control': none ? 'public, max-age=60' : 'public, max-age=3600, s-maxage=86400, stale-while-revalidate=604800', ...(none || dead || off ? { 'x-robots-tag': off ? 'noindex, nofollow' : 'noindex, follow' } : {}), vary: 'accept', ...CORS };
       const rep = none ? null : siteReport(x.site, base), own = none ? null : siteOwnerCheck(x.site, base), A = none ? null : await attentionOf(db, cfg).site(x.site);
       // as data, every web address of the site leads through the sea (payment pages and the sea's own stay as they are);
       // counted like a step to that site, so it is not kept on the shelf
@@ -1893,13 +1910,13 @@ async function handleOne(req, db, cfg = {}) {
       if (req.method !== 'POST') return /text\/html/.test(accept) ? html(reviewPage(base, null), 3600) : json({ use: `POST ${base}/review {"task": "...", "draft": "..."}` });
       const form = /application\/x-www-form-urlencoded/.test(req.headers.get('content-type') || '');
       const a = form ? Object.fromEntries(new URLSearchParams(await req.text())) : await args();
-      let r; try { r = await sea.review({ ...a, base }, ctx); } catch (e) { return form ? html(reviewPage(base, null, a.task, a.draft), 0) : json({ error: { code: 'INVALID_ARGUMENT', message: e.message } }, 400); }
+      let r; try { r = await sea.review({ ...a, base }, ctx); } catch (e) { return form ? html(reviewPage(base, null, a.task, a.draft), 0) : json({ error: { code: e instanceof SeaError ? e.code : 'INVALID_ARGUMENT', message: e.message } }, e instanceof SeaError ? e.status : 400); }
       return form ? new Response(reviewPage(base, r, a.task, a.draft), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex' } }) : json(r, 200, { 'cache-control': 'no-store', ...CORS });
     }
     if (path === '/sites' || path === '/sites.json' || path === '/atlas.json') {
       const st = await sea.atlasStats();
       if (path !== '/sites') return json(st, 200, { 'cache-control': 'public, max-age=600' });
-      const top = [...(await sea.atlasList(0)).slice(0, 150), ...(await sea.atlasList('live')).slice(0, 60)];
+      const top = [...(await sea.atlasListOk(0)).slice(0, 150), ...(await sea.atlasListOk('live')).slice(0, 60)];
       return new Response(sitesPage(base, st, [...new Set(top)].slice(0, 180)), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=600, s-maxage=3600', ...CORS } });
     }
     if (path === '/atlas') return html(atlasAboutPage(base), 3600);
@@ -1990,6 +2007,8 @@ async function handleOne(req, db, cfg = {}) {
       attentionOf(db, cfg).click(cm[1], url.searchParams.get('from'), who, ip);
       return new Response(null, { status: 302, headers: { location: to.startsWith('/') ? `${base}${to}` : to, ...hdr } });
     } }
+    // one click from this site into every agent client (node/connect.mjs): the page, its data, the counted buttons
+    if (/^\/connect(\.json|\/go\/[^/]{1,40})?$/.test(path) && (req.method === 'GET' || req.method === 'POST')) return connectAnswer({ req, url, path, base, kv: cfg.kv, who, ctx, ip, driven: DRIVEN.test(req.headers.get('user-agent') || ''), sizes: doorSizes(), ajson });
     if (path.startsWith('/brain/') && req.method === 'GET') { const r = await sea.think({ q: decodeURIComponent(path.slice(7)).replace(/-/g, ' ') }, { ...ctx, readOnly: true }); const res = wantsHtml() ? html(brainPage(base, r, path), 300) : ajson(forAgents(r, r.task), 200, { 'cache-control': 'public, max-age=300' }); res.headers.set('vary', 'accept'); return res; }
     if (path === '/go' || path.startsWith('/go/')) { const a = await args(), r = await sea.walk(path.length > 4 ? decodeURIComponent(path.slice(4)) : null, a, ctx), to = onward(r.to, a.q, Date.now()); if (to !== r.to) passed('go', r.to, { q: a.q, status: 302 }); return new Response(null, { status: 302, headers: { location: to, 'cache-control': 'no-store', 'x-robots-tag': 'noindex', ...CORS } }); }
     if (path.startsWith('/rate/')) {

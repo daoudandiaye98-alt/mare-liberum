@@ -336,8 +336,8 @@ await proof('/.well-known/opensearch.xml is text/xml and sends the words to /bra
   const { AGENT_LINK } = await import('../node/core.mjs'); assert.match(AGENT_LINK, /<\/\.well-known\/opensearch\.xml>; rel="search"/);
 });
 await proof('the sitemap names the brain, the route, both guides, the agent card, the pulse and the treasury', async () => {
-  const res = await handle(new Request(`${BASE}/sitemaps/site.xml`, { headers: { 'user-agent': 'curl/8.5.0' } }), db, { base: BASE, pay: PAY, ledger: createLedger({}), waitUntil: () => {} });
-  const x = await res.text();
+  const map = async (m) => (await handle(new Request(`${BASE}/sitemaps/${m}.xml`, { headers: { 'user-agent': 'curl/8.5.0' } }), db, { base: BASE, pay: PAY, ledger: createLedger({}), waitUntil: () => {} })).text();
+  const x = (await map('site')) + (await map('hubs')); // the hubs (the brain among them) stand in a map of their own (node/hubs.mjs)
   for (const p of ['/brain', '/route', '/via/howto', '/pay/howto', '/.well-known/agent-card.json', '/pulse', '/treasury']) assert.ok(x.includes(`<loc>${BASE}${p}</loc>`), p);
 });
 await proof('the skill is one file in three places (site, plugin, skills/), version 4.1.0, with the price line, the free sample, /pay/howto, /treasury, /pulse and a /via/ walk', () => {

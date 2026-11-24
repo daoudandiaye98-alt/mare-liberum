@@ -204,7 +204,7 @@ await proof('topic pages of the brain still answer; the areas take only their ow
 });
 await proof('llms.txt, the sitemap and the version carry the areas', async () => {
   const l = SITE['/llms.txt'].body; for (const x of ['/brain/areas', '"verified": true', '/brain/thinking?q=', '/savings']) assert.ok(l.includes(x), x);
-  const sm = await call('/sitemaps/site.xml'); for (const x of ['/brain/areas', '/brain/market', '/brain/thinking', '/savings']) assert.ok(sm.text.includes(`${BASE}${x}<`), x);
+  const sm = await call('/sitemaps/hubs.xml'); for (const x of ['/brain/areas', '/brain/market', '/brain/thinking', '/savings']) assert.ok(sm.text.includes(`${BASE}${x}<`), x);
   assert.equal(VERSION, '3.32.0');
 });
 

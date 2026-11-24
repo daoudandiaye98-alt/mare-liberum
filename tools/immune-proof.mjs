@@ -174,7 +174,7 @@ console.log('the node with its immune system');
     const st = await (await call('/immune.json')).json(); assert.equal(st.mode, 'normal'); assert.equal(st.pace.requestsPerMinutePerAddress, 900); assert.ok(st.verbs.writes.includes('layPath'));
     const txt = await (await call('/.well-known/security.txt')).text(); assert.match(txt, /^Contact: mailto:/m); assert.match(txt, /^Policy: https:\/\/sea\.test\/security$/m); assert.match(txt, /^Expires: 20\d\d-/m);
     assert.equal((await (await call('/status.json')).json()).immune, 'normal');
-    const map = await (await call('/sitemaps/site.xml')).text(); assert.match(map, /sea\.test\/security</);
+    const map = await (await call('/sitemaps/hubs.xml')).text(); assert.match(map, /sea\.test\/security</); // the security page is a hub (node/hubs.mjs)
   });
   await proof('probes get a plain 404 and then a rest; ordinary callers beside them notice nothing', async () => {
     for (const p of ['/.env', '/.git/HEAD', '/wp-login.php', '/.env.production', '/phpinfo.php']) assert.equal((await call(p, { ip: '198.51.100.81' })).status, 404, p);
