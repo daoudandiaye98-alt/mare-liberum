@@ -177,8 +177,12 @@ await proof('I7 /connect, its title and the guide say one click for Cursor, VS C
 
 console.log('I9 · the run beside the live one says what it is');
 await proof('I9 /proof names the branch and the commit the lean run measured and its seeded brain, and never says the hourly re-read confirms it', async () => {
+  // the run beside the live one, as /proof loads it: the newest run of a branch in proof/
+  const f = readdirSync(new URL('../proof/', import.meta.url)).filter((x) => /^bench-\d{4}-\d{2}-\d{2}-lean\.json$/.test(x)).sort().at(-1), L = JSON.parse(read(`proof/${f}`));
+  const branch = /\b([a-z][a-z0-9-]*\/\d+)\b/.exec(L.method.run)?.[1], seeded = /\b(\d+) pathways\b/.exec(L.method.brain)?.[1];
+  assert.ok(branch && /^[0-9a-f]{7,}$/.test(L.bench.commit) && seeded, `the run names its branch, its commit and its seeded brain (${branch}, ${L.bench.commit}, ${seeded})`);
   const p = (await call('/proof', { ua: UA.browser, headers: NAV })).text;
-  assert.match(p, /on branch lean\/1 \(commit 2ea1cb9: the reader and the short answer this release ships\), its brain a local node seeded with the 64 live pathways of these 33 tasks/);
+  assert.ok(p.includes(`on branch ${branch} (commit ${L.bench.commit}: the reader and the short answer this release ships), its brain a local node seeded with the ${seeded} live pathways of these ${L.summary.tasks} tasks`), 'the label says what the run is');
   assert.match(p, /it is no re-run of the bench/); assert.doesNotMatch(p, /confirms it|Not live yet/);
 });
 
