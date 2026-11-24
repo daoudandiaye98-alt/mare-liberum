@@ -18,6 +18,7 @@ import { CHARTS } from './charts.mjs';
 import { DOORS } from './doors.mjs';
 import { grab, robotsGroups, robotsAllows, safeHost } from './check.mjs';
 import { page, esc } from './pages.mjs';
+import { TOKEN_RATIO as CALIBRATED } from './proof.mjs';
 
 export const MARKET_TOKEN = 'MareLiberum-Market';
 export const MARKET_UA = `${MARKET_TOKEN}/1.0 (+https://mareliberum.dev/brain/market; reads a store's UCP profile, robots.txt and home page about once a month)`;
@@ -37,7 +38,6 @@ export const SAVE = {
     market: { tokens: [5000, 20000, 50000], wh: [0.5, 2, 6], what: 'stores that passed open checks instead of checking unknown shops one by one',
       basis: 'Checking a shop means reading its home and legal pages, its registration and what others say: about 2 to 4 reads of 5,000 to 15,000 tokens for each of 2 or 3 shops, and the judgement. Energy: 3 to 15 ordinary queries.' },
   },
-  bytesPerToken: 4,
   mix: { path: 0.5, plan: 0.3, market: 0.2 },
   sources: [
     { what: 'Energy of one query to a frontier model: median 0.31 Wh (0.16–0.60); a long reasoning query (test-time scaling, about 5,000 output tokens) 3.91 Wh (2.15–7.05)', by: 'Oviedo et al., Joule (2026), doi 10.1016/j.joule.2026.102430', url: 'https://arxiv.org/abs/2509.20241' },
@@ -54,20 +54,36 @@ export const SAVE = {
 const r1 = (x) => Math.round(x * 10) / 10;
 
 // ------------------------------------------------------------------ bytes into tokens: one rule for the whole sea
-// How many bytes of each kind of text make one token. Today one assumption for every kind: 4 bytes a token, the figure
-// Anthropic's own documentation uses for web pages (an average page of 10 kB is about 2,500 tokens). Newer tokenizers
-// cut the same text into more tokens (about 30 % more for Claude 4.7 and later), so 4 counts on the low side. A ratio
-// measured on the sea's own pages replaces these numbers here and nowhere else; every count of the sea passes through
-// tokensOfBytes. format: 'html' (what a caller would have read), 'md' (what it read instead), 'text'. The ledger counts
-// UTF-8 bytes; the calibration of 3.33.0 (node/proof.mjs, TOKEN_RATIO.bytes: html, markdown, text in bytes per token)
-// fits as html, md and text here, with assumption: false and its own basis and source.
-export const TOKEN_RATIO = {
-  html: 4, md: 4, text: 4, assumption: true,
-  basis: 'an assumption, not yet measured on the sea\'s own pages: 4 bytes a token for HTML and for Markdown, the figure Anthropic\'s documentation gives for web pages (an average page of 10 kB is about 2,500 tokens); newer tokenizers make about 30 % more tokens of the same text, so 4 counts on the low side',
+// What the ledger counts, kind by kind (checked for 3.33.0):
+//   md, mdAgent  UTF-8 bytes of the page as HTML and of the Markdown sent (node/core.mjs and node/agentmd.mjs, TextEncoder)
+//   read         characters as JavaScript counts them (string length): the reader holds another site's page as decoded
+//                text (node/check.mjs grab, htmlBytes = body.length in node/reader.mjs) and its Markdown as text
+//   …Bytes alone the difference kept before 3.33.0, counted in characters, as 3.32.0 counted every kind
+// Each count becomes tokens with the ratio measured for its form and its unit by the proof of function (node/proof.mjs:
+// characters and UTF-8 bytes per token for raw HTML, plain text and the sea's Markdown, tokenizer o200k_base): HTML with
+// the HTML ratio, Markdown with the Markdown ratio. The assumption of 3.32.0 (4 bytes a token for every form, from
+// Anthropic's documentation) stays only as the fallback for a node that has no measured run. Every count of the sea
+// passes through tokensOfBytes. format: 'html' (what a caller would have read), 'md' (what it read instead), 'text'.
+export const TOKEN_ASSUMED = {
+  html: 4, md: 4, text: 4, bytes: { html: 4, md: 4, text: 4 }, assumption: true,
+  basis: 'an assumption, not measured on the sea\'s own pages: 4 bytes (or characters) a token for HTML and for Markdown, the figure Anthropic\'s documentation gives for web pages (an average page of 10 kB is about 2,500 tokens); newer tokenizers make about 30 % more tokens of the same text, so 4 counts on the low side',
   source: { what: 'Average webpage (10 kB): about 2,500 tokens; Claude 4.7 and later make about 30 % more tokens for the same text', by: 'Anthropic, Claude API pricing (web fetch tool)', url: 'https://platform.claude.com/docs/en/about-claude/pricing' },
 };
-export function tokensOfBytes(format, bytes) {
-  const r = Number(TOKEN_RATIO[format]) || Number(TOKEN_RATIO.text) || 4, b = Number(bytes) || 0;
+// the unit each measured kind counts in (above)
+export const MEASURED_UNIT = { md: 'bytes', mdAgent: 'bytes', read: 'chars', before: 'chars' };
+const CAL = [CALIBRATED?.html, CALIBRATED?.markdown, CALIBRATED?.text, CALIBRATED?.bytes?.html, CALIBRATED?.bytes?.markdown, CALIBRATED?.bytes?.text].every((x) => Number(x) > 0) ? CALIBRATED : null;
+export const TOKEN_RATIO = CAL ? {
+  html: CAL.html, md: CAL.markdown, text: CAL.text, unit: 'characters per token (JavaScript string length)',
+  bytes: { html: CAL.bytes.html, md: CAL.bytes.markdown, text: CAL.bytes.text, unit: 'UTF-8 bytes per token' },
+  assumption: false, tokenizer: CAL.tokenizer, date: CAL.date, pages: CAL.pages, run: CAL.source, proof: '/proof',
+  basis: `measured, not assumed: on the ${CAL.pages} pages of the proof of function (${CAL.date}, tokenizer ${CAL.tokenizer}) one token held ${CAL.html} characters of raw HTML (${CAL.bytes.html} UTF-8 bytes), ${CAL.markdown} of the sea's Markdown (${CAL.bytes.markdown}) and ${CAL.text} of plain text (${CAL.bytes.text}). Each count becomes tokens with the ratio of its form and of the unit it was counted in: UTF-8 bytes for pages of the sea, characters for pages read through the reader and for counts from before 3.33.0`,
+  source: { what: `Characters and UTF-8 bytes per token for raw HTML, plain text and the sea's Markdown, counted with the ${CAL.tokenizer} tokenizer on the ${CAL.pages} pages of a published task set`, by: 'Mare Liberum, proof of function', url: 'https://mareliberum.dev/proof' },
+  fallback: { html: TOKEN_ASSUMED.html, md: TOKEN_ASSUMED.md, note: 'used only when no measured run is present' },
+} : TOKEN_ASSUMED;
+// n counted in unit ('bytes': UTF-8 bytes, 'chars': JavaScript string length) of a text in format, as tokens
+export function tokensOfBytes(format, n, unit = 'bytes') {
+  const R = unit === 'chars' ? TOKEN_RATIO : (TOKEN_RATIO.bytes || TOKEN_RATIO), b = Number(n) || 0;
+  const r = Number(R[format]) || Number(R.text) || TOKEN_ASSUMED.text;
   return b > 0 ? Math.round(b / r) : 0;
 }
 // what a token is worth: list prices of the large APIs for uncached input tokens, standard rate (no batch, no cache), in
@@ -94,9 +110,11 @@ export const usdOf = (tokens, perMillion) => cents(((Number(tokens) || 0) * perM
 // sent (…Out); counts from before carry only the difference (…Bytes), which is turned into tokens as Markdown.
 export const MEASURED = { md: ['md', 'md'], mdAgent: ['mdAgent', 'md-agent'], read: ['reads', 'read'] };
 export function measuredOf(n = {}, kind) {
-  const v = (k) => Number(n[k]) || 0, saved = v(`${kind}Bytes`), html = v(`${kind}Html`), out = v(`${kind}Out`);
+  const v = (k) => Number(n[k]) || 0, saved = v(`${kind}Bytes`), html = v(`${kind}Html`), out = v(`${kind}Out`), unit = MEASURED_UNIT[kind] || 'bytes';
+  // the part of the difference that no HTML and Markdown of 3.33.0 or later explain was counted before 3.33.0, in
+  // characters; it becomes tokens as Markdown (the lower bound of what it spared: the HTML ratio would give more)
   const rest = Math.max(0, saved - (html - out));
-  return Math.max(0, tokensOfBytes('html', html) - tokensOfBytes('md', out) + tokensOfBytes('md', rest));
+  return Math.max(0, tokensOfBytes('html', html, unit) - tokensOfBytes('md', out, unit) + tokensOfBytes('md', rest, MEASURED_UNIT.before));
 }
 // the savings that follow from counted reuses: { path, plan, market, readBytes, mdBytes, reads, md, mdAgent, … }
 export function savingsOf(n = {}) {
@@ -358,8 +376,8 @@ export function createAreas(h) {
         byKind: { all: kinds(all), last30days: kinds(month) }, byDoor: { all: doors(all), last30days: doors(month) },
         series: series.slice(-30).map(({ counts, ...x }) => x), ...(Number(span) > 30 ? { daily: series } : {}),
         perReuse: Object.fromEntries(Object.entries(SAVE.per).map(([k, v]) => [k, { tokens: v.tokens, wh: v.wh, what: v.what, basis: v.basis }])),
-        scenarios: [1e3, 1e5, 1e7, 1e9].map(scenario), mix: SAVE.mix, sources: SAVE.sources, notCounted: SAVE.notCounted, ratio: TOKEN_RATIO, price: TOKEN_PRICE,
-        read: `A reuse counts once per answer that handed an agent a part someone already solved: a confirmed pathway (path), a ready plan (plan), verified offers (market); what it spares is modelled from the ranges in perReuse (low, mid, high). Markdown is measured: md counts pages of the sea asked for as Markdown, mdAgent pages of the sea sent as Markdown to an assistant reading for a person (md-agent), reads pages of other sites through the reader, each with the bytes it spared against the page as HTML; bytes become tokens by one rule (ratio: ${TOKEN_RATIO.html} bytes a token, an assumption). usd prices the tokens at list prices for uncached input tokens (price): low, mid (the headline) and high. The sea's own calls and crawlers are never counted.` };
+        scenarios: [1e3, 1e5, 1e7, 1e9].map(scenario), mix: SAVE.mix, sources: SAVE.sources, notCounted: SAVE.notCounted, ratio: TOKEN_RATIO.assumption ? TOKEN_RATIO : { ...TOKEN_RATIO, proof: `${base()}/proof`, run: `${base()}${TOKEN_RATIO.run}` }, price: TOKEN_PRICE,
+        read: `A reuse counts once per answer that handed an agent a part someone already solved: a confirmed pathway (path), a ready plan (plan), verified offers (market); what it spares is modelled from the ranges in perReuse (low, mid, high). Markdown is measured: md counts pages of the sea asked for as Markdown, mdAgent pages of the sea sent as Markdown to an assistant reading for a person (md-agent), reads pages of other sites through the reader, each with what it spared against the page as HTML (UTF-8 bytes for pages of the sea, characters for pages through the reader); counts become tokens by one rule (ratio: ${TOKEN_RATIO.assumption ? `${TOKEN_RATIO.html} bytes a token, an assumption` : `HTML ${TOKEN_RATIO.bytes.html} bytes or ${TOKEN_RATIO.html} characters a token, Markdown ${TOKEN_RATIO.bytes.md} bytes or ${TOKEN_RATIO.md} characters, measured with ${TOKEN_RATIO.tokenizer} on the proof of function (${base()}/proof)`}). usd prices the tokens at list prices for uncached input tokens (price): low, mid (the headline) and high. The sea's own calls and crawlers are never counted.` };
     },
     // the map of the brain: every area with its job, its door and its numbers
     async areasLive() {

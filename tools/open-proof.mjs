@@ -16,7 +16,8 @@ import { createLedger } from '../node/ledger.mjs';
 import { payConfig } from '../node/pay.mjs';
 import { immune } from '../node/immune.mjs';
 import { KIND_ORDER } from '../node/gauge.mjs';
-import { tokensOfBytes, TOKEN_RATIO, TOKEN_PRICE, savingsOf, measuredOf } from '../node/areas.mjs';
+import { tokensOfBytes, TOKEN_RATIO, TOKEN_ASSUMED, MEASURED_UNIT, TOKEN_PRICE, savingsOf, measuredOf } from '../node/areas.mjs';
+import { TOKEN_RATIO as PROOF_RATIO } from '../node/proof.mjs';
 import { clientFamily, DATASET_NEEDS, ENDPOINTS, exampleOf, VISIT_KINDS, FAMILIES, RELEASES } from '../node/open.mjs';
 import { formLines, pageMarkdown } from '../node/agentmd.mjs';
 
@@ -83,20 +84,36 @@ const checkDataset = (d, files) => {
 };
 
 console.log('one rule from bytes to tokens, and what tokens are worth');
-await proof('every count turns bytes into tokens through tokensOfBytes: 4 bytes a token today, marked as an assumption with its source', () => {
-  assert.equal(tokensOfBytes('html', 4000), 1000); assert.equal(tokensOfBytes('md', 4000), 1000); assert.equal(tokensOfBytes('md', 0), 0); assert.equal(tokensOfBytes('nonsense', 400), 100);
-  assert.equal(TOKEN_RATIO.assumption, true); assert.match(TOKEN_RATIO.source.url, /^https:\/\/platform\.claude\.com\//);
+await proof('every count turns into tokens through tokensOfBytes, with the ratio the proof of function measured for its form and its unit; 4 bytes a token stays only as the fallback', () => {
+  // 3.33.0: the ratio is the one node/proof.mjs measured (o200k_base), never a second number written here
+  assert.equal(TOKEN_RATIO.assumption, false); assert.equal(TOKEN_RATIO.tokenizer, PROOF_RATIO.tokenizer);
+  assert.equal(TOKEN_RATIO.html, PROOF_RATIO.html); assert.equal(TOKEN_RATIO.md, PROOF_RATIO.markdown); assert.equal(TOKEN_RATIO.text, PROOF_RATIO.text);
+  assert.equal(TOKEN_RATIO.bytes.html, PROOF_RATIO.bytes.html); assert.equal(TOKEN_RATIO.bytes.md, PROOF_RATIO.bytes.markdown);
+  assert.equal(tokensOfBytes('html', Math.round(PROOF_RATIO.html * 1000), 'chars'), 1000); assert.equal(tokensOfBytes('md', Math.round(PROOF_RATIO.markdown * 1000), 'chars'), 1000);
+  assert.equal(tokensOfBytes('html', Math.round(PROOF_RATIO.bytes.html * 1000)), 1000, 'bytes is the default unit'); assert.equal(tokensOfBytes('md', Math.round(PROOF_RATIO.bytes.markdown * 1000), 'bytes'), 1000);
+  assert.equal(tokensOfBytes('md', 0), 0); assert.equal(tokensOfBytes('nonsense', Math.round(PROOF_RATIO.bytes.text * 100)), 100, 'an unknown form counts as plain text');
+  assert.match(TOKEN_RATIO.source.url, /\/proof$/); assert.match(TOKEN_RATIO.basis, /measured/);
+  // what each kind counts in: UTF-8 bytes for pages of the sea, characters for the reader and for counts from before 3.33.0
+  assert.deepEqual(MEASURED_UNIT, { md: 'bytes', mdAgent: 'bytes', read: 'chars', before: 'chars' });
+  const core = readFileSync(new URL('../node/core.mjs', import.meta.url), 'utf8'), lens = readFileSync(new URL('../node/lens.mjs', import.meta.url), 'utf8');
+  assert.match(core, /spared\(agent \? 'mdAgent' : 'md'\)\(bytesOf\(page\)/, 'the front page counts UTF-8 bytes'); assert.match(lens, /countBytes\?\.\('read', r\.htmlBytes, r\.markdown\.length/, 'the reader counts characters');
+  // the assumption of 3.32.0 is kept, labelled, as the fallback only
+  assert.equal(TOKEN_ASSUMED.assumption, true); assert.equal(TOKEN_ASSUMED.html, 4); assert.match(TOKEN_ASSUMED.source.url, /^https:\/\/platform\.claude\.com\//); assert.equal(TOKEN_RATIO.fallback.html, 4);
   const src = readFileSync(new URL('../node/areas.mjs', import.meta.url), 'utf8'), open = readFileSync(new URL('../node/open.mjs', import.meta.url), 'utf8');
-  assert.equal((src.match(/\/ SAVE\.bytesPerToken|bytesPerToken\)/g) || []).length, 0, 'no second rule from bytes to tokens');
+  assert.equal((src.match(/\/ SAVE\.bytesPerToken|bytesPerToken\)|bytesPerToken: 4/g) || []).length, 0, 'no second rule from bytes to tokens');
   assert.doesNotMatch(open, /\/ 4\b/, 'the open numbers use the one rule as well');
 });
-await proof('measured counts the HTML stood in for and the Markdown sent; counts from before 3.33.0 (only the difference) still count', () => {
-  assert.equal(measuredOf({ mdAgentHtml: 40000, mdAgentOut: 8000, mdAgentBytes: 32000 }, 'mdAgent'), 8000);
-  assert.equal(measuredOf({ mdBytes: 4000 }, 'md'), 1000, 'the difference alone, as before');
-  const s = savingsOf({ path: 2, plan: 1, market: 1, readBytes: 4000, mdBytes: 4000 }); assert.equal(s.tokens.measured, 2000); assert.equal(s.tokens.mid, 2 * 15000 + 5000 + 20000 + 2000);
+await proof('measured counts the HTML stood in for and the Markdown sent, each with its own ratio and unit; counts from before 3.33.0 (only the difference) still count, as Markdown in characters', () => {
+  const t = (b, r) => Math.round(b / r);
+  assert.equal(measuredOf({ mdAgentHtml: 40000, mdAgentOut: 8000, mdAgentBytes: 32000 }, 'mdAgent'), t(40000, PROOF_RATIO.bytes.html) - t(8000, PROOF_RATIO.bytes.markdown));
+  assert.equal(measuredOf({ readHtml: 32200, readOut: 3580, readBytes: 28620 }, 'read'), t(32200, PROOF_RATIO.html) - t(3580, PROOF_RATIO.markdown), 'the reader in characters');
+  assert.equal(measuredOf({ mdBytes: 4000 }, 'md'), t(4000, PROOF_RATIO.markdown), 'the difference alone, as before');
+  const s = savingsOf({ path: 2, plan: 1, market: 1, readBytes: 4000, mdBytes: 4000 }), m = 2 * t(4000, PROOF_RATIO.markdown);
+  assert.equal(s.tokens.measured, m); assert.equal(s.tokens.mid, 2 * 15000 + 5000 + 20000 + m);
 });
 await proof('worth: a million tokens are $0.10, $2 and $8 at list prices for input tokens, each band with official sources', () => {
-  const s = savingsOf({ mdAgentHtml: 5_000_000, mdAgentOut: 1_000_000, mdAgentBytes: 4_000_000 });
+  // a million tokens of HTML spared outright: the bytes the measured HTML ratio makes a million tokens of
+  const b = Math.round(PROOF_RATIO.bytes.html * 1_000_000), s = savingsOf({ mdAgentHtml: b, mdAgentOut: 0, mdAgentBytes: b });
   assert.equal(s.tokens.measured, 1_000_000); assert.deepEqual([s.usd.low, s.usd.mid, s.usd.high], [0.1, 2, 8]); assert.deepEqual([s.usd.measuredLow, s.usd.measuredMid, s.usd.measuredHigh], [0.1, 2, 8]);
   assert.deepEqual([TOKEN_PRICE.low, TOKEN_PRICE.mid, TOKEN_PRICE.high], [0.1, 2, 8]);
   for (const host of ['platform.claude.com', 'developers.openai.com', 'ai.google.dev']) assert.ok(TOKEN_PRICE.sources.some((x) => new URL(x.url).hostname === host), host);
@@ -257,9 +274,12 @@ await proof('/savings leads with every token spared, measured and modelled apart
   const h = await call('/savings'); assert.equal(h.status, 200);
   for (const x of ['tokens spared for AI agents so far', 'The last 30 days', 'By kind and by door', 'What it is worth', 'md-agent', 'What one reuse spares', 'If it grows', 'Sources', 'Not counted', 'Joule', '485 TWh in 2025', 'Put the count on your page', '/savings/badge.svg']) assert.ok(h.text.includes(x), x);
   for (const svg of h.text.match(/<svg viewBox[\s\S]*?<\/svg>/g)) wellFormed(svg);
+  // the ratio says where it comes from, and links the proof that measured it
+  assert.ok(h.text.includes('How counts become tokens: measured, not assumed'), 'the ratio is labelled'); assert.ok(h.text.includes('<a href="/proof">proof of function</a>'), '/proof is linked');
+  assert.ok(h.text.includes(`${TOKEN_RATIO.html}</b> characters of raw HTML`) && h.text.includes(`${TOKEN_RATIO.md}</b> characters of the sea's Markdown`), 'the measured numbers are shown');
   const j = JSON.parse((await call('/savings.json')).text);
   assert.equal(j.series.length, 30); assert.deepEqual(Object.keys(j.hero).sort(), ['measured', 'modelled', 'note', 'tokens', 'usd', 'wh']); assert.equal(j.hero.tokens, j.hero.measured + j.hero.modelled.mid);
-  assert.deepEqual(j.byKind.all.map((x) => x.kind), ['md', 'md-agent', 'read', 'path', 'plan', 'market']); assert.equal(j.scenarios.length, 4); assert.equal(j.notCounted.length, 3); assert.equal(j.price.mid, 2); assert.equal(j.ratio.assumption, true);
+  assert.deepEqual(j.byKind.all.map((x) => x.kind), ['md', 'md-agent', 'read', 'path', 'plan', 'market']); assert.equal(j.scenarios.length, 4); assert.equal(j.notCounted.length, 3); assert.equal(j.price.mid, 2); assert.equal(j.ratio.assumption, false); assert.match(j.ratio.proof, /\/proof$/); assert.equal(j.ratio.tokenizer, 'o200k_base');
 });
 await proof('/savings/badge.svg is well-formed SVG with the live count, is counted as no visit, and the page offers it to copy', async () => {
   const b = await call('/savings/badge.svg'); assert.match(b.headers.get('content-type'), /^image\/svg\+xml/); wellFormed(b.text);

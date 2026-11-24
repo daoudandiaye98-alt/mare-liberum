@@ -273,7 +273,7 @@ ${wholeTable(d)}
 <h2>Every tokenizer</h2>
 ${tokenizerTable(d)}
 <h2>Characters per token, measured</h2>
-<p>How many characters one token holds in each form, over all ${n(s.measured)} pages. The ledger of what the shared brain saves (<a href="/savings">/savings</a>) counts the characters the sea's Markdown spared; these numbers let it turn them into tokens measured for each form instead of guessed ones (exported as <code>TOKEN_RATIO</code> in <code>node/proof.mjs</code>).</p>
+<p>How many characters one token holds in each form, over all ${n(s.measured)} pages. The ledger of what the shared brain saves (<a href="/savings">/savings</a>) counts what the sea's Markdown spared, in characters for pages read through the reader and in UTF-8 bytes for the sea's own pages; it turns each into tokens with the ratio of its form and its unit from this table instead of a guessed one (exported as <code>TOKEN_RATIO</code> in <code>node/proof.mjs</code>, used by <code>tokensOfBytes</code> in <code>node/areas.mjs</code>).</p>
 ${ratioTable(d)}
 <h2>The task set</h2>
 <p>${esc(sentence(d.taskSet?.rule))}</p>
