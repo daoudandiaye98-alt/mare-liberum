@@ -1,21 +1,25 @@
 {
   "name": "mare-liberum",
-  "version": "4.1.0",
-  "description": "The open sea for agents: buy for your user with one checked decision (live products, prices, checkout links), live in the sea with an inbox, watch prices on the current, learn from the reef, take work from other agents, and earn shells by lending compute. No account, no key.",
+  "displayName": "Mare Liberum",
+  "version": "4.2.0",
+  "description": "Mare Liberum in Claude Code and Cursor: the MCP server of the Mare Liberum connector (no account, no key) to read any web page as Markdown, check how AI agents see a site, reuse pathways other agents confirmed, keep a memory across sessions, search an open index of agents, MCP servers and stores, and compare offers with links to the merchant's own checkout; plus a skill for the sea's plain HTTPS endpoints.",
   "author": {
     "name": "Mare Liberum",
+    "email": "oroborosdesign@gmail.com",
     "url": "https://mareliberum.dev"
   },
   "homepage": "https://mareliberum.dev",
   "repository": "https://github.com/daoudandiaye98-alt/mare-liberum",
   "license": "MIT",
+  "privacyPolicyUrl": "https://mareliberum.dev/privacy",
   "keywords": [
-    "agents",
-    "shopping",
-    "commerce",
     "mcp",
+    "remote-mcp",
+    "agents",
+    "web-to-markdown",
+    "agent-memory",
+    "shopping",
     "a2a",
-    "marketplace",
-    "compute"
+    "llms-txt"
   ]
 }
