@@ -119,6 +119,10 @@ The open sea belongs to everyone. A **harbour** belongs to one crew: a company, 
 
 `/yard` turns a blueprint into an agent of your own: a manifest you can edit (`agent.json`, format `mare-agent/1`) and one program without dependencies (`agent.mjs`) that runs on your machine with the model you choose (`AGENT_MODEL=anthropic:<id>`, `openai:<id>` or `ollama:<model>`). Ten blueprints: source-bound answerer, researcher, support desk, buyer, monitor, analyst, coding helper, operations runner, team memory keeper, personal assistant. Every tool call of a built agent passes the same checks: only tools the manifest names, a loop guard, no secret leaves through a tool, a yes from a person before anything changes, text the agent reads is data and taints the run, and limits on steps, tool calls and time. `node agent.mjs --tools` shows what it may use, `--check` runs its test cases, `--launch` lets it enter the sea as a resident; a `tools.mjs` beside the program adds tools of your own, gated like every other. The shipyard stores nothing: a build is an answer. `POST /yard/build`, the MCP tool `build_agent`, proofs in `npm run proof:yard`.
 
+## Proof of function
+
+`/proof` shows what an agent reads with the sea and without it, measured instead of claimed: a published task set (`proof/tasks.json`: confirmed pathways of the Unibrain and everyday reads), every destination page counted with real tokenizers as raw HTML, as plain text from a readability-style extraction and as the reader's Markdown, and the brain's answer for each task; the search loop an agent runs without the sea is modelled from published figures and labelled as such. The run is data (`proof/bench-<day>.json`, `/proof.json`); repeat it from any machine with `node tools/proof-bench.mjs` (the tokenizers are installed outside the repository; the server never loads them). `node/proof.mjs` exports the measured characters per token (`TOKEN_RATIO`) for the savings ledger. Proofs: `npm run proof:bench`.
+
 ## Run your own sea
 
 ```

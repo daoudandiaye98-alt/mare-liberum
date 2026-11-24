@@ -34,6 +34,7 @@ import { pricingOf, priceLine, withPrice } from './pricing.mjs';
 import { wantsMarkdown, mdTwin, asMarkdown } from './agentmd.mjs';
 import { areasPage, areasJson, marketPage, thinkingPage } from './areas.mjs';
 import { openOf, openPage, savingsPage, visitsCsv, savingsCsv, clientFamily, OPEN } from './open.mjs';
+import { proofPage, proofJson, loadBench, benchFile, proofLive, proofTide } from './proof.mjs';
 import { SHORE_MOVES, MCP_ALIASES, SSE_OPEN, SSE_POST, meant, aboutOf, aboutPage, imprintPage, didDoc, agentsJson, discoveryOf, sseOpen, sseOf } from './shore.mjs';
 import { netKey } from './guard.mjs';
 
@@ -1687,7 +1688,7 @@ async function handleOne(req, db, cfg = {}) {
     if (path === '/say') return json(await sea.say(await args(), ctx));
     if (path === '/inbox') return json(await sea.inbox(await args()));
     // the ecosystem: the current, watches, the reef, work between agents, seals, the heartbeat
-    if (path === '/tide') { const t = await sea.tide(await args(), ctx); try { if (!t?.calm) { const m = (async () => { await sea.flushSave?.(); await sea.flushOpen?.(); if (!immune.atRest?.('market')) await sea.marketSweep?.(); })().catch((e) => console.error('mare_market', e?.message)); cfg.waitUntil?.(m); } } catch {} try { const p = indexNowDaily(db, base, sea, cfg).catch(() => {}); cfg.waitUntil?.(p); } catch {} try { const g = db('mare_stats', {}).then((idx) => sea.gaugeLakes(idx)).catch(() => {}); cfg.waitUntil?.(g); } catch {} return json(t); }
+    if (path === '/tide') { const t = await sea.tide(await args(), ctx); try { if (!t?.calm) { const m = (async () => { await sea.flushSave?.(); await sea.flushOpen?.(); if (!immune.atRest?.('market')) await sea.marketSweep?.(); })().catch((e) => console.error('mare_market', e?.message)); cfg.waitUntil?.(m); } } catch {} try { if (!t?.calm && !ctx.readOnly && !immune.atRest?.('proof')) cfg.waitUntil?.(proofTide(cfg.kv || db.kv, cfg.proofRead).catch(() => null)); } catch {} try { const p = indexNowDaily(db, base, sea, cfg).catch(() => {}); cfg.waitUntil?.(p); } catch {} try { const g = db('mare_stats', {}).then((idx) => sea.gaugeLakes(idx)).catch(() => {}); cfg.waitUntil?.(g); } catch {} return json(t); }
     if (path === '/indexnow.json') return json((await cfg.kv?.get(`indexnow:${new Date().toISOString().slice(0, 10)}`).catch(() => null)) || { today: 'not yet' }, 200, { 'cache-control': 'public, max-age=60' });
     if (path === '/tides') return json(await sea.tides(await args()), 200, { 'cache-control': 'public, max-age=60' });
     if (path === '/instinct.json' || path === '/instinct') return json(await sea.instinctState(), 200, { 'cache-control': 'public, max-age=30' });
@@ -1957,6 +1958,12 @@ async function handleOne(req, db, cfg = {}) {
       const a = await args();
       if (at === '/brain/market') { const r = await sea.market(a, ctx); return out(r, () => marketPage(base, r), a.q || a.need || a.host ? 0 : 120); }
       const r = await sea.thinking(a, ctx); return out(r, () => thinkingPage(base, r), a.q || a.task ? 0 : 300);
+    }
+    // the proof of function (node/proof.mjs): what an agent reads with and without the sea, counted with real tokenizers
+    if (/^\/proof(\.json|\/(tasks|bench-\d{4}-\d{2}-\d{2})\.json)?$/.test(path) && req.method === 'GET') {
+      if (path.startsWith('/proof/')) { const f = benchFile(path.slice(7)); return f ? new Response(f, { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=3600', 'x-robots-tag': 'noindex', ...CORS } }) : json({ error: { code: 'NOT_FOUND', message: `no such run; see ${base}/proof` } }, 404); }
+      const acc = req.headers.get('accept') || '', asJson = path.endsWith('.json') || url.searchParams.get('format') === 'json' || (/application\/json/.test(acc) && !/text\/html/.test(acc)), d = loadBench(), live = await proofLive(cfg.kv || db.kv);
+      return asJson ? ajson(proofJson(base, d, live), 200, { 'cache-control': 'public, max-age=300', ...(path.endsWith('.json') ? { 'x-robots-tag': 'noindex' } : {}) }) : html(proofPage(base, d, live), 300);
     }
     if (path.startsWith('/brain/') && req.method === 'GET') { const r = await sea.think({ q: decodeURIComponent(path.slice(7)).replace(/-/g, ' ') }, { ...ctx, readOnly: true }); const res = wantsHtml() ? html(brainPage(base, r, path), 300) : ajson(forAgents(r, r.task), 200, { 'cache-control': 'public, max-age=300' }); res.headers.set('vary', 'accept'); return res; }
     if (path === '/go' || path.startsWith('/go/')) { const a = await args(), r = await sea.walk(path.length > 4 ? decodeURIComponent(path.slice(4)) : null, a, ctx), to = onward(r.to, a.q, Date.now()); if (to !== r.to) passed('go', r.to, { q: a.q, status: 302 }); return new Response(null, { status: 302, headers: { location: to, 'cache-control': 'no-store', 'x-robots-tag': 'noindex', ...CORS } }); }

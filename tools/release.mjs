@@ -50,7 +50,7 @@ if (cmd === 'pack') {
   const stamp = new Date(build.builtAt || Date.now()).toISOString().replace(/[-:]/g, '').slice(0, 15).replace('T', '-');
   const id = `${stamp}-${sha.slice(0, 7)}`;
   // the node as it runs: no lake caches, no plain copy of the index (the node reads the compressed one), no git history
-  const keep = ['serve.mjs', 'package.json', 'LICENSE', 'README.md', 'server.json', 'node', 'site', 'public', 'flow', 'deploy', 'engines'].filter((f) => existsSync(f));
+  const keep = ['serve.mjs', 'package.json', 'LICENSE', 'README.md', 'server.json', 'node', 'site', 'public', 'flow', 'deploy', 'engines', 'proof'].filter((f) => existsSync(f));
   const dataFiles = readdirSync('data', { withFileTypes: true }).filter((d) => d.isDirectory() || (!/\.ndjson$/.test(d.name) && d.name !== 'sea.tsv')).map((d) => `data/${d.name}`);
   if (!existsSync('data/sea.tsv.gz')) throw new Error('data/sea.tsv.gz is missing; run node tools/build.mjs first');
   execFileSync('tar', ['-czf', 'sea.tar.gz', '--owner=0', '--group=0', ...keep, ...dataFiles], { stdio: 'inherit' });

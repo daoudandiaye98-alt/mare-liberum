@@ -46,6 +46,7 @@ const CHART = [
   [/^\/de\/agentenwetter$/, P(1, '150 m', 'sonar', ['KI-Agenten lesen den ganzen Tag im Netz.', 'Kaum eine Website weiß, welche und wofür.', 'Ein Pegel zählt sie. Zusammen ergeben die Pegel das Wetter.'])],
   [/^\/gauge\/view$/, P(1, '150 m', 'sonar')],
   [/^\/web(\/|$)/, P(1, '150 m', 'sonar')],
+  [/^\/proof$/, P(2, '700 m', 'sonar', ['Every word an agent reads costs tokens.', 'We counted them on real tasks, with the sea and without it.', 'Measured where we could, modelled where we had to, and said which is which.'])],
   [/^\/(use|tools|learn|read|mcp-server|de\/mcp-server|web-to-markdown|de\/webseite-als-markdown)$/, P(1, '40 m', 'threads')],
   [/^\/(business|de\/unternehmen)$/, P(0, '0 m', 'harbour')],
   [/^\/de$/, P(0, '0 m', 'compass', undefined, 'The surface')],
