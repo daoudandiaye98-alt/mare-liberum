@@ -108,5 +108,6 @@
   "build_agent",
   "stats"
  ],
- "openDoorNote": "The names of the open door (/mcp) at 3.32.0, in order: the open door may say more about each tool, but no tool is removed or renamed."
+ "openDoorNote": "The names of the open door (/mcp) at 3.32.0, in order, and the size of its tools/list body in bytes: the open door may say more about each tool, but no tool is removed or renamed, and its list stays at or under that size.",
+ "openDoorBytes": 40576
 }

@@ -93,12 +93,16 @@ console.log('the open door says what each tool is for (MCP 2025-11-25 Tool and T
 const LIST = JSON.parse((await doorBodies(CORE, '/mcp'))['tools/list'].body), OPEN = LIST.result.tools;
 const NAMES = new Set(OPEN.map((t) => t.name)), PROPS = new Set(OPEN.flatMap((t) => Object.keys(t.inputSchema?.properties || {})));
 const HINTS = ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint'];
-await proof('no tool of 3.32.0 is removed or renamed, and the order stays', () => assert.deepEqual(OPEN.map((t) => t.name), FIX.openDoorTools));
+await proof('no tool of 3.32.0 is removed or renamed, and the order stays; a tool added since has its own entry in node/opentools.mjs', async () => {
+  const kept = OPEN.map((t) => t.name).filter((n) => FIX.openDoorTools.includes(n)); assert.deepEqual(kept, FIX.openDoorTools);
+  const { OPEN: TEXTS } = await import(pathToFileURL(join(ROOT, 'node/opentools.mjs')).href);
+  for (const n of NAMES) assert.ok(TEXTS[n], `the open door has ${n}, but node/opentools.mjs has no entry for it: add a lean one`);
+});
 await proof('every tool has a title of its own, a description that says what it does, when to use it (and which sibling fits otherwise) and what comes back', () => {
   for (const t of OPEN) {
     assert.ok(t.title && t.title !== t.name && t.title.length > t.name.length, `${t.name}: a meaningful title`);
-    assert.ok(t.description.length >= 150 && t.description.length <= 900, `${t.name}: description of ${t.description.length} characters`);
-    assert.match(t.description, /\bUse it\b/, `${t.name}: says when to use it`);
+    assert.ok(t.description.length >= 100 && t.description.length <= 320, `${t.name}: description of ${t.description.length} characters (100 to 320)`);
+    assert.match(t.description, /\b[Uu]se\b/, `${t.name}: says when to use it or which sibling instead`);
     assert.match(t.description, /\bReturns\b/, `${t.name}: says what comes back`);
     assert.ok(t.description.length > 2 * t.title.length && !t.description.toLowerCase().startsWith(t.title.toLowerCase() + '.'), `${t.name}: more than its title`);
   }
@@ -118,12 +122,12 @@ await proof('every input is described, every required input exists, and the sche
     for (const r of t.inputSchema.required || []) assert.ok(p[r], `${t.name}: required ${r} is not a property`);
   }
 });
-await proof('every tool carries all four annotations as booleans, and the title in them is its title', () => {
-  for (const t of OPEN) { for (const h of HINTS) assert.equal(typeof t.annotations[h], 'boolean', `${t.name}.${h}`); assert.equal(t.annotations.title, t.title, t.name); }
+await proof('every tool carries all four annotations as booleans; the title lives once, on the tool', () => {
+  for (const t of OPEN) { for (const h of HINTS) assert.equal(typeof t.annotations[h], 'boolean', `${t.name}.${h}`); assert.deepEqual(Object.keys(t.annotations), HINTS, t.name); }
 });
 await proof('annotations and descriptions never contradict each other', () => {
   const PUBLISHES = /\b(publish(es)?|is public|are public|becomes a public|carried to|is laid|leaves the need)\b/i;
-  const LEAVES_A_MARK = /\b(public|stored|kept|carried|inbox|ticket|counted|moves?|records|hide|removed|keeps|issues|sets|state|reorder)\b/i;
+  const LEAVES_A_MARK = /\b(public\w*|stored|kept|carried|inbox|ticket|counted|moves?|records|hides?|removed|keeps|issues|sets|state|reorders?)\b/i;
   for (const t of OPEN) {
     const a = t.annotations, d = t.description;
     if (a.readOnlyHint) { assert.ok(!PUBLISHES.test(d), `${t.name} is read-only but says it publishes: ${d.match(PUBLISHES)?.[0]}`); assert.equal(a.destructiveHint, false, t.name); }
@@ -148,7 +152,13 @@ await proof('the server card the registry entry points to shows the same tools a
   assert.deepEqual(card.tools, OPEN.map((t) => ({ name: t.name, title: t.title, description: t.description, annotations: t.annotations })));
   assert.equal(card.remotes[0].url, DOOR);
 });
-await proof(`the open door stays a size an agent can afford: ${Math.round(JSON.stringify(LIST).length / 1024)} KB for ${OPEN.length} tools`, () => assert.ok(JSON.stringify(LIST).length < 72 * 1024));
+const OPEN_BYTES = Buffer.byteLength((await doorBodies(CORE, '/mcp'))['tools/list'].body), HARD = 45 * 1024;
+await proof(`the open door's tool list stays lean: ${OPEN_BYTES} bytes (about ${Math.round(OPEN_BYTES / 4)} tokens), at most ${FIX.openDoorBytes} as at 3.32.0`, () => {
+  // every agent that loads the list pays for each byte: say more only by saying something else in fewer words, or raise the
+  // ceiling on purpose (never above 45 KB)
+  assert.ok(FIX.openDoorBytes <= HARD);
+  assert.ok(OPEN_BYTES <= FIX.openDoorBytes, `the open door's tools/list is ${OPEN_BYTES} bytes, more than ${FIX.openDoorBytes}: tighten node/opentools.mjs`);
+});
 
 // -------------------------------------------------------------------------------------------- the official MCP registry
 console.log('the official MCP registry (server.schema.json 2025-12-11)');
