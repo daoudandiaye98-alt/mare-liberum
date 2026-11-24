@@ -32,7 +32,8 @@
     "proof:bench": "node tools/bench-proof.mjs",
     "proof:attention": "node --expose-gc tools/attention-proof.mjs",
     "proof:connect": "node tools/connect-proof.mjs",
-    "proof:reach": "node tools/reach-proof.mjs"
+    "proof:reach": "node tools/reach-proof.mjs",
+    "proof:offers": "node tools/offers-proof.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.9.0",
