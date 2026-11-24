@@ -25,6 +25,7 @@ import { createInstinct } from './instinct.mjs';
 import { createLighthouse } from './lighthouse.mjs';
 import { createGauge } from './gauge.mjs';
 import { createAreas } from './areas.mjs';
+import { createOpen } from './open.mjs';
 import * as charts from './charts.mjs';
 import { netKey } from './guard.mjs';
 import { readFileSync as readFileSyncAtlas } from 'node:fs';
@@ -532,5 +533,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
   Object.assign(api, createGauge({ kv, update, allow, SeaError, clean, strip, now, sha, DAY, roleOf, classify, fetchText: gaugeFetch, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
   // the areas of the Unibrain: the verified market, thinking, and the ledger of what the shared brain saves (node/areas.mjs)
   Object.assign(api, createAreas({ kv, update, allow, api, SeaError, clean, strip, now, DAY, entryOf, marketFetch, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
+  // the open numbers: the census of the last days and the tool calls at the open MCP door, for /open (node/open.mjs)
+  Object.assign(api, createOpen({ kv, update, now, DAY }));
   return api;
 }

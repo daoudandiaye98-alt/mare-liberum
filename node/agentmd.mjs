@@ -32,29 +32,57 @@ export const mdTwin = (path) => {
 };
 
 const attr = (html, re) => { const m = re.exec(html); return m ? entities(m[1]).replace(/\s+/g, ' ').trim() : ''; };
-// one HTML page of the sea as Markdown: title, description, the main part, and where the page and the guide live
+const UTF8 = new TextEncoder(), bytesOf = (s) => UTF8.encode(String(s || '')).length;
+// A form is a door of the page: in Markdown its fields would be lost, and an agent could not use it. Each form is
+// written as one line above its fields: the method, the address and the name of every field, with what the field asks
+// for (its label, else its placeholder, else its name) and the value of a fixed one.
+const unquote = (a, name) => { const m = new RegExp(`\\b${name}\\s*=\\s*("([^"]*)"|'([^']*)'|([^\\s>]+))`, 'i').exec(a); return m ? entities(m[2] ?? m[3] ?? m[4] ?? '') : null; };
+export function formLines(html, base) {
+  const labels = {}; for (const m of String(html).matchAll(/<label\b([^>]*)>([\s\S]*?)<\/label>/gi)) { const f = unquote(m[1], 'for'); if (f) labels[f] = entities(m[2].replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim(); }
+  let n = 0;
+  return String(html).replace(/<form\b([^>]*)>([\s\S]*?)<\/form>/gi, (all, a, inner) => {
+    // a form without an address of its own is worked by the page's script (it sends elsewhere): it is left as it is
+    const action = unquote(a, 'action'); if (++n > 20 || !action) return all;
+    const method = (unquote(a, 'method') || 'get').toUpperCase() === 'POST' ? 'POST' : 'GET';
+    let to; try { to = new URL(action, base).href; } catch { return all; }
+    const options = {}; for (const m of inner.matchAll(/<select\b([^>]*)>([\s\S]*?)<\/select>/gi)) { const nm = unquote(m[1], 'name'); if (nm) options[nm] = [...m[2].matchAll(/<option\b([^>]*)>/gi)].map((o) => unquote(o[1], 'value') ?? '').filter(Boolean); }
+    const fields = [];
+    for (const m of inner.matchAll(/<(input|textarea|select)\b([^>]*)>/gi)) {
+      const at = m[2], name = unquote(at, 'name'), type = (unquote(at, 'type') || '').toLowerCase(); if (!name || ['submit', 'button', 'reset', 'image', 'file'].includes(type)) continue;
+      const id = unquote(at, 'id'), what = ((id && labels[id]) || unquote(at, 'placeholder') || unquote(at, 'aria-label') || name).replace(/[<>]/g, ''), o = options[name];
+      fields.push(type === 'hidden' ? `${name}=${unquote(at, 'value') ?? ''}` : o?.length ? `${name}=<${what}: ${o.slice(0, 12).join(' | ')}${o.length > 12 ? ' | …' : ''}>` : `${name}=<${what}>`);
+    }
+    if (!fields.length) return all;
+    const line = method === 'GET' ? `GET ${to}${to.includes('?') ? '&' : '?'}${fields.join('&')}` : `POST ${to} with ${fields.join(', ')}`;
+    return `<p>Form: <code>${line.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')}</code></p><form${a}>${inner}</form>`;
+  });
+}
+// one HTML page of the sea as Markdown: title, description, the main part, and where the page and the guide live. A
+// page of the sea holds no menus in its main part (its frame stands outside it), so a list of links is content and stays
 export function pageMarkdown(html, url, base) {
   const title = attr(html, /<title[^>]*>([\s\S]*?)<\/title>/i);
   const desc = attr(html, /<meta\s+name="description"\s+content="([^"]*)"/i);
   const canon = attr(html, /<link\s+rel="canonical"\s+href="([^"]*)"/i) || url;
-  let body = toMarkdown(html, base);
+  let body = toMarkdown(formLines(html, base), base, { menus: false });
   // the page's own first heading repeats the title: keep one of them
   if (title && body.startsWith('# ')) { const first = body.split('\n', 1)[0].slice(2).trim(); if (title.toLowerCase().startsWith(first.toLowerCase())) body = body.slice(body.indexOf('\n') + 1).trim(); }
   const head = [title && `# ${title}`, desc && `> ${desc}`].filter(Boolean).join('\n\n');
   return { canon, md: `${head}${head ? '\n\n' : ''}${body}\n\n---\nPage: ${canon} · For agents: ${base}/llms.txt · MCP: ${base}/mcp · Ask first: ${base}/brain?q=<task>\n` };
 }
 
-// the response for an agent that asked for Markdown: built from the HTML answer, or that answer as it was
-export async function asMarkdown(res, { url, base, twin = false, spared }) {
+// the response for an agent that asked for Markdown: built from the HTML answer, or that answer as it was. agent: the
+// address of the HTML page, when the Markdown goes to an assistant that asked for HTML (it varies with User-Agent then,
+// and names the HTML as its alternate)
+export async function asMarkdown(res, { url, base, twin = false, spared, agent }) {
   if (res.status !== 200 || !/^text\/html/i.test(res.headers.get('content-type') || '')) return res;
   const page = await res.text(), { canon, md } = pageMarkdown(page, url, base);
-  // what the Markdown spared against the HTML, for the ledger of the Unibrain (node/areas.mjs)
-  try { spared?.(page.length, md.length); } catch {}
+  // what the Markdown spared against the HTML, in bytes, for the ledger of the Unibrain (node/areas.mjs)
+  try { spared?.(bytesOf(page), bytesOf(md)); } catch {}
   const h = new Headers();
   for (const k of ['cache-control', 'access-control-allow-origin', 'access-control-expose-headers', 'x-robots-tag']) { const v = res.headers.get(k); if (v) h.set(k, v); }
   h.set('content-type', 'text/markdown; charset=utf-8');
-  h.set('vary', 'accept');
-  h.set('link', `<${canon}>; rel="canonical"`);
+  h.set('vary', agent ? 'User-Agent, Accept' : 'accept');
+  h.set('link', agent ? `<${canon}>; rel="canonical", <${agent}>; rel="alternate"; type="text/html"` : `<${canon}>; rel="canonical"`);
   // the .md twin is a copy of an indexed page: search engines keep the HTML one
   if (twin) h.set('x-robots-tag', 'noindex, follow');
   return new Response(md, { status: 200, headers: h });

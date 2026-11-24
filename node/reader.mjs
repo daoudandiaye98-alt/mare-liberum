@@ -12,8 +12,9 @@ export const entities = (s) => String(s || '').replace(/&#x([0-9a-f]+);/gi, (_, 
 const abs = (href, base) => { try { const u = new URL(entities(href).trim(), base); return /^https?:$/.test(u.protocol) ? u.href : null; } catch { return null; } };
 const inline = (s) => entities(s.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
 
-// HTML to Markdown, plainly: the main part of the page, headings, paragraphs, lists, links, code; no scripts, no menus
-export function toMarkdown(html, base) {
+// HTML to Markdown, plainly: the main part of the page, headings, paragraphs, lists, links, code; no scripts, no menus.
+// menus: false keeps runs of links (a page whose main part holds no menu, like the pages of the sea itself)
+export function toMarkdown(html, base, { menus = true } = {}) {
   let h = String(html || '').replace(/<!--[\s\S]*?-->/g, ' ');
   const pick = (tag) => { let best = ''; for (const m of h.matchAll(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'gi'))) if (m[1].length > best.length) best = m[1]; return best; };
   const main = pick('main') || pick('article'), region = main && main.replace(/<[^>]+>/g, '').trim().length > 200 ? main : (/<body\b[^>]*>([\s\S]*)<\/body>/i.exec(h)?.[1] || h);
@@ -33,7 +34,7 @@ export function toMarkdown(html, base) {
   // menus: runs of three or more short link-only items (blank lines between them do not break a run) are navigation, not content
   const navItem = (l) => /^(- )?\[[^\]]{1,40}\]\([^)]+\)$/.test(l) || /^-$/.test(l);
   const drop = new Set();
-  for (let i = 0; i < ls.length;) {
+  for (let i = 0; menus && i < ls.length;) {
     if (!navItem(ls[i])) { i++; continue; }
     let j = i, n = 0; while (j < ls.length && (navItem(ls[j]) || ls[j] === '')) { if (ls[j].length > 2) n++; j++; }
     if (n >= 3) for (let k = i; k < j; k++) drop.add(k);

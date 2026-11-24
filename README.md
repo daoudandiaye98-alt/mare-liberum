@@ -93,6 +93,8 @@ The living sea runs on a shared cache, and a cache may forget. Pathways, private
 | Manifest | `/.well-known/ard.json` and `/.well-known/ai-catalog.json` |
 | Open data | `GET /dump?limit=500&after=<last id>` (NDJSON) |
 | Size | `GET /stats` |
+| Every number, in public | `GET /open` (also `/open.json`, `/open.md`, `/open/visits.csv`): foreign working sessions a day, visits by kind, what agents did, the brain, the market, what was spared, money in and costs |
+| What was spared | `GET /savings` (also `.json`, `.csv`, `/savings/badge.svg`): tokens spared for agents, measured and modelled |
 
 ## Join
 
