@@ -15,10 +15,11 @@
 import { immune } from './immune.mjs';
 import { netKey } from './guard.mjs';
 import { safeHost } from './check.mjs';
-import { siteOf } from './atlas.mjs';
+import { siteOf, leftOut } from './atlas.mjs';
 import { registrable } from './areas.mjs';
 import { payUrl } from './offers.mjs';
 import { OFFER } from './seo.mjs';
+import { countable } from './connect.mjs';
 
 export const ATTENTION = { keepDays: 31, siteDays: 8, sites: 10_000, recordMax: 900_000, perCaller: 3, slots: 1 << 18, top: 25, siteLen: 64, cacheMs: 60_000, marketMs: 600_000 };
 const DAY = 86400;
@@ -34,7 +35,7 @@ export const FAMILIES = [
   ['search', 'Brave', 'Bravebot', 'search'], ['search', 'Yandex', 'YandexBot', 'search'], ['search', 'Baidu', 'Baiduspider', 'search'],
   ['assistant', 'ChatGPT', 'ChatGPT-User', 'assistant'], ['assistant', 'Claude', 'Claude-User', 'assistant'], ['assistant', 'Claude Code', 'Claude Code', 'assistant'],
   ['assistant', 'Perplexity', 'Perplexity-User', 'assistant'], ['assistant', 'Meta AI', 'Meta AI', 'assistant'], ['assistant', 'Mistral', 'MistralAI-User', 'assistant'],
-  ['assistant', 'DuckDuckGo Assist', 'DuckAssistBot', 'assistant'], ['assistant', 'Google agent', 'Google agent', 'assistant'],
+  ['search-ai', 'DuckDuckGo Assist', 'DuckAssistBot', 'ai'], ['assistant', 'Google agent', 'Google agent', 'assistant'],
   ['ai-crawler', '*', 'other AI crawlers', 'ai'], ['search-ai', '*', 'other AI search', 'ai'], ['search', '*', 'other search engines', 'search'], ['assistant', '*', 'other assistants', 'assistant'],
 ];
 export const GROUPS = { ai: 'AI crawlers', search: 'search engines', assistant: 'assistants reading for a person' };
@@ -187,8 +188,8 @@ export function createAttention({ kv = memKv(), now = Date.now, log = () => {}, 
     for (const [h, v] of Object.entries(idx && typeof idx === 'object' ? idx : {})) if (Array.isArray(v) && Number(v[0]) < 2) set.add(siteOf(h));
     market = { at: now(), set }; return set;
   }
-  // names of domains that point to adult or gambling content stay out of the public list (their reads still count)
-  const UNSUITABLE = /porn|xxx|xvideo|xnxx|xhamster|(?<!es|sus|middle)sex|hentai|nude|nsfw|onlyfans|fansly|chaturbate|stripchat|camsoda|livejasmin|escort|erotic|erotik|fetish|bdsm|naked|hookup|casino|poker|gambl|betting|bet365|1xbet|lotto/i;
+  // names of domains that point to adult or gambling content stay out of the public list (their reads still count): the one
+  // rule the Atlas keeps them out of sitemaps, IndexNow and search with (node/atlas.mjs leftOut)
 
   const att = {
     // for every request: a function that counts the answer once it is known, or null (no listing, or no reader)
@@ -204,9 +205,12 @@ export function createAttention({ kv = memKv(), now = Date.now, log = () => {}, 
       return (status) => { if (status === 200) count('s', site.length <= C.siteLen ? site : null, fi, net, path); };
     },
     count, ready,
-    // a click on a paid service through the counted door: per service, page kind and kind of caller; crawlers and the sea itself not
-    click(offer, from, who, ip) {
+    // a click on a paid service through the counted door: a person in a browser who navigates (the same rule as the buttons
+    // of /connect, node/connect.mjs countable): no prefetch, no driven or headless browser, no picture or script that loads
+    // the address from another page, no program; per service and page kind, at most 3 per network a day
+    click(offer, from, who, ip, marks = {}) {
       if (!who?.kind || who.kind === 'self' || READONLY.has(who.kind) || rest() || !Object.hasOwn(CTA, offer)) return false;
+      if (!countable({ ...marks, kind: who.kind }, 'go')) return false;
       const day = dayOf(now()); dayRec(day);
       if (!since) since = day;
       if (!under(fnv(`${day}|${netKey(ip)}|c|${offer}`))) return false;
@@ -250,7 +254,7 @@ export function createAttention({ kv = memKv(), now = Date.now, log = () => {}, 
       const bad = await failing(), tally = new Map();
       for (const d of Array.from({ length: 7 }, (_, i) => back(today, i))) for (const [dom, row] of days.get(d)?.sites || []) { const t = tally.get(dom) || {}; for (const [k, n] of Object.entries(row)) add(t, k, n); tally.set(dom, t); }
       const top = [...tally].map(([site, row]) => { const page = {}, entries = {}; for (const [k, n] of Object.entries(row)) add(k[0] === 'e' ? entries : page, k[0] === 'e' ? k.slice(1) : k, n); const all = view(sum([page, entries])), pg = view(page); return { site, ai: all.ai, search: all.search, assistant: all.assistant, maps: pg.ai, entries: view(entries).ai, by: all.by, mapped: pg.ai + pg.search + pg.assistant > 0 }; })
-        .filter((x) => x.ai > 0 && !bad.has(x.site) && !UNSUITABLE.test(x.site))
+        .filter((x) => x.ai > 0 && !bad.has(x.site) && !leftOut(x.site))
         .sort((a, b) => b.ai - a.ai || (b.search + b.assistant) - (a.search + a.assistant) || a.site.localeCompare(b.site)).slice(0, C.top);
       const cs = {}, cdays = [];
       for (const d of ds) { const X = clicks.get(d)?.n || {}; let n = 0; for (const [k, v] of Object.entries(X)) { const [offer, from, who] = k.split('|'); const o = cs[offer] || (cs[offer] = { total: 0, from: {}, who: {} }); o.total += v; add(o.from, from, v); add(o.who, who, v); n += v; } cdays.push({ day: d, clicks: n }); }

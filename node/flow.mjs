@@ -277,7 +277,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
       // crawlers get the page without asking the stores; a quiet resident still gets the live offers
       const products = readOnly ? [] : await api.products(routes, topic, ask);
       let market;
-      if (verified) { const f = products.length ? await api.marketFilter(products, ctx) : { keep: [], held: { notYetChecked: 0, notPassing: 0 } }; products.splice(0, products.length, ...f.keep);
+      if (verified) { const f = products.length ? await api.marketFilter(products, ctx, need) : { keep: [], held: { notYetChecked: 0, notPassing: 0 } }; products.splice(0, products.length, ...f.keep);
         market = strip({ only: 'stores in the verified market of the Unibrain', held: f.held.notYetChecked || f.held.notPassing ? f.held : undefined, note: f.held.notYetChecked ? 'stores not checked yet are being checked now; ask again in a few minutes' : undefined, rule: `${base0}/brain/market` }); }
       if (!quiet) await emit({ type: 'ask', id, by: ask.by, name: ask.name, text: need, budget: ask.budget, currency: ask.currency, region: ask.region, empty: readOnly || products.length ? undefined : true });
       const understood = strip({ budget: ask.budget, currency: ask.currency, region: ask.region, size: c.size, colour: c.colour, for: c.for, topic });

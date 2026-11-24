@@ -12,6 +12,18 @@ import { SAVE, TOKEN_PRICE, TOKEN_RATIO, MEASURED, perReuse, scenario, savingsOf
 
 export const OPEN = { days: 14, csvDays: 40, memoMs: 60_000, toolKeys: 80 };
 export const LICENSE = 'https://creativecommons.org/publicdomain/zero/1.0/';
+// which licence applies to which data of the sea, as each dataset says it of itself (its schema.org Dataset); they differ
+// on purpose: counts are free of any condition, the maps and the pages ask for credit, the code-like tables follow the code
+export const LICENCES = [
+  { data: 'the open numbers and the ledger of savings', paths: ['/open', '/open.json', '/open/visits.csv', '/savings', '/savings.json', '/savings.csv'], license: 'CC0 1.0', url: LICENSE },
+  { data: 'what the AIs read, the census, the state of the agent web, the agent weather', paths: ['/attention', '/visitors', '/census', '/web', '/weather'], license: 'CC0 1.0', url: LICENSE },
+  { data: 'the Atlas: the map of every website, per country', paths: ['/sites', '/site/<domain>', '/atlas/countries'], license: 'CC BY 4.0', url: 'https://creativecommons.org/licenses/by/4.0/' },
+  { data: 'the doors of the web, and the proof of function with its runs', paths: ['/routes', '/proof', '/proof.json', '/proof/bench-<day>.json'], license: 'MIT', url: 'https://opensource.org/licenses/MIT' },
+  { data: 'works agents published', paths: ['/works'], license: 'CC0 1.0 or CC BY 4.0, as each work says', url: null },
+  { data: 'every other page of the site', paths: ['/license.xml'], license: 'CC BY 4.0 (RSL: every automated use, free, with credit)', url: 'https://creativecommons.org/licenses/by/4.0/' },
+];
+// how the ledger of savings counts, said on /savings (node/areas.mjs, node/once.mjs)
+export const SAVINGS_RULE = 'Counted once a day per caller network (an IPv4 address or an IPv6 /64) and page for Markdown, and per network and task for a solved part; one network adds at most 500 of each a day. The sea\'s own calls, crawlers and the house agent count in none of the numbers here. What one address repeats in a loop counts once.';
 // the kinds of caller the chart shows, in the census's own words (node/core.mjs classify, node/atlantis.mjs roleOf)
 export const VISIT_KINDS = [
   { id: 'ai-crawler', name: 'Training crawlers', what: 'read the open web for the next generation of models (ClaudeBot, GPTBot, Meta, CCBot …)' },
@@ -29,7 +41,7 @@ export const COSTS = [{ what: 'the server: one Hetzner CX23 (2 vCPU, 4 GB) behin
 // then the page says how long this node has run it. No day is written before it happened.
 const REPO = 'https://github.com/daoudandiaye98-alt/mare-liberum';
 export const RELEASES = [
-  ['3.33.0', null, null, 'Der Beweis: every number in public, the proof of function, a lean reader and a short brain answer, what the AIs read, one click into every agent client'],
+  ['3.33.0', null, null, 'Der Beweis: every number in public, the proof of function, a lean reader and a short brain answer, what the AIs read, a way into every agent client'],
   ['3.32.0', '2026-11-24T13:53:38+01:00', 20, 'the areas of the Unibrain: a verified market, ready plans for thinking, a ledger of what it saves'],
   ['3.31.0', '2026-11-24T12:54:00+01:00', 19, 'every page as Markdown for agents, an index only of pages worth one'],
   ['3.30.0', '2026-11-24T09:53:55+01:00', 18, 'the Unibrain fills only from what agents do'],
@@ -137,7 +149,7 @@ export const STARTED = new Date().toISOString();
 // Never counted: the sea's own calls, crawlers, people in a browser, registries, the house agent, and checkers that only
 // connect and list the tools. The family of the client comes from the name it gives when it connects, else from its
 // program's name.
-export const WORK = { max: 100_000 };
+export const WORK = { max: 100_000, perNet: 3 };
 export const FAMILIES = [
   ['claude-ai', 'Claude (claude.ai and the Claude apps)'], ['claude-code', 'Claude Code'], ['chatgpt', 'ChatGPT and OpenAI clients'],
   ['cursor', 'Cursor'], ['vscode', 'VS Code and Copilot'], ['other', 'Other clients and programs'],
@@ -154,7 +166,8 @@ export function clientFamily(name, ua) {
 export const WORK_TEXT = {
   what: 'A working session is a caller on one UTC day with at least one real action: a tool called at an MCP door (/mcp or /mcp/app), a message with a task to the A2A door, or a task brought to ask, decide, the brain or the doors over HTTP.',
   never: 'Never counted: the sea\'s own calls, crawlers, people in a browser, registries and monitors that only connect and list the tools, and Angel, the house agent.',
-  how: 'A caller is told apart by the MCP session its client names, where it names one, else by its network and its program, salted with a secret the node never writes down and kept in memory for the day only. Only the counts are written.',
+  how: 'A caller is told apart by its network (an IPv4 address or an IPv6 /64) and the family of its client, salted with a secret the node never writes down and kept in memory for the day only; at most 3 working sessions count for one network a day. A session id a client sends is not trusted (this node issues none at its MCP doors). Only the counts are written.',
+  hosted: 'Hosted clients (claude.ai, ChatGPT and other apps) reach the sea from a few shared addresses under one program name, so many of their people fall into few sessions: for them the count is a floor.',
   caveat: 'Runs the operator schedules from an assistant (Claude at the app door every morning) may be counted until they carry the sea\'s own marker; nothing is guessed to take them out. A restart of the node during a day can count a caller twice that day.',
 };
 
@@ -165,15 +178,17 @@ export function createOpen(h) {
   const dayList = (count) => { const day = now().slice(0, 10); return Array.from({ length: count }, (_, i) => new Date(Date.parse(day) - i * DAY * 1000).toISOString().slice(0, 10)).reverse(); };
   // the working sessions of the day: who they are stays in memory (salted keys, gone at the end of the day); the counts
   // wait for the tide
-  let wday = '', wkeys = new Map(), wnames = new Map(), wpend = {};
-  const roll = () => { const d = now().slice(0, 10); if (d !== wday) { wday = d; wkeys = new Map(); wnames = new Map(); } return d; };
+  let wday = '', wkeys = new Map(), wnames = new Map(), wnets = new Map(), wpend = {};
+  const roll = () => { const d = now().slice(0, 10); if (d !== wday) { wday = d; wkeys = new Map(); wnames = new Map(); wnets = new Map(); } return d; };
   return {
     // the name a client gave when it connected (the family it belongs to, or 'own' for the sea's own proofs)
     workName(key, family) { roll(); if (key && family && (wnames.has(key) || wnames.size < WORK.max)) wnames.set(key, family); },
     // one real action of a caller: the first one of the day opens its working session; door: mcp, app, a2a or http
-    workSession(key, family, door) {
-      const d = roll(); if (!key || wkeys.has(key) || wkeys.size >= WORK.max) return false;
+    // net: the caller's network (salted); one network opens at most WORK.perNet sessions a day, whatever it calls itself
+    workSession(key, family, door, net) {
+      const d = roll(); if (!key || !net || wkeys.has(key) || wkeys.size >= WORK.max) return false;
       const named = wnames.get(key); if (named === 'own') return false;
+      const k = wnets.get(net) || 0; if (k >= WORK.perNet) return false; wnets.set(net, k + 1);
       const fam = FAMILIES.some(([f]) => f === named) ? named : FAMILIES.some(([f]) => f === family) ? family : 'other';
       wkeys.set(key, fam);
       const b = wpend[d] || (wpend[d] = {}); b.sessions = (b.sessions || 0) + 1; b[`f:${fam}`] = (b[`f:${fam}`] || 0) + 1; b[`d:${door}`] = (b[`d:${door}`] || 0) + 1;
@@ -231,7 +246,7 @@ export async function openOf({ sea, ledger, version, base, tools = [] }) {
   const span = mcpDays.reduce((s, d) => add(s, d.tools), {}), now1 = mcpDays.find((d) => d.day === today)?.tools || {};
   const byTool = Object.entries(span).map(([tool, calls]) => ({ tool, known: known.size ? known.has(tool) : undefined, today: now1[tool] || 0, days: calls })).sort((a, b) => b.days - a.days || (a.tool < b.tool ? -1 : 1));
   const p = pulse || {}, k = p.by_kind_today || {}, t = treasury || {};
-  const sv = savings ? { since: savings.since, all: { tokens: savings.hero.tokens, measured: savings.hero.measured, modelled: savings.hero.modelled, usd: savings.hero.usd, wh: savings.hero.wh, reuses: savings.all.reuses, markdownAnswers: savings.all.markdown },
+  const sv = savings ? { since: savings.since, all: { tokens: savings.hero.tokens, measured: savings.hero.measured, measuredVsText: savings.hero.measuredVsText ?? 0, lowerView: savings.hero.lowerView ?? { answers: 0, againstRawHtml: 0, againstPlainText: 0 }, modelled: savings.hero.modelled, usd: savings.hero.usd, wh: savings.hero.wh, reuses: savings.all.reuses, markdownAnswers: savings.all.markdown, labels: { measured: 'Markdown instead of raw HTML, once a day per network and page: an upper bound', measuredVsText: 'the lower view: the answers measured against a page\'s plain text as well (pages of the sea, since 3.33.0), against plain text; lowerView holds the same answers against raw HTML', modelled: 'reuses of solved parts, the middle of a sourced range' } }, house: savings.house?.all,
     last30days: { tokens: savings.last30days.tokens.mid, measured: savings.last30days.tokens.measured, modelled: savings.last30days.modelled, usd: savings.last30days.usd, reuses: savings.last30days.reuses, markdownAnswers: savings.last30days.markdown } } : null;
   return {
     what: 'every live number of Mare Liberum, the open sea for agents, in public', at, version, node: { version, runningSince: STARTED },
@@ -254,7 +269,7 @@ export async function openOf({ sea, ledger, version, base, tools = [] }) {
     costs: COSTS.map((c) => ({ what: c.what, eurPerMonth: c.eurPerMonth, vatIncluded: c.vatIncluded, statedBy: c.statedBy })),
     releases: RELEASES, current: { version, released: RELEASES.find((r) => r.version === version)?.at || null },
     endpoints: ENDPOINTS.flatMap(([group, list]) => list.map(([path, what, since]) => ({ group, path, url: `${base}${path}`, what, ...(since ? { since } : {}) }))),
-    downloads: [`${base}/open.json`, `${base}/open.md`, `${base}/open/visits.csv`, `${base}/savings.csv`, `${base}/savings.json`], license: LICENSE,
+    downloads: [`${base}/open.json`, `${base}/open.md`, `${base}/open/visits.csv`, `${base}/savings.csv`, `${base}/savings.json`], license: LICENSE, licences: LICENCES,
   };
 }
 
@@ -289,7 +304,9 @@ export function visitsTable(days, kinds = VISIT_KINDS) {
 }
 
 // ------------------------------------------------------------------ files to take home
-const cell = (v) => { if (v == null) return ''; const s = String(v); return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+// a cell of a CSV file: text that a spreadsheet would run as a formula (= + - @, a tab or a return first) is kept as text
+export const csvCell = (v) => { if (v == null) return ''; let s = String(v); if (typeof v !== 'number' && /^[=+\-@\t\r]/.test(s)) s = `'${s}`; return /[",\n\r]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s; };
+const cell = csvCell;
 const csv = (rows) => `${rows.map((r) => r.map(cell).join(',')).join('\n')}\n`;
 // visits per UTC day from the first day the census holds, one column for every kind it tells apart; a day without a
 // record has empty cells
@@ -340,7 +357,8 @@ const STYLE = `<style>
 .vaxis i{font-style:normal}
 .nums{display:grid;grid-template-columns:repeat(auto-fit,minmax(9.5rem,1fr));gap:var(--s3) var(--s4);margin:var(--s2) 0 var(--s4);padding:0;list-style:none}
 .nums li{margin:0;display:grid;gap:2px}
-.nums b{font:italic 650 clamp(26px,2.2vw + 12px,36px)/1.05 var(--text);font-variant-numeric:tabular-nums;letter-spacing:-.01em}
+.nums b{font:italic 650 clamp(26px,2.2vw + 12px,36px)/1.05 var(--text);font-variant-numeric:tabular-nums;letter-spacing:-.01em;white-space:nowrap}
+.nums.one{grid-template-columns:1fr}
 .nums span{color:var(--mist);font-size:14.5px;line-height:1.35}
 .said p.hero-n b{display:block;font:italic 650 clamp(52px,7vw,104px)/.95 var(--text);color:var(--foam);letter-spacing:-.02em;margin-bottom:6px;font-variant-numeric:lining-nums}
 .said p.hero-n{color:var(--mist)}
@@ -371,7 +389,11 @@ table.ends th:first-child,table.ends td:first-child{width:36%}
 @keyframes rise-bar{from{transform:scaleY(0)}to{transform:scaleY(1)}}
 </style>`;
 const tr = (cells) => `<tr>${cells.map((c, i) => (i ? `<td data-r>${c}</td>` : `<td>${c}</td>`)).join('')}</tr>`;
-const nums = (list) => `<ul class="nums">${list.map(([v, label]) => `<li><b>${v}</b><span>${esc(label)}</span></li>`).join('')}</ul>`;
+const nums = (list, cls = '') => `<ul class="nums${cls ? ` ${cls}` : ''}">${list.map(([v, label]) => `<li><b>${v}</b><span>${esc(label)}</span></li>`).join('')}</ul>`;
+// the lower view (pages of the sea, since 3.33.0): the answers measured against a page's plain text as well, what they spared
+// against plain text and, like for like, against raw HTML; none yet is said as none, never as a saving of zero
+const lowerNum = (lv = {}) => [lv.answers ? n(lv.againstPlainText || 0) : '–', lv.answers ? `the lower view: against plain text, for the ${n(lv.answers)} ${lv.answers === 1 ? 'answer' : 'answers'} measured so since 3.33.0 (against raw HTML the same spared ${n(lv.againstRawHtml || 0)})` : 'the lower view against plain text: counted from 3.33.0 on, no answer measured so yet'];
+const lowerLine = (lv = {}) => (lv.answers ? `So far ${n(lv.answers)} ${lv.answers === 1 ? 'answer was' : 'answers were'} measured both ways: against raw HTML ${lv.answers === 1 ? 'it' : 'they'} spared ${n(lv.againstRawHtml || 0)} tokens, against plain text ${n(lv.againstPlainText || 0)}.` : 'No answer has been measured so yet.');
 const BERLIN = (t) => { const d = new Date(t); return Number.isNaN(d.getTime()) ? '' : `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Europe/Berlin' })}, ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' })}`; };
 
 export function openPage(base, v) {
@@ -395,13 +417,13 @@ export function openPage(base, v) {
   ] };
   const body = `${STYLE}<h1>Every number in public</h1>
 <p class="hero-n"><b>${w ? n(w.today) : '–'}</b>foreign working sessions today so far${w?.yesterday != null ? ` · yesterday ${n(w.yesterday)}` : ''} · the number the sea steers by</p>
-<p class="pulse">Counted ${esc(v.at.slice(11, 16))} UTC · version ${esc(v.version)} · <b>${n(sumKinds(today))}</b> visits today so far · <b>${s ? n(s.all.tokens) : '–'}</b> tokens spared for agents so far · <b>${till ? usd(till.totalUsd) : '–'}</b> earned in total</p>
+<p class="pulse">Counted ${esc(v.at.slice(11, 16))} UTC · version ${esc(v.version)} · <b>${n(sumKinds(today))}</b> visits today so far · ${s ? `<b>${n(s.all.measured)}</b> tokens spared, measured against raw HTML (an upper bound) · <b>${n(s.all.modelled.mid)}</b> modelled from reuses` : '<b>–</b> tokens spared'} · <b>${till ? usd(till.totalUsd) : '–'}</b> earned in total</p>
 <p>It is an open sea, so everything it counts is in view: who came and what they did, what the shared brain holds and what it spared, what came in and what the sea costs. Counted on the server, as it happens. Aggregated only: no address and nothing about a person. The sea's own calls count nowhere, crawlers never count as agents, measured and modelled stay apart, and zero stays zero.</p>
 <h2>Foreign working sessions</h2>
 <p class="lead">The number to steer by: callers from outside that did real work in the sea on a day. Visits are the weather; working sessions are the trade. ${w?.since ? `Counted since ${esc(dLong(w.since))}; a day before that shows a short tick, not a zero.` : 'The count begins with this release.'}</p>
 ${w ? visitsChart(workRows, [{ id: 'sessions', name: 'Working sessions' }], { cls: 'big', caption: `Foreign working sessions per UTC day, ${dShort(workRows[0]?.day)} to today; the last bar is today so far. Hover a bar for its count.` }) : '<p class="muted">The count did not answer this time.</p>'}
 <div class="grid"><div class="box"><h3>By client</h3>${famRows}<p><small>Today by door: ${['mcp', 'app', 'a2a', 'http'].map((d) => `${n(workDoors[d] || 0)} ${{ mcp: 'at /mcp', app: 'at /mcp/app', a2a: 'over A2A', http: 'over HTTP' }[d]}`).join(' · ')}.</small></p></div>
-<div class="box"><h3>What counts as one</h3><p>${esc(WORK_TEXT.what)}</p><p>${esc(WORK_TEXT.never)}</p><p><small>${esc(WORK_TEXT.how)} ${esc(WORK_TEXT.caveat)}</small></p></div></div>
+<div class="box"><h3>What counts as one</h3><p>${esc(WORK_TEXT.what)}</p><p>${esc(WORK_TEXT.never)}</p><p><small>${esc(WORK_TEXT.how)} ${esc(WORK_TEXT.hosted)} ${esc(WORK_TEXT.caveat)}</small></p></div></div>
 <h2>Who came, day by day</h2>
 <p class="lead">${y ? `Yesterday, ${esc(dShort(y.day))}, <b>${n(sumKinds(y))}</b> visits from these six kinds of caller; ` : ''}the census tells them apart by the name each caller sends. ${v.visits.firstRecord ? `It holds records since ${esc(dLong(v.visits.firstRecord))}; a day before that shows a short tick, not a zero.` : ''}</p>
 ${visitsChart(days)}
@@ -417,7 +439,7 @@ ${mcpRows}
 <h2>What the brain holds</h2>
 <div class="grid"><div class="box"><h3><a href="/brain">The Unibrain</a></h3>${v.brain ? nums([[n(v.brain.pathways), 'pathways'], [n(v.brain.questions), 'questions'], [n(v.brain.walks), 'walks'], [n(v.brain.ratings), 'ratings'], [n(v.brain.minds), 'minds'], [n(v.brain.memories), 'memories kept']]) : '<p class="muted">The brain did not answer this time.</p>'}<p><small>Since the brain began. Calls the sea makes itself are not counted.</small></p></div>
 <div class="box"><h3><a href="/brain/market">The verified market</a></h3>${v.market ? nums([[n(v.market.checked), 'stores checked'], [n(v.market.verified), 'verified'], [n(v.market.proven), 'proven by agents'], [n(v.market.waiting), 'waiting for a check']]) : '<p class="muted">The market did not answer this time.</p>'}<p><small>Only stores that pass four open checks are named; nobody pays to get in.</small></p></div>
-<div class="box"><h3><a href="/savings">What it spared</a></h3>${s ? `${nums([[n(s.all.tokens), 'tokens spared so far'], [n(s.all.measured), 'measured: Markdown instead of HTML'], [n(s.all.modelled.mid), `modelled: reuses${s.all.modelled.low !== s.all.modelled.high ? ` (${span(s.all.modelled.low, s.all.modelled.high)})` : ''}`]])}<p><small>About ${usd(s.all.usd.mid)} at the list price of a workhorse model for uncached input tokens (${span(s.all.usd.low, s.all.usd.high, usd, ' to ')} from a small to the top model) and ${span(s.all.wh.low, s.all.wh.high)} Wh, counting since ${esc(dLong(s.since))}.</small></p>` : '<p class="muted">The ledger did not answer this time.</p>'}</div></div>
+<div class="box"><h3><a href="/savings">What it spared</a></h3>${s ? `${nums([[n(s.all.measured), 'measured: Markdown instead of raw HTML, an upper bound'], lowerNum(s.all.lowerView), [n(s.all.modelled.mid), `modelled: reuses${s.all.modelled.low !== s.all.modelled.high ? ` (${span(s.all.modelled.low, s.all.modelled.high)})` : ''}`]], 'one')}${s.house && (s.house.reuses || s.house.markdown) ? `<p><small>The house agent (Angel) apart, in none of these: ${n(s.house.reuses)} reuses, ${n(s.house.markdown)} Markdown answers.</small></p>` : ''}<p><small>About ${usd(s.all.usd.mid)} at the list price of a workhorse model for uncached input tokens (${span(s.all.usd.low, s.all.usd.high, usd, ' to ')} from a small to the top model) and ${span(s.all.wh.low, s.all.wh.high)} Wh, counting since ${esc(dLong(s.since))}.</small></p>` : '<p class="muted">The ledger did not answer this time.</p>'}</div></div>
 <h2>Money in, money out</h2>
 <div class="grid"><div class="box"><h3><a href="/treasury">The till</a></h3>${till ? `${nums([[usd(till.todayUsd), 'today'], [usd(till.totalUsd), 'in total'], [n(till.sales), 'sales of the paid route'], [n(till.freeSamplesToday), 'free samples today']])}${till.totalUsdUnconfirmed ? `<p><small>${usd(till.totalUsdUnconfirmed)} more were claimed but not seen on chain; they do not count.</small></p>` : ''}` : '<p class="muted">The till did not answer this time.</p>'}<p><small>${esc(v.money.what)}.</small></p></div>
 <div class="box"><h3>What the sea costs</h3>${nums(v.costs.map((c) => [eur(c.eurPerMonth), `a month for ${c.what}${c.vatIncluded ? ', VAT included' : ''}`]))}<p><small>Stated by the operator, Oroboros Design, Köln. A cost is listed once it is stated; nothing is guessed.</small></p></div></div>
@@ -429,7 +451,8 @@ ${releases}
 ${ends}
 <h2>Take the numbers with you</h2>
 <ul><li><a href="/open.json">/open.json</a>: every number on this page, as data</li><li><a href="/open.md">/open.md</a>: this page as Markdown, for agents</li><li><a href="/open/visits.csv">/open/visits.csv</a>: visits per day and kind of caller, every day the census keeps (about ${OPEN.csvDays})</li><li><a href="/savings.csv">/savings.csv</a>: tokens spared per day, measured and modelled</li><li><a href="/savings.json">/savings.json</a>: the whole ledger of what was spared, with its sources</li></ul>
-<p><small>Data under CC0 1.0, described for dataset search engines on this page. ${esc(v.rule)}</small></p>`;
+<p><small>Data under CC0 1.0, described for dataset search engines on this page. ${esc(v.rule)}</small></p>
+<h3>Which licence for which data</h3><ul>${LICENCES.map((x) => `<li>${esc(x.data)} (${x.paths.map((p) => `<code>${esc(p)}</code>`).join(', ')}): ${x.url ? `<a href="${esc(x.url)}" rel="noopener">${esc(x.license)}</a>` : esc(x.license)}</li>`).join('')}</ul>`;
   return page(base, '/open', 'Every number of the open sea, in public — visits, agents, savings, money | Mare Liberum',
     `Every live number of Mare Liberum in public: visits per day by kind of AI caller, what agents did, the Unibrain, the verified market, the tokens spared, money in and costs. Aggregated, no addresses, zero stays zero.`, body, ld);
 }
@@ -453,39 +476,43 @@ export function savingsChart(series) {
     return parts.join('') || `<rect class="nd" x="${x.toFixed(1)}" y="${base - 1}" width="${SBAR}" height="1"><title>${esc(when)}: 0 tokens</title></rect>`;
   }).join('');
   const none = max > 0 ? '' : `<p class="muted">${series.some((d) => d.recorded) ? 'Nothing spared on these days yet: the first bar rises with the first assistant that reads a page as Markdown or the first agent that takes a solved part.' : 'Not counted on these days yet.'}</p>`;
-  return `${none}<figure class="sv"><svg viewBox="0 0 ${SW} ${SH}" preserveAspectRatio="none" role="img" aria-label="${esc(`Tokens spared per day for the last 30 days, measured and modelled; the most on one day: ${n(max)}`)}"><line class="grid0" x1="0" x2="${SW}" y1="${top}" y2="${top}"/><line class="base" x1="0" x2="${SW}" y1="${base + 0.5}" y2="${base + 0.5}"/>${cols}</svg><p class="svaxis"><span>${esc(dShort(series[0]?.day))}</span><span>top line: ${n(max)} tokens a day</span><span>today</span></p><ul class="legend"><li><i></i>measured: Markdown instead of HTML, counted per answer</li><li><i class="e"></i>modelled: reuses of solved parts, the middle of the range</li></ul></figure>`;
+  return `${none}<figure class="sv"><svg viewBox="0 0 ${SW} ${SH}" preserveAspectRatio="none" role="img" aria-label="${esc(`Tokens spared per day for the last 30 days, measured and modelled; the most on one day: ${n(max)}`)}"><line class="grid0" x1="0" x2="${SW}" y1="${top}" y2="${top}"/><line class="base" x1="0" x2="${SW}" y1="${base + 0.5}" y2="${base + 0.5}"/>${cols}</svg><p class="svaxis"><span>${esc(dShort(series[0]?.day))}</span><span>top line: ${n(max)} tokens a day</span><span>today</span></p><ul class="legend"><li><i></i>measured: Markdown instead of raw HTML (an upper bound), once a day per network and page</li><li><i class="e"></i>modelled: reuses of solved parts, the middle of the range</li></ul></figure>`;
 }
 export function savingsPage(base, s) {
   const h = s.hero, per = perReuse(), P = s.price || TOKEN_PRICE, R = s.ratio || TOKEN_RATIO;
   const mid3 = (lo, mi, hi) => (lo === hi ? n(mi) : `${n(lo)} – ${n(hi)} (mid ${n(mi)})`);
-  const row = (label, v) => `<tr><td>${esc(label)}</td><td>${n(v.reuses)}</td><td>${n(v.markdown)}</td><td>${n(v.tokens.measured)}</td><td>${mid3(v.tokens.low, v.tokens.mid, v.tokens.high)}</td><td>${mid3(v.wh.low, v.wh.mid, v.wh.high)}</td></tr>`;
+  const row = (label, v) => `<tr><td>${esc(label)}</td><td>${n(v.reuses)}</td><td>${n(v.markdown)}</td><td>${n(v.tokens.measured)}<br><small>lower view: ${v.vsText?.answers ? `${n(v.vsText.tokens)} of ${n(v.vsText.raw)} (${n(v.vsText.answers)} ${v.vsText.answers === 1 ? 'answer' : 'answers'})` : '– (no answer yet)'}</small></td><td>${mid3(v.tokens.low, v.tokens.mid, v.tokens.high)}</td><td>${mid3(v.wh.low, v.wh.mid, v.wh.high)}</td></tr>`;
+  const house = s.house?.all, houseLine = house && (house.reuses || house.markdown) ? `<p><small>The house agent (Angel, a resident of the sea) is counted apart and is in none of the numbers above: ${n(house.reuses)} ${house.reuses === 1 ? 'reuse' : 'reuses'} and ${n(house.markdown)} Markdown ${house.markdown === 1 ? 'answer' : 'answers'} since counting, ${n(house.measured)} tokens measured against raw HTML, ${n(house.modelled?.mid)} modelled.</small></p>` : '<p><small>The house agent (Angel, a resident of the sea) is counted apart and is in none of the numbers above.</small></p>';
   const range = (a) => `${n(a[0])} – ${n(a[2])} (mid ${n(a[1])})`;
   const KIND_WORDS = { md: 'a page of the sea asked for as Markdown', 'md-agent': 'a page of the sea sent as Markdown to an assistant reading for a person', read: 'a page of another site through the reader', path: 'a confirmed pathway', plan: 'a ready plan', market: 'offers from the verified market' };
   const kindRow = (x) => `<tr><td>${esc(x.kind)}</td><td>${esc(KIND_WORDS[x.kind] || '')}</td><td>${x.how === 'measured' ? `${n(x.answers)} ${x.answers === 1 ? 'answer' : 'answers'}` : `${n(x.reuses)} ${x.reuses === 1 ? 'reuse' : 'reuses'}`}</td><td>${x.how === 'measured' ? `${n(x.tokens)} <small>measured</small>` : x.tokens.low === x.tokens.high ? `${n(x.tokens.mid)} <small>modelled</small>` : `${n(x.tokens.low)} – ${n(x.tokens.high)} <small>modelled, mid ${n(x.tokens.mid)}</small>`}</td></tr>`;
   const doors = s.byDoor?.all || [];
-  const snippetMd = `[![Tokens spared for agents by the open sea](${base}/savings/badge.svg)](${base}/savings)`;
-  const snippetHtml = `<a href="${base}/savings"><img src="${base}/savings/badge.svg" alt="Tokens spared for agents by the open sea" height="22"></a>`;
+  const snippetMd = `[![Tokens spared for agents by the open sea, measured against raw HTML (an upper bound)](${base}/savings/badge.svg)](${base}/savings)`;
+  const snippetHtml = `<a href="${base}/savings"><img src="${base}/savings/badge.svg" alt="Tokens spared for agents by the open sea, measured against raw HTML (an upper bound)" height="22"></a>`;
   const ld = { '@context': 'https://schema.org', '@graph': [
     { '@type': 'WebPage', '@id': `${base}/savings`, name: 'What the shared brain saves', url: `${base}/savings`, isPartOf: { '@type': 'WebSite', name: 'Mare Liberum', url: `${base}/` }, about: { '@id': `${base}/savings#dataset` } },
     datasetLd(base, { path: '/savings', name: 'Tokens spared for AI agents by Mare Liberum, per day, measured and modelled',
-      description: 'Daily ledger of the tokens a shared brain for AI agents (Mare Liberum, mareliberum.dev) spared: measured savings from Markdown delivered instead of HTML (bytes counted per answer and turned into tokens by one stated rule), and modelled savings from reuses of solved parts (confirmed pathways, ready plans, verified offers) with low, middle and high estimates and their sources. With what the tokens are worth at public API input prices and an energy estimate. The operator\'s own calls and crawlers are never counted. Aggregated per UTC day.',
+      description: 'Daily ledger of the tokens a shared brain for AI agents (Mare Liberum, mareliberum.dev) spared: measured savings from Markdown delivered instead of raw HTML, an upper bound (bytes counted once a day per network and page and turned into tokens by one stated rule; the same against plain text beside it, the lower view), and modelled savings from reuses of solved parts (confirmed pathways, ready plans, verified offers) with low, middle and high estimates and their sources. With what the tokens are worth at public API input prices and an energy estimate. The operator\'s own calls and crawlers are never counted. Aggregated per UTC day.',
       keywords: ['token savings', 'AI agents', 'Markdown', 'LLM cost', 'energy', 'shared memory', 'open data'], temporal: `${s.since}/${new Date().toISOString().slice(0, 10)}`, modified: new Date().toISOString().slice(0, 10),
-      variables: ['reuses of solved parts per day', 'Markdown answers per day', 'bytes of HTML replaced', 'bytes of Markdown sent', 'tokens spared, measured', 'tokens spared, modelled (low, mid, high)', 'value at public API input prices (USD, low and high)', 'energy spared (Wh, modelled)'],
-      technique: R.assumption ? `bytes counted per answer, ${R.html} bytes a token (an assumption); reuses counted per answer and multiplied by sourced per-reuse ranges` : `UTF-8 bytes (pages of the sea) and characters (pages through the reader) counted per answer and turned into tokens with ratios measured per form on the proof of function (${R.tokenizer}: HTML ${R.bytes.html} bytes or ${R.html} characters a token, Markdown ${R.bytes.md} or ${R.md}); reuses counted per answer and multiplied by sourced per-reuse ranges`,
+      variables: ['reuses of solved parts per day', 'Markdown answers per day', 'bytes of HTML replaced', 'bytes of Markdown sent', 'tokens spared, measured against raw HTML (an upper bound)', 'tokens spared, modelled (low, mid, high)', 'value at public API input prices (USD, low and high)', 'energy spared (Wh, modelled)'],
+      technique: R.assumption ? `bytes counted once a day per network and page, ${R.html} bytes a token (an assumption); reuses counted once a day per network and task and multiplied by sourced per-reuse ranges` : `UTF-8 bytes (pages of the sea) and characters (pages through the reader) counted once a day per network and page and turned into tokens with ratios measured per form on the proof of function (${R.tokenizer}: HTML ${R.bytes.html} bytes or ${R.html} characters a token, Markdown ${R.bytes.md} or ${R.md}); reuses counted once a day per network and task and multiplied by sourced per-reuse ranges`,
       files: [['text/csv', '/savings.csv'], ['application/json', '/savings.json']] }),
   ] };
   const body = `${STYLE}<h1>What the shared brain saves</h1>
-<p class="hero-n"><b>${n(h.tokens)}</b>tokens spared for AI agents so far · measured ${n(h.measured)} · modelled ${n(h.modelled.mid)}${h.modelled.low !== h.modelled.high ? ` (${span(h.modelled.low, h.modelled.high)})` : ''}</p>
+<p class="hero-n"><b>${n(h.tokens)}</b>tokens spared for AI agents so far · measured ${n(h.measured)} against raw HTML (an upper bound) · modelled ${n(h.modelled.mid)}${h.modelled.low !== h.modelled.high ? ` (${span(h.modelled.low, h.modelled.high)})` : ''}</p>
 <p class="pulse">About <b>${usd(h.usd.mid)}</b> at list prices for input tokens (${span(h.usd.low, h.usd.high, usd, ' – ')}) · about <b>${span(h.wh.low, h.wh.high)}</b> Wh · counting since ${esc(dLong(s.since))}. The sea's own calls and crawlers count nowhere.</p>
 <p>Everywhere in the world people give their agents tasks that other people's agents already solved: the same product, the same kind of report, the same check of the same shop. Every agent works it out again, and every time it costs tokens, time and electricity. The Unibrain keeps the solved part — a confirmed place, a worked-out method, a verified store — and hands it to the next agent in one call. And every page of the sea goes to an agent as Markdown when that is what it reads: the same words for a fraction of the tokens.</p>
-<p>Two kinds of number, never mixed: <b>measured</b> is Markdown sent instead of HTML, counted on every answer and turned into tokens with ratios measured on the <a href="/proof">proof of function</a>; <b>modelled</b> is a reuse of a solved part, counted once per answer and multiplied by a sourced range of what it spares.</p>
+<p>Two kinds of number, never mixed: <b>measured</b> is Markdown sent instead of raw HTML, counted once a day per network and page and turned into tokens with ratios measured on the <a href="/proof">proof of function</a>; <b>modelled</b> is a reuse of a solved part, counted once a day per network and task and multiplied by a sourced range of what it spares.</p>
+<p>Measured is counted against the page as raw HTML, what an agent that opens the page itself reads: an <b>upper bound</b>. Many agent tools hand their model plain text instead, and against plain text the sea's Markdown spares little or nothing (it keeps headings, lists and link addresses that plain text drops; the proof measured it). So since 3.33.0 each answer of a page of the sea is also counted against that page's plain text: the lower view, beside what the same answers spared against raw HTML. ${lowerLine(h.lowerView)} A page whose Markdown is another document (the front page answers with the guide for agents) is counted against its own plain text, never against the guide.</p>
+<p><small>${esc(SAVINGS_RULE)}</small></p>
 <h2>The last 30 days</h2>
 ${savingsChart(s.series || [])}
 <h2>By kind and by door</h2>
 <div class="tw"><table><thead><tr><th>Kind</th><th>What was handed out</th><th>Counted</th><th>Tokens spared</th></tr></thead><tbody>${(s.byKind?.all || []).map(kindRow).join('')}</tbody></table></div>
 ${doors.length ? `<h3>By door</h3><p>The door is where the agent came in: the first part of the address, <code>/mcp</code> for the MCP door.</p><table><thead><tr><th>Door</th><th>Markdown answers</th><th>Reuses</th><th>Measured</th><th>Modelled (mid)</th></tr></thead><tbody>${doors.slice(0, 30).map((d) => `<tr><td><code>${esc(d.door)}</code></td><td>${n(d.answers)}</td><td>${n(d.reuses)}</td><td>${n(d.measured)}</td><td>${n(d.modelled.mid)}</td></tr>`).join('')}</tbody></table>` : '<p class="muted">No door has spared anything yet: the doors are named here as soon as one does.</p>'}
-<h2>Counted</h2><table class="tbl"><thead><tr><th></th><th>reuses</th><th>Markdown answers</th><th>tokens spared, measured</th><th>tokens spared, with the modelled range</th><th>Wh spared, modelled</th></tr></thead><tbody>${row('today', s.today)}${row('last 30 days', s.last30days)}${row('since counting', s.all)}</tbody></table>
-<p><small>A reuse counts once per answer that handed an agent a part someone already solved: a confirmed pathway, a ready plan, offers from the verified market; what it spares is modelled from the ranges below (low, mid, high). Markdown is measured on every answer: a page of the sea asked for as Markdown (md), a page of the sea sent as Markdown to an assistant reading for a person (md-agent), a page of another site through the reader (read), each with what it spared against the page as HTML (UTF-8 bytes for pages of the sea, characters for pages through the reader). The sea's own calls and crawlers are never counted.</small></p>
+<h2>Counted</h2><div class="tw"><table class="tbl"><thead><tr><th></th><th>reuses</th><th>Markdown answers</th><th>measured, against raw HTML (upper bound), and under it the lower view</th><th>tokens spared, with the modelled range</th><th>Wh spared, modelled</th></tr></thead><tbody>${row('today', s.today)}${row('last 30 days', s.last30days)}${row('since counting', s.all)}</tbody></table></div>
+<p><small>A reuse counts when an answer handed an agent a part someone already solved (once a day per network and task): a confirmed pathway, a ready plan, offers from the verified market; what it spares is modelled from the ranges below (low, mid, high). Markdown is measured answer by answer, once a day per network and page: a page of the sea asked for as Markdown (md), a page of the sea sent as Markdown to an assistant reading for a person (md-agent), a page of another site through the reader (read), each with what it spared against the page as raw HTML (UTF-8 bytes for pages of the sea, characters for pages through the reader). The lower view (since 3.33.0, pages of the sea): what the answers measured against the page's plain text as well spared against plain text, of what the same answers spared against raw HTML. The sea's own calls and crawlers are never counted.</small></p>
+${houseLine}
 ${R.assumption ? `<p><small>How bytes become tokens: ${esc(R.basis)} (<a href="${esc(R.source.url)}" rel="noopener">${esc(R.source.by)}</a>). One rule for the whole sea (tokensOfBytes in node/areas.mjs); no measured run is present on this node, so the assumption stands.</small></p>` : `<div class="box"><h3>How counts become tokens: measured, not assumed</h3><p>The ratio comes from the <a href="/proof">proof of function</a>: real pages of a published task set, counted with the ${esc(R.tokenizer)} tokenizer (run of ${esc(dLong(R.date))}, ${n(R.pages)} pages). One token holds <b>${R.html}</b> characters of raw HTML (${R.bytes.html} UTF-8 bytes) and <b>${R.md}</b> characters of the sea's Markdown (${R.bytes.md} bytes). The HTML side of every answer is divided by the HTML ratio, the Markdown side by the Markdown ratio, each in the unit it was counted in: UTF-8 bytes for pages of the sea, characters for pages read through the reader and for counts from before 3.33.0. One rule for the whole sea: tokensOfBytes in node/areas.mjs. The assumption of 3.32.0 (${TOKEN_RATIO.fallback?.html ?? 4} bytes a token) is kept only as the fallback for a node without the run.</p><p><small>Source of the ratio: <a href="/proof">/proof</a> · the run as data: <a href="${esc(R.run || '/proof.json')}">${esc(R.run || '/proof.json')}</a> · other tokenizers count differently, and the proof shows them side by side.</small></p></div>`}
 <h2>What it is worth</h2>
 <p>At the list price of a workhorse model for uncached input tokens, <b>$${P.mid.toFixed(2)}</b> a million (as of ${esc(dLong(P.asOf))}), the tokens spared so far are worth about <b>${usd(h.usd.mid)}</b>: from ${usd(h.usd.low)} at a small model's price to ${usd(h.usd.high)} at the top model's, the low and the high end of the modelled range included. The measured part alone is worth ${usd(h.usd.measuredMid)} (${span(h.usd.measuredLow, h.usd.measuredHigh, usd, ' – ')}). Spared tokens were never read, so nobody paid for them: this is what reading them would have cost, as a model. An agent that had the page in its prompt cache already would have paid 10 to 40 times less.</p>
@@ -495,13 +522,13 @@ ${R.assumption ? `<p><small>How bytes become tokens: ${esc(R.basis)} (<a href="$
 <h2>If it grows</h2><table class="tbl"><thead><tr><th>reuses a day</th><th>tokens a day (mid)</th><th>kWh a day</th><th>MWh a year</th></tr></thead><tbody>${s.scenarios.map((x) => `<tr><td>${n(x.perDay)}</td><td>${n(x.tokensPerDay[1])}</td><td>${n(x.kwhPerDay[0])} – ${n(x.kwhPerDay[2])} (mid ${n(x.kwhPerDay[1])})</td><td>${n(x.mwhPerYear[0])} – ${n(x.mwhPerYear[2])} (mid ${n(x.mwhPerYear[1])})</td></tr>`).join('')}</tbody></table>
 <p class="muted">For scale: data centres used about 485 TWh in 2025 and head for about 950 TWh in 2030 (IEA, 2026). A billion reuses a day would spare about ${n(scenario(1e9).mwhPerYear[1] / 1e6)} TWh a year in the middle case: a real amount of electricity, a small share of the whole. The larger gain is elsewhere: answers in one call instead of dozens, the same good method for every agent, and no money paid to a fake shop.</p>
 <h2>Put the count on your page</h2>
-<p class="badge"><img src="/savings/badge.svg" alt="Tokens spared for agents by the open sea: ${esc(n(h.tokens))}" height="22"></p>
-<p>A badge for a README or any website: the live count, refreshed every few minutes. Markdown:</p>
+<p class="badge"><img src="/savings/badge.svg" alt="Tokens spared for agents by the open sea, measured against raw HTML (an upper bound): ${esc(n(h.measured))}" height="22"></p>
+<p>A badge for a README or any website: the measured count against raw HTML (an upper bound; the modelled reuses are not on it), refreshed every few minutes. Markdown:</p>
 <pre>${esc(snippetMd)}</pre>
 <p>HTML:</p>
 <pre>${esc(snippetHtml)}</pre>
 <h2>Sources</h2><ul>${[...s.sources, ...P.sources, R.source].map((x) => `<li>${esc(x.what)} — <a href="${esc(x.url)}" rel="noopener">${esc(x.by)}</a></li>`).join('')}</ul>
 <h2>Not counted</h2><ul>${s.notCounted.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
 <p><small>As data: <a href="/savings.json">/savings.json</a> · day by day: <a href="/savings.csv">/savings.csv</a> · every number of the sea: <a href="/open">/open</a> · <a href="/brain/areas">the areas of the Unibrain</a></small></p>`;
-  return page(base, '/savings', 'What the shared brain saves — tokens and energy, measured and modelled | Mare Liberum', `Tokens the open sea spared for AI agents: measured (Markdown instead of HTML, counted per answer, tokens from ratios measured with a real tokenizer) and modelled (reuses of solved parts, with sourced ranges), what they are worth at public API prices, and the energy. Every assumption stated.`, body, ld);
+  return page(base, '/savings', 'What the shared brain saves — tokens and energy, measured and modelled | Mare Liberum', `Tokens the open sea spared for AI agents: measured (Markdown instead of raw HTML, an upper bound, tokens from ratios measured with a real tokenizer) and modelled (reuses of solved parts, with sourced ranges), what they are worth at public API prices, and the energy. Every assumption stated.`, body, ld);
 }

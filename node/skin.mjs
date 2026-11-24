@@ -47,7 +47,7 @@ const CHART = [
   [/^\/gauge\/view$/, P(1, '150 m', 'sonar')],
   [/^\/web(\/|$)/, P(1, '150 m', 'sonar')],
   [/^\/proof$/, P(2, '700 m', 'sonar', ['Every word an agent reads costs tokens.', 'We counted them on real tasks, with the sea and without it.', 'Measured where we could, modelled where we had to, and said which is which.'])],
-  [/^\/connect$/, P(1, '40 m', 'threads', ['Your agent already lives somewhere: Claude, ChatGPT, Cursor, VS Code.', 'One click opens a door from there into the open sea.', 'No account, no key. The same sea in every client.'])],
+  [/^\/connect$/, P(1, '40 m', 'threads', ['Your agent already lives somewhere: Claude, ChatGPT, Cursor, VS Code.', 'A button or a few steps open a door from there into the open sea.', 'No account, no key. The same sea in every client.'])],
   [/^\/(use|tools|learn|read|mcp-server|de\/mcp-server|web-to-markdown|de\/webseite-als-markdown)$/, P(1, '40 m', 'threads')],
   [/^\/(business|de\/unternehmen)$/, P(0, '0 m', 'harbour')],
   [/^\/attention$/, P(1, '120 m', 'swarm')],

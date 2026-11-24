@@ -134,8 +134,8 @@ await proof('the sea itself, crawlers, programs, browsers without marks, driven 
   for (const [i, h] of tries.entries()) { const r = await call('/connect/go/vscode', { headers: h, ip: `203.0.113.${50 + i}` }); assert.equal(r.status, 302); assert.equal(r.headers.get('location'), byId.vscode.go); }
   await tick(); const j = await counts(); assert.equal(j.counts.sums.all.go, before); assert.equal(j.counts.today.vscode, undefined);
 });
-await proof('a press of Copy on the page counts as copied (204), from the same site only', async () => {
-  const same = await call('/connect/go/windsurf', { method: 'POST', headers: { 'user-agent': CHROME, 'sec-fetch-mode': 'no-cors', 'sec-fetch-site': 'same-origin', 'sec-fetch-dest': 'empty' }, ip: '203.0.113.20' });
+await proof('a press of Copy on the page counts as copied (204), from the same site only: the page\'s own beacon (Origin of the site, Referer /connect)', async () => {
+  const same = await call('/connect/go/windsurf', { method: 'POST', headers: { 'user-agent': CHROME, 'sec-fetch-mode': 'no-cors', 'sec-fetch-site': 'same-origin', 'sec-fetch-dest': 'empty', origin: BASE, referer: `${BASE}/connect` }, ip: '203.0.113.20' });
   const cross = await call('/connect/go/windsurf', { method: 'POST', headers: { 'user-agent': CHROME, 'sec-fetch-mode': 'no-cors', 'sec-fetch-site': 'cross-site', 'sec-fetch-dest': 'empty' }, ip: '203.0.113.21' });
   assert.equal(same.status, 204); assert.equal(cross.status, 204);
   await tick(); assert.deepEqual((await counts()).counts.today.windsurf, { go: 0, copy: 1 });
@@ -203,7 +203,7 @@ await proof('/connect.json: every client with its button, its door and its count
 });
 await proof('/connect.md and Accept: text/markdown give the page as Markdown, not indexed as a copy', async () => {
   const r = await call('/connect.md', { headers: { accept: '*/*' } }); assert.equal(r.status, 200); assert.match(r.headers.get('content-type'), /text\/markdown/); assert.match(r.headers.get('x-robots-tag'), /noindex/);
-  assert.match(r.text, /^# Connect Claude, ChatGPT, Cursor and VS Code/); assert.ok(r.text.includes('claude mcp add --transport http mare-liberum'));
+  assert.match(r.text, /^# Connect your agent/); assert.ok(r.text.includes('claude mcp add --transport http mare-liberum'));
   const m = await call('/connect', { headers: { accept: 'text/markdown' } }); assert.match(m.headers.get('content-type'), /text\/markdown/);
 });
 await proof('the app door is byte for byte the door of main (tools/list, and initialize without the version)', async () => {

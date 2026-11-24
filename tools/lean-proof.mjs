@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { handle, VERSION } from '../node/core.mjs';
+import { handle } from '../node/core.mjs';
 import { createMem } from '../node/mem.mjs';
 import { memoryKv } from '../node/flow.mjs';
 import { createLedger } from '../node/ledger.mjs';
@@ -193,8 +193,10 @@ await proof('the run of the branch is committed beside the live run, small, its 
 });
 await proof('/proof shows before and after side by side, said to be the release candidate measured locally before deploy, with every number from one of the two runs', async () => {
   const page = await call('/proof', { accept: 'text/html' }), html = page.text;
-  const day = L.date.split('-').reverse().join('.'), label = `Measured on the release candidate before deploy (local run, ${day}); the live re-measure below confirms it once ${VERSION} runs.`;
-  assert.ok(!html.includes('Not live yet'), 'the old label is gone');
+  // (verifier I9: the label names the branch and the commit the run measured, the seeded local brain, and says that the hourly
+  // re-read is an estimate against the old live run, no re-run; it never says it "confirms")
+  const label = `Measured locally before deploy on branch lean/1 (commit ${L.bench.commit}: the reader and the short answer this release ships), its brain a local node seeded with the 64 live pathways of these ${L.summary.tasks} tasks. The hourly re-read below estimates one page at a time against the old live run; it is no re-run of the bench, and only the next live run measures the deployed sea.`;
+  assert.ok(!html.includes('Not live yet') && !/confirms it/.test(html), 'neither the old label nor a claim to confirm');
   holds(html, ['Before and after: the lean reader', label, 'Local run of lean/1 before deploy.', `href="/proof/${L.file}"`, 'id="chart-lean"', 'id="chart-compact"']);
   const fig = (id) => (new RegExp(`<figure[^>]*id="${id}"[\\s\\S]*?</figure>`).exec(html) || [''])[0];
   assert.equal((fig('chart-lean').match(/<circle /g) || []).length, L.tasks.filter((t) => t.page?.tokens?.o200k_base?.prior > 0).length * 3);

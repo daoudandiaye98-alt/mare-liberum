@@ -221,6 +221,8 @@ code{font:500 .92em/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;col
 .spared .figure>span{max-width:none}
 .spared .figure span .snd{color:var(--foam);font-size:inherit}
 .spared .small{margin:0}
+/* the dock floats over the foot of the screen: where the counter ends a screen, its lines stay above the dock */
+.spared{padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 .countries,.cells{display:grid}
 .waters{display:grid;gap:var(--s5)}
 .waters[hidden]{display:none}
@@ -546,7 +548,7 @@ footer li a:hover{color:var(--foam);text-decoration:underline}
     <p class="stamp" id="stamp" aria-live="off">Loading live data…</p>
     <p class="stamp">AI visits are counted per UTC day<span id="aiy"></span></p>
     <div class="spared" id="spared">
-      <p class="figure"><b class="snd" id="spared-n" data-k="spared">–</b><span>tokens spared for AI agents so far · measured <span class="snd" data-k="sparedM">–</span> · modelled <span class="snd" data-k="sparedE">–</span></span></p>
+      <p class="figure"><b class="snd" id="spared-n" data-k="spared">–</b><span>tokens spared for AI agents so far · measured <span class="snd" data-k="sparedM">–</span> against raw HTML (an upper bound) · modelled <span class="snd" data-k="sparedE">–</span></span></p>
       <p class="small"><a href="/savings">How it is counted</a> · <a href="/open">Every number, in public</a></p>
     </div>
     <noscript><p class="stamp">Without JavaScript this page shows the count of the moment it was sent, and some lists stay empty. Every number is open at <a href="/live.json">/live.json</a>.</p></noscript>

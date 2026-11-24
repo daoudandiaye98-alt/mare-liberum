@@ -24,7 +24,7 @@ Cursor · ~/.cursor/mcp.json
 VS Code · .vscode/mcp.json
 { "servers": { "mare-liberum": { "type": "http", "url": "${url}" } } }
 
-Claude, ChatGPT and other apps: add ${url} as a custom connector.</pre><p><a href="/connect">One click into Claude, ChatGPT, Cursor, VS Code and more clients</a></p>`;
+Claude, ChatGPT and other apps: add ${url} as a custom connector.</pre><p><a href="/connect">Cursor, VS Code, Goose and LM Studio in one click; Claude and ChatGPT in a few steps</a></p>`;
 const connectDe = (url = 'https://mareliberum.dev/mcp') => `<pre>Claude Code
 claude mcp add --transport http mare-liberum ${url}
 
@@ -34,7 +34,7 @@ Cursor · ~/.cursor/mcp.json
 VS Code · .vscode/mcp.json
 { "servers": { "mare-liberum": { "type": "http", "url": "${url}" } } }
 
-Claude, ChatGPT und andere Apps: ${url} als eigenen Connector hinzufügen.</pre><p><a href="/connect" hreflang="en">Mit einem Klick in Claude, ChatGPT, Cursor, VS Code und weitere Programme</a> (auf Englisch)</p>`;
+Claude, ChatGPT und andere Apps: ${url} als eigenen Connector hinzufügen.</pre><p><a href="/connect" hreflang="en">Cursor, VS Code, Goose und LM Studio mit einem Klick, Claude und ChatGPT in wenigen Schritten</a> (auf Englisch)</p>`;
 
 // ── The directory of MCP servers, by topic ──
 // [slug, name, search words, one sentence on what such servers do]

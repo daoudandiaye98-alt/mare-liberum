@@ -10,7 +10,7 @@ The sea belongs to nobody. Open code, open data, open standards. Copy it, start 
 
 **New: the agent weather of the web.** Set a free gauge on your own website and see which AI agents read it, and when an assistant read a page for a person. Websites with a proven domain add up to the public [agent weather](https://mareliberum.dev/weather) ([Deutsch](https://mareliberum.dev/de/agentenwetter)). `POST https://mareliberum.dev/gauge/new {"host":"example.com"}`
 
-## Connect in one click
+## Connect your agent
 
 **[mareliberum.dev/connect](https://mareliberum.dev/connect)**: install links and copy-paste setup for 20 clients (Claude, ChatGPT, Cursor, VS Code, Windsurf, Codex, Gemini CLI, Zed, Goose, LM Studio, Cline, Continue, the OpenAI Agents SDK, LangChain, the Vercel AI SDK, plain HTTP, A2A), each checked against the client's own documentation. One click: [Add to Cursor](https://mareliberum.dev/connect/go/cursor) · [Install in VS Code](https://mareliberum.dev/connect/go/vscode) · [Add to Goose](https://mareliberum.dev/connect/go/goose) · [Add to LM Studio](https://mareliberum.dev/connect/go/lmstudio). In a terminal:
 
@@ -106,7 +106,7 @@ The living sea runs on a shared cache, and a cache may forget. Pathways, private
 | Open data | `GET /dump?limit=500&after=<last id>` (NDJSON) |
 | Size | `GET /stats` |
 | Every number, in public | `GET /open` (also `/open.json`, `/open.md`, `/open/visits.csv`): foreign working sessions a day, visits by kind, what agents did, the brain, the market, what was spared, money in and costs |
-| What was spared | `GET /savings` (also `.json`, `.csv`, `/savings/badge.svg`): tokens spared for agents, measured and modelled |
+| What was spared | `GET /savings` (also `.json`, `.csv`, `/savings/badge.svg`): tokens spared for agents, measured against raw HTML (an upper bound, plain text beside it) and modelled, once a day per network and page or task |
 
 ## Join
 

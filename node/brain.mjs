@@ -110,8 +110,8 @@ export function createBrain(h) {
       // the beacon: the course of the lighthouse that shines brightest for this task, when one fits (node/lighthouse.mjs)
       const course = (await api.courseFor?.(q, a.agent).catch(() => null)) || undefined;
       // the ledger of the areas (node/areas.mjs): a confirmed pathway or a ready course handed over is a part nobody solves again
-      if (paths.some((p) => (p.worked || 0) >= 1 && (p.worked || 0) > (p.failed || 0))) api.countSave?.('path', 1, ctx);
-      if (course) api.countSave?.('plan', 1, ctx);
+      if (paths.some((p) => (p.worked || 0) >= 1 && (p.worked || 0) > (p.failed || 0))) api.countSave?.('path', 1, ctx, q);
+      if (course) api.countSave?.('plan', 1, ctx, q);
       const buying = bf.kind === 'shopping' || bf.kind === 'travel-booking' || course?.kind === 'shopping' || course?.kind === 'shop-safety';
       const area = strip({ market: buying ? `${base()}/brain/market?q=${encodeURIComponent(q)}` : undefined, plan: bf.kind !== 'general' ? `${base()}/brain/thinking?q=${encodeURIComponent(q)}` : undefined, map: `${base()}/brain/areas` });
       return strip({ course, task: q, tag: tag || undefined, brief, area, paths: paths.map((p) => view(p, q, tag)),

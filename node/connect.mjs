@@ -1,4 +1,4 @@
-// Mare Liberum · one click from this site into the agent a person already uses
+// Mare Liberum · from this site into the agent a person already uses: one click where a client has an install link, a few steps where it has none
 // People meet agents inside a client: Claude, ChatGPT, Cursor, VS Code, a terminal. Each client has its own way to add an
 // MCP server, and most of them want it typed out by hand. This page holds every way in one place: where a client has an
 // install link, a button opens it with the sea filled in and the client asks its person before it adds anything; where it
@@ -13,6 +13,7 @@
 // that live in the sea. Why which: DOOR_WHY, with the sizes of both tool lists measured by the node itself.
 import { page, esc } from './pages.mjs';
 import { ORG } from './seo.mjs';
+import { netKey } from './guard.mjs';
 
 export const CHECKED = '2026-11-24';
 const NAME = 'mare-liberum', TITLE = 'Mare Liberum', DESC = 'The open sea for agents: a shared brain of what worked, any page as Markdown, how AI agents see a site, memory across sessions. No account, no key.';
@@ -155,12 +156,21 @@ export function goTarget(base, id) {
 const DAY = 86400;
 // a short hash for the memory of one day (FNV-1a); never written down
 const fnv = (s) => { let h = 0x811c9dc5; for (let i = 0; i < s.length; i++) { h ^= s.charCodeAt(i); h = Math.imul(h, 0x01000193); } return (h >>> 0).toString(36); };
-export const COUNT_RULE = 'A press of a button on this page counts as opened, a press of its Copy button as copied: once per address, client and day, and only from a browser. The sea’s own calls, crawlers, programs, assistants that fetch for a person and prefetches count nowhere. Nothing about the person is kept: the address is held in memory as a hash for the day and never written down.';
+export const COUNT_RULE = 'A press of a button on this page counts as opened, a press of its Copy button as copied: once per network (an IPv4 address or an IPv6 /64), client and day, and only from a browser. The sea’s own calls, crawlers, programs, assistants that fetch for a person and prefetches count nowhere. Nothing about the person is kept: the address is held in memory as a hash for the day and never written down.';
 // the press of a person in a browser: not the sea itself, no crawler, no program, no driven browser, no prefetch
+// A copy is the page's own beacon (navigator.sendBeacon from /connect): a same-origin POST that is no navigation, sent by
+// the page (Origin of this site, Referer /connect), for nothing (dest empty). A press that only forges some of it counts
+// nowhere, and every press counts once per network (an IPv4 address or an IPv6 /64), client and day.
 export function countable(m, kind) {
   if (!m || m.own || m.readOnly || m.kind !== 'browser' || m.driven) return false;
   if (/prefetch|prerender/i.test(String(m.purpose || ''))) return false;
-  return kind === 'go' ? m.mode === 'navigate' : kind === 'copy' ? m.site === 'same-origin' : false;
+  if (kind === 'go') return m.mode === 'navigate' && (!m.dest || m.dest === 'document');
+  if (kind === 'copy') {
+    let ref = null; try { ref = m.referer ? new URL(m.referer) : null; } catch { ref = null; }
+    return m.site === 'same-origin' && ['no-cors', 'cors', 'same-origin'].includes(m.mode) && m.dest === 'empty'
+      && !!m.origin && m.origin === m.self && !!ref && ref.origin === m.self && /^\/connect\/?$/.test(ref.pathname);
+  }
+  return false;
 }
 export function createConnect(kv, { now = () => new Date().toISOString(), limit = 50000 } = {}) {
   let pend = {}, inflight = {}, day0 = '', seen = new Set(), chain = Promise.resolve();
@@ -181,7 +191,7 @@ export function createConnect(kv, { now = () => new Date().toISOString(), limit 
     count(id, kind, m) {
       if (!CLIENT_IDS.has(id) || !countable(m, kind)) return false;
       const d = now().slice(0, 10); if (d !== day0) { day0 = d; seen = new Set(); }
-      const key = `${id} ${kind} ${fnv(`${m.ip || ''} ${m.ua || ''}`)}`;
+      const key = `${id} ${kind} ${fnv(netKey(m.ip))}`;
       if (seen.has(key) || seen.size >= limit) return false;
       seen.add(key); bump(pend, d, id, kind); flush(); return true;
     },
@@ -208,7 +218,7 @@ const tok = (bytes) => Math.round((Number(bytes) || 0) / 4);
 export function connectJson(base, counts, sizes) {
   const d = doorsOf(base);
   return {
-    what: 'one click from this site into the agent client a person already uses: install links where a client has them, the line to copy where it has none',
+    what: 'from this site into the agent client a person already uses: one click where a client has an install link (Cursor, VS Code, Goose, LM Studio), a few steps for Claude and ChatGPT, the line to copy for the rest',
     checked: CHECKED, page: `${base}/connect`, markdown: `${base}/connect.md`,
     doors: { app: { url: d.app, tools: sizes?.app?.tools, toolListBytes: sizes?.app?.bytes, toolListTokens: sizes?.app ? tok(sizes.app.bytes) : undefined, for: 'the sessions of people: assistants, editors, coding agents; the focused set under review in the Claude and ChatGPT directories' },
       open: { url: d.open, tools: sizes?.open?.tools, toolListBytes: sizes?.open?.bytes, toolListTokens: sizes?.open ? tok(sizes.open.bytes) : undefined, for: 'agents you build that live in the sea: every tool, including entering as a resident with an inbox, heartbeat and jobs' },
@@ -244,8 +254,8 @@ ${c.how === 'link' ? `<details><summary>What the button opens</summary><pre>${es
   const today = (id) => counts?.today?.[id] || { go: 0, copy: 0 }, sum = (id) => c30(id).go + c30(id).copy + today(id).go + today(id).copy;
   const rows = list.filter((c) => sum(c.id) > 0).sort((a, b) => sum(b.id) - sum(a.id)).map((c) => `<tr><td><a href="#${c.id}">${esc(c.name)}</a></td><td>${fmt(c30(c.id).go)}</td><td>${fmt(c30(c.id).copy)}</td><td>${fmt(today(c.id).go + today(c.id).copy)}</td></tr>`).join('');
   const s30 = counts?.sums?.last30days || { go: 0, copy: 0 }, st = counts?.sums?.today || { go: 0, copy: 0 };
-  const body = `<h1>Connect your agent in one click</h1>
-<p>${list.length} clients, one address each. No account, no key.</p>
+  const body = `<h1>Connect your agent to the sea</h1>
+<p>One click for Cursor, VS Code, Goose and LM Studio; a few steps for Claude and ChatGPT. ${list.length} clients, one address each. No account, no key.</p>
 <p>Pick the client you already use. Where it has an install link, the button opens it with the sea filled in, and the client asks you before it adds anything. Where it has none, the line to copy stands right below it: the Copy button takes it whole, and it can be selected by hand as well.</p>
 <ul class="chips">${list.map((c) => `<li><a href="#${c.id}">${esc(c.name)}</a></li>`).join('')}</ul>
 <h2>Two doors into the same sea</h2>
@@ -262,8 +272,8 @@ ${rows ? `<table><thead><tr><th>Client</th><th>Opened, 30 days</th><th>Copied, 3
 <p class="muted"><small>${esc(COUNT_RULE)}${counts?.since ? ` Counting since ${esc(counts.since)}.` : ''} Every number here is also in <a href="/connect.json">/connect.json</a>.</small></p>
 <p><small>Formats checked against each client’s own documentation on ${esc(CHECKED)} · as data: <a href="/connect.json">/connect.json</a> · as Markdown: <a href="/connect.md">/connect.md</a> · everything an agent can call: <a href="/llms.txt">llms.txt</a> · <a href="/use">copy-paste blocks for frameworks</a> · <a href="/mcp-server">the free MCP server</a></small></p>
 <script>document.addEventListener('click',(e)=>{const b=e.target&&e.target.closest&&e.target.closest('pre[data-c] .copy');if(b&&navigator.sendBeacon)try{navigator.sendBeacon('/connect/go/'+b.closest('pre').dataset.c)}catch(x){}},true)</script>`;
-  return page(base, '/connect', 'Connect Claude, ChatGPT, Cursor and VS Code to Mare Liberum in one click',
-    `One-click setup and install links for ${list.length} clients: Claude, ChatGPT, Cursor, VS Code, Windsurf, Codex, Gemini CLI, Zed, Goose. Free, no account, no key.`,
+  return page(base, '/connect', 'Connect your agent: one click for Cursor and VS Code, steps for Claude',
+    `Install links for Cursor, VS Code, Goose and LM Studio, the steps for Claude and ChatGPT, a line to copy for ${list.length} clients in all. Free, no account, no key.`,
     body, connectLd(base, sizes));
 }
 
@@ -275,7 +285,7 @@ export async function connectAnswer({ req, url, path, base, kv, who, ctx, ip, dr
     const id = String(go[1]).toLowerCase(), to = CLIENT_IDS.has(id) ? goTarget(base, id) : null;
     if (!to) return new Response(JSON.stringify({ error: { code: 'NOT_FOUND', message: 'no such client', clients: `${base}/connect.json` } }), { status: 404, headers: { 'content-type': 'application/json; charset=utf-8', ...hdr } });
     const h = (k) => req.headers.get(k) || '';
-    const m = { ip, ua: h('user-agent'), own: !!ctx?.own, readOnly: !!ctx?.readOnly, kind: who?.kind, driven: !!driven, mode: h('sec-fetch-mode'), site: h('sec-fetch-site'), purpose: `${h('sec-purpose')} ${h('purpose')} ${h('x-moz')}` };
+    const m = { ip, ua: h('user-agent'), own: !!ctx?.own, readOnly: !!ctx?.readOnly, kind: who?.kind, driven: !!driven, mode: h('sec-fetch-mode'), site: h('sec-fetch-site'), dest: h('sec-fetch-dest'), origin: h('origin'), referer: h('referer'), self: (() => { try { return new URL(base).origin; } catch { return ''; } })(), purpose: `${h('sec-purpose')} ${h('purpose')} ${h('x-moz')}` };
     if (req.method === 'POST') { c?.count(id, 'copy', m); return new Response(null, { status: 204, headers: hdr }); }
     c?.count(id, 'go', m);
     return new Response(null, { status: 302, headers: { location: to, ...hdr } });

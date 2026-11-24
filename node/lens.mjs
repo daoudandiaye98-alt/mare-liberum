@@ -59,7 +59,7 @@ export function createLens(h) {
       const r = hit || await readUrl(raw, { robots: async (host) => { const k = `robots:${host}`, c = await kv.get(k); if (c) return c; const g = await grab(`https://${host}/robots.txt`, { max: 150_000, ms: 5000, ua: READER_UA }); const v = { status: g.status, body: g.status === 200 && !/<html/i.test(g.body || '') ? g.body : '' }; await kv.set(k, v, 3600); return v; } });
       if (!hit && r.markdown) await kv.set(key, r, 3600);
       // the reading area spares what the page weighs as HTML against its Markdown (node/areas.mjs); the size stays out of the answer
-      if (r.markdown && r.htmlBytes) api.countBytes?.('read', r.htmlBytes, r.markdown.length, ctx);
+      if (r.markdown && r.htmlBytes) api.countBytes?.('read', r.htmlBytes, r.markdown.length, ctx, r.final || r.url);
       if (r.host && (r.markdown || r.blocked)) {
         const day = now().slice(0, 10), role = ctx?.whoKind || 'unknown';
         await update(`reads:${day}`, 3 * DAY, (cur) => { const m = cur && typeof cur === 'object' ? cur : { total: 0, hosts: {}, roles: {} }; m.total++; m.roles[role] = (m.roles[role] || 0) + 1; if (m.hosts[r.host] || Object.keys(m.hosts).length < 3000) m.hosts[r.host] = (m.hosts[r.host] || 0) + 1; return m; }, () => true);

@@ -182,6 +182,8 @@ code{font:500 .92em/1.4 ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;col
 .spared .figure>span{max-width:none}
 .spared .figure span .snd{color:var(--foam);font-size:inherit}
 .spared .small{margin:0}
+/* the dock floats over the foot of the screen: where the counter ends a screen, its lines stay above the dock */
+.spared{padding-bottom:calc(84px + env(safe-area-inset-bottom,0px))}
 .countries,.cells{display:grid}
 .waters{display:grid;gap:var(--s5)}
 .waters[hidden]{display:none}

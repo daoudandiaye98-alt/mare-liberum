@@ -162,7 +162,7 @@ await proof('1,000,000 synthetic reads: the memory holds its bounds, every read 
 await proof('what the tide wrote is read back after a restart and added to what the new node counted meanwhile; the listings of a day travel as short lines', async () => {
   const kv = memoryKv(), t = Date.parse(`${today}T08:00:00Z`), a = createAttention({ kv, now: () => t }); await a.ready();
   for (let i = 0; i < 5; i++) a.count('s', 'keep.com', 0, `n${i}`, 'keep.com');
-  a.count('e', 'keep.com', 2, 'm1', 'x'); a.click('owner', 'site', { kind: 'browser', name: 'Mozilla/5.0' }, '203.0.113.9'); await a.flush();
+  a.count('e', 'keep.com', 2, 'm1', 'x'); a.click('owner', 'site', { kind: 'browser', name: 'Mozilla/5.0' }, '203.0.113.9', { mode: 'navigate', dest: 'document', site: 'none' }); await a.flush();
   const b = createAttention({ kv, now: () => t }); b.count('s', 'keep.com', 0, 'n9', 'keep.com');
   const s = await b.site('keep.com'); assert.deepEqual([s.page.by.ClaudeBot, s.entries.by.Meta], [6, 1]); assert.equal((await b.overview()).clicks.last30days.owner.total, 1);
   await b.flush(); assert.equal((await createAttention({ kv, now: () => t }).site('keep.com')).page.by.ClaudeBot, 6, 'written once more, not twice');
@@ -209,7 +209,7 @@ await proof('every button to a paid service, on every page that offers one, pass
   for (const d of doors) { const r = await S.call(d, person); assert.equal(r.status, 302, d); assert.ok(safeTarget(r.loc) || r.loc.startsWith(`${BASE}/`), `${d} → ${r.loc}`); }
   assert.ok(doors.size >= 15, `${doors.size} buttons`);
 });
-await proof('clicks count per day, service, page kind and kind of caller; crawlers and the sea itself not; at most 3 per caller network and service', async () => {
+await proof('clicks count per day, service and page kind for a person who navigates; assistants, programs, crawlers and the sea itself not; at most 3 per caller network and service', async () => {
   const S = sea();
   for (let i = 0; i < 5; i++) await S.call('/c/owner?from=site&ref=ropes.dev', { ...person, from: '203.0.113.77' });
   await S.call('/c/report?from=attention', { ua: UA.chatgpt }); await S.call('/c/teams?from=pricing', { ua: 'curl/8.4' });
@@ -217,10 +217,11 @@ await proof('clicks count per day, service, page kind and kind of caller; crawle
   await S.call('/c/owner?from=site', { ua: UA.own }); await S.call('/c/law?from=//evil.example', person);
   const c = (await S.call('/attention.json')).j.clicks;
   assert.deepEqual(c.last30days.owner, { total: 3, from: { site: 3 }, who: { person: 3 } });
-  assert.deepEqual(c.last30days.report, { total: 1, from: { attention: 1 }, who: { assistant: 1 } });
-  assert.deepEqual(c.last30days.teams, { total: 1, from: { pricing: 1 }, who: { program: 1 } });
+  // (3.33.0, verifier I3: only a person in a browser who navigates counts, by the rule of the buttons of /connect; an assistant
+  // or a program that follows the link is sent on and not counted)
+  assert.equal(c.last30days.report, undefined, 'an assistant is not a click'); assert.equal(c.last30days.teams, undefined, 'a program is not a click');
   assert.deepEqual(c.last30days.law, { total: 1, from: { other: 1 }, who: { person: 1 } });
-  assert.equal(c.total, 6);
+  assert.equal(c.total, 4);
 });
 await proof('the operator can let attention rest without a release (immune:policy rest "attention"): nothing is counted, the doors still lead on', async () => {
   const S = sea(); await S.map('ropes.dev');

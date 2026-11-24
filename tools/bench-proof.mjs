@@ -6,7 +6,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { handle, VERSION } from '../node/core.mjs';
+import { handle } from '../node/core.mjs';
 import { createMem } from '../node/mem.mjs';
 import { memoryKv } from '../node/flow.mjs';
 import { createLedger } from '../node/ledger.mjs';
@@ -37,9 +37,7 @@ const NUM = /(?<![\p{L}\p{N}_])\d+(?:[.,:]\d+)*(?:-\d{2}-\d{2})?(?![\p{L}\p{N}_]
 function allowedOf(d) {
   const out = new Set();
   const num = (x) => { out.add(String(x)); out.add(x.toLocaleString('en-US')); out.add(x.toFixed(2)); if (!Number.isInteger(x)) out.add(x.toFixed(1)); };
-  const str = (s) => { for (const m of s.matchAll(NUM)) out.add(m[0]); const iso = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(s); if (iso) { out.add(iso[1]); out.add(iso[2]); }
-    // (3.33.0: a day of the run is also written as d.m.y, in the label of the run beside the live one)
-    const day = /^(\d{4})-(\d{2})-(\d{2})/.exec(s); if (day) out.add(`${day[3]}.${day[2]}.${day[1]}`); };
+  const str = (s) => { for (const m of s.matchAll(NUM)) out.add(m[0]); const iso = /^(\d{4}-\d{2}-\d{2})T(\d{2}:\d{2})/.exec(s); if (iso) { out.add(iso[1]); out.add(iso[2]); } };
   (function walk(v) { if (typeof v === 'number' && Number.isFinite(v)) num(v); else if (typeof v === 'string') str(v); else if (v && typeof v === 'object') Object.values(v).forEach(walk); })(d);
   return out;
 }
@@ -106,8 +104,7 @@ await proof('/proof: a page of the sea with a multi-word title, both charts and 
   const ld = JSON.parse(/<script type="application\/ld\+json">([\s\S]*?)<\/script>/.exec(P.text)[1]); assert.equal(ld['@type'], 'Dataset'); assert.match(ld.distribution[0].contentUrl, /\/proof\/bench-/);
 });
 await proof('every number on the page comes from the run, or from the run of the branch beside it (and the check catches one that does not)', () => {
-  // the page as the node serves it: with its VERSION, which names the release in the label of the run beside the live one (a name, no measurement)
-  const allowed = new Set([...allowedOf(D), ...(L ? allowedOf(L) : []), VERSION]), html = proofPage(BASE, D, null, undefined, VERSION), text = mainText(html);
+  const allowed = new Set([...allowedOf(D), ...(L ? allowedOf(L) : [])]), html = proofPage(BASE, D, null), text = mainText(html);
   const desc = /<meta name="description" content="([^"]*)"/.exec(html)[1].replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/&quot;/g, '"');
   assert.deepEqual(strangers(text, allowed), [], 'numbers the run does not hold'); assert.deepEqual(strangers(desc, allowed), []);
   assert.ok([...text.matchAll(NUM)].length > 300, 'the page is full of the run\'s numbers');
@@ -136,7 +133,7 @@ await proof('/proof.json: the same run as data, with the headline, the caveats, 
 });
 await proof('/proof.md and Accept: text/markdown: the page for agents, its numbers without the charts\' drawing', async () => {
   const m = await call('/proof.md', { accept: '*/*', ua: 'claude-code/2.0' }), a = await call('/proof', { accept: 'text/markdown, text/html;q=0.9', ua: 'claude-code/2.0' });
-  for (const r of [m, a]) { assert.equal(r.status, 200); assert.match(r.headers.get('content-type'), /text\/markdown/); assert.match(r.text, /What an agent reads, with and without the sea/); assert.ok(!/<svg|<circle/.test(r.text)); assert.ok(r.text.includes(fmt(D.summary.reading[TOK].markdown.median))); }
+  for (const r of [m, a]) { assert.equal(r.status, 200); assert.match(r.headers.get('content-type'), /text\/markdown/); assert.match(r.text, /With the sea and without it/); assert.ok(!/<svg|<circle/.test(r.text)); assert.ok(r.text.includes(fmt(D.summary.reading[TOK].markdown.median))); }
   assert.match(m.headers.get('x-robots-tag') || '', /noindex/, 'the twin leaves the HTML page to the search engines');
   assert.ok(m.text.length < P.text.length / 3, 'far smaller than the page itself');
 });

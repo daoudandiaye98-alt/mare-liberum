@@ -31,7 +31,7 @@ import { createLedger, pulseOrdered } from './ledger.mjs';
 import { callerHash, callerHashes, viaProxy, rewriteForAgents, viaUrl, wrapTarget, ADDRESS_KEYS } from './via.mjs';
 import { paidRoute } from './paid.mjs';
 import { pricingOf, priceLine, withPrice } from './pricing.mjs';
-import { wantsMarkdown, mdTwin, asMarkdown } from './agentmd.mjs';
+import { wantsMarkdown, mdTwin, asMarkdown, plainTextBytes } from './agentmd.mjs';
 import { areasPage, areasJson, marketPage, thinkingPage } from './areas.mjs';
 import { openOf, openPage, savingsPage, visitsCsv, savingsCsv, clientFamily, OPEN } from './open.mjs';
 import { proofPage, proofJson, loadBench, benchFile, proofLive, proofTide } from './proof.mjs';
@@ -747,10 +747,14 @@ const TOOLS = [
 ];
 // the names of the open door's tools: a call of one is counted under its name for /open, anything else as no such tool
 const TOOL_NAMES = new Set(TOOLS.map((t) => t.name));
-// who a working session is, for one UTC day and in memory only (node/open.mjs): the MCP session a client names where it
-// names one, else its network and its program, salted with a secret the node draws at its start and never writes down
+// who a working session is, for one UTC day and in memory only (node/open.mjs): its network (an IPv4 address or an IPv6
+// /64) and the family of its client, salted with a secret the node draws at its start and never writes down. A session id
+// a client sends is not trusted (the MCP door issues none, so only a spoofer would send one), nor is a program name that
+// changes from call to call; one network opens at most WORK.perNet sessions a day (node/open.mjs)
 const WORK_SALT = [...crypto.getRandomValues(new Uint8Array(16))].map((x) => x.toString(16).padStart(2, '0')).join('');
-const workKey = (ip, headers, session) => { const sid = session || headers.get('mcp-session-id'); return hash16(`${WORK_SALT}|${new Date().toISOString().slice(0, 10)}|${sid ? `s:${String(sid).slice(0, 200)}` : `${netKey(ip)}|${headers.get('user-agent') || ''}`}`); };
+const workDay = () => new Date().toISOString().slice(0, 10);
+const workKey = (ip, headers) => hash16(`${WORK_SALT}|${workDay()}|${netKey(ip)}|${clientFamily(null, headers.get('user-agent'))}`);
+const workNet = (ip) => hash16(`${WORK_SALT}|${workDay()}|net|${netKey(ip)}`);
 // callers that never open a working session: a person in a browser, a registry, the house agent (and, by ctx, the sea's
 // own calls and crawlers); the doors where a task makes one over HTTP
 const NOT_WORK = new Set(['browser', 'registry', 'resident']);
@@ -758,7 +762,7 @@ const WORK_PATH = /^\/(ask|decide|brain|think|route|route\.json|doors|lay|brain\
 // an A2A message that carries a task: text or data in its parts
 const a2aTask = (m) => (m?.method === 'message/send' || m?.method === 'SendMessage') && Array.isArray(m.params?.message?.parts) && m.params.message.parts.some((x) => (typeof x?.text === 'string' && x.text.trim()) || (x?.data && typeof x.data === 'object'));
 // the working sessions an MCP message makes: a client that connects names itself; the first tool it calls opens its session
-const workMcp = (sea, list, key, ua, door) => { for (const m of list) { if (m?.method === 'initialize') sea.workName?.(key, /mare-proof|first-swimmer|kasse-proof/i.test(m.params?.clientInfo?.name || '') ? 'own' : clientFamily(m.params?.clientInfo?.name, ua)); else if (m?.method === 'tools/call') sea.workSession?.(key, clientFamily(null, ua), door); } };
+const workMcp = (sea, list, key, ua, door, net) => { for (const m of list) { if (m?.method === 'initialize') sea.workName?.(key, /mare-proof|first-swimmer|kasse-proof/i.test(m.params?.clientInfo?.name || '') ? 'own' : clientFamily(m.params?.clientInfo?.name, ua)); else if (m?.method === 'tools/call') sea.workSession?.(key, clientFamily(null, ua), door, net); } };
 // one call at the open MCP door, counted per tool and day (node/open.mjs); never the sea's own calls, never a crawler, never the app door
 const tallyTool = (sea, m, skip) => { if (!skip && m?.method === 'tools/call' && typeof m.params?.name === 'string') sea.mcpTool?.(m.params.name, TOOL_NAMES.has(m.params.name)); };
 
@@ -782,8 +786,8 @@ const strip0 = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v !
 async function entryWithTraces(db, id) { const e = await db('mare_get', { id: String(id || '') }); if (!e) return null; const t = db.flow ? await db.flow.tracesOf(e.identifier).catch(() => null) : null; return t ? { ...e, trace: t.standing, traces: t.traces } : e; }
 // own: the call came from the sea itself (its sessions, proofs and buoy): answered like any other, counted nowhere and
 // strengthening no path, as over HTTP (ctx.own in handleOne)
-async function mcpCall(db, base, name, a, ip, own = false) {
-  const sea = db.flow, ctx = { ip, door: '/mcp', ...(own ? { own: true } : {}) };
+async function mcpCall(db, base, name, a, ip, own = false, house = false) {
+  const sea = db.flow, ctx = { ip, door: '/mcp', ...(own ? { own: true } : {}), ...(house ? { house: true } : {}) };
   if (name === 'ask') return await sea.ask(a, ctx);
   if (name === 'route') return await sea.route(a, ctx);
   if (name === 'decide') return await sea.ask({ ...a, kind: a?.kind || 'merchant', compact: true }, ctx);
@@ -899,7 +903,7 @@ function firstContact(name, a, out, base) {
   }
   return out;
 }
-async function mcp(db, base, msg, ip, app = false, own = false) {
+async function mcp(db, base, msg, ip, app = false, own = false, house = false) {
   const ok = (result) => ({ jsonrpc: '2.0', id: msg.id, result });
   const err = (code, message) => ({ jsonrpc: '2.0', id: msg.id ?? null, error: { code, message } });
   if (!msg || msg.jsonrpc !== '2.0' || typeof msg.method !== 'string') return err(-32600, 'Invalid Request');
@@ -917,7 +921,7 @@ async function mcp(db, base, msg, ip, app = false, own = false) {
       try {
         if (app && !APP_TOOLS.has(msg.params?.name)) return ok({ content: [{ type: 'text', text: `unknown tool for this endpoint: ${String(msg.params?.name || '').slice(0, 40)} — the full set is at ${base}/mcp` }], isError: true });
         const args = { ...(msg.params?.arguments || {}) }; if (app) { delete args.by; delete args.pass; if (msg.params?.name === 'read_page') delete args.q; }
-        const out = await mcpCall(db, base, msg.params?.name, args, ip, own);
+        const out = await mcpCall(db, base, msg.params?.name, args, ip, own, house);
         if (app && out && typeof out === 'object') appClean(msg.params?.name, out);
         if (!app) firstContact(msg.params?.name, args, out, base);
         return ok({ content: [{ type: 'text', text: JSON.stringify(out) }], structuredContent: out, isError: false });
@@ -1006,7 +1010,7 @@ const WHO = [
   [/^Angel\//i, 'resident', 'Angel'], [/meta-externalfetcher/i, 'assistant', 'Meta AI'],
   [/Claude-User.*claude-code/i, 'assistant', 'Claude Code'], [/Claude-User/i, 'assistant', 'Claude'], [/Claude-SearchBot/i, 'search-ai', 'Claude search'], [/ClaudeBot|anthropic-ai/i, 'ai-crawler', 'Anthropic ClaudeBot'],
   [/Perplexity-User/i, 'assistant', 'Perplexity'], [/PerplexityBot/i, 'search-ai', 'Perplexity'], [/MistralAI-User/i, 'assistant', 'Mistral'],
-  [/DuckAssistBot/i, 'assistant', 'DuckDuckGo Assist'], [/Google-Agent|GoogleAgent|Gemini-User/i, 'assistant', 'Google agent'], [/Googlebot/i, 'search', 'Google'],
+  [/DuckAssistBot/i, 'search-ai', 'DuckDuckGo Assist'], [/Google-Agent|GoogleAgent|Gemini-User/i, 'assistant', 'Google agent'], [/Googlebot/i, 'search', 'Google'],
   [/Google-Extended|GoogleOther|Google-CloudVertexBot/i, 'ai-crawler', 'Google'], [/bingbot|BingPreview|adidxbot/i, 'search', 'Bing'], [/DuckDuckBot/i, 'search', 'DuckDuckGo'], [/Bravebot/i, 'search', 'Brave'],
   [/YouBot/i, 'search-ai', 'You.com'], [/Amazonbot/i, 'ai-crawler', 'Amazon'], [/Applebot/i, 'search', 'Apple'], [/meta-external|FacebookBot/i, 'ai-crawler', 'Meta'],
   [/Bytespider/i, 'ai-crawler', 'ByteDance'], [/CCBot/i, 'ai-crawler', 'Common Crawl'], [/YandexBot/i, 'search', 'Yandex'], [/Baiduspider/i, 'search', 'Baidu'],
@@ -1381,21 +1385,32 @@ function openApi(base) {
     } };
 }
 
-function badgeSvg(label, value) {
+function badgeSvg(label, value, title = `${label}: ${value}`) {
   const w = (t) => Math.round([...t].length * 6.6 + 18), lw = w(label), vw = w(value), W = lw + vw;
   const e = (t) => t.replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c]);
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="22" role="img" aria-label="${e(label)}: ${e(value)}"><title>${e(label)}: ${e(value)}</title><rect width="${W}" height="22" rx="5" fill="#030b14"/><rect x="${lw}" width="${vw}" height="22" rx="5" fill="#0a1d31"/><rect x="${lw}" width="6" height="22" fill="#0a1d31"/><circle cx="11" cy="11" r="3.5" fill="#4fe3c1"/><g font-family="Verdana,DejaVu Sans,sans-serif" font-size="11"><text x="${lw / 2 + 5}" y="15" fill="#eaf4ff" text-anchor="middle">${e(label)}</text><text x="${lw + vw / 2}" y="15" fill="#7fd3ff" text-anchor="middle">${e(value)}</text></g></svg>`;
+  return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="22" role="img" aria-label="${e(title)}"><title>${e(title)}</title><rect width="${W}" height="22" rx="5" fill="#030b14"/><rect x="${lw}" width="${vw}" height="22" rx="5" fill="#0a1d31"/><rect x="${lw}" width="6" height="22" fill="#0a1d31"/><circle cx="11" cy="11" r="3.5" fill="#4fe3c1"/><g font-family="Verdana,DejaVu Sans,sans-serif" font-size="11"><text x="${lw / 2 + 5}" y="15" fill="#eaf4ff" text-anchor="middle">${e(label)}</text><text x="${lw + vw / 2}" y="15" fill="#7fd3ff" text-anchor="middle">${e(value)}</text></g></svg>`;
 }
 
 // the live numbers of the front page in one line, for the front page as Markdown
 function liveLine(d, base) {
   const h = headline(d), at = new Date(d.at).toISOString().slice(11, 16);
-  return `Live, counted ${at} UTC: ${fmtN(h.ai)} visits from AI today and ${fmtN(h.people)} from people · ${fmtN(h.index)} places in the open index · ${fmtN(h.paths)} pathways in the Unibrain · ${fmtN(h.spared)} tokens spared for agents so far (measured ${fmtN(h.sparedM)}, modelled ${fmtN(h.sparedE)}) · version ${VERSION}. Every number: ${base}/open`;
+  return `Live, counted ${at} UTC: ${fmtN(h.ai)} visits from AI today and ${fmtN(h.people)} from people · ${fmtN(h.index)} places in the open index · ${fmtN(h.paths)} pathways in the Unibrain · ${fmtN(h.spared)} tokens spared for agents so far (measured ${fmtN(h.sparedM)} against raw HTML, an upper bound; modelled ${fmtN(h.sparedE)}) · version ${VERSION}. Every number: ${base}/open`;
 }
 // the pages of the sea an assistant reading for a person gets as Markdown: all of them but the via addresses, which
 // carry another site's page and are no page of the sea
 export const mdForAgent = (path) => !/^\/via\//.test(path);
 const UTF8 = new TextEncoder(), bytesOf = (s) => UTF8.encode(String(s || '')).length;
+// the plain text of a page, in bytes, taken once per page and kept ten minutes (at most 500 pages)
+const TEXT_CACHE = new Map();
+function textBytesOf(path, html) {
+  const hit = TEXT_CACHE.get(path), t = Date.now(); if (hit && t - hit.at < 600_000) return hit.n;
+  const n = plainTextBytes(html); if (TEXT_CACHE.size >= 500) TEXT_CACHE.delete(TEXT_CACHE.keys().next().value); TEXT_CACHE.set(path, { at: t, n }); return n;
+}
+// the badge of what the sea spared: measured only (Markdown answers counted one by one), against raw HTML, which makes it an
+// upper bound; the modelled reuses are never on it (they are on /savings, said to be modelled)
+export const SAVINGS_BADGE = { label: 'tokens spared, measured vs raw HTML', title: 'Tokens the open sea spared for agents, measured against raw HTML (an upper bound; modelled reuses not included)' };
+// the house agent of the sea (Angel, a resident): what it is handed is counted apart, never in the headline (node/areas.mjs)
+export const isHouse = (who) => who?.kind === 'resident' && who?.name === 'Angel';
 // every answer passes here once more: an agent that asked for Markdown (Accept: text/markdown, or .md at the end of the
 // address) gets the page as Markdown (node/agentmd.mjs). So does an assistant that reads a page of the sea for a person
 // (ChatGPT-User, Claude-User, Perplexity-User, MistralAI-User … the census kind "assistant"), whatever it asked for:
@@ -1408,8 +1423,11 @@ export async function handle(req, db, cfg = {}) {
   // what Markdown spares counts into the ledger of the Unibrain, in bytes of UTF-8 and with the door it came through;
   // the sea's own calls and crawlers count nowhere
   const who0 = callerOf(req.headers), counts = who0.kind !== 'self' && !['ai-crawler', 'crawler', 'search', 'search-ai'].includes(who0.kind);
-  const door = `/${((twin ?? url.pathname).split('/')[1] || '').slice(0, 24)}`;
-  const spared = (kind) => (h, m) => { if (counts) seaOf(db, cfg, base).countBytes?.(kind, h, m, { door }); };
+  const page = twin ?? url.pathname, door = `/${(page.split('/')[1] || '').slice(0, 24)}`;
+  // once a day per network and page (node/once.mjs); the house agent apart; beside the bytes, the page's plain text for the
+  // lower view, taken once per page and kept a few minutes
+  const sctx = { door, ip: (req.headers.get('x-forwarded-for') || 'unknown').split(',')[0].trim(), ...(isHouse(who0) ? { house: true } : {}) };
+  const spared = (kind) => (h, m, html) => { if (counts) seaOf(db, cfg, base).countBytes?.(kind, h, m, sctx, page, html == null ? null : textBytesOf(page, html)); };
   // the front page as Markdown is the guide written for agents (llms.txt): what the sea is and how to call it, first,
   // and under its title the live numbers the front page shows
   const front = async (res, isTwin, agent = false) => {
@@ -1417,7 +1435,9 @@ export async function handle(req, db, cfg = {}) {
     const page = await res.text().catch(() => '');
     let md = withPrice(g, pricingOf(cfg.pay || payConfig(), base));
     try { const line = liveLine(await liveNow(seaOf(db, cfg, base), db, cfg), base), i = md.indexOf('\n'); if (i > 0) md = `${md.slice(0, i + 1)}\n${line}\n${md.slice(i + 1)}`; } catch {}
-    spared(agent ? 'mdAgent' : 'md')(bytesOf(page) || Number(cfg.site?.['/']?.body?.length) || 0, bytesOf(md));
+    // what it spared is measured against the page's own plain text (the guide is another document), never against llms.txt
+    const html = page || cfg.site?.['/']?.body || '', own = textBytesOf('/', html);
+    spared(agent ? 'mdAgent' : 'md')(bytesOf(html), own, html);
     return new Response(md, { headers: { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'public, max-age=300', vary: agent ? 'User-Agent, Accept' : 'accept',
       link: agent ? `<${base}/>; rel="canonical", <${base}/>; rel="alternate"; type="text/html"` : `<${base}/>; rel="canonical"`, 'access-control-allow-origin': '*', ...(isTwin ? { 'x-robots-tag': 'noindex, follow' } : {}) } });
   };
@@ -1433,6 +1453,9 @@ export async function handle(req, db, cfg = {}) {
     if (forAgent && who0.kind === 'assistant' && !immune.atRest?.('mdagents')) return (url.pathname === '/' && await front(res, false, true)) || asMarkdown(res, { url: req.url, base, spared: spared('mdAgent'), agent: `${base}${url.pathname}${url.search}` });
     try { let v = res.headers.get('vary') || ''; for (const k of forAgent ? ['accept', 'user-agent'] : ['accept']) if (!new RegExp(`\\b${k}\\b`, 'i').test(v)) v = v ? `${v}, ${k}` : k; res.headers.set('vary', v); } catch {}
   }
+  // a door that answers by Accept answers a search crawler that names no type with its page (handleOne turns its Accept into
+  // text/html): what such a door answers varies with the User-Agent as well, whatever it answered this time
+  try { const v = res.headers.get('vary') || ''; if (/\baccept\b/i.test(v) && !/\buser-agent\b/i.test(v)) res.headers.set('vary', `${v}, user-agent`); } catch {}
   return res;
 }
 async function handleOne(req, db, cfg = {}) {
@@ -1469,6 +1492,8 @@ async function handleOne(req, db, cfg = {}) {
   ctx.who = who.name; ctx.whoKind = who.kind;
   // the sea's own calls (its sessions, proofs and buoy): answered like any other, counted nowhere, strengthen no path
   ctx.own = who.kind === 'self';
+  // the house agent (Angel): answered like any agent; what it is handed is counted apart from the headline
+  if (isHouse(who)) ctx.house = true;
   // the door the request came through (the first part of the address), for the ledger of what the shared brain spares
   ctx.door = `/${(path.split('/')[1] || '').slice(0, 24)}`;
   // the country a caller stands in: from the node's own table when it has one (a node that stands alone), else from the platform in front of it
@@ -1510,7 +1535,7 @@ async function handleOne(req, db, cfg = {}) {
   if (working && WORK_PATH.test(path)) {
     const sp = url.searchParams; let task = sp.get('q') || sp.get('task') || sp.get('need') || (path.startsWith('/rate/') ? path : '');
     if (!task && req.method === 'POST') { try { const b = await req.clone().json(); task = b?.q || b?.task || b?.need || ''; } catch {} }
-    if (String(task || '').trim()) sea.workSession?.(workKey(ip, req.headers), clientFamily(null, req.headers.get('user-agent')), 'http');
+    if (String(task || '').trim()) sea.workSession?.(workKey(ip, req.headers), clientFamily(null, req.headers.get('user-agent')), 'http', workNet(ip));
   }
   // a read of a listing (/site/<domain>, an entry) by an AI crawler, a search engine or an assistant counts once its answer is known (node/attention.mjs)
   const att = req.method === 'GET' ? attentionOf(db, cfg).hook(path, who, ip) : null;
@@ -1601,7 +1626,7 @@ async function handleOne(req, db, cfg = {}) {
     if (path === '/.well-known/x402' || path === '/.well-known/x402.json') { const pc = cfg.pay || payConfig(), price = pricingOf(pc, base); return json({ version: 1, resources: [`${base}/route`], payTo: [{ network: 'eip155:8453', asset: 'USDC', address: pc.payTo }], pricing: [price], how_to_pay: price.how_to_pay, instructions: `${price.line}. Mare Liberum sells one move: POST ${base}/route?q=<task> gives the 10 best agent paths for exactly that task, each a /via/ address, ranked with reasons and the next step, for ${price.amount_usd} USDC (${price.human}) on Base. The first 3 paths are free: POST ${base}/route?q=<task>&free=true. The first call answers 402 with the terms (x402 v2 PAYMENT-REQUIRED header, v1 body); without an x402 client, send the USDC and POST ${base}/settle {"q":"<task>","tx":"<hash>"}. Prices: ${base}/job. Everything else in the sea is free.`, note: 'Mare Liberum takes no cut of anything else. Paid x402 services of others are listed in the open index with their price.', index: `${base}/search`, brain: `${base}/brain?q=paid+api+x402` }, 200, cached); }
     if ((path === '/v1/message:send' || path === '/a2a/v1/message:send') && req.method === 'POST') {
       seen({ kind: who.kind === 'self' ? 'self' : 'a2a', name: who.name || 'A2A agent' });
-      const params = await body(); if (working && a2aTask({ method: 'SendMessage', params })) sea.workSession?.(workKey(ip, req.headers), clientFamily(null, req.headers.get('user-agent')), 'a2a');
+      const params = await body(); if (working && a2aTask({ method: 'SendMessage', params })) sea.workSession?.(workKey(ip, req.headers), clientFamily(null, req.headers.get('user-agent')), 'a2a', workNet(ip));
       const r = await a2a(db, base, { jsonrpc: '2.0', id: 1, method: 'SendMessage', params }, ctx);
       return r.error ? json({ error: { code: r.error.code, message: r.error.message } }, 400) : json(r.result);
     }
@@ -1610,7 +1635,7 @@ async function handleOne(req, db, cfg = {}) {
       if (req.method !== 'POST') return new Response(null, { status: 405, headers: { allow: 'GET, POST, OPTIONS', ...CORS } });
       const msg = await body();
       seen({ kind: who.kind === 'self' ? 'self' : 'a2a', name: who.name || 'A2A agent' });
-      if (working && (Array.isArray(msg) ? msg.slice(0, 10) : [msg]).some(a2aTask)) sea.workSession?.(workKey(ip, req.headers), clientFamily(null, req.headers.get('user-agent')), 'a2a');
+      if (working && (Array.isArray(msg) ? msg.slice(0, 10) : [msg]).some(a2aTask)) sea.workSession?.(workKey(ip, req.headers), clientFamily(null, req.headers.get('user-agent')), 'a2a', workNet(ip));
       if (Array.isArray(msg)) return json(await Promise.all(msg.slice(0, 10).map((x) => a2a(db, base, x, ctx))));
       return json(await a2a(db, base, msg, ctx));
     }
@@ -1977,7 +2002,7 @@ async function handleOne(req, db, cfg = {}) {
     const fresh = cfg.openMemoMs ?? OPEN.memoMs;
     if (/^\/(open(\.json|\/visits\.csv)?|savings(\.csv|\/badge\.svg))$/.test(path) && req.method === 'GET') {
       const hdr = { 'cache-control': 'public, max-age=60, s-maxage=60', ...CORS }, file = (name) => ({ 'content-type': 'text/csv; charset=utf-8; header=present', 'content-disposition': `inline; filename="${name}"`, 'x-robots-tag': 'noindex', ...hdr });
-      if (path === '/savings/badge.svg') { const s = await memoOf(sea, 'savings', () => sea.savings(), fresh); return new Response(badgeSvg('tokens spared for agents by the open sea', fmtN(s?.hero?.tokens ?? 0)), { headers: { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'public, max-age=300, s-maxage=300', ...CORS } }); }
+      if (path === '/savings/badge.svg') { const s = await memoOf(sea, 'savings', () => sea.savings(), fresh), m = fmtN(s?.hero?.measured ?? 0); return new Response(badgeSvg(SAVINGS_BADGE.label, m, `${SAVINGS_BADGE.title}: ${m}`), { headers: { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'public, max-age=300, s-maxage=300', ...CORS } }); }
       if (path === '/savings.csv') return new Response(savingsCsv((await memoOf(sea, 'savings:400', () => sea.savings({ days: 400 }), fresh)).daily), { headers: file('mare-liberum-savings.csv') });
       if (path === '/open/visits.csv') return new Response(visitsCsv(await memoOf(sea, 'census:40', () => sea.censusDays(OPEN.csvDays), fresh)), { headers: file('mare-liberum-visits.csv') });
       const v = await memoOf(sea, 'open', () => openOf({ sea, ledger: ledgerOf(cfg), version: VERSION, base, tools: [...TOOL_NAMES] }), fresh);
@@ -1997,7 +2022,7 @@ async function handleOne(req, db, cfg = {}) {
     if (/^\/proof(\.json|\/(tasks|bench-\d{4}-\d{2}-\d{2}(-lean)?)\.json)?$/.test(path) && req.method === 'GET') {
       if (path.startsWith('/proof/')) { const f = benchFile(path.slice(7)); return f ? new Response(f, { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=3600', 'x-robots-tag': 'noindex', ...CORS } }) : json({ error: { code: 'NOT_FOUND', message: `no such run; see ${base}/proof` } }, 404); }
       const acc = req.headers.get('accept') || '', asJson = path.endsWith('.json') || url.searchParams.get('format') === 'json' || (/application\/json/.test(acc) && !/text\/html/.test(acc)), d = loadBench(), live = await proofLive(cfg.kv || db.kv);
-      return asJson ? ajson(proofJson(base, d, live, undefined, VERSION), 200, { 'cache-control': 'public, max-age=300', ...(path.endsWith('.json') ? { 'x-robots-tag': 'noindex' } : {}) }) : html(proofPage(base, d, live, undefined, VERSION), 300);
+      return asJson ? ajson(proofJson(base, d, live), 200, { 'cache-control': 'public, max-age=300', ...(path.endsWith('.json') ? { 'x-robots-tag': 'noindex' } : {}) }) : html(proofPage(base, d, live), 300);
     }
     // attention (node/attention.mjs, node/attention-ui.mjs): what the AIs read of the listings, how a provider claims one, every price,
     // and the counted door to the paid services. A program gets the data unless it asks for a page (or Markdown)
@@ -2016,7 +2041,8 @@ async function handleOne(req, db, cfg = {}) {
     { const cm = /^\/c\/([a-z]{2,12})$/.exec(path); if (cm && req.method === 'GET' && Object.hasOwn(CTA, cm[1])) {
       const to = ctaTarget(cm[1], url.searchParams.get('ref')), hdr = { 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow', 'referrer-policy': 'strict-origin-when-cross-origin', ...CORS };
       if (!to) return new Response(null, { status: 302, headers: { location: `${base}/pricing`, ...hdr } });
-      attentionOf(db, cfg).click(cm[1], url.searchParams.get('from'), who, ip);
+      const hh = (k) => req.headers.get(k) || '';
+      attentionOf(db, cfg).click(cm[1], url.searchParams.get('from'), who, ip, { own: ctx.own, readOnly: ctx.readOnly, driven: DRIVEN.test(hh('user-agent')), mode: hh('sec-fetch-mode'), site: hh('sec-fetch-site'), dest: hh('sec-fetch-dest'), purpose: `${hh('sec-purpose')} ${hh('purpose')} ${hh('x-moz')}` });
       return new Response(null, { status: 302, headers: { location: to.startsWith('/') ? `${base}${to}` : to, ...hdr } });
     } }
     // one click from this site into every agent client (node/connect.mjs): the page, its data, the counted buttons
@@ -2250,10 +2276,10 @@ async function handleOne(req, db, cfg = {}) {
       const msg = await body(), list = Array.isArray(msg) ? msg : [msg];
       if (list.length > 16) return json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'at most 16 calls in one batch' } }, 400);
       for (const x of list) if (x?.method === 'initialize') seen(who.kind === 'self' ? { kind: 'self' } : { kind: 'mcp-client', name: clean(x?.params?.clientInfo?.name, 60) || who.name || 'MCP client' });
-      if (working) workMcp(sea, list.slice(0, 16), workKey(ip, req.headers, `sse:${url.searchParams.get('sessionId') || url.searchParams.get('session_id')}`), req.headers.get('user-agent'), s.app ? 'app' : 'mcp');
+      if (working) workMcp(sea, list.slice(0, 16), workKey(ip, req.headers), req.headers.get('user-agent'), s.app ? 'app' : 'mcp', workNet(ip));
       if (list.length > 1) { const wait = immune.spend(ip, 5 * (list.length - 1)); if (wait) return json({ jsonrpc: '2.0', id: null, error: { code: -32000, message: 'the sea asks for a calmer pace from this address; come back in a moment' } }, 429, { 'retry-after': String(wait) }); }
       // accepted at once; the answers travel on the stream
-      const work = (async () => { for (const m of list) { tallyTool(sea, m, s.app || ctx.own || ctx.readOnly); const r = await mcp(db, base, m, ip, s.app, ctx.own).catch(() => null); if (r) s.send(r); } })();
+      const work = (async () => { for (const m of list) { tallyTool(sea, m, s.app || ctx.own || ctx.readOnly); const r = await mcp(db, base, m, ip, s.app, ctx.own, ctx.house).catch(() => null); if (r) s.send(r); } })();
       try { cfg.waitUntil?.(work); } catch {}
       return new Response('Accepted', { status: 202, headers: { 'content-type': 'text/plain; charset=utf-8', ...CORS } });
     }
@@ -2264,16 +2290,16 @@ async function handleOne(req, db, cfg = {}) {
       if (req.method !== 'POST') return new Response(null, { status: 405, headers: { allow: 'POST, OPTIONS', ...CORS } });
       const msg = await body();
       for (const x of Array.isArray(msg) ? msg : [msg]) if (x?.method === 'initialize') seen(who.kind === 'self' || /mare-proof|first-swimmer|kasse-proof/i.test(x.params?.clientInfo?.name || '') ? { kind: 'self' } : { kind: 'mcp-client', name: clean(x.params?.clientInfo?.name, 60) || who.name || 'MCP client' });
-      if (working) workMcp(sea, (Array.isArray(msg) ? msg : [msg]).slice(0, 16), workKey(ip, req.headers), req.headers.get('user-agent'), app ? 'app' : 'mcp');
+      if (working) workMcp(sea, (Array.isArray(msg) ? msg : [msg]).slice(0, 16), workKey(ip, req.headers), req.headers.get('user-agent'), app ? 'app' : 'mcp', workNet(ip));
       if (Array.isArray(msg)) {
         // a batch has an end, is answered one call after the other, and every call in it counts in the caller's pace
         if (msg.length > 16) return json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'at most 16 calls in one batch' } }, 400);
         const wait = immune.spend(ip, 5 * (msg.length - 1)); if (wait) return json({ jsonrpc: '2.0', id: null, error: { code: -32000, message: 'the sea asks for a calmer pace from this address; come back in a moment' } }, 429, { 'retry-after': String(wait) });
-        const out = []; for (const m of msg) { tallyTool(sea, m, app || ctx.own || ctx.readOnly); const r = await mcp(db, base, m, ip, app, ctx.own); if (r) out.push(r); }
+        const out = []; for (const m of msg) { tallyTool(sea, m, app || ctx.own || ctx.readOnly); const r = await mcp(db, base, m, ip, app, ctx.own, ctx.house); if (r) out.push(r); }
         return out.length ? json(out) : new Response(null, { status: 202, headers: CORS });
       }
       tallyTool(sea, msg, app || ctx.own || ctx.readOnly);
-      const out = await mcp(db, base, msg, ip, app, ctx.own);
+      const out = await mcp(db, base, msg, ip, app, ctx.own, ctx.house);
       return out ? json(out) : new Response(null, { status: 202, headers: CORS });
     }
     if (path.startsWith('/ingest/') && req.method === 'POST') {

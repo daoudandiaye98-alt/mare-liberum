@@ -96,7 +96,7 @@ await proof('every count turns into tokens through tokensOfBytes, with the ratio
   // what each kind counts in: UTF-8 bytes for pages of the sea, characters for the reader and for counts from before 3.33.0
   assert.deepEqual(MEASURED_UNIT, { md: 'bytes', mdAgent: 'bytes', read: 'chars', before: 'chars' });
   const core = readFileSync(new URL('../node/core.mjs', import.meta.url), 'utf8'), lens = readFileSync(new URL('../node/lens.mjs', import.meta.url), 'utf8');
-  assert.match(core, /spared\(agent \? 'mdAgent' : 'md'\)\(bytesOf\(page\)/, 'the front page counts UTF-8 bytes'); assert.match(lens, /countBytes\?\.\('read', r\.htmlBytes, r\.markdown\.length/, 'the reader counts characters');
+  assert.match(core, /spared\(agent \? 'mdAgent' : 'md'\)\(bytesOf\(html\), own, html\)/, 'the front page counts UTF-8 bytes, against its own plain text'); assert.match(lens, /countBytes\?\.\('read', r\.htmlBytes, r\.markdown\.length/, 'the reader counts characters');
   // the assumption of 3.32.0 is kept, labelled, as the fallback only
   assert.equal(TOKEN_ASSUMED.assumption, true); assert.equal(TOKEN_ASSUMED.html, 4); assert.match(TOKEN_ASSUMED.source.url, /^https:\/\/platform\.claude\.com\//); assert.equal(TOKEN_RATIO.fallback.html, 4);
   const src = readFileSync(new URL('../node/areas.mjs', import.meta.url), 'utf8'), open = readFileSync(new URL('../node/open.mjs', import.meta.url), 'utf8');
@@ -146,7 +146,7 @@ await proof('what an assistant was spared counts as measured, kind md-agent, wit
 });
 await proof('the front page goes to an assistant as the guide for agents with the live numbers under its title; /index.md and Accept: text/markdown keep their headers', async () => {
   const a = await call('/', { ua: UA.claude }); assert.equal(a.headers.get('content-type'), 'text/markdown; charset=utf-8'); assert.equal(a.headers.get('vary'), 'User-Agent, Accept');
-  assert.match(a.text, /^# Mare Liberum · the first stop for agents/); assert.match(a.text, /^Live, counted \d\d:\d\d UTC: .* tokens spared for agents so far \(measured .*, modelled .*\) · version /m); assert.match(a.headers.get('link'), /rel="alternate"; type="text\/html"/);
+  assert.match(a.text, /^# Mare Liberum · the first stop for agents/); assert.match(a.text, /^Live, counted \d\d:\d\d UTC: .* tokens spared for agents so far \(measured .* against raw HTML, an upper bound; modelled .*\) · version /m); assert.match(a.headers.get('link'), /rel="alternate"; type="text\/html"/);
   const m = await call('/', { accept: 'text/markdown' }); assert.equal(m.headers.get('link'), `<${BASE}/>; rel="canonical"`); assert.equal(m.headers.get('vary'), 'accept');
   const t = await call('/index.md'); assert.equal(t.headers.get('x-robots-tag'), 'noindex, follow'); assert.match(t.text, /^# Mare Liberum · the first stop/);
 });
@@ -296,14 +296,15 @@ await proof('/savings leads with every token spared, measured and modelled apart
   assert.ok(h.text.includes('How counts become tokens: measured, not assumed'), 'the ratio is labelled'); assert.ok(h.text.includes('<a href="/proof">proof of function</a>'), '/proof is linked');
   assert.ok(h.text.includes(`${TOKEN_RATIO.html}</b> characters of raw HTML`) && h.text.includes(`${TOKEN_RATIO.md}</b> characters of the sea's Markdown`), 'the measured numbers are shown');
   const j = JSON.parse((await call('/savings.json')).text);
-  assert.equal(j.series.length, 30); assert.deepEqual(Object.keys(j.hero).sort(), ['measured', 'modelled', 'note', 'tokens', 'usd', 'wh']); assert.equal(j.hero.tokens, j.hero.measured + j.hero.modelled.mid);
+  assert.equal(j.series.length, 30); assert.deepEqual(Object.keys(j.hero).sort(), ['lowerView', 'measured', 'measuredVsText', 'modelled', 'note', 'tokens', 'usd', 'wh']); assert.equal(j.hero.tokens, j.hero.measured + j.hero.modelled.mid);
   assert.deepEqual(j.byKind.all.map((x) => x.kind), ['md', 'md-agent', 'read', 'path', 'plan', 'market']); assert.equal(j.scenarios.length, 4); assert.equal(j.notCounted.length, 3); assert.equal(j.price.mid, 2); assert.equal(j.ratio.assumption, false); assert.match(j.ratio.proof, /\/proof$/); assert.equal(j.ratio.tokenizer, 'o200k_base');
 });
 await proof('/savings/badge.svg is well-formed SVG with the live count, is counted as no visit, and the page offers it to copy', async () => {
   const b = await call('/savings/badge.svg'); assert.match(b.headers.get('content-type'), /^image\/svg\+xml/); wellFormed(b.text);
-  const hero = JSON.parse((await call('/savings.json')).text).hero.tokens;
-  assert.match(b.text, /tokens spared for agents by the open sea/); assert.ok(b.text.includes(`>${hero.toLocaleString('en-US')}</text>`), `the badge shows ${hero}`);
-  const page = (await call('/savings')).text; assert.ok(page.includes(`[![Tokens spared for agents by the open sea](${BASE}/savings/badge.svg)](${BASE}/savings)`.replace(/&/g, '&amp;')) || page.includes('[![Tokens spared for agents by the open sea]'));
+  // (3.33.0, verifier I4: the badge carries the measured count only, said to be against raw HTML, an upper bound)
+  const hero = JSON.parse((await call('/savings.json')).text).hero.measured;
+  assert.match(b.text, /tokens spared, measured vs raw HTML/); assert.match(b.text, /an upper bound; modelled reuses not included/); assert.ok(b.text.includes(`>${hero.toLocaleString('en-US')}</text>`), `the badge shows ${hero}`);
+  const page = (await call('/savings')).text; assert.ok(page.includes('[![Tokens spared for agents by the open sea, measured against raw HTML (an upper bound)]'));
   const day = new Date().toISOString().slice(0, 10), total = async () => { await tick(40); return Object.values((await kv.get(`census:${day}`))?.kinds || {}).reduce((s, v) => s + v, 0); };
   const before = await total(); await call('/savings/badge.svg', { ua: 'github-camo (+https://github.com/atmos/camo)' }); assert.equal(await total(), before, 'a badge shown on another page is no visit');
 });
@@ -322,7 +323,7 @@ await proof('the sources carry the areas of the Unibrain (3.32.0) and the two ne
   const built = readFileSync(new URL('../site/index.html', import.meta.url), 'utf8');
   for (const x of ['href="/proof"', 'href="/attention"', 'href="/impressum"']) assert.ok(built.includes(x), `built: ${x}`);
   for (const m of built.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/gs)) for (const o of JSON.parse(m[1])['@graph'] || []) if (o['@type'] === 'Dataset') assert.equal(o.creator?.name, 'Mare Liberum', 'the home page Dataset names its creator');
-  assert.match(p, /tokens spared for AI agents so far · measured <span class="snd" data-k="sparedM">\{\{sparedM\}\}<\/span> · modelled <span class="snd" data-k="sparedE">\{\{sparedE\}\}<\/span>/);
+  assert.match(p, /tokens spared for AI agents so far · measured <span class="snd" data-k="sparedM">\{\{sparedM\}\}<\/span> against raw HTML \(an upper bound\) · modelled <span class="snd" data-k="sparedE">\{\{sparedE\}\}<\/span>/);
   const app = readFileSync(new URL('../homepage/src/app.js', import.meta.url), 'utf8'); assert.match(app, /if \(el && !still && goal\(\) > 0\)/, 'no counting up with reduced motion');
 });
 await proof('the node fills the counter in the page it sends: every token spared so far, with its measured and modelled parts', async () => {

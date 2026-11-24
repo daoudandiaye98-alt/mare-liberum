@@ -196,7 +196,7 @@ await proof('a door (/d/<id>) leads through the sea: Location is a /via/ address
   assert.equal(bot.r.status, 302); assert.doesNotMatch(bot.r.headers.get('location'), /\/via\//); assert.equal(bot.ledger.mem.hits.length, 0);
 });
 await proof('/site/<domain> answers a program with data and a person with the page; the data is never HTML', async () => {
-  const data = await at('/site/unmapped-proof-site.com', { accept: '*/*' }); assert.match(data.r.headers.get('content-type'), /^application\/json/); assert.equal(data.r.headers.get('vary'), 'accept');
+  const data = await at('/site/unmapped-proof-site.com', { accept: '*/*' }); assert.match(data.r.headers.get('content-type'), /^application\/json/); assert.equal(data.r.headers.get('vary'), 'accept, user-agent', 'a search crawler that names no type gets the page: the answer varies with the program too');
   const plain = await at('/site/unmapped-proof-site.com', { accept: '' }); assert.match(plain.r.headers.get('content-type'), /^application\/json/);
   const page = await at('/site/unmapped-proof-site.com', { accept: 'text/html,application/xhtml+xml' }); assert.match(page.r.headers.get('content-type'), /^text\/html/);
   const md = await at('/site/unmapped-proof-site.com', { accept: 'text/markdown' }); assert.match(md.r.headers.get('content-type'), /^text\/markdown/);

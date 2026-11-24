@@ -33,6 +33,14 @@ export const mdTwin = (path) => {
 
 const attr = (html, re) => { const m = re.exec(html); return m ? entities(m[1]).replace(/\s+/g, ' ').trim() : ''; };
 const UTF8 = new TextEncoder(), bytesOf = (s) => UTF8.encode(String(s || '')).length;
+// the plain text a person sees of a page (its main part, else its body; no scripts, styles, pictures or markup), in bytes
+// of UTF-8: what a tool that extracts plain text would hand its model. The lower view of what Markdown spares is measured
+// against it, and a page whose Markdown is another document (the front page answers with the guide) is measured with it.
+export function plainText(html) {
+  const h = String(html || ''), main = /<main\b[^>]*>([\s\S]*?)<\/main>/i.exec(h)?.[1] ?? /<body\b[^>]*>([\s\S]*)<\/body>/i.exec(h)?.[1] ?? h;
+  return entities(main.replace(/<!--[\s\S]*?-->/g, ' ').replace(/<(script|style|noscript|svg|template|iframe|canvas|video|audio|picture|head)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
+}
+export const plainTextBytes = (html) => bytesOf(plainText(html));
 // A form is a door of the page: in Markdown its fields would be lost, and an agent could not use it. Each form is
 // written as one line above its fields: the method, the address and the name of every field, with what the field asks
 // for (its label, else its placeholder, else its name) and the value of a fixed one.
@@ -77,7 +85,7 @@ export async function asMarkdown(res, { url, base, twin = false, spared, agent }
   if (res.status !== 200 || !/^text\/html/i.test(res.headers.get('content-type') || '')) return res;
   const page = await res.text(), { canon, md } = pageMarkdown(page, url, base);
   // what the Markdown spared against the HTML, in bytes, for the ledger of the Unibrain (node/areas.mjs)
-  try { spared?.(bytesOf(page), bytesOf(md)); } catch {}
+  try { spared?.(bytesOf(page), bytesOf(md), page); } catch {}
   const h = new Headers();
   for (const k of ['cache-control', 'access-control-allow-origin', 'access-control-expose-headers', 'x-robots-tag']) { const v = res.headers.get(k); if (v) h.set(k, v); }
   h.set('content-type', 'text/markdown; charset=utf-8');
