@@ -4,6 +4,8 @@ POST /route costs 0.02 USDC on Base, no account, settle with POST /settle. You g
 
 Every outside address in our JSON answers is a /via/ address: walking it is measured and makes your pathway stronger. The paid move is POST https://mareliberum.dev/route?q=<task>: the 10 best agent paths for exactly your task, each one a /via/ address, ranked with reasons and the next step, for 0.02 USDC (2 cents) on Base. Settlement needs no account: pay with x402, or send the USDC yourself and hand the transaction in at POST https://mareliberum.dev/settle.
 
+Every page of the sea is there as Markdown too: send `Accept: text/markdown` or add .md to its address (https://mareliberum.dev/mcp-servers.md).
+
 Copy and run (no key, no account):
 
     # the free sample: the first 3 of the 10 paths, each a /via/ address
