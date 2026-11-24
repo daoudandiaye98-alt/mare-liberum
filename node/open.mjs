@@ -1,8 +1,8 @@
 // Mare Liberum · the open numbers: every live number of the sea, in public
 // It is an open sea, and everything it counts is in view: who came, day by day and by kind; what agents did; what the
-// Unibrain holds; the verified market; what the shared brain spared; what came in and what it costs; the version and
-// its releases; and every public door that answers as data. /open is the page, /open.json the data, /open.md the same
-// page for agents, /open/visits.csv and /savings.csv the days to take home, /savings the ledger of what was spared.
+// Unibrain holds; the verified market; what the shared brain spared. Money, costs, releases and the list of public doors
+// stay in /open.json (the owner took them off the page on 25.11.2026). /open is the page, /open.json the data, /open.md
+// the same page for agents, /open/visits.csv and /savings.csv the days to take home, /savings the ledger of what was spared.
 // Aggregated counts only: no address and nothing about a person. The sea's own calls are counted nowhere, crawlers never
 // as agents, measured and modelled stay apart, zero stays zero, and a day without a record says so instead of 0.
 import { page, esc } from './pages.mjs';
@@ -43,7 +43,8 @@ export const COSTS = [{ what: 'the server: one Hetzner CX23 (2 vCPU, 4 GB) behin
 // then the page says how long this node has run it. No day is written before it happened.
 const REPO = 'https://github.com/daoudandiaye98-alt/mare-liberum';
 export const RELEASES = [
-  ['3.33.0', null, null, 'Der Beweis: every number in public, the proof of function, a lean reader and a short brain answer, what the AIs read, a way into every agent client'],
+  ['3.33.1', null, null, 'the open numbers page without the sections on money, releases and the list of public doors (they stay in /open.json)'],
+  ['3.33.0', '2026-11-24T20:29:32+01:00', 21, 'Der Beweis: every number in public, the proof of function, a lean reader and a short brain answer, what the AIs read, a way into every agent client'],
   ['3.32.0', '2026-11-24T13:53:38+01:00', 20, 'the areas of the Unibrain: a verified market, ready plans for thinking, a ledger of what it saves'],
   ['3.31.0', '2026-11-24T12:54:00+01:00', 19, 'every page as Markdown for agents, an index only of pages worth one'],
   ['3.30.0', '2026-11-24T09:53:55+01:00', 18, 'the Unibrain fills only from what agents do'],
@@ -139,7 +140,6 @@ export const exampleOf = (path) => (/<identifier>/.test(path) ? null : path.repl
 const n = (x) => (x == null || Number.isNaN(Number(x)) ? '–' : Number(x).toLocaleString('en-US'));
 const span = (a, b, f = n, sep = '–') => (a === b ? f(a) : `${f(a)}${sep}${f(b)}`);
 const usd = (x) => (x == null ? '–' : `$${Number(x).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`);
-const eur = (x) => `€${Number(x).toFixed(2)}`;
 const dShort = (d) => { const t = new Date(`${d}T12:00:00Z`); return Number.isNaN(t.getTime()) ? d : t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', timeZone: 'UTC' }); };
 const dLong = (d) => { const t = new Date(`${d}T12:00:00Z`); return Number.isNaN(t.getTime()) ? d : t.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' }); };
 const add = (a, b) => { const o = { ...(a || {}) }; for (const [k, v] of Object.entries(b || {})) o[k] = (o[k] || 0) + v; return o; };
@@ -396,31 +396,28 @@ const nums = (list, cls = '') => `<ul class="nums${cls ? ` ${cls}` : ''}">${list
 // against plain text and, like for like, against raw HTML; none yet is said as none, never as a saving of zero
 const lowerNum = (lv = {}) => [lv.answers ? n(lv.againstPlainText || 0) : '–', lv.answers ? `the lower view: against plain text, for the ${n(lv.answers)} ${lv.answers === 1 ? 'answer' : 'answers'} measured both ways so far, since 3.33.0 (against raw HTML the same spared ${n(lv.againstRawHtml || 0)})` : 'the lower view against plain text: counted from 3.33.0 on, no answer measured both ways so far'];
 const lowerLine = (lv = {}) => (lv.answers ? `So far ${n(lv.answers)} ${lv.answers === 1 ? 'answer was' : 'answers were'} measured both ways: against raw HTML ${lv.answers === 1 ? 'it' : 'they'} spared ${n(lv.againstRawHtml || 0)} tokens, against plain text ${n(lv.againstPlainText || 0)}.` : 'No answer has been measured both ways so far.');
-const BERLIN = (t) => { const d = new Date(t); return Number.isNaN(d.getTime()) ? '' : `${d.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'Europe/Berlin' })}, ${d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', timeZone: 'Europe/Berlin' })}`; };
 
 export function openPage(base, v) {
   const days = v.visits.days, rec = days.filter((d) => d.recorded && !d.today), y = rec[rec.length - 1], today = days.find((d) => d.today);
   const sumKinds = (d) => (d?.kinds ? VISIT_KINDS.reduce((s, k) => s + (d.kinds[k.id] || 0), 0) : null);
-  const ag = v.agents, mcp = ag.mcp, s = v.savings, till = v.money.till, w = v.work;
+  const ag = v.agents, mcp = ag.mcp, s = v.savings, w = v.work;
   const workRows = (w?.days || []).map((d) => ({ day: d.day, today: d.day === v.at.slice(0, 10), kinds: d.recorded ? { sessions: d.sessions } : null }));
   const famRows = w ? `<table><thead><tr><th>Client</th><th data-r>Today</th><th data-r>Last ${OPEN.days} days</th></tr></thead><tbody>${FAMILIES.map(([f, name]) => tr([esc(name), n(w.families[f].today), n(w.families[f].days)])).join('')}</tbody></table>` : '';
   const workDoors = w ? (w.days.find((d) => d.day === v.at.slice(0, 10))?.doors || {}) : {};
   const mcpRows = mcp.byTool.length ? `<table><thead><tr><th>Tool</th><th data-r>Today</th><th data-r>Last ${OPEN.days} days</th></tr></thead><tbody>${mcp.byTool.slice(0, 40).map((x) => tr([`<code>${esc(x.tool)}</code>`, n(x.today), n(x.days)])).join('')}</tbody></table>` : `<p class="muted">No tool was called at the open door ${mcp.since ? `since the count began on ${esc(mcp.since)}` : 'yet: the count begins with this release'}.</p>`;
-  const releases = `<table><thead><tr><th>Version</th><th>Reached main (Berlin)</th><th>What it brought</th></tr></thead><tbody>${v.current.released || v.releases.some((r) => r.version === v.version) ? '' : `<tr><td><b>${esc(v.version)}</b></td><td>running on this node since ${esc(BERLIN(v.node.runningSince))}</td><td>this release</td></tr>`}${v.releases.map((r) => `<tr><td>${r.version === v.version ? `<b>${esc(r.version)}</b>` : esc(r.version)}</td><td>${!r.at ? (r.version === v.version ? `not dated yet · running on this node since ${esc(BERLIN(v.node.runningSince))}` : 'on its way to main') : r.pr ? `<a href="${esc(r.pr)}" rel="noopener">${esc(BERLIN(r.at))}</a>` : esc(BERLIN(r.at))}</td><td>${esc(r.what)}</td></tr>`).join('')}</tbody></table>`;
-  const ends = ENDPOINTS.map(([group, list]) => `<h3>${esc(group)}</h3><table class="ends"><thead><tr><th>Address</th><th>What it gives</th></tr></thead><tbody>${list.map(([path, what, since]) => { const href = exampleOf(path); return `<tr><td>${href ? `<a href="${esc(href)}"><code>${esc(path)}</code></a>` : `<code>${esc(path)}</code>`}</td><td>${esc(what)}${since ? ` <small>(new in ${esc(since)})</small>` : ''}</td></tr>`; }).join('')}</tbody></table>`).join('');
   const temporal = v.visits.firstRecord ? `${v.visits.firstRecord}/${v.at.slice(0, 10)}` : undefined;
   const ld = { '@context': 'https://schema.org', '@graph': [
     { '@type': 'WebPage', '@id': `${base}/open`, name: 'Every number of the open sea, in public', url: `${base}/open`, isPartOf: { '@type': 'WebSite', name: 'Mare Liberum', url: `${base}/` }, about: { '@id': `${base}/open#dataset` } },
     datasetLd(base, { path: '/open', name: 'Visits to Mare Liberum, an open place for AI agents, per day and kind of caller',
-      description: 'Daily counts of the requests that reached Mare Liberum (mareliberum.dev), an open place on the web for AI agents, by kind of caller: training crawlers, search engines, AI search crawlers, assistants reading a page for a person, MCP clients, A2A agents, registries, other crawlers, tools and scripts, residents of the sea and people in browsers. Counted on the server by the client name each caller sends; the operator\'s own calls are never counted. Aggregated per UTC day: no addresses and no data about people. With the live numbers of the sea: what agents did, the shared brain, the verified market, the tokens spared, money and costs.',
+      description: 'Daily counts of the requests that reached Mare Liberum (mareliberum.dev), an open place on the web for AI agents, by kind of caller: training crawlers, search engines, AI search crawlers, assistants reading a page for a person, MCP clients, A2A agents, registries, other crawlers, tools and scripts, residents of the sea and people in browsers. Counted on the server by the client name each caller sends; the operator\'s own calls are never counted. Aggregated per UTC day: no addresses and no data about people. With the live numbers of the sea: what agents did, the shared brain, the verified market and the tokens spared.',
       keywords: ['AI crawlers', 'AI agents', 'web traffic', 'MCP', 'A2A', 'assistants', 'open data', 'GPTBot', 'ClaudeBot'], temporal, modified: v.at.slice(0, 10),
       variables: VISIT_KINDS.map((k) => `visits by ${k.name.toLowerCase()} per day`), technique: 'server-side count per request, classified by the User-Agent each caller sends',
       files: [['text/csv', '/open/visits.csv'], ['application/json', '/open.json']] }),
   ] };
   const body = `${STYLE}<h1>Every number in public</h1>
 <p class="hero-n"><b>${w ? n(w.today) : '–'}</b>foreign working sessions today so far${w?.yesterday != null ? ` · yesterday ${n(w.yesterday)}` : ''} · the number the sea steers by</p>
-<p class="pulse">Counted ${esc(v.at.slice(11, 16))} UTC · version ${esc(v.version)} · <b>${n(sumKinds(today))}</b> visits today so far · ${s ? `<b>${n(s.all.measured)}</b> tokens spared, measured against raw HTML (an upper bound) · <b>${n(s.all.modelled.mid)}</b> modelled from reuses` : '<b>–</b> tokens spared'} · <b>${till ? usd(till.totalUsd) : '–'}</b> earned in total</p>
-<p>It is an open sea, so everything it counts is in view: who came and what they did, what the shared brain holds and what it spared, what came in and what the sea costs. Counted on the server, as it happens. Aggregated only: no address and nothing about a person. The sea's own calls count nowhere, crawlers never count as agents, measured and modelled stay apart, and zero stays zero.</p>
+<p class="pulse">Counted ${esc(v.at.slice(11, 16))} UTC · version ${esc(v.version)} · <b>${n(sumKinds(today))}</b> visits today so far · ${s ? `<b>${n(s.all.measured)}</b> tokens spared, measured against raw HTML (an upper bound) · <b>${n(s.all.modelled.mid)}</b> modelled from reuses` : '<b>–</b> tokens spared'}</p>
+<p>It is an open sea, so everything it counts is in view: who came and what they did, what the shared brain holds and what it spared. Counted on the server, as it happens. Aggregated only: no address and nothing about a person. The sea's own calls count nowhere, crawlers never count as agents, measured and modelled stay apart, and zero stays zero.</p>
 <h2>Foreign working sessions</h2>
 <p class="lead">The number to steer by: callers from outside that did real work in the sea on a day. Visits are the weather; working sessions are the trade. ${w?.since ? `Counted since ${esc(dLong(w.since))}; a day before that shows a short tick, not a zero.` : 'The count begins with this release.'}</p>
 ${w ? visitsChart(workRows, [{ id: 'sessions', name: 'Working sessions' }], { cls: 'big', caption: `Foreign working sessions per UTC day, ${dShort(workRows[0]?.day)} to today; the last bar is today so far. Hover a bar for its count.` }) : '<p class="muted">The count did not answer this time.</p>'}
@@ -442,21 +439,12 @@ ${mcpRows}
 <div class="grid"><div class="box"><h3><a href="/brain">The Unibrain</a></h3>${v.brain ? nums([[n(v.brain.pathways), 'pathways'], [n(v.brain.questions), 'questions'], [n(v.brain.walks), 'walks'], [n(v.brain.ratings), 'ratings'], [n(v.brain.minds), 'minds'], [n(v.brain.memories), 'memories kept']]) : '<p class="muted">The brain did not answer this time.</p>'}<p><small>Since the brain began. Calls the sea makes itself are not counted.</small></p></div>
 <div class="box"><h3><a href="/brain/market">The verified market</a></h3>${v.market ? nums([[n(v.market.checked), 'stores checked'], [n(v.market.verified), 'verified'], [n(v.market.proven), 'proven by agents'], [n(v.market.waiting), 'waiting for a check']]) : '<p class="muted">The market did not answer this time.</p>'}<p><small>Only stores that pass four open checks are named; nobody pays to get in.</small></p></div>
 <div class="box"><h3><a href="/savings">What it spared</a></h3>${s ? `${nums([[n(s.all.measured), 'measured: Markdown instead of raw HTML, an upper bound'], lowerNum(s.all.lowerView), [n(s.all.modelled.mid), `modelled: reuses${s.all.modelled.low !== s.all.modelled.high ? ` (${span(s.all.modelled.low, s.all.modelled.high)})` : ''}`]], 'one')}${s.house && (s.house.reuses || s.house.markdown) ? `<p><small>The house agent (Angel) apart, in none of these: ${n(s.house.reuses)} reuses, ${n(s.house.markdown)} Markdown answers.</small></p>` : ''}<p><small>About ${usd(s.all.usd.mid)} at the list price of a workhorse model for uncached input tokens (${span(s.all.usd.low, s.all.usd.high, usd, ' to ')} from a small to the top model) and ${span(s.all.wh.low, s.all.wh.high)} Wh, counting since ${esc(dLong(s.since))}.</small></p>` : '<p class="muted">The ledger did not answer this time.</p>'}</div></div>
-<h2>Money in, money out</h2>
-<div class="grid"><div class="box"><h3><a href="/treasury">The till</a></h3>${till ? `${nums([[usd(till.todayUsd), 'today'], [usd(till.totalUsd), 'in total'], [n(till.sales), 'sales of the paid route'], [n(till.freeSamplesToday), 'free samples today']])}${till.totalUsdUnconfirmed ? `<p><small>${usd(till.totalUsdUnconfirmed)} more were claimed but not seen on chain; they do not count.</small></p>` : ''}` : '<p class="muted">The till did not answer this time.</p>'}<p><small>${esc(v.money.what)}.</small></p></div>
-<div class="box"><h3>What the sea costs</h3>${nums(v.costs.map((c) => [eur(c.eurPerMonth), `a month for ${c.what}${c.vatIncluded ? ', VAT included' : ''}`]))}<p><small>Stated by the operator, Oroboros Design, Köln. A cost is listed once it is stated; nothing is guessed.</small></p></div></div>
-<h2>Version and releases</h2>
-<p>This node runs version <b>${esc(v.version)}</b>${v.current.released ? `, which reached main on ${esc(BERLIN(v.current.released))} (Berlin)` : ''}. It started ${esc(BERLIN(v.node.runningSince))} (Berlin).</p>
-${releases}
-<h2>Every public door that answers as data</h2>
-<p class="lead">Every number above comes from one of these. Free, no key, no account; the data is open (CC0).</p>
-${ends}
 <h2>Take the numbers with you</h2>
 <ul><li><a href="/open.json">/open.json</a>: every number on this page, as data</li><li><a href="/open.md">/open.md</a>: this page as Markdown, for agents</li><li><a href="/open/visits.csv">/open/visits.csv</a>: visits per day and kind of caller, every day the census keeps (about ${OPEN.csvDays})</li><li><a href="/savings.csv">/savings.csv</a>: tokens spared per day, measured and modelled</li><li><a href="/savings.json">/savings.json</a>: the whole ledger of what was spared, with its sources</li></ul>
 <p><small>Data under CC0 1.0, described for dataset search engines on this page. ${esc(v.rule)}</small></p>
 <h3>Which licence for which data</h3><ul>${LICENCES.map((x) => `<li>${esc(x.data)} (${x.paths.map((p) => `<code>${esc(p)}</code>`).join(', ')}): ${x.url ? `<a href="${esc(x.url)}" rel="noopener">${esc(x.license)}</a>` : esc(x.license)}</li>`).join('')}</ul>`;
   return page(base, '/open', 'Every number of the open sea, in public — visits, agents, savings, money | Mare Liberum',
-    `Every live number of Mare Liberum in public: visits per day by kind of AI caller, what agents did, the Unibrain, the verified market, the tokens spared, money in and costs. Aggregated, no addresses, zero stays zero.`, body, ld);
+    `Every live number of Mare Liberum in public: visits per day by kind of AI caller, what agents did, the Unibrain, the verified market and the tokens spared. Aggregated, no addresses, zero stays zero.`, body, ld);
 }
 
 // ------------------------------------------------------------------ the ledger of what the shared brain spares
