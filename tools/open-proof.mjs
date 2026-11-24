@@ -316,7 +316,10 @@ await proof('the sea\'s own calls are not visits, and release dates are stated a
   const day = new Date().toISOString().slice(0, 10), before = Object.values((await kv.get(`census:${day}`))?.kinds || {}).reduce((s, v) => s + v, 0);
   await call('/open', { ua: UA.own }); await tick(40);
   assert.equal(Object.values((await kv.get(`census:${day}`))?.kinds || {}).reduce((s, v) => s + v, 0), before);
-  assert.ok(RELEASES.every((r) => /^\d+\.\d+\.\d+$/.test(r.version) && !Number.isNaN(Date.parse(r.at))));
+  // a release is dated by the moment it reached main; only the newest may still be on its way (no day, no pull request yet)
+  assert.ok(RELEASES.every((r, i) => /^\d+\.\d+\.\d+$/.test(r.version) && (r.at === null ? i === 0 && !r.pr : !Number.isNaN(Date.parse(r.at)))));
+  assert.equal(RELEASES[0].version, VERSION, 'the newest release is the version this node runs');
+  const o = (await call('/open')).text; if (!RELEASES[0].at) assert.match(o, new RegExp(`<b>${VERSION.replace(/\./g, '\\.')}</b></td><td[^>]*>not dated yet · running on this node since`), 'an undated release says how long this node has run it');
 });
 
 rmSync(dir, { recursive: true, force: true });

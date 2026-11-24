@@ -207,7 +207,8 @@ await proof('topic pages of the brain still answer; the areas take only their ow
 await proof('llms.txt, the sitemap and the version carry the areas', async () => {
   const l = SITE['/llms.txt'].body; for (const x of ['/brain/areas', '"verified": true', '/brain/thinking?q=', '/savings']) assert.ok(l.includes(x), x);
   const sm = await call('/sitemaps/hubs.xml'); for (const x of ['/brain/areas', '/brain/market', '/brain/thinking', '/savings']) assert.ok(sm.text.includes(`${BASE}${x}<`), x);
-  assert.equal(VERSION, '3.32.0');
+  // the areas came with 3.32.0; every release after carries them (3.33.0 is the integrator's bump)
+  const [ma, mi] = VERSION.split('.').map(Number); assert.ok(ma > 3 || (ma === 3 && mi >= 32), `VERSION ${VERSION} carries the areas`);
 });
 
 rmSync(dir, { recursive: true, force: true });

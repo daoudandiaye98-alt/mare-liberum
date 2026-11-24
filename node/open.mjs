@@ -24,9 +24,12 @@ export const VISIT_KINDS = [
 // what the node costs: the operator's own figure, VAT included (the operator is a small business, § 19 UStG, and pays
 // the VAT on what it buys). Nothing else is listed until it is stated.
 export const COSTS = [{ what: 'the server: one Hetzner CX23 (2 vCPU, 4 GB) behind Caddy', eurPerMonth: 7.13, vatIncluded: true, statedBy: 'the operator, Oroboros Design', plan: 'https://www.hetzner.com/cloud/' }];
-// the releases of the sea: the day each one reached main on GitHub (the server takes a release within about 90 seconds)
+// the releases of the sea: the day each one reached main on GitHub (the server takes a release within about 90 seconds).
+// A release on its way to main has no day and no pull request yet (null): both are filled in when it is known, and until
+// then the page says how long this node has run it. No day is written before it happened.
 const REPO = 'https://github.com/daoudandiaye98-alt/mare-liberum';
 export const RELEASES = [
+  ['3.33.0', null, null, 'Der Beweis: every number in public, the proof of function, what the AIs read, one click into every agent client'],
   ['3.32.0', '2026-11-24T13:53:38+01:00', 20, 'the areas of the Unibrain: a verified market, ready plans for thinking, a ledger of what it saves'],
   ['3.31.0', '2026-11-24T12:54:00+01:00', 19, 'every page as Markdown for agents, an index only of pages worth one'],
   ['3.30.0', '2026-11-24T09:53:55+01:00', 18, 'the Unibrain fills only from what agents do'],
@@ -379,7 +382,7 @@ export function openPage(base, v) {
   const famRows = w ? `<table><thead><tr><th>Client</th><th data-r>Today</th><th data-r>Last ${OPEN.days} days</th></tr></thead><tbody>${FAMILIES.map(([f, name]) => tr([esc(name), n(w.families[f].today), n(w.families[f].days)])).join('')}</tbody></table>` : '';
   const workDoors = w ? (w.days.find((d) => d.day === v.at.slice(0, 10))?.doors || {}) : {};
   const mcpRows = mcp.byTool.length ? `<table><thead><tr><th>Tool</th><th data-r>Today</th><th data-r>Last ${OPEN.days} days</th></tr></thead><tbody>${mcp.byTool.slice(0, 40).map((x) => tr([`<code>${esc(x.tool)}</code>`, n(x.today), n(x.days)])).join('')}</tbody></table>` : `<p class="muted">No tool was called at the open door ${mcp.since ? `since the count began on ${esc(mcp.since)}` : 'yet: the count begins with this release'}.</p>`;
-  const releases = `<table><thead><tr><th>Version</th><th>Reached main (Berlin)</th><th>What it brought</th></tr></thead><tbody>${v.current.released ? '' : `<tr><td><b>${esc(v.version)}</b></td><td>running on this node since ${esc(BERLIN(v.node.runningSince))}</td><td>this release</td></tr>`}${v.releases.map((r) => `<tr><td>${r.version === v.version ? `<b>${esc(r.version)}</b>` : esc(r.version)}</td><td>${r.pr ? `<a href="${esc(r.pr)}" rel="noopener">${esc(BERLIN(r.at))}</a>` : esc(BERLIN(r.at))}</td><td>${esc(r.what)}</td></tr>`).join('')}</tbody></table>`;
+  const releases = `<table><thead><tr><th>Version</th><th>Reached main (Berlin)</th><th>What it brought</th></tr></thead><tbody>${v.current.released || v.releases.some((r) => r.version === v.version) ? '' : `<tr><td><b>${esc(v.version)}</b></td><td>running on this node since ${esc(BERLIN(v.node.runningSince))}</td><td>this release</td></tr>`}${v.releases.map((r) => `<tr><td>${r.version === v.version ? `<b>${esc(r.version)}</b>` : esc(r.version)}</td><td>${!r.at ? (r.version === v.version ? `not dated yet · running on this node since ${esc(BERLIN(v.node.runningSince))}` : 'on its way to main') : r.pr ? `<a href="${esc(r.pr)}" rel="noopener">${esc(BERLIN(r.at))}</a>` : esc(BERLIN(r.at))}</td><td>${esc(r.what)}</td></tr>`).join('')}</tbody></table>`;
   const ends = ENDPOINTS.map(([group, list]) => `<h3>${esc(group)}</h3><table class="ends"><thead><tr><th>Address</th><th>What it gives</th></tr></thead><tbody>${list.map(([path, what, since]) => { const href = exampleOf(path); return `<tr><td>${href ? `<a href="${esc(href)}"><code>${esc(path)}</code></a>` : `<code>${esc(path)}</code>`}</td><td>${esc(what)}${since ? ` <small>(new in ${esc(since)})</small>` : ''}</td></tr>`; }).join('')}</tbody></table>`).join('');
   const temporal = v.visits.firstRecord ? `${v.visits.firstRecord}/${v.at.slice(0, 10)}` : undefined;
   const ld = { '@context': 'https://schema.org', '@graph': [
