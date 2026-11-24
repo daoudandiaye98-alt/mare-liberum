@@ -346,7 +346,7 @@ await proof('the skill is one file in three places (site, plugin, skills/), vers
   assert.equal(read('skills/mare-liberum/SKILL.md'), site); assert.equal(read('plugins/mare-liberum/skills/mare-liberum/SKILL.md'), site);
   assert.match(site, /^---\nname: mare-liberum\nversion: 4\.1\.0\n/);
   for (const w of [priceLine(PRICING), '&free=true', '/pay/howto', '/treasury', '/pulse', '/via/<token>']) assert.ok(site.includes(w), w);
-  assert.equal(JSON.parse(read('site/skill.json')).version, '4.1.0'); assert.equal(JSON.parse(read('.claude-plugin/marketplace.json')).plugins[0].version, '4.1.0'); assert.equal(JSON.parse(read('plugins/mare-liberum/.claude-plugin/plugin.json')).version, '4.1.0');
+  assert.equal(JSON.parse(read('site/skill.json')).version, '4.1.0'); assert.equal(JSON.parse(read('.claude-plugin/marketplace.json')).plugins[0].version, '4.2.0'); assert.equal(JSON.parse(read('plugins/mare-liberum/.claude-plugin/plugin.json')).version, '4.2.0');
 });
 await proof('four examples, each with three lines on top (what, the curl that proves it, how to run), each calling POST /route with free=true and walking a /via/ token; a README with the proofs', () => {
   const read = (f) => readFileSync(new URL(`../examples/${f}`, import.meta.url), 'utf8');

@@ -160,3 +160,17 @@ On a server of your own the same file is the whole node: `MARE_BASE=https://your
 ## License
 
 Code: MIT. Compiled index: free to use and mirror, with credit to the lakes it flows from (table above). Every entry belongs to its publisher.
+
+## Install from this repository
+
+This repository is itself an install source. Gemini CLI and the official MCP Registry connect the open MCP door, `https://mareliberum.dev/mcp` (Streamable HTTP, all tools). The Claude Code plugin connects the app door, `https://mareliberum.dev/mcp/app`, the same server as the Mare Liberum connector in the Claude directory, so Claude shows one set of tools. No account, no key.
+
+[![Mare Liberum MCP connector](https://glama.ai/mcp/connectors/dev.mareliberum/sea/badges/score.svg)](https://glama.ai/mcp/connectors/dev.mareliberum/sea) [![daoudandiaye98-alt/mare-liberum MCP server](https://glama.ai/mcp/servers/daoudandiaye98-alt/mare-liberum/badges/score.svg)](https://glama.ai/mcp/servers/daoudandiaye98-alt/mare-liberum)
+
+| Client | Install | Door | Reads |
+|---|---|---|---|
+| Gemini CLI | `gemini extensions install https://github.com/daoudandiaye98-alt/mare-liberum` | `/mcp` | `gemini-extension.json`, `GEMINI.md` |
+| Claude Code | `/plugin marketplace add daoudandiaye98-alt/mare-liberum`, then `/plugin install mare-liberum@mare-liberum` | `/mcp/app` | `.claude-plugin/marketplace.json` and `plugins/mare-liberum` (the MCP server, the skill, a README) |
+| Any client that reads the official MCP Registry | the server `dev.mareliberum/sea` | `/mcp` | `server.json` |
+
+The plugin folder also carries a Cursor plugin manifest (`.cursor-plugin/`, `plugins/mare-liberum/mcp.json`), and `glama.json` names the maintainer for Glama. Every tool of the open door has a title, a description that says when to use it and what it stores, a described input schema and MCP annotations (read-only, destructive, idempotent, open world), in few words: the whole tool list stays at or under its 3.32.0 size (40,576 bytes). `npm run proof:reach` checks that, the manifests against their documented fields, and the app door `/mcp/app` byte for byte against what the assistant directories reviewed.
