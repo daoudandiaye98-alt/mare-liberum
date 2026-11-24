@@ -4,7 +4,14 @@
 //   npm install --prefix ~/.cache/mare-proof js-tiktoken@1.0.21 @anthropic-ai/tokenizer@0.0.4 @mozilla/readability@0.6.0 linkedom@0.18.15
 //   node tools/proof-bench.mjs                  measure the task set in proof/tasks.json → proof/bench-<day>.json
 //   node tools/proof-bench.mjs --pick           pick the task set anew (the strongest confirmed pathways at /brain, and EVERYDAY below)
+//   node tools/proof-bench.mjs --sea http://127.0.0.1:8120 --base https://mareliberum.dev --tag lean --compact \
+//        --run "local run of lean/1 before deploy"     a run of a branch before it is deployed: the brain of a local node,
+//                                                        the reader of the branch, the reader of 3.32.0 beside it (prior)
 //   options: --deps <dir> (where the tokenizers are installed; default ~/.cache/mare-proof or MARE_PROOF_DEPS)
+//            --base <address> (the public address the sea's own answers are rendered with; default: --sea)
+//            --prior <commit> (the reader of that commit is counted beside this one on the same copy; default bc74c42, 3.32.0)
+//            --tag <word> (written to proof/bench-<day>-<word>.json)   --compact (also the brain's short answer, fmt=compact)
+//            --run "<what this run is>"   --brain-source "<where the brain's answers come from, when not mareliberum.dev>"
 //            --only <n> (the first n tasks, a quick try; nothing is written)   --write-ratio (also write TOKEN_RATIOS in node/proof.mjs)
 //            --ratio (only write TOKEN_RATIOS in node/proof.mjs from the newest run in proof/; no network)
 //            --from "<where it ran>"   --sea <address of the sea> (default https://mareliberum.dev)
@@ -34,7 +41,7 @@ import { homedir, tmpdir } from 'node:os';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { execFileSync } from 'node:child_process';
 import { robotsGroups, robotsAllows, readPage } from '../node/check.mjs';
-import { toMarkdown, entities, READER_TOKEN } from '../node/reader.mjs';
+import { digest, entities, READER_TOKEN } from '../node/reader.mjs';
 import { decodeVia } from '../node/via.mjs';
 import { summarize, TOKENIZER_IDS } from '../node/proof.mjs';
 
@@ -51,8 +58,11 @@ export const METHOD = {
   walls: 'a page that answers with a bot wall instead of itself (a challenge, a captcha, a request to enable JavaScript) is not counted; the run says so in its row',
   text: 'readability-style extraction (tools/proof-bench.mjs, extractText): scripts, styles, form controls, hidden elements, nav, aside and footer elements and boxes whose class or id names navigation, menus, headers, footers, sidebars, comments, cookies, sharing or ads are dropped; every paragraph-like block of 25 characters or more scores its parent (1 + commas + one point per 100 characters, at most 3) and, at half and a sixth, the elements above; a box scores more for words like article, content, main, product, post or text in its class or id and less for the words above; the score is reduced by the share of text in links; the best box and its siblings that score at least a fifth of it are the article; like Readability it tries again with fewer rules when an attempt finds less than 500 characters (without dropping unlikely boxes, then without weighing class names) and keeps the longest attempt; a box that holds the page\'s main or article element is never dropped; the text is written out one block per line, without link targets, markup or images',
   readability: 'Mozilla Readability 0.6.0 (the library behind Firefox Reader View) on a linkedom document: the text of the article it finds, whitespace collapsed the same way; a cross-check of the extraction above, where it is installed',
-  markdown: 'the Markdown of the sea\'s reader, toMarkdown in node/reader.mjs (the code that answers /r/ and read_page), on the same copy of the page; not cut (the reader itself cuts at 60,000 characters, see served)',
+  markdown: 'the Markdown of the sea\'s reader, digest in node/reader.mjs (the code that answers /r/ and read_page; since 3.33.0 the lean reader of node/lean.mjs: the main part only, a product\'s essentials first, links once and short), on the same copy of the page; not cut (the reader itself cuts at 60,000 characters, see served)',
+  prior: 'the Markdown of the reader of an earlier release (toMarkdown in node/reader.mjs of the commit named in bench.prior), on the same copy of the page: the reader before and after, page by page, without the page changing in between',
   served: 'the answer of the sea\'s /r/ door for the page (a few lines about the page and the sea around the Markdown), rendered by the node\'s own route on the same copy of the page on the bench machine; on mareliberum.dev it can also list up to three pathways other agents walked to the site',
+  servedFull: 'the /r/ answer with format=full: the long lines around the Markdown as the reader wrote them before 3.33.0 (pathways, the site check, Angel, the brief), rendered the same way',
+  brainCompact: 'the brain\'s short answer, GET /brain?q=<task>&fmt=compact (since 3.33.0): the confirmed pathways with one line of reason each and the one next step; counted only where the sea answered in that shape',
   mcp: 'the text block of the answer of the MCP tool read_page (open door /mcp), rendered the same way; it carries the Markdown and a list of the page\'s links',
   keeps: 'at least two thirds of the words of its heading (the first h1 inside its main or article element, else the first h1 a person sees, else og:title, else the longest part of its title; words of three letters or more) and, on a shop page, a price',
   result: 'one search result as a search tool hands it to a model: the page\'s title, its address and a snippet (its meta description, else the start of its text) of at most 160 characters',
@@ -270,12 +280,25 @@ export async function seaRenderer(base) {
   const call = async (path, init = {}) => { const res = await handle(new Request(base + path, { ...init, headers: { 'user-agent': SESSION_UA, 'x-forwarded-for': `198.18.9.${(ip++ % 250) + 1}`, ...(init.headers || {}) } }), db, cfg); return { status: res.status, text: await res.text() }; };
   return {
     async served(url) { return call(`/read?url=${encodeURIComponent(url)}`, { headers: { accept: 'text/markdown, text/plain;q=0.9' } }); },
+    async servedFull(url) { return call(`/read?url=${encodeURIComponent(url)}&format=full`, { headers: { accept: 'text/markdown, text/plain;q=0.9' } }); },
     async mcp(url) {
       const r = await call('/mcp', { method: 'POST', headers: { accept: 'application/json, text/event-stream', 'content-type': 'application/json' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'read_page', arguments: { url } } }) });
       try { const j = JSON.parse(r.text); return { status: r.status, text: j.result?.content?.[0]?.text ?? null, isError: !!j.result?.isError }; } catch { return { status: r.status, text: null }; }
     },
     done() { rmSync(dir, { recursive: true, force: true }); },
   };
+}
+
+// ------------------------------------------------------------------ the reader of an earlier release, from the repository's history
+export async function priorReader(commit) {
+  const git = (args) => execFileSync('git', args, { cwd: fileURLToPath(ROOT), encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+  const dir = mkdtempSync(join(tmpdir(), 'mare-prior-')), here = (f) => pathToFileURL(fileURLToPath(new URL(`node/${f}.mjs`, ROOT))).href;
+  // its own helpers (check.mjs, aside.mjs) are today's: toMarkdown uses none of them
+  writeFileSync(join(dir, 'reader.mjs'), git(['show', `${commit}:node/reader.mjs`]).replace(/from '\.\/(check|aside|lean)\.mjs'/g, (m, f) => `from '${here(f)}'`));
+  const mod = await import(pathToFileURL(join(dir, 'reader.mjs')).href);
+  const version = /export const VERSION = '([^']+)'/.exec(git(['show', `${commit}:node/core.mjs`]))?.[1] || null;
+  rmSync(dir, { recursive: true, force: true });
+  return { toMarkdown: mod.toMarkdown, version };
 }
 
 // ------------------------------------------------------------------ the run
@@ -287,6 +310,7 @@ function args(argv) { const a = { _: [] }; for (let i = 0; i < argv.length; i++)
 async function main() {
   const a = args(process.argv.slice(2));
   const deps = a.deps || process.env.MARE_PROOF_DEPS || join(homedir(), '.cache', 'mare-proof'), sea = String(a.sea || 'https://mareliberum.dev').replace(/\/+$/, '');
+  const pub = String(typeof a.base === 'string' ? a.base : sea).replace(/\/+$/, ''), tag = typeof a.tag === 'string' && /^[a-z0-9]{1,20}$/.test(a.tag) ? a.tag : null;
   const realFetch = globalThis.fetch.bind(globalThis), pace = pacer();
   const get = async (url, { ua = BENCH_UA, accept = 'text/html,application/xhtml+xml;q=0.9,*/*;q=0.5', max = METHOD.maxBytes } = {}) => {
     const t0 = Date.now();
@@ -322,6 +346,9 @@ async function main() {
   }
 
   const tk = await tokenizers(deps);
+  // the reader of an earlier release, beside this one on the same copy of each page (git show <commit>:node/reader.mjs)
+  const priorCommit = a.prior === false || a.prior === 'none' ? null : typeof a.prior === 'string' ? a.prior : 'bc74c42';
+  const prior = priorCommit ? await priorReader(priorCommit) : null;
   if (!tk) { console.error(`js-tiktoken is not installed in ${deps}. Install the tokenizers outside the repository:\n  npm install --prefix ${deps} js-tiktoken@1.0.21 @anthropic-ai/tokenizer@0.0.4 @mozilla/readability@0.6.0 linkedom@0.18.15`); process.exit(2); }
   const set = JSON.parse(readFileSync(new URL('proof/tasks.json', ROOT), 'utf8')), only = Number(a.only) || 0, tasks = only ? set.tasks.slice(0, only) : set.tasks;
   const count = (s) => Object.fromEntries(tk.list.map((t) => [t.id, t.count(String(s))]));
@@ -332,7 +359,7 @@ async function main() {
   // the sea's own answers are rendered here, from the copy the bench read: the node's code fetches through this stand-in
   const copies = new Map();
   globalThis.fetch = async (u) => { const k = String(u?.url || u), c = copies.get(k); if (!c) throw new Error(`the bench serves only the page it read: ${k.slice(0, 80)}`); return new Response(c.status >= 300 && c.status < 400 ? null : c.raw, { status: c.status, headers: { 'content-type': c.type || 'text/html', ...(c.location ? { location: c.location } : {}) } }); };
-  const render = await seaRenderer(sea);
+  const render = await seaRenderer(pub);
   const robotsOf = new Map(), startedAt = new Date().toISOString(), rows = [];
   const robots = async (origin) => {
     if (robotsOf.has(origin)) return robotsOf.get(origin);
@@ -367,15 +394,15 @@ async function main() {
         else if (!isHtml) row.skipped = `not a web page (${r.type.split(';')[0]})`;
         else if (botWall(html)) row.skipped = botWall(html);
         else {
-          const text = extractText(html), readab = tk.extra.readability?.text(html) ?? null, md = toMarkdown(html, url), result = resultOf(html, url, text);
+          const text = extractText(html), readab = tk.extra.readability?.text(html) ?? null, md = digest(html, url).md, before = prior ? prior.toMarkdown(html, url) : null, result = resultOf(html, url, text);
           // the same copy for the node's own reader: robots.txt and every hop of the page
           copies.clear();
           for (const [origin, rb] of robotsOf) copies.set(`${origin}/robots.txt`, { status: rb.status || 503, type: rb.type || 'text/plain', raw: rb.raw || Buffer.alloc(0) });
           for (const c of chain) copies.set(new URL(c.url).href, c);
-          const served = await render.served(t.url), mcp = await render.mcp(t.url);
-          const forms = { html, text, ...(readab ? { readability: readab } : {}), markdown: md, ...(served.status === 200 ? { served: served.text } : {}), ...(mcp.text && !mcp.isError ? { mcp: mcp.text } : {}), result };
+          const served = await render.served(t.url), full = prior ? await render.servedFull(t.url) : null, mcp = await render.mcp(t.url);
+          const forms = { html, text, ...(readab ? { readability: readab } : {}), ...(before != null ? { prior: before } : {}), markdown: md, ...(served.status === 200 ? { served: served.text } : {}), ...(full?.status === 200 ? { servedFull: full.text } : {}), ...(mcp.text && !mcp.isError ? { mcp: mcp.text } : {}), result };
           const tokens = {}; for (const tz of tk.list) tokens[tz.id] = Object.fromEntries(Object.entries(forms).map(([f, s]) => [f, tz.count(s)]));
-          const ess = essentialsOf(html, t.group === 'shopping'), kept = Object.fromEntries(['text', 'readability', 'markdown'].filter((f) => forms[f] != null).map((f) => [f, keeps(forms[f], ess)]));
+          const ess = essentialsOf(html, t.group === 'shopping'), kept = Object.fromEntries(['text', 'readability', 'prior', 'markdown'].filter((f) => forms[f] != null).map((f) => [f, keeps(forms[f], ess)]));
           row.page = { at: new Date(t0).toISOString(), status: r.status, final: url !== t.url ? url : undefined, type: r.type.split(';')[0], ms: chain.reduce((s, c) => s + c.ms, 0), hops: hops || undefined, cut: r.cut || undefined,
             capped: md.length > METHOD.markdownCap || undefined, servedStatus: served.status !== 200 ? served.status : undefined,
             keeps: ess.words.length ? kept : undefined,
@@ -402,18 +429,33 @@ async function main() {
             pathRank: t.path ? rank || null : undefined, confirmedBy: by, destinationHost: [...targets(paths), ...targets(j?.places)].some((u) => host(u) === want) });
         }
       } catch (e) { row.brain = { at: new Date().toISOString(), status: 0, error: String(e?.cause?.code || e?.message || 'error').slice(0, 60) }; }
+      // the short answer (fmt=compact), counted only where the sea answers in that shape (an older sea answers in full)
+      if (a.compact) {
+        const wait2 = lastBrain + METHOD.brainGapMs - Date.now(); if (wait2 > 0) await sleep(wait2); lastBrain = Date.now();
+        try {
+          const b = await get(`${sea}/brain?q=${encodeURIComponent(t.task)}&fmt=compact`, { ua: SESSION_UA, accept: 'application/json', max: 5_000_000 }); lastBrain = Date.now();
+          let j = null; try { j = JSON.parse(b.body); } catch {}
+          row.brainCompact = { at: new Date().toISOString(), status: b.status };
+          if (b.status === 200 && j && !j.brief && 'next' in j) {
+            const host = (u) => { try { return new URL(u).hostname.replace(/^www\./, ''); } catch { return null; } }, want = host(t.url);
+            const sites = [...(j.paths || []), ...(j.doors || [])].map((x) => x.site).filter(Boolean), rank = t.path ? (j.paths || []).findIndex((p) => String(p.go || '').endsWith(`/go/${t.path}`)) + 1 : 0;
+            Object.assign(row.brainCompact, { chars: b.body.length, bytes: utf8(b.body), tokens: count(b.body), paths: (j.paths || []).length, doors: (j.doors || []).length, pathRank: t.path ? rank || null : undefined, destinationHost: sites.some((x) => x === want || x.replace(/^www\./, '') === want) });
+          } else if (b.status === 200) row.brainCompact.note = 'the sea answered in full: it does not know fmt=compact';
+        } catch (e) { row.brainCompact = { at: new Date().toISOString(), status: 0, error: String(e?.cause?.code || e?.message || 'error').slice(0, 60) }; }
+      }
     }
     rows.push(row);
     const o = row.page?.tokens?.o200k_base;
-    console.log(`${t.id} ${t.task.slice(0, 34).padEnd(34)} ${o ? `html ${o.html} · text ${o.text} · md ${o.markdown} · r ${o.served ?? '–'} · mcp ${o.mcp ?? '–'}` : `skipped: ${row.skipped}`} · brain ${row.brain?.tokens?.o200k_base ?? row.brain?.status ?? '–'}`);
+    console.log(`${t.id} ${t.task.slice(0, 34).padEnd(34)} ${o ? `html ${o.html} · text ${o.text}${o.prior != null ? ` · before ${o.prior}` : ''} · md ${o.markdown} · r ${o.served ?? '–'} · mcp ${o.mcp ?? '–'}` : `skipped: ${row.skipped}`} · brain ${row.brain?.tokens?.o200k_base ?? row.brain?.status ?? '–'}${row.brainCompact ? ` · compact ${row.brainCompact.tokens?.o200k_base ?? row.brainCompact.status}` : ''}`);
   }
   render.done();
   globalThis.fetch = realFetch;
 
   const d = { what: 'Proof of function: the tokens an agent reads with the open sea and without it (https://mareliberum.dev/proof)', version: 1, date: startedAt.slice(0, 10), startedAt, endedAt: new Date().toISOString(),
-    bench: { script: 'tools/proof-bench.mjs', ua: BENCH_UA, sessionUa: SESSION_UA, node: process.version, commit, seaVersion: VERSION, sea, ranFrom: typeof a.from === 'string' ? a.from : 'a session machine' },
+    bench: { script: 'tools/proof-bench.mjs', ua: BENCH_UA, sessionUa: SESSION_UA, node: process.version, commit, seaVersion: VERSION, sea, ...(pub !== sea ? { base: pub } : {}), ...(prior ? { prior: { commit: priorCommit, version: prior.version } } : {}), ranFrom: typeof a.from === 'string' ? a.from : 'a session machine' },
     tokenizers: tk.list.map(({ id, package: p, models }) => ({ id, package: p, models })), crossCheck: tk.extra.readability ? tk.extra.readability.package : null,
-    taskSet: { file: 'proof/tasks.json', picked: set.picked, rule: set.rule }, method: METHOD, tasks: rows };
+    taskSet: { file: 'proof/tasks.json', picked: set.picked, rule: set.rule },
+    method: { ...(typeof a.run === 'string' ? { run: a.run } : {}), ...METHOD, ...(typeof a['brain-source'] === 'string' ? { brain: a['brain-source'] } : {}) }, tasks: rows };
   const brainTimes = rows.map((x) => x.brain?.at).filter(Boolean).sort();
   if (brainTimes.length) d.brainAt = { from: brainTimes[0], to: brainTimes.at(-1), takenOver: brainFrom ? true : undefined };
   d.summary = summarize(d);
@@ -421,7 +463,7 @@ async function main() {
   console.log(`\nmeasured ${s.measured} of ${s.tasks} pages · median o200k: html ${o.html?.median} · text ${o.text?.median} · markdown ${o.markdown?.median} · /r/ ${o.served?.median} · brain ${f.brain.median} vs modelled loop ${f.low}–${f.high}`);
   if (only || a['no-write']) return;
   mkdirSync(new URL('proof/', ROOT), { recursive: true });
-  const file = `proof/bench-${d.date}.json`;
+  const file = `proof/bench-${d.date}${tag ? `-${tag}` : ''}.json`;
   writeFileSync(new URL(file, ROOT), compact(d));
   console.log(`written: ${file} (${utf8(compact(d))} bytes)`);
   if (a['write-ratio']) { writeRatio(d); console.log('written: TOKEN_RATIOS in node/proof.mjs'); }

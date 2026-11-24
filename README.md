@@ -135,6 +135,8 @@ The open sea belongs to everyone. A **harbour** belongs to one crew: a company, 
 
 `/proof` shows what an agent reads with the sea and without it, measured instead of claimed: a published task set (`proof/tasks.json`: confirmed pathways of the Unibrain and everyday reads), every destination page counted with real tokenizers as raw HTML, as plain text from a readability-style extraction and as the reader's Markdown, and the brain's answer for each task; the search loop an agent runs without the sea is modelled from published figures and labelled as such. The run is data (`proof/bench-<day>.json`, `/proof.json`); repeat it from any machine with `node tools/proof-bench.mjs` (the tokenizers are installed outside the repository; the server never loads them). `node/proof.mjs` exports the measured characters per token (`TOKEN_RATIO`) for the savings ledger. Proofs: `npm run proof:bench`.
 
+The lean answers (`node/lean.mjs`, `node/compact.mjs`): the reader keeps the main part of a page and leaves menus, cookie banners, footers, galleries, other products and tracking parameters out; a product page starts with its essentials from its structured data. `/r/` carries one line of source and one line of how to cite (`?format=full` for the long answer). `/brain?q=<task>&fmt=compact` gives the confirmed pathways with one line of reason each and the one next step; the full answers stay as they were. A run of a branch before its deploy is kept beside the live run (`proof/bench-<day>-lean.json`, `node tools/proof-bench.mjs --sea <local node> --tag lean --compact`) and shown on `/proof` as not live yet. Proofs: `npm run proof:lean`.
+
 ## Run your own sea
 
 ```

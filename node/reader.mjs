@@ -2,13 +2,12 @@
 // It follows robots.txt, reads one page per call, keeps nothing but a short cache and the name of the site that was read.
 import { safeHost, publicDns, grab, robotsGroups, robotsAllows, readPage } from './check.mjs';
 import { aside } from './aside.mjs';
+import { entities, leanMarkdown } from './lean.mjs';
+export { entities };
 
 export const READER_UA = 'MareLiberum-Reader/1.0 (+https://mareliberum.dev/read; reads one page for an agent and follows robots.txt)';
 export const READER_TOKEN = 'MareLiberum-Reader';
 
-const ENT = { amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: ' ', mdash: '—', ndash: '–', hellip: '…', laquo: '«', raquo: '»', copy: '©', reg: '®', euro: '€', rsquo: '’', lsquo: '‘', rdquo: '”', ldquo: '“', middot: '·', bull: '•', times: '×' };
-const cp = (n) => { try { return n > 0 && n < 0x110000 ? String.fromCodePoint(n) : ''; } catch { return ''; } };
-export const entities = (s) => String(s || '').replace(/&#x([0-9a-f]+);/gi, (_, h) => cp(parseInt(h, 16))).replace(/&#(\d+);/g, (_, d) => cp(Number(d))).replace(/&([a-z]+);/gi, (m, n) => ENT[n.toLowerCase()] ?? m);
 const abs = (href, base) => { try { const u = new URL(entities(href).trim(), base); return /^https?:$/.test(u.protocol) ? u.href : null; } catch { return null; } };
 const inline = (s) => entities(s.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
 
@@ -44,8 +43,9 @@ export function toMarkdown(html, base, { menus = true } = {}) {
   return md;
 }
 
-// what the reader takes from one page, in one go (run beside the node, see aside.mjs)
-export function digest(html, base) { return { meta: readPage(html), md: toMarkdown(html, base) }; }
+// what the reader takes from one page, in one go (run beside the node, see aside.mjs): the page's own words about itself,
+// and its main part as lean Markdown (node/lean.mjs) with the links it leads on to, each once and as a full address
+export function digest(html, base) { const meta = readPage(html), { md, links } = leanMarkdown(html, base); return { meta, md, links }; }
 
 // read one page for an agent; robots(host) returns the site's robots.txt (cached by the caller)
 export async function readUrl(raw, { robots } = {}) {
@@ -63,9 +63,9 @@ export async function readUrl(raw, { robots } = {}) {
   const type = r.type.toLowerCase(), final = r.url || u.href;
   if (/html|xml\+xhtml/.test(type) || /^\s*</.test(r.body)) {
     // a page can be written to stall whoever reads it: it is read beside the node, with a time limit
-    let meta, md; try { ({ meta, md } = await aside(import.meta.url, 'digest', [r.body, final])); } catch (e) { return { url: u.href, final, host, status: r.status, error: e?.code === 'EBUSY' ? e.message : 'this page could not be read in time; it is built in a way that stalls readers' }; }
-    const links = [], seen = new Set();
-    for (const m of md.matchAll(/\[([^\]]{2,120})\]\((https?:[^)\s]+)\)/g)) { if (seen.has(m[2]) || links.length >= 60) continue; seen.add(m[2]); links.push({ text: m[1], url: m[2] }); }
+    let meta, md, found; try { ({ meta, md, links: found } = await aside(import.meta.url, 'digest', [r.body, final])); } catch (e) { return { url: u.href, final, host, status: r.status, error: e?.code === 'EBUSY' ? e.message : 'this page could not be read in time; it is built in a way that stalls readers' }; }
+    // the links the page leads on to, as full addresses (the Markdown writes those on the page's own site as paths)
+    const links = (found || []).filter((l) => l.text && l.text.length >= 2).slice(0, 60);
     return { url: u.href, final, host, status: r.status, htmlBytes: r.body.length, title: meta.title, description: meta.description, lang: meta.lang, words: md.split(/\s+/).filter(Boolean).length, jsOnly: meta.shell || undefined, markdown: md.slice(0, 60_000), truncated: md.length > 60_000 || undefined, links };
   }
   if (/^text\/|json|markdown|xml/.test(type)) return { url: u.href, final, host, status: r.status, type, markdown: r.body.slice(0, 60_000), truncated: r.body.length > 60_000 || undefined };
