@@ -44,11 +44,17 @@ export function toMarkdown(html, base, { menus = true } = {}) {
 }
 
 // what the reader takes from one page, in one go (run beside the node, see aside.mjs): the page's own words about itself,
-// and its main part as lean Markdown (node/lean.mjs) with the links it leads on to, each once and as a full address
-export function digest(html, base) { const meta = readPage(html), { md, links } = leanMarkdown(html, base); return { meta, md, links }; }
+// and its main part as lean Markdown (node/lean.mjs) with the links it leads on to, each once and as a full address.
+// full: the whole Markdown the reader wrote before the lean one (toMarkdown, every link as it stands): the way back to
+// whatever the lean reader leaves out (/r/<page>?format=full)
+export function digest(html, base, { full = false } = {}) {
+  const meta = readPage(html);
+  if (full) { const md = toMarkdown(html, base), links = [], seen = new Set(); for (const m of md.matchAll(/\[([^\]]{2,120})\]\((https?:[^)\s]+)\)/g)) { if (seen.has(m[2]) || links.length >= 60) continue; seen.add(m[2]); links.push({ text: m[1], url: m[2] }); } return { meta, md, links, full: true }; }
+  const { md, links, cut } = leanMarkdown(html, base); return { meta, md, links, cut };
+}
 
 // read one page for an agent; robots(host) returns the site's robots.txt (cached by the caller)
-export async function readUrl(raw, { robots } = {}) {
+export async function readUrl(raw, { robots, full = false } = {}) {
   let u; try { u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${String(raw).trim()}`); } catch { return { error: 'not a web address' }; }
   if (!/^https?:$/.test(u.protocol)) return { error: 'only http and https pages' };
   // web pages live on the web's ports; the reader is not a way to knock on every door of a machine
@@ -63,10 +69,10 @@ export async function readUrl(raw, { robots } = {}) {
   const type = r.type.toLowerCase(), final = r.url || u.href;
   if (/html|xml\+xhtml/.test(type) || /^\s*</.test(r.body)) {
     // a page can be written to stall whoever reads it: it is read beside the node, with a time limit
-    let meta, md, found; try { ({ meta, md, links: found } = await aside(import.meta.url, 'digest', [r.body, final])); } catch (e) { return { url: u.href, final, host, status: r.status, error: e?.code === 'EBUSY' ? e.message : 'this page could not be read in time; it is built in a way that stalls readers' }; }
+    let meta, md, found, cut; try { ({ meta, md, links: found, cut } = await aside(import.meta.url, 'digest', [r.body, final, { full }])); } catch (e) { return { url: u.href, final, host, status: r.status, error: e?.code === 'EBUSY' ? e.message : 'this page could not be read in time; it is built in a way that stalls readers' }; }
     // the links the page leads on to, as full addresses (the Markdown writes those on the page's own site as paths)
     const links = (found || []).filter((l) => l.text && l.text.length >= 2).slice(0, 60);
-    return { url: u.href, final, host, status: r.status, htmlBytes: r.body.length, title: meta.title, description: meta.description, lang: meta.lang, words: md.split(/\s+/).filter(Boolean).length, jsOnly: meta.shell || undefined, markdown: md.slice(0, 60_000), truncated: md.length > 60_000 || undefined, links };
+    return { url: u.href, final, host, status: r.status, htmlBytes: r.body.length, title: meta.title, description: meta.description, lang: meta.lang, words: md.split(/\s+/).filter(Boolean).length, jsOnly: meta.shell || undefined, markdown: md.slice(0, 60_000), truncated: md.length > 60_000 || undefined, partial: cut || undefined, links, full: full || undefined };
   }
   if (/^text\/|json|markdown|xml/.test(type)) return { url: u.href, final, host, status: r.status, type, markdown: r.body.slice(0, 60_000), truncated: r.body.length > 60_000 || undefined };
   return { url: u.href, final, host, status: r.status, type, error: `this reader reads web pages and text, not ${type.split(';')[0] || 'this kind of file'}` };
