@@ -290,7 +290,8 @@ console.log('the run of the branch, beside the live run');
 const D = loadBench({ fresh: true }), L = loadLean({ fresh: true });
 await proof('the run of the branch is committed beside the live run, small, its summary what its rows give, its method saying it is local and not live', () => {
   assert.ok(L?.summary, 'proof/bench-<day>-lean.json is there'); assert.match(L.file, /^bench-\d{4}-\d{2}-\d{2}-lean\.json$/); assert.match(D.file, /^bench-\d{4}-\d{2}-\d{2}\.json$/, 'the live run stays the run of the page');
-  assert.equal(L.method.run, 'local run of lean/1 before deploy'); assert.match(L.method.brain, /local node/);
+  // (run again after the verifier's fixes: the run of fix-lean/1, which replaced the run of lean/1 of the same day)
+  assert.equal(L.method.run, 'local run of fix-lean/1 before deploy: the lean reader with the fixes for the verifier of 3.33.0'); assert.match(L.method.brain, /local node of the branch fix-lean\/1/);
   assert.ok(statSync(new URL(`../proof/${L.file}`, import.meta.url)).size < 140_000);
   assert.deepEqual(summarize(L), L.summary);
   assert.deepEqual(L.tasks.map((t) => [t.id, t.task, t.url]), D.tasks.map((t) => [t.id, t.task, t.url]), 'the same task set');
@@ -300,7 +301,7 @@ await proof('/proof shows before and after side by side, said to be the release 
   const page = await call('/proof', { accept: 'text/html' }), html = page.text;
   const day = L.date.split('-').reverse().join('.'), label = `Measured on the release candidate before deploy (local run, ${day}); the live re-measure below confirms it once ${VERSION} runs.`;
   assert.ok(!html.includes('Not live yet'), 'the old label is gone');
-  holds(html, ['Before and after: the lean reader', label, 'Local run of lean/1 before deploy.', `href="/proof/${L.file}"`, 'id="chart-lean"', 'id="chart-compact"']);
+  holds(html, ['Before and after: the lean reader', label, 'Local run of fix-lean/1 before deploy: the lean reader with the fixes for the verifier of 3.33.0.', `href="/proof/${L.file}"`, 'id="chart-lean"', 'id="chart-compact"']);
   const fig = (id) => (new RegExp(`<figure[^>]*id="${id}"[\\s\\S]*?</figure>`).exec(html) || [''])[0];
   assert.equal((fig('chart-lean').match(/<circle /g) || []).length, L.tasks.filter((t) => t.page?.tokens?.o200k_base?.prior > 0).length * 3);
   assert.equal((fig('chart-compact').match(/<circle /g) || []).length, L.tasks.filter((t) => t.brainCompact?.tokens).length * 2);
