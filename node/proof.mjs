@@ -271,8 +271,10 @@ const ago = (L) => `${L.date} between ${hm(L.startedAt)} and ${hm(L.endedAt)} UT
 // what the run beside the live one is, from the run file itself: the branch and commit it measured, before the deploy, and
 // the local brain it asked (seeded with the live pathways of these tasks). The node's hourly re-read below is an estimate of
 // one page against the old live run, no re-run of the bench: only the next live run measures the deployed sea.
+// the branch a run of the bench was made from, as the run file names it ("local run of fix-lean/1 before deploy …")
+const branchOf = (L) => /\b([a-z][a-z0-9-]*\/\d+)\b/.exec(`${L?.method?.run || ''} ${L?.bench?.ranFrom || ''}`)?.[1];
 export const candidateLabel = (L) => {
-  const branch = /\b([a-z][a-z0-9-]*\/\d+)\b/.exec(`${L?.method?.run || ''} ${L?.bench?.ranFrom || ''}`)?.[1] || 'a branch', commit = L?.bench?.commit || '?';
+  const branch = branchOf(L) || 'a branch', commit = L?.bench?.commit || '?';
   const paths = /\b(\d+) pathways\b/.exec(L?.method?.brain || '')?.[1], tasks = L?.summary?.tasks;
   return `Measured locally before deploy on branch ${branch} (commit ${commit}: the reader and the short answer this release ships), its brain a local node seeded with ${paths ? `the ${paths} live pathways of` : 'the live pathways of'} these ${tasks ?? ''} tasks. The hourly re-read below estimates one page at a time against the old live run; it is no re-run of the bench, and only the next live run measures the deployed sea.`.replace(/ {2,}/g, ' ');
 };
@@ -282,7 +284,7 @@ function leanSays(d, L) {
   const out = [
     `The reader's Markdown of the median page: ${n(ra.markdown?.median)} tokens on the live sea (${esc(d.bench.seaVersion || '')}), ${n(rb.markdown?.median)} with the lean reader; plain text, the baseline, ${ra.text?.median === rb.text?.median ? `${n(rb.text?.median)} in both runs` : `${n(ra.text?.median)} and ${n(rb.text?.median)}`}. On the same copy of each page the reader of ${esc(L.bench.prior?.version || 'the release before')} wrote ${n(rb.prior?.median)} tokens, page by page a median ${times(tb.priorPerMarkdown)} the lean Markdown.`,
     `Against plain text, page by page: the Markdown was a median ${times(ta.markdownPerText)} the plain text before, and is ${times(tb.markdownPerText)} now. It still holds the page (its heading, on shop pages a price) on ${n(kb.markdown?.kept)} of ${n(kb.markdown?.of)} pages; plain text on ${n(kb.text?.kept)} of ${n(kb.text?.of)}.`,
-    `The /r/ answer of the median page: ${n(ra.served?.median)} tokens before, ${n(rb.served?.median)} now (one line of source above the page, one line of how to cite it below); format=full keeps the long lines: ${n(rb.servedFull?.median)}. The MCP tool read_page: ${n(ra.mcp?.median)} before, ${n(rb.mcp?.median)} now.`,
+    `The /r/ answer of the median page: ${n(ra.served?.median)} tokens before, ${n(rb.served?.median)} now (one line of source above the page, one line of how to cite it below); format=full (the long lines around the reader's whole Markdown of before): ${n(rb.servedFull?.median)}. The MCP tool read_page: ${n(ra.mcp?.median)} before, ${n(rb.mcp?.median)} now.`,
   ];
   if (fb.compact?.n) out.push(`Finding the page: the brain's short answer (fmt=compact) costs a median ${n(fb.compact.median)} tokens (middle half ${mid(fb.compact)}), against ${n(fa.brain.median)} for the full answer on the live sea and a modelled search loop of ${n(fb.low)}–${n(fb.high)}. It led to the page's site for ${n(b.ledCompact)} of ${n(b.compacts)} tasks, with the task's confirmed pathway first ${n(b.firstPathCompact)} times.`);
   if (wb.compactN) out.push(`A whole task where the short answer led to the page (${n(wb.compactN)} tasks): ${n(wb.seaCompact?.median)} tokens with the sea (short answer and lean Markdown), against ${n(wa.sea?.median)} before; without the sea ${n(wb.lowCompact?.median)} to ${n(wb.highCompact?.median)} for an agent whose tool hands it plain text.`);
@@ -291,11 +293,11 @@ function leanSays(d, L) {
 function leanTable(d, L) {
   const a = d.summary, b = L.summary, ra = a.reading[TOK], rb = b.reading[TOK], fa = a.finding[TOK], fb = b.finding[TOK], ka = a.keeps.all, kb = b.keeps.all;
   const row = (what, x, y, note = '') => `<tr><td>${what}</td><td>${x}</td><td>${y}</td><td>${note}</td></tr>`;
-  return `<table class="tbl"><thead><tr><th>median, ${TOK}</th><th>before: the live sea, ${esc(d.bench.seaVersion || '')}</th><th>after: lean/1, local</th><th>beside it</th></tr></thead><tbody>
+  return `<table class="tbl"><thead><tr><th>median, ${TOK}</th><th>before: the live sea, ${esc(d.bench.seaVersion || '')}</th><th>after: ${esc(branchOf(L) || 'a branch')}, local</th><th>beside it</th></tr></thead><tbody>
 ${row('plain text of the page (the baseline)', n(ra.text?.median), n(rb.text?.median), 'the same extraction, read again')}
 ${row('<b>the reader\'s Markdown</b>', n(ra.markdown?.median), `<b>${n(rb.markdown?.median)}</b>`, `the ${esc(L.bench.prior?.version || 'earlier')} reader on the same copy: ${n(rb.prior?.median)}`)}
 ${row('Markdown still holds the page', `${n(ka.markdown?.kept)} of ${n(ka.markdown?.of)}`, `${n(kb.markdown?.kept)} of ${n(kb.markdown?.of)}`, `plain text: ${n(kb.text?.kept)} of ${n(kb.text?.of)}`)}
-${row('the /r/ answer', n(ra.served?.median), n(rb.served?.median), `format=full: ${n(rb.servedFull?.median)}`)}
+${row('the /r/ answer', n(ra.served?.median), n(rb.served?.median), `format=full, the reader's whole Markdown of before: ${n(rb.servedFull?.median)}`)}
 ${row('the MCP tool read_page', n(ra.mcp?.median), n(rb.mcp?.median), '')}
 ${fb.compact?.n ? row('<b>the brain\'s answer</b>', `${n(fa.brain.median)} (full)`, `<b>${n(fb.compact.median)}</b> (fmt=compact)`, `the full answer of the local node: ${n(fb.brain.median)}`) : ''}
 ${fb.compact?.n ? row('it led to the page\'s site', `${n(a.led)} of ${n(a.brains)}`, `${n(b.ledCompact)} of ${n(b.compacts)}`, '') : ''}

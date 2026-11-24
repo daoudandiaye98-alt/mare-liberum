@@ -184,6 +184,7 @@ await proof('I9 /proof names the branch and the commit the lean run measured and
   const p = (await call('/proof', { ua: UA.browser, headers: NAV })).text;
   assert.ok(p.includes(`on branch ${branch} (commit ${L.bench.commit}: the reader and the short answer this release ships), its brain a local node seeded with the ${seeded} live pathways of these ${L.summary.tasks} tasks`), 'the label says what the run is');
   assert.match(p, /it is no re-run of the bench/); assert.doesNotMatch(p, /confirms it|Not live yet/);
+  assert.ok(p.includes(`after: ${branch}, local</th>`), 'the table names the branch of the run too');
 });
 
 console.log('the smaller ones');
