@@ -242,7 +242,8 @@ console.log('/open, its data and its files');
 await proof('/open shows the number to steer by first, then every number: visits by kind (own scale per row), agents, brain, market, savings, money, costs, releases, doors', async () => {
   const r = await call('/open'); assert.equal(r.status, 200); assert.match(r.text, /<h1>Every number in public<\/h1>/);
   assert.match(r.text, /<p class="hero-n"><b>[\d,]+<\/b>foreign working sessions today so far/);
-  for (const x of ['Foreign working sessions', 'Who came, day by day', 'What agents did', 'What the brain holds', 'Money in, money out', 'Version and releases', 'Every public door that answers as data', 'Take the numbers with you', '€7.13', 'VAT included', 'may be counted until they carry the sea&#39;s own marker']) assert.ok(r.text.includes(x), x);
+  for (const x of ['Foreign working sessions', 'Who came, day by day', 'What agents did', 'What the brain holds', 'Take the numbers with you', 'may be counted until they carry the sea&#39;s own marker']) assert.ok(r.text.includes(x), x);
+  for (const x of ['Money in, money out', 'Version and releases', 'Every public door that answers as data', 'earned in total', 'What the sea costs', 'The till']) assert.ok(!r.text.includes(x), `owner removed from /open (25.11.): ${x}`);
   assert.equal((r.text.match(/<div class="vrow">/g) || []).length, VISIT_KINDS.length + 1, 'one row a kind, and the sessions');
   for (const svg of r.text.match(/<svg viewBox[\s\S]*?<\/svg>/g)) wellFormed(svg);
   assert.match(r.text, /animation:rise-bar/); assert.match(r.text, /prefers-reduced-motion:no-preference/);
@@ -273,9 +274,9 @@ await proof('every public door the index names answers as data, the three that o
   }
   assert.ok(fresh >= 3, `${fresh} doors new in 3.33.0 were asked`);
 });
-await proof('/open.md is the page for agents: Markdown, the doors as rows with their addresses, no markup', async () => {
+await proof('/open.md is the page for agents: Markdown with the links to the data, no markup, and without the sections the owner took off (25.11.)', async () => {
   const r = await call('/open.md'); assert.equal(r.status, 200); assert.match(r.headers.get('content-type'), /^text\/markdown/); assert.match(r.text, /^# Every number of the open sea, in public/);
-  assert.doesNotMatch(r.text, /<(html|script|style|svg)\b/i); assert.ok(r.text.includes('[`/census`](https://mare.test/census)') || r.text.includes('[/census](https://mare.test/census)'), 'the doors keep their links');
+  assert.doesNotMatch(r.text, /<(html|script|style|svg)\b/i); assert.ok(r.text.includes('(https://mare.test/open.json)'), 'the data keeps its link'); for (const s of ['Every public door that answers as data', 'Version and releases', 'Money in, money out']) assert.ok(!r.text.includes(s), `not on the page for agents either: ${s}`);
   assert.match(r.text, /Working sessions/); assert.match(r.text, /Training crawlers/);
 });
 await proof('/open/visits.csv: one row a day from the first record, one column for every kind the census tells apart; /savings.csv from the day the count began', async () => {
@@ -343,7 +344,9 @@ await proof('the sea\'s own calls are not visits, and release dates are stated a
   // a release is dated by the moment it reached main; only the newest may still be on its way (no day, no pull request yet)
   assert.ok(RELEASES.every((r, i) => /^\d+\.\d+\.\d+$/.test(r.version) && (r.at === null ? i === 0 && !r.pr : !Number.isNaN(Date.parse(r.at)))));
   assert.equal(RELEASES[0].version, VERSION, 'the newest release is the version this node runs');
-  const o = (await call('/open')).text; if (!RELEASES[0].at) assert.match(o, new RegExp(`<b>${VERSION.replace(/\./g, '\\.')}</b></td><td[^>]*>not dated yet · running on this node since`), 'an undated release says how long this node has run it');
+  // the releases left the page on 25.11.2026 (owner's decision); they stay in /open.json, newest first
+  const o = (await call('/open')).text, j = JSON.parse((await call('/open.json')).text);
+  assert.ok(!o.includes('Version and releases'), 'the releases are off the page'); assert.equal(j.releases[0].version, VERSION); assert.equal(j.current.version, VERSION);
 });
 
 rmSync(dir, { recursive: true, force: true });
