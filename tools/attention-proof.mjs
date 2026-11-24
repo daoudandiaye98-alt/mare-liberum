@@ -295,7 +295,7 @@ await proof('no failing shop is named, nor a domain whose name points to adult o
 });
 
 console.log('robots.txt and the license');
-await proof('robots.txt: the Content-Signal line once, in the group of the crawlers, as Cloudflare writes it; /c/ is a move crawlers skip; the rest of the file is that of 3.32.0', () => {
+await proof('robots.txt: the Content-Signal line once, in the group of the crawlers, as Cloudflare writes it; /c/ is a move crawlers skip; the rest of the file is that of 3.32.0 with the search engines\' group of connect/1', () => {
   const lines = ROBOTS.split('\n'), cs = lines.filter((l) => /^\s*content-signal\s*:/i.test(l));
   assert.deepEqual(cs, ['Content-Signal: search=yes, ai-input=yes, ai-train=yes']);
   const i = lines.indexOf(cs[0]); assert.equal(lines[i + 1], 'Allow: /');
@@ -306,7 +306,11 @@ await proof('robots.txt: the Content-Signal line once, in the group of the crawl
     for (const p of ['/', '/site/ropes.dev', '/attention', '/claim', '/pricing', '/license.xml', '/e/x']) assert.equal(robotsAllows(groups, bot, p).allowed, true, `${bot} ${p}`);
   }
   assert.equal(robotsAllows(groups, 'Claude-User', '/c/owner').allowed, true, 'an assistant acting for a person may follow a button');
-  const before = ROBOTS.replace('License: https://mareliberum.dev/license.xml\n', '').replace('Content-Signal: search=yes, ai-input=yes, ai-train=yes\n', '').replace('Disallow: /c/\n', '');
+  // 3.33.0 also adds one group for the five search engines (connect/1: no counted buttons, no answers to a search); it is
+  // taken out whole, once, and the rest must be 3.32.0 to the byte
+  const SE = ROBOTS.slice(ROBOTS.indexOf('# Search engines index pages, not steps'), ROBOTS.indexOf('Agentmap:'));
+  assert.ok(SE.includes('User-agent: Googlebot\n') && SE.includes('Disallow: /c/\n') && ROBOTS.split(SE).length === 2, 'the search engines\' group stands once, before Agentmap');
+  const before = ROBOTS.replace('License: https://mareliberum.dev/license.xml\n', '').replace('Content-Signal: search=yes, ai-input=yes, ai-train=yes\n', '').replace('Disallow: /c/\n', '').replace(SE, '');
   assert.equal(createHash('sha256').update(before).digest('hex'), '6696a73cc123a9d89a6135668a93151565ff812d844f2c44aafeb86486127e69');
 });
 await proof('robots.txt names the license once, for every crawler, as an absolute address; the sea serves it as RSL 1.0: every automated use, free, with credit to Mare Liberum', async () => {
