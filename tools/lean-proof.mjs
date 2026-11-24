@@ -7,7 +7,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync, statSync } from 'node:fs';
 import { createRequire } from 'node:module';
-import { handle } from '../node/core.mjs';
+import { handle, VERSION } from '../node/core.mjs';
 import { createMem } from '../node/mem.mjs';
 import { memoryKv } from '../node/flow.mjs';
 import { createLedger } from '../node/ledger.mjs';
@@ -191,19 +191,35 @@ await proof('the run of the branch is committed beside the live run, small, its 
   assert.deepEqual(L.tasks.map((t) => [t.id, t.task, t.url]), D.tasks.map((t) => [t.id, t.task, t.url]), 'the same task set');
   assert.ok(L.tasks.filter((t) => t.page?.tokens?.o200k_base?.prior > 0).length >= 30, 'the reader before, on the same copy of each page');
 });
-await proof('/proof shows before and after side by side, said to be not live yet, with every number from one of the two runs', async () => {
+await proof('/proof shows before and after side by side, said to be the release candidate measured locally before deploy, with every number from one of the two runs', async () => {
   const page = await call('/proof', { accept: 'text/html' }), html = page.text;
-  holds(html, ['Before and after: the lean reader', 'Not live yet.', 'Local run of lean/1 before deploy.', `href="/proof/${L.file}"`, 'id="chart-lean"', 'id="chart-compact"']);
+  const day = L.date.split('-').reverse().join('.'), label = `Measured on the release candidate before deploy (local run, ${day}); the live re-measure below confirms it once ${VERSION} runs.`;
+  assert.ok(!html.includes('Not live yet'), 'the old label is gone');
+  holds(html, ['Before and after: the lean reader', label, 'Local run of lean/1 before deploy.', `href="/proof/${L.file}"`, 'id="chart-lean"', 'id="chart-compact"']);
   const fig = (id) => (new RegExp(`<figure[^>]*id="${id}"[\\s\\S]*?</figure>`).exec(html) || [''])[0];
   assert.equal((fig('chart-lean').match(/<circle /g) || []).length, L.tasks.filter((t) => t.page?.tokens?.o200k_base?.prior > 0).length * 3);
   assert.equal((fig('chart-compact').match(/<circle /g) || []).length, L.tasks.filter((t) => t.brainCompact?.tokens).length * 2);
   const md = L.summary.reading.o200k_base.markdown.median, cm = L.summary.finding.o200k_base.compact.median, fmt = (x) => Number(x).toLocaleString('en-US');
   holds(html, [fmt(md), fmt(cm), fmt(D.summary.reading.o200k_base.markdown.median)]);
-  const j = (await call('/proof.json')).j; assert.equal(j.lean.live, false); assert.equal(j.lean.after.medianPage.markdown, md); assert.equal(j.lean.after.compact.median, cm); assert.equal(j.lean.before.medianPage.markdown, D.summary.reading.o200k_base.markdown.median);
+  const j = (await call('/proof.json')).j; assert.equal(j.lean.live, false); assert.equal(j.lean.label, label); assert.equal(j.lean.after.medianPage.markdown, md); assert.equal(j.lean.after.compact.median, cm); assert.equal(j.lean.before.medianPage.markdown, D.summary.reading.o200k_base.markdown.median);
   const raw = await call(`/proof/${L.file}`, { accept: '*/*' }); assert.equal(raw.status, 200); assert.equal(raw.text, readFileSync(new URL(`../proof/${L.file}`, import.meta.url), 'utf8'));
   assert.equal((await call('/proof/bench-2026-11-24-other.json', { accept: '*/*' })).status, 404);
   assert.ok(!proofPage(BASE, D, null, null).includes('Before and after'), 'without a run of a branch, no such section');
   assert.equal(proofJson(BASE, D, null, null).lean, undefined);
+});
+
+console.log('the hourly re-read of /proof, after the merge (3.33.0)');
+await proof('the node\'s own re-read on /proof (proof/1\'s tide: remeasure with proofRead) reads with the lean reader and sets it beside the live run\'s counts', async () => {
+  const { remeasure, proofRead, TOKEN_RATIO } = await import('../node/proof.mjs');
+  const kv = memoryKv(), d = { date: '2026-11-24', tasks: [{ id: 't-shop', task: 'trail running shoes', url: SHOP_URL, page: { final: SHOP_URL, tokens: { o200k_base: { html: 9000, markdown: 3000, text: 800 } } } }] };
+  const e = await remeasure({ kv, read: proofRead, d, now: Date.parse('2026-11-24T12:00:00Z') });
+  assert.ok(e && !e.error, `the tide read the page: ${e?.error || ''}`);
+  const lean = digest(SHOP, SHOP_URL).md, old = toMarkdown(SHOP, SHOP_URL);
+  assert.equal(lean, leanMarkdown(SHOP, SHOP_URL).md, 'the reader\'s digest is the lean reader');
+  assert.equal(e.chars.markdown, lean.length, 'the tide measured the lean Markdown');
+  assert.ok(e.chars.markdown < old.length, `lean ${e.chars.markdown} < the earlier reader ${old.length}`);
+  assert.equal(e.tokens.markdown, Math.round(lean.length / TOKEN_RATIO.markdown)); assert.deepEqual(e.bench, { date: '2026-11-24', html: 9000, markdown: 3000 }, 'beside the live run\'s counts');
+  assert.equal((await kv.get('proof:live')).last.chars.markdown, lean.length, 'kept as the node\'s last re-read');
 });
 
 console.log(`\n${passed} proofs hold, ${failed} fail`);

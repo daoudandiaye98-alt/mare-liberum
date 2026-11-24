@@ -1997,7 +1997,7 @@ async function handleOne(req, db, cfg = {}) {
     if (/^\/proof(\.json|\/(tasks|bench-\d{4}-\d{2}-\d{2}(-lean)?)\.json)?$/.test(path) && req.method === 'GET') {
       if (path.startsWith('/proof/')) { const f = benchFile(path.slice(7)); return f ? new Response(f, { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=3600', 'x-robots-tag': 'noindex', ...CORS } }) : json({ error: { code: 'NOT_FOUND', message: `no such run; see ${base}/proof` } }, 404); }
       const acc = req.headers.get('accept') || '', asJson = path.endsWith('.json') || url.searchParams.get('format') === 'json' || (/application\/json/.test(acc) && !/text\/html/.test(acc)), d = loadBench(), live = await proofLive(cfg.kv || db.kv);
-      return asJson ? ajson(proofJson(base, d, live), 200, { 'cache-control': 'public, max-age=300', ...(path.endsWith('.json') ? { 'x-robots-tag': 'noindex' } : {}) }) : html(proofPage(base, d, live), 300);
+      return asJson ? ajson(proofJson(base, d, live, undefined, VERSION), 200, { 'cache-control': 'public, max-age=300', ...(path.endsWith('.json') ? { 'x-robots-tag': 'noindex' } : {}) }) : html(proofPage(base, d, live, undefined, VERSION), 300);
     }
     // attention (node/attention.mjs, node/attention-ui.mjs): what the AIs read of the listings, how a provider claims one, every price,
     // and the counted door to the paid services. A program gets the data unless it asks for a page (or Markdown)

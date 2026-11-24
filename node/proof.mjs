@@ -265,8 +265,13 @@ function liveBlock(live) {
 
 // ------------------------------------------------------------------ before and after: the lean reader and the brain's short answer
 // The run above is the live sea (its reader of the release it ran). A run of a branch before its deploy (--tag lean) is
-// shown beside it, said to be local and not live, until the next live run measures the deployed sea.
+// shown beside it as what it is: the release candidate, measured locally before the deploy; the node's hourly re-read and
+// the next live run of the bench confirm it on the deployed sea.
 const ago = (L) => `${L.date} between ${hm(L.startedAt)} and ${hm(L.endedAt)} UTC`;
+// what the run beside the live one is, said as it stays true after the deploy: the release candidate, measured locally before
+// it went live; the node's own hourly re-read below confirms it once the release runs (version: the node's VERSION)
+const dmy = (day) => { const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(day || '')); return m ? `${m[3]}.${m[2]}.${m[1]}` : String(day || ''); };
+export const candidateLabel = (L, version) => `Measured on the release candidate before deploy (local run, ${dmy(L?.date)}); the live re-measure below confirms it once ${version || 'this release'} runs.`;
 const times = (x) => (x == null ? '–' : `${n(x)}×`);
 function leanSays(d, L) {
   const a = d.summary, b = L.summary, ra = a.reading[TOK], rb = b.reading[TOK], ta = a.times[TOK], tb = b.times[TOK], fa = a.finding[TOK], fb = b.finding[TOK], wa = a.whole[TOK], wb = b.whole[TOK], ka = a.keeps.all, kb = b.keeps.all;
@@ -321,11 +326,11 @@ function compactChart(d, L) {
     return `<li><span class="vz-n">${esc(t.task)}</span><svg class="vz-s" width="100%" height="22" aria-hidden="true" focusable="false"><rect class="vz-band" x="${x(s.low)}%" y="-1" width="${(x(s.high) - x(s.low)).toFixed(2)}%" height="24"/><line class="vz-edge" x1="${x(s.low)}%" x2="${x(s.low)}%" y1="-1" y2="23"/><line class="vz-edge" x1="${x(s.high)}%" x2="${x(s.high)}%" y1="-1" y2="23"/>${gridOf(ticks, x, 22)}${w ? `<line class="vz-span" x1="${x(Math.min(v, w))}%" x2="${x(Math.max(v, w))}%" y1="11" y2="11"/><circle class="vz-ring" cx="${x(w)}%" cy="11" r="5.5"><title>${esc(t.task)}: the full answer on the live sea ${n(w)} tokens</title></circle>` : ''}<circle class="vz-md" cx="${x(v)}%" cy="11" r="5.5"><title>${esc(t.task)}: the short answer ${n(v)} tokens</title></circle></svg><span class="vz-vh">the full answer on the live sea ${n(w)} tokens, the short answer ${n(v)} tokens</span></li>`; };
   return `<figure class="vz wide" id="chart-compact"><figcaption>Finding the page, before and after (${TOK}, one row per task): the brain's full answer on the live sea, its short answer from the branch, the search loop modelled</figcaption><ul class="vz-k"><li><i class="vz-ringkey"></i>the full answer, live sea, measured</li><li><i class="vz-md"></i>the short answer (fmt=compact), local node, measured</li><li><i class="vz-bandkey"></i>search loop without the sea, modelled: ${n(s.low)} to ${n(s.high)}</li></ul>${axisRow(ticks, x, n)}<ol class="vz-r">${sorted.map(row).join('')}</ol>${axisRow(ticks, x, n)}</figure>`;
 }
-function leanSection(d, L) {
+function leanSection(d, L, version) {
   if (!L?.summary || !d?.summary) return '';
   const b = L.bench, m = L.method || {};
   return `<h2>Before and after: the lean reader</h2>
-<p class="vz-note" data-lean><b>Not live yet.</b> ${esc(sentence(m.run || 'a run of a branch before its deploy'))} Measured on ${esc(ago(L))}: the reader and the brain of the branch on a local node (${esc(b.sea)}), the same ${n(L.summary.tasks)} tasks, the same pages read again. Beside it the run above: the live sea. After the deploy, the node's hourly re-read and the next run of the bench measure it on mareliberum.dev.</p>
+<p class="vz-note" data-lean><b>${esc(candidateLabel(L, version))}</b> ${esc(sentence(m.run || 'a run of a branch before its deploy'))} Measured on ${esc(ago(L))}: the reader and the brain of the branch on a local node (${esc(b.sea)}), the same ${n(L.summary.tasks)} tasks, the same pages read again. Beside it the run above: the live sea. After the deploy, the node's hourly re-read and the next run of the bench measure it on mareliberum.dev.</p>
 <p>What changed: the reader keeps the main part of a page and leaves menus, cookie banners, footers, galleries, other products and repeated links out; a product page starts with what an agent buys by (name, price and currency, stock, options, the page's address), its own text after. The /r/ answer carries one line of source above the page and one line of how to cite it below. The brain answers short when asked (<code>/brain?q=&lt;task&gt;&amp;fmt=compact</code>): the confirmed pathways, one line of reason each, the one next step. The full answers stay as they were.</p>
 <div class="box vz-say"><h3>What the two runs say</h3><ul>${leanSays(d, L).map((x) => `<li>${x}</li>`).join('')}</ul></div>
 ${leanTable(d, L)}
@@ -333,16 +338,16 @@ ${leanReadingChart(L)}
 ${compactChart(d, L)}
 <p class="vz-note">${esc(sentence(m.brain || ''))} ${esc(sentence(m.prior || ''))} The run as data: <a href="/proof/${esc(L.file)}">/proof/${esc(L.file)}</a>.</p>`;
 }
-export function leanJson(base, d, L) {
+export function leanJson(base, d, L, version = null) {
   if (!L?.summary || !d?.summary) return null;
   const a = d.summary, b = L.summary, ra = a.reading[TOK], rb = b.reading[TOK];
-  return { live: false, what: L.method?.run || 'a run of a branch before its deploy', data: `${base}/proof/${L.file}`, date: L.date, startedAt: L.startedAt, endedAt: L.endedAt, sea: L.bench.sea, base: L.bench.base, prior: L.bench.prior, commit: L.bench.commit,
+  return { live: false, label: candidateLabel(L, version), what: L.method?.run || 'a run of a branch before its deploy', data: `${base}/proof/${L.file}`, date: L.date, startedAt: L.startedAt, endedAt: L.endedAt, sea: L.bench.sea, base: L.bench.base, prior: L.bench.prior, commit: L.bench.commit,
     before: { run: d.file, medianPage: { text: ra.text?.median, markdown: ra.markdown?.median, served: ra.served?.median, mcp: ra.mcp?.median }, keeps: a.keeps.all.markdown, brain: a.finding[TOK].brain.median, markdownPerText: a.times[TOK].markdownPerText },
     after: { medianPage: { text: rb.text?.median, prior: rb.prior?.median, markdown: rb.markdown?.median, served: rb.served?.median, servedFull: rb.servedFull?.median, mcp: rb.mcp?.median }, keeps: b.keeps.all.markdown, keepsText: b.keeps.all.text, keepsPrior: b.keeps.all.prior, brain: b.finding[TOK].brain.median, compact: b.finding[TOK].compact, ledCompact: b.ledCompact, compacts: b.compacts, markdownPerText: b.times[TOK].markdownPerText, priorPerMarkdown: b.times[TOK].priorPerMarkdown, loop: [b.finding[TOK].low, b.finding[TOK].high], wholeCompact: b.whole[TOK].seaCompact?.median },
     says: leanSays(d, L).map((x) => x.replace(/<[^>]+>/g, '')), summary: b };
 }
 
-export function proofPage(base, d, live, lean = loadLean()) {
+export function proofPage(base, d, live, lean = loadLean(), version = null) {
   const title = 'Proof of function: what an agent reads with and without the sea | Mare Liberum';
   if (!d?.summary) return page(base, '/proof', title, 'A public, repeatable measurement of the tokens an agent reads with the open sea and without it.', `<p>Proof of function</p><h1>What an agent reads, with and without the sea</h1><p>No run of the bench is on this node yet. Run <code>node tools/proof-bench.mjs</code> from a session; it writes <code>proof/bench-&lt;day&gt;.json</code>.</p>`, undefined, '/og.png', { robots: 'noindex, follow' });
   const s = d.summary, r = s.reading[TOK], f = s.finding[TOK], rows = measuredRows(d), c = caveats(d);
@@ -381,7 +386,7 @@ ${taskTable(d)}
 <pre>${esc(installLine(d))}
 git clone https://github.com/daoudandiaye98-alt/mare-liberum &amp;&amp; cd mare-liberum
 node tools/proof-bench.mjs --deps ~/.cache/mare-proof</pre>
-${leanSection(d, lean)}
+${leanSection(d, lean, version)}
 ${liveBlock(live)}
 <p><small>The run as data: <a href="/proof/${esc(d.file || `bench-${d.date}.json`)}">/proof/${esc(d.file || `bench-${d.date}.json`)}</a> · the task set: <a href="/proof/tasks.json">/proof/tasks.json</a> · this page as data: <a href="/proof.json">/proof.json</a> · for agents as Markdown: <a href="/proof.md">/proof.md</a> · what the shared brain saves: <a href="/savings">/savings</a> · everything the sea counts, in the open: <a href="/open">/open</a></small></p>`;
   const ld = { '@context': 'https://schema.org', '@type': 'Dataset', name: 'Proof of function: what an agent reads with and without the sea', description: desc, url: `${base}/proof`, dateModified: d.endedAt, temporalCoverage: d.date, license: 'https://opensource.org/licenses/MIT', isAccessibleForFree: true,
@@ -390,7 +395,7 @@ ${liveBlock(live)}
   return page(base, '/proof', title, desc, body, ld);
 }
 
-export function proofJson(base, d, live, lean = loadLean()) {
+export function proofJson(base, d, live, lean = loadLean(), version = null) {
   if (!d?.summary) return { what: 'Proof of function: what an agent reads with the open sea and without it', measured: false, note: 'no run of the bench on this node yet', how: 'node tools/proof-bench.mjs' };
   const s = d.summary, r = s.reading[TOK], f = s.finding[TOK], w = s.whole[TOK], c = caveats(d), file = d.file || `bench-${d.date}.json`;
   return {
@@ -405,7 +410,7 @@ export function proofJson(base, d, live, lean = loadLean()) {
     tasks: d.tasks.map((t) => ({ id: t.id, task: t.task, group: t.group, source: t.source, url: t.url, tokens: t.page?.tokens?.[TOK], keeps: t.page?.keeps, skipped: t.skipped, brain: t.brain?.tokens ? { tokens: t.brain.tokens[TOK], led: t.brain.destinationHost, pathRank: t.brain.pathRank } : { status: t.brain?.status } })),
     live: live?.last || null, reproduce: [installLine(d), 'node tools/proof-bench.mjs --deps ~/.cache/mare-proof'],
     links: { savings: `${base}/savings`, open: `${base}/open` },
-    ...(leanJson(base, d, lean) ? { lean: leanJson(base, d, lean) } : {}),
+    ...(leanJson(base, d, lean) ? { lean: leanJson(base, d, lean, version) } : {}),
   };
 }
 

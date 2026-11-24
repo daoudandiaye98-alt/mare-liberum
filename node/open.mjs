@@ -29,7 +29,7 @@ export const COSTS = [{ what: 'the server: one Hetzner CX23 (2 vCPU, 4 GB) behin
 // then the page says how long this node has run it. No day is written before it happened.
 const REPO = 'https://github.com/daoudandiaye98-alt/mare-liberum';
 export const RELEASES = [
-  ['3.33.0', null, null, 'Der Beweis: every number in public, the proof of function, what the AIs read, one click into every agent client'],
+  ['3.33.0', null, null, 'Der Beweis: every number in public, the proof of function, a lean reader and a short brain answer, what the AIs read, one click into every agent client'],
   ['3.32.0', '2026-11-24T13:53:38+01:00', 20, 'the areas of the Unibrain: a verified market, ready plans for thinking, a ledger of what it saves'],
   ['3.31.0', '2026-11-24T12:54:00+01:00', 19, 'every page as Markdown for agents, an index only of pages worth one'],
   ['3.30.0', '2026-11-24T09:53:55+01:00', 18, 'the Unibrain fills only from what agents do'],
