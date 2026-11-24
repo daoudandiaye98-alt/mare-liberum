@@ -83,7 +83,7 @@ export function decide(products, c = {}, standingOf = () => null) {
     confidence: round(Math.min(1, 0.4 + 0.1 * Math.min(pool.length, 4) + (best.p.rating ? 0.1 : 0) + (best.st?.worked ? 0.1 : 0))), rule: RULE };
 }
 const RULE = 'score = 0.45 relevance (stores\' own order) + 0.30 rating + 0.25 price (cheapest fitting = 1) + traces (+0.05 per worked, -0.15 per failed, capped); offers that miss a stated limit do not compete';
-export const slim = (p) => Object.fromEntries(Object.entries({ title: p.title, price: p.price, currency: p.currency, inStock: p.inStock, rating: p.rating, store: p.store, storeHost: p.storeHost, url: p.url, checkout: p.checkout, sizes: p.sizes, promoted: p.promoted, commission: p.commission, entry: p.entry || (p.storeHost ? `urn:air:${p.storeHost}:ucp:store` : undefined) }).filter(([, v]) => v !== undefined && v !== null && v !== ''));
+export const slim = (p) => Object.fromEntries(Object.entries({ title: p.title, price: p.price, currency: p.currency, inStock: p.inStock, rating: p.rating, store: p.store, storeHost: p.storeHost, url: p.url, checkout: p.checkout, sizes: p.sizes, promoted: p.promoted, commission: p.commission, market: p.market, entry: p.entry || (p.storeHost ? `urn:air:${p.storeHost}:ucp:store` : undefined) }).filter(([, v]) => v !== undefined && v !== null && v !== ''));
 
 // The steps after finding, each as a ready request. Services come from residents that declared them; the first resident
 // that offered a step stands first until traces say otherwise. Every agent can offer a step: POST /enter with serves.

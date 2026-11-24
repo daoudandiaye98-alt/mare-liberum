@@ -109,7 +109,12 @@ export function createBrain(h) {
       const brief = { kind: bf.kind, title: bf.title, assume: bf.missing.map((m) => `${m.slot}: ${m.assume}`), bar: bf.bar.slice(0, 4), deliver: bf.deliver, full: `${base()}/brief.json?q=${encodeURIComponent(q)}` };
       // the beacon: the course of the lighthouse that shines brightest for this task, when one fits (node/lighthouse.mjs)
       const course = (await api.courseFor?.(q, a.agent).catch(() => null)) || undefined;
-      return strip({ course, task: q, tag: tag || undefined, brief, paths: paths.map((p) => view(p, q, tag)),
+      // the ledger of the areas (node/areas.mjs): a confirmed pathway or a ready course handed over is a part nobody solves again
+      if (paths.some((p) => (p.worked || 0) >= 1 && (p.worked || 0) > (p.failed || 0))) api.countSave?.('path', 1, ctx);
+      if (course) api.countSave?.('plan', 1, ctx);
+      const buying = bf.kind === 'shopping' || bf.kind === 'travel-booking' || course?.kind === 'shopping' || course?.kind === 'shop-safety';
+      const area = strip({ market: buying ? `${base()}/brain/market?q=${encodeURIComponent(q)}` : undefined, plan: bf.kind !== 'general' ? `${base()}/brain/thinking?q=${encodeURIComponent(q)}` : undefined, map: `${base()}/brain/areas` });
+      return strip({ course, task: q, tag: tag || undefined, brief, area, paths: paths.map((p) => view(p, q, tag)),
         topics: routed?.topics?.length ? routed.topics : undefined, terms: doors ? routed.terms : undefined, doors: doors || undefined, web: routed?.general?.length ? routed.general : undefined, note: routed?.note,
         places: cand.length ? cand : undefined,
         how: paths.length ? 'Follow a path with its go link: the walk strengthens it. After you used the place, open worked_it or failed_it — that is how the brain learns. Lay a new path for a place that helped you: /lay?q=<task>&to=<https address>&note=<what helped>.'
