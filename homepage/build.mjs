@@ -105,7 +105,7 @@ function build(mode) {
     since: live ? '' : R.pace(d),
     tDay: live ? 'day –' : `day ${d.clock?.day}`, geoSpan: live ? 'in the last 30 days' : R.geoSpan(d),
   };
-  for (const k of ['ai', 'people', 'ratio', 'one', 'residents', 'index', 'paths', 'walks', 'ratings', 'memories', 'countries', 'webChecked', 'webBlock', 'webAssist', 'webLlms', 'webAvg']) v[k] = num(k);
+  for (const k of ['ai', 'people', 'ratio', 'one', 'residents', 'index', 'paths', 'walks', 'ratings', 'memories', 'countries', 'webChecked', 'webBlock', 'webAssist', 'webLlms', 'webAvg', 'market', 'plans', 'tokens30', 'spared', 'sparedM', 'sparedE']) v[k] = num(k);
   v.painted = live && FILM?.films?.home ? ' painted' : '';
   const js = (rd('src/render.js') + '\n' + rd('src/app.js'))
     .replace('/*@LIVE*/false', String(live)).replace("'/*@B*/'", JSON.stringify(B)).replace('/*@EX*/null', live ? 'null' : safe(examples()))

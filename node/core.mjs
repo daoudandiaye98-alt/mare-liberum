@@ -32,7 +32,8 @@ import { callerHash, callerHashes, viaProxy, rewriteForAgents, viaUrl, wrapTarge
 import { paidRoute } from './paid.mjs';
 import { pricingOf, priceLine, withPrice } from './pricing.mjs';
 import { wantsMarkdown, mdTwin, asMarkdown } from './agentmd.mjs';
-import { areasPage, areasJson, marketPage, thinkingPage, savingsPage } from './areas.mjs';
+import { areasPage, areasJson, marketPage, thinkingPage } from './areas.mjs';
+import { openOf, openPage, savingsPage, visitsCsv, savingsCsv, clientFamily, OPEN } from './open.mjs';
 import { SHORE_MOVES, MCP_ALIASES, SSE_OPEN, SSE_POST, meant, aboutOf, aboutPage, imprintPage, didDoc, agentsJson, discoveryOf, sseOpen, sseOf } from './shore.mjs';
 import { netKey } from './guard.mjs';
 
@@ -736,6 +737,22 @@ const TOOLS = [
   { name: 'build_agent', description: 'Build an AI agent from a blueprint at the shipyard, for the person you work for. Returns its manifest, its instructions (usable as project or custom instructions), connector settings, and a link to its program: one file without dependencies that runs on their own machine with any model (Anthropic, OpenAI-compatible, Ollama) and can enter the sea as a resident. Kinds: source-bound-answerer (answers only from the approved sources of a harbour), researcher, support-desk, buyer, monitor, analyst, coding-helper, operations-runner, team-memory-keeper, personal-assistant. Without kind you get the blueprints.', inputSchema: { type: 'object', properties: { name: { type: 'string', description: 'The name of the agent.' }, kind: { type: 'string', enum: ['source-bound-answerer', 'researcher', 'support-desk', 'buyer', 'monitor', 'analyst', 'coding-helper', 'operations-runner', 'team-memory-keeper', 'personal-assistant'] }, purpose: { type: 'string', description: 'What it is for, in a sentence or two.' }, rules: { type: 'array', items: { type: 'string' }, description: 'Rules of the person, one each.' }, language: { type: 'string', enum: ['en', 'de', 'auto'] }, harbour: { type: 'boolean', description: 'true: let it read the harbour of the team as well.' } } } },
   { name: 'stats', description: 'Size and pulse of the sea: entries by kind and lake, residents, calls, answers and traces of the last 24 hours.', inputSchema: { type: 'object', properties: {} } },
 ];
+// the names of the open door's tools: a call of one is counted under its name for /open, anything else as no such tool
+const TOOL_NAMES = new Set(TOOLS.map((t) => t.name));
+// who a working session is, for one UTC day and in memory only (node/open.mjs): the MCP session a client names where it
+// names one, else its network and its program, salted with a secret the node draws at its start and never writes down
+const WORK_SALT = [...crypto.getRandomValues(new Uint8Array(16))].map((x) => x.toString(16).padStart(2, '0')).join('');
+const workKey = (ip, headers, session) => { const sid = session || headers.get('mcp-session-id'); return hash16(`${WORK_SALT}|${new Date().toISOString().slice(0, 10)}|${sid ? `s:${String(sid).slice(0, 200)}` : `${netKey(ip)}|${headers.get('user-agent') || ''}`}`); };
+// callers that never open a working session: a person in a browser, a registry, the house agent (and, by ctx, the sea's
+// own calls and crawlers); the doors where a task makes one over HTTP
+const NOT_WORK = new Set(['browser', 'registry', 'resident']);
+const WORK_PATH = /^\/(ask|decide|brain|think|route|route\.json|doors|lay|brain\/(thinking|market)(\.json)?)$|^\/rate\//;
+// an A2A message that carries a task: text or data in its parts
+const a2aTask = (m) => (m?.method === 'message/send' || m?.method === 'SendMessage') && Array.isArray(m.params?.message?.parts) && m.params.message.parts.some((x) => (typeof x?.text === 'string' && x.text.trim()) || (x?.data && typeof x.data === 'object'));
+// the working sessions an MCP message makes: a client that connects names itself; the first tool it calls opens its session
+const workMcp = (sea, list, key, ua, door) => { for (const m of list) { if (m?.method === 'initialize') sea.workName?.(key, /mare-proof|first-swimmer|kasse-proof/i.test(m.params?.clientInfo?.name || '') ? 'own' : clientFamily(m.params?.clientInfo?.name, ua)); else if (m?.method === 'tools/call') sea.workSession?.(key, clientFamily(null, ua), door); } };
+// one call at the open MCP door, counted per tool and day (node/open.mjs); never the sea's own calls, never a crawler, never the app door
+const tallyTool = (sea, m, skip) => { if (!skip && m?.method === 'tools/call' && typeof m.params?.name === 'string') sea.mcpTool?.(m.params.name, TOOL_NAMES.has(m.params.name)); };
 
 // every tool says what it is and whether it only reads: clients ask their users before tools that change something
 const TOOL_META = {
@@ -754,7 +771,7 @@ for (const t of TOOLS) { const [title, readOnlyHint, destructiveHint, openWorldH
 const strip0 = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v != null && v !== ''));
 async function entryWithTraces(db, id) { const e = await db('mare_get', { id: String(id || '') }); if (!e) return null; const t = db.flow ? await db.flow.tracesOf(e.identifier).catch(() => null) : null; return t ? { ...e, trace: t.standing, traces: t.traces } : e; }
 async function mcpCall(db, base, name, a, ip) {
-  const sea = db.flow, ctx = { ip };
+  const sea = db.flow, ctx = { ip, door: '/mcp' };
   if (name === 'ask') return await sea.ask(a, ctx);
   if (name === 'route') return await sea.route(a, ctx);
   if (name === 'decide') return await sea.ask({ ...a, kind: a?.kind || 'merchant', compact: true }, ctx);
@@ -1269,6 +1286,15 @@ async function liveNow(sea, db, cfg, fresh) {
   if (cfg.geoIndex) v.geo = { ...v.geo, index: cfg.geoIndex };
   liveMemo.clear(); liveMemo.set(sea, { at: Date.now(), v }); return v;
 }
+// the open numbers (node/open.mjs) are gathered once a minute per instance, however often they are asked for: training
+// crawlers read every page by the thousand. Callers that come at the same moment share one gathering
+const openMemo = new WeakMap();
+function memoOf(sea, key, fn, ms = OPEN.memoMs) {
+  let m = openMemo.get(sea); if (!m) openMemo.set(sea, (m = new Map()));
+  const hit = m.get(key); if (hit && Date.now() - hit.at < ms) return hit.p;
+  const p = Promise.resolve().then(fn); m.set(key, { at: Date.now(), p }); p.catch(() => { if (m.get(key)?.p === p) m.delete(key); });
+  return p;
+}
 const fmtN = (n) => (n == null || isNaN(n) ? '–' : Number(n).toLocaleString('en-US'));
 export function headline(d) {
   const roles = d.roles || {}, ai = Object.entries(roles).filter(([k]) => !['people', 'other', 'resident'].includes(k)).reduce((s, [, v]) => s + v, 0);
@@ -1281,6 +1307,8 @@ export function headline(d) {
     paths: d.brain?.pathways, walks: d.brain?.walks, ratings: d.brain?.ratings, memories: d.brain?.memories,
     // the areas of the Unibrain (node/areas.mjs): the verified market, ready plans, and what the shared brain spared
     market: d.areas?.market?.verified, plans: d.areas?.thinking?.kinds, tokens30: d.areas?.saved?.tokens30d?.mid,
+    // every token the open sea spared for agents so far: measured (Markdown) and modelled (reuses, the middle of the range)
+    spared: d.areas?.saved?.tokensAll?.mid, sparedM: d.areas?.saved?.tokensAll?.measured, sparedE: d.areas?.saved?.tokensAll?.modelled,
     webChecked: d.web?.checked, webBlock: d.web?.shares?.blocksSomeAgent, webAssist: d.web?.shares?.blocksAnAssistant, webLlms: d.web?.shares?.llms, webAvg: d.web?.average,
     // every kind of visitor under its own name (r_people, r_training, …): the table "Today, by what they do"
     ...Object.fromEntries(Object.entries(roles).map(([k, v]) => [`r_${k}`, v])) };
@@ -1335,25 +1363,51 @@ function badgeSvg(label, value) {
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${W}" height="22" role="img" aria-label="${e(label)}: ${e(value)}"><title>${e(label)}: ${e(value)}</title><rect width="${W}" height="22" rx="5" fill="#030b14"/><rect x="${lw}" width="${vw}" height="22" rx="5" fill="#0a1d31"/><rect x="${lw}" width="6" height="22" fill="#0a1d31"/><circle cx="11" cy="11" r="3.5" fill="#4fe3c1"/><g font-family="Verdana,DejaVu Sans,sans-serif" font-size="11"><text x="${lw / 2 + 5}" y="15" fill="#eaf4ff" text-anchor="middle">${e(label)}</text><text x="${lw + vw / 2}" y="15" fill="#7fd3ff" text-anchor="middle">${e(value)}</text></g></svg>`;
 }
 
+// the live numbers of the front page in one line, for the front page as Markdown
+function liveLine(d, base) {
+  const h = headline(d), at = new Date(d.at).toISOString().slice(11, 16);
+  return `Live, counted ${at} UTC: ${fmtN(h.ai)} visits from AI today and ${fmtN(h.people)} from people · ${fmtN(h.index)} places in the open index · ${fmtN(h.paths)} pathways in the Unibrain · ${fmtN(h.spared)} tokens spared for agents so far (measured ${fmtN(h.sparedM)}, modelled ${fmtN(h.sparedE)}) · version ${VERSION}. Every number: ${base}/open`;
+}
+// the pages of the sea an assistant reading for a person gets as Markdown: all of them but the via addresses, which
+// carry another site's page and are no page of the sea
+export const mdForAgent = (path) => !/^\/via\//.test(path);
+const UTF8 = new TextEncoder(), bytesOf = (s) => UTF8.encode(String(s || '')).length;
 // every answer passes here once more: an agent that asked for Markdown (Accept: text/markdown, or .md at the end of the
-// address) gets the page as Markdown (node/agentmd.mjs); the HTML answer says it varies with Accept
+// address) gets the page as Markdown (node/agentmd.mjs). So does an assistant that reads a page of the sea for a person
+// (ChatGPT-User, Claude-User, Perplexity-User, MistralAI-User … the census kind "assistant"), whatever it asked for:
+// the same words for a fraction of the tokens. Search engines, training crawlers and browsers get the HTML, which says
+// it varies with Accept and User-Agent. The operator switches the assistants' Markdown off without a release: put
+// "md-agents" into rest of immune:policy
 export async function handle(req, db, cfg = {}) {
   if ((req.method !== 'GET' && req.method !== 'HEAD') || cfg.path) return handleOne(req, db, cfg);
   const url = new URL(req.url), base = String(cfg.base || url.origin).replace(/\/+$/, ''), twin = mdTwin(url.pathname);
-  // what Markdown spares counts into the ledger of the Unibrain; the sea's own calls and crawlers count nowhere
-  const who0 = callerOf(req.headers), spared = (h, m) => { if (who0.kind !== 'self' && !['ai-crawler', 'crawler', 'search', 'search-ai'].includes(who0.kind)) seaOf(db, cfg, base).countBytes?.('md', h, m); };
-  // the front page as Markdown is the guide written for agents (llms.txt): what the sea is and how to call it, first
-  const front = (res, isTwin) => { const g = cfg.site?.['/llms.txt']?.body; if (!g || res.status !== 200) return null; res.body?.cancel?.().catch(() => {}); spared(Number(cfg.site?.['/']?.body?.length) || 0, g.length);
-    return new Response(withPrice(g, pricingOf(cfg.pay || payConfig(), base)), { headers: { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'public, max-age=300', vary: 'accept', link: `<${base}/>; rel="canonical"`, 'access-control-allow-origin': '*', ...(isTwin ? { 'x-robots-tag': 'noindex, follow' } : {}) } }); };
+  // what Markdown spares counts into the ledger of the Unibrain, in bytes of UTF-8 and with the door it came through;
+  // the sea's own calls and crawlers count nowhere
+  const who0 = callerOf(req.headers), counts = who0.kind !== 'self' && !['ai-crawler', 'crawler', 'search', 'search-ai'].includes(who0.kind);
+  const door = `/${((twin ?? url.pathname).split('/')[1] || '').slice(0, 24)}`;
+  const spared = (kind) => (h, m) => { if (counts) seaOf(db, cfg, base).countBytes?.(kind, h, m, { door }); };
+  // the front page as Markdown is the guide written for agents (llms.txt): what the sea is and how to call it, first,
+  // and under its title the live numbers the front page shows
+  const front = async (res, isTwin, agent = false) => {
+    const g = cfg.site?.['/llms.txt']?.body; if (!g || res.status !== 200) return null;
+    const page = await res.text().catch(() => '');
+    let md = withPrice(g, pricingOf(cfg.pay || payConfig(), base));
+    try { const line = liveLine(await liveNow(seaOf(db, cfg, base), db, cfg), base), i = md.indexOf('\n'); if (i > 0) md = `${md.slice(0, i + 1)}\n${line}\n${md.slice(i + 1)}`; } catch {}
+    spared(agent ? 'mdAgent' : 'md')(bytesOf(page) || Number(cfg.site?.['/']?.body?.length) || 0, bytesOf(md));
+    return new Response(md, { headers: { 'content-type': 'text/markdown; charset=utf-8', 'cache-control': 'public, max-age=300', vary: agent ? 'User-Agent, Accept' : 'accept',
+      link: agent ? `<${base}/>; rel="canonical", <${base}/>; rel="alternate"; type="text/html"` : `<${base}/>; rel="canonical"`, 'access-control-allow-origin': '*', ...(isTwin ? { 'x-robots-tag': 'noindex, follow' } : {}) } });
+  };
   if (twin) {
     const h = new Headers(req.headers); h.set('accept', 'text/html'); const u = new URL(req.url); u.pathname = twin;
     const res = await handleOne(new Request(u, { method: req.method, headers: h }), db, cfg);
-    return (twin === '/' && front(res, true)) || asMarkdown(res, { url: u.href, base, twin: true, spared });
+    return (twin === '/' && await front(res, true)) || asMarkdown(res, { url: u.href, base, twin: true, spared: spared('md') });
   }
   const res = await handleOne(req, db, cfg);
   if (res.status === 200 && /^text\/html/i.test(res.headers.get('content-type') || '')) {
-    if (wantsMarkdown(req.headers.get('accept'))) return (url.pathname === '/' && front(res, false)) || asMarkdown(res, { url: req.url, base, spared });
-    try { const v = res.headers.get('vary') || ''; if (!/\baccept\b/i.test(v)) res.headers.set('vary', v ? `${v}, accept` : 'accept'); } catch {}
+    if (wantsMarkdown(req.headers.get('accept'))) return (url.pathname === '/' && await front(res, false)) || asMarkdown(res, { url: req.url, base, spared: spared('md') });
+    const forAgent = mdForAgent(url.pathname);
+    if (forAgent && who0.kind === 'assistant' && !immune.atRest?.('mdagents')) return (url.pathname === '/' && await front(res, false, true)) || asMarkdown(res, { url: req.url, base, spared: spared('mdAgent'), agent: `${base}${url.pathname}${url.search}` });
+    try { let v = res.headers.get('vary') || ''; for (const k of forAgent ? ['accept', 'user-agent'] : ['accept']) if (!new RegExp(`\\b${k}\\b`, 'i').test(v)) v = v ? `${v}, ${k}` : k; res.headers.set('vary', v); } catch {}
   }
   return res;
 }
@@ -1391,10 +1445,12 @@ async function handleOne(req, db, cfg = {}) {
   ctx.who = who.name; ctx.whoKind = who.kind;
   // the sea's own calls (its sessions, proofs and buoy): answered like any other, counted nowhere, strengthen no path
   ctx.own = who.kind === 'self';
+  // the door the request came through (the first part of the address), for the ledger of what the shared brain spares
+  ctx.door = `/${(path.split('/')[1] || '').slice(0, 24)}`;
   // the country a caller stands in: from the node's own table when it has one (a node that stands alone), else from the platform in front of it
   const geo = cfg.geoOf ? { cc: cfg.geoOf(ip) || undefined } : { cc: (req.headers.get('x-vercel-ip-country') || '').slice(0, 2).toUpperCase() || undefined, lat: parseFloat(req.headers.get('x-vercel-ip-latitude')), lon: parseFloat(req.headers.get('x-vercel-ip-longitude')) };
   // a probe for files that hold secrets (/.env, wp-login …) is not a visit: the immune system counts it, the census does not
-  const countable = (d) => d !== '/live.json' && d !== '/badge.svg' && !d.startsWith('/gauge/in') && !d.startsWith('/check') && !(who.kind === 'browser' && (d === '/stats' || d === '/flow')) && !immune.hostile(d);
+  const countable = (d) => d !== '/live.json' && d !== '/badge.svg' && d !== '/savings/badge.svg' && !d.startsWith('/gauge/in') && !d.startsWith('/check') && !(who.kind === 'browser' && (d === '/stats' || d === '/flow')) && !immune.hostile(d);
   const counted = countable(door);
   // browsers' requests for pages that wait to hear whether the page was shown (see shownLine): a hash of address and
   // door, held in memory and never written down. What waited long enough was a program under a browser's name
@@ -1425,6 +1481,13 @@ async function handleOne(req, db, cfg = {}) {
     late.push({ ...who, path: door, geo, ...(who.kind === 'assistant' ? { ua: req.headers.get('user-agent'), ref: req.headers.get('referer'), method: req.method } : {}) });
   }
   seen(...late);
+  // a working session of the day (node/open.mjs): a caller from outside with a task for the brain, the doors or the stores
+  const working = !ctx.own && !ctx.readOnly && !NOT_WORK.has(who.kind);
+  if (working && WORK_PATH.test(path)) {
+    const sp = url.searchParams; let task = sp.get('q') || sp.get('task') || sp.get('need') || (path.startsWith('/rate/') ? path : '');
+    if (!task && req.method === 'POST') { try { const b = await req.clone().json(); task = b?.q || b?.task || b?.need || ''; } catch {} }
+    if (String(task || '').trim()) sea.workSession?.(workKey(ip, req.headers), clientFamily(null, req.headers.get('user-agent')), 'http');
+  }
   // a node that stands alone keeps its own shelf of ready answers (the work a CDN did for it elsewhere); every caller is counted first
   const shelf = cfg.shelf && req.method === 'GET' ? cfg.shelf : null, ready = shelf?.take(req, path, who.kind);
   if (ready?.fresh) return ready.res;
@@ -1510,7 +1573,8 @@ async function handleOne(req, db, cfg = {}) {
     if (path === '/.well-known/x402' || path === '/.well-known/x402.json') { const pc = cfg.pay || payConfig(), price = pricingOf(pc, base); return json({ version: 1, resources: [`${base}/route`], payTo: [{ network: 'eip155:8453', asset: 'USDC', address: pc.payTo }], pricing: [price], how_to_pay: price.how_to_pay, instructions: `${price.line}. Mare Liberum sells one move: POST ${base}/route?q=<task> gives the 10 best agent paths for exactly that task, each a /via/ address, ranked with reasons and the next step, for ${price.amount_usd} USDC (${price.human}) on Base. The first 3 paths are free: POST ${base}/route?q=<task>&free=true. The first call answers 402 with the terms (x402 v2 PAYMENT-REQUIRED header, v1 body); without an x402 client, send the USDC and POST ${base}/settle {"q":"<task>","tx":"<hash>"}. Prices: ${base}/job. Everything else in the sea is free.`, note: 'Mare Liberum takes no cut of anything else. Paid x402 services of others are listed in the open index with their price.', index: `${base}/search`, brain: `${base}/brain?q=paid+api+x402` }, 200, cached); }
     if ((path === '/v1/message:send' || path === '/a2a/v1/message:send') && req.method === 'POST') {
       seen({ kind: who.kind === 'self' ? 'self' : 'a2a', name: who.name || 'A2A agent' });
-      const r = await a2a(db, base, { jsonrpc: '2.0', id: 1, method: 'SendMessage', params: await body() }, ctx);
+      const params = await body(); if (working && a2aTask({ method: 'SendMessage', params })) sea.workSession?.(workKey(ip, req.headers), clientFamily(null, req.headers.get('user-agent')), 'a2a');
+      const r = await a2a(db, base, { jsonrpc: '2.0', id: 1, method: 'SendMessage', params }, ctx);
       return r.error ? json({ error: { code: r.error.code, message: r.error.message } }, 400) : json(r.result);
     }
     if (path === '/a2a') {
@@ -1518,6 +1582,7 @@ async function handleOne(req, db, cfg = {}) {
       if (req.method !== 'POST') return new Response(null, { status: 405, headers: { allow: 'GET, POST, OPTIONS', ...CORS } });
       const msg = await body();
       seen({ kind: who.kind === 'self' ? 'self' : 'a2a', name: who.name || 'A2A agent' });
+      if (working && (Array.isArray(msg) ? msg.slice(0, 10) : [msg]).some(a2aTask)) sea.workSession?.(workKey(ip, req.headers), clientFamily(null, req.headers.get('user-agent')), 'a2a');
       if (Array.isArray(msg)) return json(await Promise.all(msg.slice(0, 10).map((x) => a2a(db, base, x, ctx))));
       return json(await a2a(db, base, msg, ctx));
     }
@@ -1622,7 +1687,7 @@ async function handleOne(req, db, cfg = {}) {
     if (path === '/say') return json(await sea.say(await args(), ctx));
     if (path === '/inbox') return json(await sea.inbox(await args()));
     // the ecosystem: the current, watches, the reef, work between agents, seals, the heartbeat
-    if (path === '/tide') { const t = await sea.tide(await args(), ctx); try { if (!t?.calm) { const m = (async () => { await sea.flushSave?.(); if (!immune.atRest?.('market')) await sea.marketSweep?.(); })().catch((e) => console.error('mare_market', e?.message)); cfg.waitUntil?.(m); } } catch {} try { const p = indexNowDaily(db, base, sea, cfg).catch(() => {}); cfg.waitUntil?.(p); } catch {} try { const g = db('mare_stats', {}).then((idx) => sea.gaugeLakes(idx)).catch(() => {}); cfg.waitUntil?.(g); } catch {} return json(t); }
+    if (path === '/tide') { const t = await sea.tide(await args(), ctx); try { if (!t?.calm) { const m = (async () => { await sea.flushSave?.(); await sea.flushOpen?.(); if (!immune.atRest?.('market')) await sea.marketSweep?.(); })().catch((e) => console.error('mare_market', e?.message)); cfg.waitUntil?.(m); } } catch {} try { const p = indexNowDaily(db, base, sea, cfg).catch(() => {}); cfg.waitUntil?.(p); } catch {} try { const g = db('mare_stats', {}).then((idx) => sea.gaugeLakes(idx)).catch(() => {}); cfg.waitUntil?.(g); } catch {} return json(t); }
     if (path === '/indexnow.json') return json((await cfg.kv?.get(`indexnow:${new Date().toISOString().slice(0, 10)}`).catch(() => null)) || { today: 'not yet' }, 200, { 'cache-control': 'public, max-age=60' });
     if (path === '/tides') return json(await sea.tides(await args()), 200, { 'cache-control': 'public, max-age=60' });
     if (path === '/instinct.json' || path === '/instinct') return json(await sea.instinctState(), 200, { 'cache-control': 'public, max-age=30' });
@@ -1873,12 +1938,22 @@ async function handleOne(req, db, cfg = {}) {
       if (!a.q && !a.task) { const [st, top] = await Promise.all([sea.brainStats(), sea.topPaths(24)]); return vary(wantsHtml() ? html(brainHomePage(base, st, top), 60) : ajson(forAgents({ what: 'the first stop for agents on the internet', ask: `${base}/brain?q=<your task>`, ...st, top }), 200, { 'cache-control': 'public, max-age=60' })); }
       const r = await sea.think(a, ctx); if (!wantsHtml()) asked(r.task || a.q || a.task); return vary(wantsHtml() ? html(brainPage(base, r), 30) : ajson(forAgents(r, r.task), 200, { 'cache-control': 'no-store' }));
     }
+    // every number of the sea in public (node/open.mjs): the page, its data, the days as CSV, and the badge of what was spared
+    const fresh = cfg.openMemoMs ?? OPEN.memoMs;
+    if (/^\/(open(\.json|\/visits\.csv)?|savings(\.csv|\/badge\.svg))$/.test(path) && req.method === 'GET') {
+      const hdr = { 'cache-control': 'public, max-age=60, s-maxage=60', ...CORS }, file = (name) => ({ 'content-type': 'text/csv; charset=utf-8; header=present', 'content-disposition': `inline; filename="${name}"`, 'x-robots-tag': 'noindex', ...hdr });
+      if (path === '/savings/badge.svg') { const s = await memoOf(sea, 'savings', () => sea.savings(), fresh); return new Response(badgeSvg('tokens spared for agents by the open sea', fmtN(s?.hero?.tokens ?? 0)), { headers: { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'public, max-age=300, s-maxage=300', ...CORS } }); }
+      if (path === '/savings.csv') return new Response(savingsCsv((await memoOf(sea, 'savings:400', () => sea.savings({ days: 400 }), fresh)).daily), { headers: file('mare-liberum-savings.csv') });
+      if (path === '/open/visits.csv') return new Response(visitsCsv(await memoOf(sea, 'census:40', () => sea.censusDays(OPEN.csvDays), fresh)), { headers: file('mare-liberum-visits.csv') });
+      const v = await memoOf(sea, 'open', () => openOf({ sea, ledger: ledgerOf(cfg), version: VERSION, base, tools: [...TOOL_NAMES] }), fresh);
+      return path === '/open.json' ? ajson(v, 200, { ...hdr, 'x-robots-tag': 'noindex' }) : html(openPage(base, v), 60);
+    }
     // the areas of the Unibrain (node/areas.mjs): the map, the verified market, thinking, and what the shared brain saves
     if (/^\/(brain\/(areas|market|thinking)|savings)(\.json)?$/.test(path) && req.method === 'GET') {
       const acc = req.headers.get('accept') || '', asJson = path.endsWith('.json') || url.searchParams.get('format') === 'json' || (/application\/json/.test(acc) && !/text\/html/.test(acc)), at = path.replace(/\.json$/, '');
       const out = (v, page, age = 60) => (asJson ? ajson(v, 200, { 'cache-control': age ? `public, max-age=${age}` : 'no-store', ...(path.endsWith('.json') ? { 'x-robots-tag': 'noindex' } : {}) }) : html(page(), age));
       if (at === '/brain/areas') { const L = await sea.areasLive(); return out(areasJson(base, L), () => areasPage(base, L)); }
-      if (at === '/savings') { const v = await sea.savings(); return out(v, () => savingsPage(base, v)); }
+      if (at === '/savings') { const v = await memoOf(sea, 'savings', () => sea.savings(), fresh); return out(v, () => savingsPage(base, v)); }
       const a = await args();
       if (at === '/brain/market') { const r = await sea.market(a, ctx); return out(r, () => marketPage(base, r), a.q || a.need || a.host ? 0 : 120); }
       const r = await sea.thinking(a, ctx); return out(r, () => thinkingPage(base, r), a.q || a.task ? 0 : 300);
@@ -2112,9 +2187,10 @@ async function handleOne(req, db, cfg = {}) {
       const msg = await body(), list = Array.isArray(msg) ? msg : [msg];
       if (list.length > 16) return json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'at most 16 calls in one batch' } }, 400);
       for (const x of list) if (x?.method === 'initialize') seen(who.kind === 'self' ? { kind: 'self' } : { kind: 'mcp-client', name: clean(x?.params?.clientInfo?.name, 60) || who.name || 'MCP client' });
+      if (working) workMcp(sea, list.slice(0, 16), workKey(ip, req.headers, `sse:${url.searchParams.get('sessionId') || url.searchParams.get('session_id')}`), req.headers.get('user-agent'), s.app ? 'app' : 'mcp');
       if (list.length > 1) { const wait = immune.spend(ip, 5 * (list.length - 1)); if (wait) return json({ jsonrpc: '2.0', id: null, error: { code: -32000, message: 'the sea asks for a calmer pace from this address; come back in a moment' } }, 429, { 'retry-after': String(wait) }); }
       // accepted at once; the answers travel on the stream
-      const work = (async () => { for (const m of list) { const r = await mcp(db, base, m, ip, s.app).catch(() => null); if (r) s.send(r); } })();
+      const work = (async () => { for (const m of list) { tallyTool(sea, m, s.app || ctx.own || ctx.readOnly); const r = await mcp(db, base, m, ip, s.app).catch(() => null); if (r) s.send(r); } })();
       try { cfg.waitUntil?.(work); } catch {}
       return new Response('Accepted', { status: 202, headers: { 'content-type': 'text/plain; charset=utf-8', ...CORS } });
     }
@@ -2125,13 +2201,15 @@ async function handleOne(req, db, cfg = {}) {
       if (req.method !== 'POST') return new Response(null, { status: 405, headers: { allow: 'POST, OPTIONS', ...CORS } });
       const msg = await body();
       for (const x of Array.isArray(msg) ? msg : [msg]) if (x?.method === 'initialize') seen(who.kind === 'self' || /mare-proof|first-swimmer|kasse-proof/i.test(x.params?.clientInfo?.name || '') ? { kind: 'self' } : { kind: 'mcp-client', name: clean(x.params?.clientInfo?.name, 60) || who.name || 'MCP client' });
+      if (working) workMcp(sea, (Array.isArray(msg) ? msg : [msg]).slice(0, 16), workKey(ip, req.headers), req.headers.get('user-agent'), app ? 'app' : 'mcp');
       if (Array.isArray(msg)) {
         // a batch has an end, is answered one call after the other, and every call in it counts in the caller's pace
         if (msg.length > 16) return json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'at most 16 calls in one batch' } }, 400);
         const wait = immune.spend(ip, 5 * (msg.length - 1)); if (wait) return json({ jsonrpc: '2.0', id: null, error: { code: -32000, message: 'the sea asks for a calmer pace from this address; come back in a moment' } }, 429, { 'retry-after': String(wait) });
-        const out = []; for (const m of msg) { const r = await mcp(db, base, m, ip, app); if (r) out.push(r); }
+        const out = []; for (const m of msg) { tallyTool(sea, m, app || ctx.own || ctx.readOnly); const r = await mcp(db, base, m, ip, app); if (r) out.push(r); }
         return out.length ? json(out) : new Response(null, { status: 202, headers: CORS });
       }
+      tallyTool(sea, msg, app || ctx.own || ctx.readOnly);
       const out = await mcp(db, base, msg, ip, app);
       return out ? json(out) : new Response(null, { status: 202, headers: CORS });
     }
