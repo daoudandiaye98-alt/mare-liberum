@@ -214,6 +214,22 @@ await proof('each tool call at /mcp counts under its tool, per day; the sea\'s o
   const after = await day(), d = (k) => (after[k] || 0) - (before[k] || 0);
   assert.equal(d('think'), 2); assert.equal(d('search'), 1); assert.equal(d('stats'), 1); assert.equal(d('(no such tool)'), 1); assert.equal(d('no_such_tool'), 0);
 });
+await proof('the sea\'s own tool calls at /mcp, /mcp/app and in a batch count nowhere: no ask in the brain\'s stats, no reuse, no walk; the same call from a foreign client counts (3.33.0)', async () => {
+  const q = 'fact check a claim about creatine', kvStats = async () => (await kv.get('brain:stats')) || {};
+  // a confirmed path for the task, laid and rated by foreign agents, so that think hands out a solved part (a reuse)
+  await sea().layPath({ q, to: 'https://pubmed.ncbi.nlm.nih.gov/', title: 'PubMed' }, { ip: '198.18.9.8' });
+  const id = (await sea().findPaths(q, 1))[0].id; await sea().rate(id, { worked: 1 }, { ip: '198.18.9.9' });
+  const think = (ua, path = '/mcp', n = 1) => mcp(path, n > 1 ? Array.from({ length: n }, (_, i) => ({ jsonrpc: '2.0', id: i + 1, method: 'tools/call', params: { name: 'think', arguments: { q } } })) : { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'think', arguments: { q } } }, ua);
+  const rate = (ua) => mcp('/mcp', { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'rate_path', arguments: { id, outcome: 'worked' } } }, ua);
+  const asks0 = (await kvStats()).asks || 0, path0 = (await counts()).path || 0, walks0 = (await sea().findPaths(q, 1))[0].worked || 0;
+  for (const r of [await think(UA.own), await think(UA.own, '/mcp/app'), await think(UA.own, '/mcp', 2)]) { assert.equal(r.status, 200); assert.doesNotMatch(r.text, /"isError":true/); }
+  const rOwn = JSON.parse((await rate(UA.own)).text); assert.match(rOwn.result.content[0].text, /the sea's own calls are not counted/);
+  assert.equal((await kvStats()).asks || 0, asks0, 'own think: no ask in the brain\'s stats');
+  assert.equal((await counts()).path || 0, path0, 'own think: no reuse in the ledger');
+  assert.equal((await sea().findPaths(q, 1))[0].worked || 0, walks0, 'own rate_path: the path is not strengthened');
+  // the same call from outside counts once each
+  await think('Cursor/1.7'); assert.equal((await kvStats()).asks || 0, asks0 + 1, 'a foreign think is an ask'); assert.equal((await counts()).path || 0, path0 + 1, 'a foreign think that hands out a confirmed path is a reuse');
+});
 await proof('/mcp/app stays byte for byte what it was: initialize (but for the version) and tools/list as in 3.32.0', async () => {
   const h = (s) => createHash('sha256').update(s).digest('hex');
   const init = await mcp('/mcp/app', { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2025-06-18', clientInfo: { name: 'Anthropic/ClaudeAI' } } }, 'Claude-User');

@@ -779,8 +779,10 @@ const OPEN_TOOLS = openTools(TOOLS);
 
 const strip0 = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v != null && v !== ''));
 async function entryWithTraces(db, id) { const e = await db('mare_get', { id: String(id || '') }); if (!e) return null; const t = db.flow ? await db.flow.tracesOf(e.identifier).catch(() => null) : null; return t ? { ...e, trace: t.standing, traces: t.traces } : e; }
-async function mcpCall(db, base, name, a, ip) {
-  const sea = db.flow, ctx = { ip, door: '/mcp' };
+// own: the call came from the sea itself (its sessions, proofs and buoy): answered like any other, counted nowhere and
+// strengthening no path, as over HTTP (ctx.own in handleOne)
+async function mcpCall(db, base, name, a, ip, own = false) {
+  const sea = db.flow, ctx = { ip, door: '/mcp', ...(own ? { own: true } : {}) };
   if (name === 'ask') return await sea.ask(a, ctx);
   if (name === 'route') return await sea.route(a, ctx);
   if (name === 'decide') return await sea.ask({ ...a, kind: a?.kind || 'merchant', compact: true }, ctx);
@@ -896,7 +898,7 @@ function firstContact(name, a, out, base) {
   }
   return out;
 }
-async function mcp(db, base, msg, ip, app = false) {
+async function mcp(db, base, msg, ip, app = false, own = false) {
   const ok = (result) => ({ jsonrpc: '2.0', id: msg.id, result });
   const err = (code, message) => ({ jsonrpc: '2.0', id: msg.id ?? null, error: { code, message } });
   if (!msg || msg.jsonrpc !== '2.0' || typeof msg.method !== 'string') return err(-32600, 'Invalid Request');
@@ -914,7 +916,7 @@ async function mcp(db, base, msg, ip, app = false) {
       try {
         if (app && !APP_TOOLS.has(msg.params?.name)) return ok({ content: [{ type: 'text', text: `unknown tool for this endpoint: ${String(msg.params?.name || '').slice(0, 40)} — the full set is at ${base}/mcp` }], isError: true });
         const args = { ...(msg.params?.arguments || {}) }; if (app) { delete args.by; delete args.pass; if (msg.params?.name === 'read_page') delete args.q; }
-        const out = await mcpCall(db, base, msg.params?.name, args, ip);
+        const out = await mcpCall(db, base, msg.params?.name, args, ip, own);
         if (app && out && typeof out === 'object') appClean(msg.params?.name, out);
         if (!app) firstContact(msg.params?.name, args, out, base);
         return ok({ content: [{ type: 'text', text: JSON.stringify(out) }], structuredContent: out, isError: false });
@@ -2244,7 +2246,7 @@ async function handleOne(req, db, cfg = {}) {
       if (working) workMcp(sea, list.slice(0, 16), workKey(ip, req.headers, `sse:${url.searchParams.get('sessionId') || url.searchParams.get('session_id')}`), req.headers.get('user-agent'), s.app ? 'app' : 'mcp');
       if (list.length > 1) { const wait = immune.spend(ip, 5 * (list.length - 1)); if (wait) return json({ jsonrpc: '2.0', id: null, error: { code: -32000, message: 'the sea asks for a calmer pace from this address; come back in a moment' } }, 429, { 'retry-after': String(wait) }); }
       // accepted at once; the answers travel on the stream
-      const work = (async () => { for (const m of list) { tallyTool(sea, m, s.app || ctx.own || ctx.readOnly); const r = await mcp(db, base, m, ip, s.app).catch(() => null); if (r) s.send(r); } })();
+      const work = (async () => { for (const m of list) { tallyTool(sea, m, s.app || ctx.own || ctx.readOnly); const r = await mcp(db, base, m, ip, s.app, ctx.own).catch(() => null); if (r) s.send(r); } })();
       try { cfg.waitUntil?.(work); } catch {}
       return new Response('Accepted', { status: 202, headers: { 'content-type': 'text/plain; charset=utf-8', ...CORS } });
     }
@@ -2260,11 +2262,11 @@ async function handleOne(req, db, cfg = {}) {
         // a batch has an end, is answered one call after the other, and every call in it counts in the caller's pace
         if (msg.length > 16) return json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'at most 16 calls in one batch' } }, 400);
         const wait = immune.spend(ip, 5 * (msg.length - 1)); if (wait) return json({ jsonrpc: '2.0', id: null, error: { code: -32000, message: 'the sea asks for a calmer pace from this address; come back in a moment' } }, 429, { 'retry-after': String(wait) });
-        const out = []; for (const m of msg) { tallyTool(sea, m, app || ctx.own || ctx.readOnly); const r = await mcp(db, base, m, ip, app); if (r) out.push(r); }
+        const out = []; for (const m of msg) { tallyTool(sea, m, app || ctx.own || ctx.readOnly); const r = await mcp(db, base, m, ip, app, ctx.own); if (r) out.push(r); }
         return out.length ? json(out) : new Response(null, { status: 202, headers: CORS });
       }
       tallyTool(sea, msg, app || ctx.own || ctx.readOnly);
-      const out = await mcp(db, base, msg, ip, app);
+      const out = await mcp(db, base, msg, ip, app, ctx.own);
       return out ? json(out) : new Response(null, { status: 202, headers: CORS });
     }
     if (path.startsWith('/ingest/') && req.method === 'POST') {
