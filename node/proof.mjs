@@ -16,8 +16,8 @@ import { page, esc } from './pages.mjs';
 
 export const PROOF_DIR = new URL('../proof/', import.meta.url);
 // the forms a page is counted in, in the order the page shows them
-export const FORMATS = ['html', 'text', 'readability', 'markdown', 'served', 'mcp'];
-export const FORMAT_NAME = { html: 'raw HTML', text: 'plain text (readability-style)', readability: 'Mozilla Readability text (cross-check)', markdown: 'Mare reader Markdown', served: 'Mare /r/ answer', mcp: 'Mare MCP read_page answer' };
+export const FORMATS = ['html', 'text', 'readability', 'prior', 'markdown', 'served', 'servedFull', 'mcp'];
+export const FORMAT_NAME = { html: 'raw HTML', text: 'plain text (readability-style)', readability: 'Mozilla Readability text (cross-check)', prior: 'Mare reader Markdown of the release before (same copy)', markdown: 'Mare reader Markdown', served: 'Mare /r/ answer', servedFull: 'Mare /r/ answer, format=full', mcp: 'Mare MCP read_page answer' };
 export const TOKENIZER_IDS = ['o200k_base', 'cl100k_base', 'claude-legacy'];
 
 // ------------------------------------------------------------------ statistics, the same for the bench, the page and the proofs
@@ -44,7 +44,7 @@ export const measuredRows = (d) => (d?.tasks || []).filter((t) => t.page?.tokens
 export function summarize(d) {
   const tasks = d?.tasks || [], rows = measuredRows(d), toks = (d?.tokenizers || []).map((t) => t.id), m = d?.method || {};
   const tokOf = (t, tok, f) => t.page?.tokens?.[tok]?.[f];
-  const brains = tasks.filter((t) => t.brain?.status === 200 && t.brain?.tokens);
+  const brains = tasks.filter((t) => t.brain?.status === 200 && t.brain?.tokens), compacts = tasks.filter((t) => t.brainCompact?.status === 200 && t.brainCompact?.tokens);
   const groups = {};
   for (const t of tasks) { const g = groups[t.group] || (groups[t.group] = { tasks: 0, measured: 0 }); g.tasks++; if (t.page?.tokens) g.measured++; }
   // like for like: the pages where both the plain text and the Markdown still hold the page (see keeps)
@@ -57,6 +57,8 @@ export function summarize(d) {
     // how many times larger one form is than another, page by page (the median of those ratios)
     const per = (a, b) => round(median(rows.map((t) => { const x = tokOf(t, tok, a), y = tokOf(t, tok, b); return x > 0 && y > 0 ? x / y : null; })), 1);
     times[tok] = { htmlPerMarkdown: per('html', 'markdown'), htmlPerText: per('html', 'text'), markdownPerText: per('markdown', 'text'), servedPerText: per('served', 'text'), readabilityPerText: per('readability', 'text') };
+    // a run with the reader of the release before beside this one (same copy of each page): how many times larger it was
+    if (rows.some((t) => tokOf(t, tok, 'prior') != null)) Object.assign(times[tok], { priorPerMarkdown: per('prior', 'markdown'), priorPerText: per('prior', 'text') });
     // the search loop without the sea, modelled: each search hands the model a list of results, each page read to judge
     // it hands the model its text. Sizes from this run: one result (title, address, snippet) and one page as plain text
     const resultTokens = int(median(rows.map((t) => tokOf(t, tok, 'result')))), pageTokens = int(median(rows.map((t) => tokOf(t, tok, 'text'))));
@@ -65,6 +67,8 @@ export function summarize(d) {
     // the brain's answer for every task, and for the tasks where it led to the destination's site (a confirmed pathway)
     const led = brains.filter((t) => t.brain.destinationHost === true);
     finding[tok] = { brain: stats(brains.map((t) => t.brain.tokens[tok])), led: stats(led.map((t) => t.brain.tokens[tok])), resultTokens, pageTokens, searchTokens: per1, low: cost(loop.low), high: cost(loop.high) };
+    // the brain's short answer (fmt=compact), where the run asked for it
+    if (compacts.length) Object.assign(finding[tok], { compact: stats(compacts.map((t) => t.brainCompact.tokens[tok])), ledCompact: stats(compacts.filter((t) => t.brainCompact.destinationHost === true).map((t) => t.brainCompact.tokens[tok])) });
     // a whole task, where the brain led to the destination: finding the page and reading it. With the sea: the brain's
     // answer and the reader's Markdown (both measured). Without: the modelled loop and the page as plain text (or, for an
     // agent that reads raw HTML, as HTML)
@@ -72,18 +76,21 @@ export function summarize(d) {
     whole[tok] = { n: both.length, sea: stats(both.map((t) => t.brain.tokens[tok] + tokOf(t, tok, 'markdown'))),
       low: stats(both.map((t) => finding[tok].low + tokOf(t, tok, 'text'))), high: stats(both.map((t) => finding[tok].high + tokOf(t, tok, 'text'))),
       lowHtml: stats(both.map((t) => finding[tok].low + tokOf(t, tok, 'html'))), highHtml: stats(both.map((t) => finding[tok].high + tokOf(t, tok, 'html'))) };
+    // with the short answer: where it led to the page's site, its answer and the reader's Markdown
+    if (compacts.length) { const bc = rows.filter((t) => t.brainCompact?.status === 200 && t.brainCompact.destinationHost === true && t.brainCompact.tokens?.[tok] != null); Object.assign(whole[tok], { compactN: bc.length, seaCompact: stats(bc.map((t) => t.brainCompact.tokens[tok] + tokOf(t, tok, 'markdown'))), lowCompact: stats(bc.map((t) => finding[tok].low + tokOf(t, tok, 'text'))), highCompact: stats(bc.map((t) => finding[tok].high + tokOf(t, tok, 'text'))) }); }
     // characters (JavaScript string length, the unit the savings ledger counts) and UTF-8 bytes per token, over all pages
     const ratio = (f, unit) => { let a = 0, b = 0; for (const t of rows) { const x = t.page?.[unit]?.[f], y = tokOf(t, tok, f); if (x > 0 && y > 0) { a += x; b += y; } } return b ? round(a / b, 2) : null; };
     ratios[tok] = { html: ratio('html', 'chars'), text: ratio('text', 'chars'), markdown: ratio('markdown', 'chars'), served: ratio('served', 'chars'),
       bytes: { html: ratio('html', 'bytes'), text: ratio('text', 'bytes'), markdown: ratio('markdown', 'bytes'), served: ratio('served', 'bytes') } };
   }
   // whether a form still holds the page (a rough check, see the method): a form can be small because it lost the page
-  const keepsOf = (list) => Object.fromEntries(['text', 'readability', 'markdown'].map((f) => { const c = list.filter((t) => typeof t.page?.keeps?.[f] === 'boolean'); return [f, { kept: c.filter((t) => t.page.keeps[f]).length, of: c.length }]; }).filter(([, v]) => v.of));
+  const keepsOf = (list) => Object.fromEntries(['text', 'readability', 'prior', 'markdown'].map((f) => { const c = list.filter((t) => typeof t.page?.keeps?.[f] === 'boolean'); return [f, { kept: c.filter((t) => t.page.keeps[f]).length, of: c.length }]; }).filter(([, v]) => v.of));
   const keeps = { all: keepsOf(rows), ...Object.fromEntries(Object.keys(groups).map((g) => [g, keepsOf(rows.filter((t) => t.group === g))])) };
   // who confirmed the pathways of the shopping tasks, as the brain's answers name them (on their checks and notes)
   const confirmedBy = {}; for (const t of brains) for (const who of t.brain.confirmedBy || []) confirmedBy[who] = (confirmedBy[who] || 0) + 1;
   return { tasks: tasks.length, measured: rows.length, keeps, confirmedBy, skipped: tasks.filter((t) => !t.page?.tokens).map((t) => ({ id: t.id, why: t.skipped || 'not measured' })),
-    brains: brains.length, led: brains.filter((t) => t.brain.destinationHost === true).length, ledByGroup: Object.fromEntries(Object.keys(groups).map((g) => [g, brains.filter((t) => t.group === g && t.brain.destinationHost === true).length])),
+    brains: brains.length, led: brains.filter((t) => t.brain.destinationHost === true).length,
+    ...(compacts.length ? { compacts: compacts.length, ledCompact: compacts.filter((t) => t.brainCompact.destinationHost === true).length, firstPathCompact: compacts.filter((t) => t.brainCompact.pathRank === 1).length } : {}), ledByGroup: Object.fromEntries(Object.keys(groups).map((g) => [g, brains.filter((t) => t.group === g && t.brain.destinationHost === true).length])),
     firstPath: brains.filter((t) => t.brain.pathRank === 1).length, groups, capped: rows.filter((t) => t.page?.capped).length, reading, readingByGroup, fair, times, finding, whole, ratios };
 }
 
@@ -100,7 +107,19 @@ export function loadBench({ dir = PROOF_DIR, fresh = false } = {}) {
   return d;
 }
 export function loadTasks({ dir = PROOF_DIR } = {}) { try { return JSON.parse(readFileSync(new URL('tasks.json', dir), 'utf8')); } catch { return null; } }
-export const benchFile = (name) => /^bench-\d{4}-\d{2}-\d{2}\.json$|^tasks\.json$/.test(String(name)) ? (() => { try { return readFileSync(new URL(name, PROOF_DIR), 'utf8'); } catch { return null; } })() : null;
+// a run of a branch before its deploy (tools/proof-bench.mjs --tag lean): proof/bench-<day>-lean.json, the newest one
+let leanCache = null;
+export function loadLean({ dir = PROOF_DIR, fresh = false } = {}) {
+  if (leanCache && !fresh) return leanCache.d;
+  let d = null;
+  try {
+    const name = readdirSync(dir).filter((f) => /^bench-\d{4}-\d{2}-\d{2}-lean\.json$/.test(f)).sort().pop();
+    if (name) { d = JSON.parse(readFileSync(new URL(name, dir), 'utf8')); d.file = name; }
+  } catch { d = null; }
+  leanCache = { d };
+  return d;
+}
+export const benchFile = (name) => /^bench-\d{4}-\d{2}-\d{2}(-lean)?\.json$|^tasks\.json$/.test(String(name)) ? (() => { try { return readFileSync(new URL(name, PROOF_DIR), 'utf8'); } catch { return null; } })() : null;
 
 // ------------------------------------------------------------------ the calibration: characters per token, measured
 // Written from the newest run by tools/proof-bench.mjs --ratio (tools/bench-proof.mjs checks that it matches that run).
@@ -244,7 +263,85 @@ function liveBlock(live) {
   return `<p class="vz-note" data-live>Re-read by the node itself, about once an hour: last at <b>${esc(e.at.slice(0, 16).replace('T', ' '))} UTC</b> (${esc(e.task)}, ${esc(e.host)}): raw HTML ${n(e.chars.html)} characters ≈ ${n(e.tokens.html)} tokens, Markdown ${n(e.chars.markdown)} characters ≈ ${n(e.tokens.markdown)} tokens${e.truncated ? ' (the reader cut it)' : ''}. That is an estimate: characters divided by the characters per token this run measured, not a count. The bench counted ${n(e.bench?.html)} and ${n(e.bench?.markdown)} on ${esc(e.bench?.date || '')}.</p>`;
 }
 
-export function proofPage(base, d, live) {
+// ------------------------------------------------------------------ before and after: the lean reader and the brain's short answer
+// The run above is the live sea (its reader of the release it ran). A run of a branch before its deploy (--tag lean) is
+// shown beside it, said to be local and not live, until the next live run measures the deployed sea.
+const ago = (L) => `${L.date} between ${hm(L.startedAt)} and ${hm(L.endedAt)} UTC`;
+const times = (x) => (x == null ? '–' : `${n(x)}×`);
+function leanSays(d, L) {
+  const a = d.summary, b = L.summary, ra = a.reading[TOK], rb = b.reading[TOK], ta = a.times[TOK], tb = b.times[TOK], fa = a.finding[TOK], fb = b.finding[TOK], wa = a.whole[TOK], wb = b.whole[TOK], ka = a.keeps.all, kb = b.keeps.all;
+  const out = [
+    `The reader's Markdown of the median page: ${n(ra.markdown?.median)} tokens on the live sea (${esc(d.bench.seaVersion || '')}), ${n(rb.markdown?.median)} with the lean reader; plain text, the baseline, ${n(ra.text?.median)} and ${n(rb.text?.median)}. On the same copy of each page the reader of ${esc(L.bench.prior?.version || 'the release before')} wrote ${n(rb.prior?.median)} tokens, page by page a median ${times(tb.priorPerMarkdown)} the lean Markdown.`,
+    `Against plain text, page by page: the Markdown was a median ${times(ta.markdownPerText)} the plain text before, and is ${times(tb.markdownPerText)} now. It still holds the page (its heading, on shop pages a price) on ${n(kb.markdown?.kept)} of ${n(kb.markdown?.of)} pages; plain text on ${n(kb.text?.kept)} of ${n(kb.text?.of)}.`,
+    `The /r/ answer of the median page: ${n(ra.served?.median)} tokens before, ${n(rb.served?.median)} now (one line of source above the page, one line of how to cite it below); format=full keeps the long lines: ${n(rb.servedFull?.median)}. The MCP tool read_page: ${n(ra.mcp?.median)} before, ${n(rb.mcp?.median)} now.`,
+  ];
+  if (fb.compact?.n) out.push(`Finding the page: the brain's short answer (fmt=compact) costs a median ${n(fb.compact.median)} tokens (middle half ${mid(fb.compact)}), against ${n(fa.brain.median)} for the full answer on the live sea and a modelled search loop of ${n(fb.low)}–${n(fb.high)}. It led to the page's site for ${n(b.ledCompact)} of ${n(b.compacts)} tasks, with the task's confirmed pathway first ${n(b.firstPathCompact)} times.`);
+  if (wb.compactN) out.push(`A whole task where the short answer led to the page (${n(wb.compactN)} tasks): ${n(wb.seaCompact?.median)} tokens with the sea (short answer and lean Markdown), against ${n(wa.sea?.median)} before; without the sea ${n(wb.lowCompact?.median)} to ${n(wb.highCompact?.median)} for an agent whose tool hands it plain text.`);
+  return out;
+}
+function leanTable(d, L) {
+  const a = d.summary, b = L.summary, ra = a.reading[TOK], rb = b.reading[TOK], fa = a.finding[TOK], fb = b.finding[TOK], ka = a.keeps.all, kb = b.keeps.all;
+  const row = (what, x, y, note = '') => `<tr><td>${what}</td><td>${x}</td><td>${y}</td><td>${note}</td></tr>`;
+  return `<table class="tbl"><thead><tr><th>median, ${TOK}</th><th>before: the live sea, ${esc(d.bench.seaVersion || '')}</th><th>after: lean/1, local</th><th>beside it</th></tr></thead><tbody>
+${row('plain text of the page (the baseline)', n(ra.text?.median), n(rb.text?.median), 'the same extraction, read again')}
+${row('<b>the reader\'s Markdown</b>', n(ra.markdown?.median), `<b>${n(rb.markdown?.median)}</b>`, `the ${esc(L.bench.prior?.version || 'earlier')} reader on the same copy: ${n(rb.prior?.median)}`)}
+${row('Markdown still holds the page', `${n(ka.markdown?.kept)} of ${n(ka.markdown?.of)}`, `${n(kb.markdown?.kept)} of ${n(kb.markdown?.of)}`, `plain text: ${n(kb.text?.kept)} of ${n(kb.text?.of)}`)}
+${row('the /r/ answer', n(ra.served?.median), n(rb.served?.median), `format=full: ${n(rb.servedFull?.median)}`)}
+${row('the MCP tool read_page', n(ra.mcp?.median), n(rb.mcp?.median), '')}
+${fb.compact?.n ? row('<b>the brain\'s answer</b>', `${n(fa.brain.median)} (full)`, `<b>${n(fb.compact.median)}</b> (fmt=compact)`, `the full answer of the local node: ${n(fb.brain.median)}`) : ''}
+${fb.compact?.n ? row('it led to the page\'s site', `${n(a.led)} of ${n(a.brains)}`, `${n(b.ledCompact)} of ${n(b.compacts)}`, '') : ''}
+${row('search loop without the sea, modelled', `${n(fa.low)}–${n(fa.high)}`, `${n(fb.low)}–${n(fb.high)}`, 'from each run\'s own page sizes')}
+</tbody></table>`;
+}
+// per task: the earlier reader (a ring), the lean reader (a dot), plain text (a dot), on one logarithmic axis
+function leanReadingChart(L) {
+  const rows = measuredRows(L).filter((t) => tk(t, 'prior') > 0);
+  const F = [['prior', 'vz-ring', 'the earlier reader\'s Markdown, same copy'], ['markdown', 'vz-md', 'the lean reader\'s Markdown'], ['text', 'vz-text', 'plain text']];
+  const vals = rows.flatMap((t) => F.map(([f]) => tk(t, f))).filter((v) => v > 0);
+  if (!vals.length) return '';
+  const lo = Math.floor(Math.log10(Math.min(...vals))), hi = Math.max(lo + 1, Math.ceil(Math.log10(Math.max(...vals))));
+  const x = (v) => (2 + ((Math.log10(Math.max(v, 10 ** lo)) - lo) / (hi - lo)) * 96).toFixed(2);
+  const ticks = []; for (let e = lo; e <= hi; e++) ticks.push(10 ** e);
+  const lab = (v) => (v >= 1e6 ? `${v / 1e6}M` : v >= 1e3 ? `${v / 1e3}K` : String(v));
+  const sorted = [...rows].sort((a, b) => tk(b, 'prior') - tk(a, 'prior'));
+  const row = (t) => { const v = F.map(([f]) => tk(t, f)), ok = v.filter((y) => y > 0);
+    return `<li><span class="vz-n">${esc(t.task)} <small>${esc(hostOf(t.page.final || t.url))}</small></span><svg class="vz-s" width="100%" height="22" aria-hidden="true" focusable="false">${gridOf(ticks, x, 22)}<line class="vz-span" x1="${x(Math.min(...ok))}%" x2="${x(Math.max(...ok))}%" y1="11" y2="11"/>${F.map(([f, c, name], i) => (v[i] > 0 ? `<circle class="${c}" cx="${x(v[i])}%" cy="11" r="5.5"><title>${esc(t.task)}: ${esc(name)} ${n(v[i])} tokens</title></circle>` : '')).join('')}</svg><span class="vz-vh">${F.map(([, , name], i) => `${esc(name)} ${n(v[i])}`).join(' · ')} tokens</span></li>`; };
+  return `<figure class="vz wide" id="chart-lean"><figcaption>The reader before and after, page by page (${TOK}, one row per task, the same copy of each page, a logarithmic axis)</figcaption><ul class="vz-k"><li><i class="vz-ringkey"></i>${esc(F[0][2])}</li><li><i class="vz-md"></i>${esc(F[1][2])}</li><li><i class="vz-text"></i>${esc(F[2][2])}</li></ul>${axisRow(ticks, x, lab)}<ol class="vz-r">${sorted.map(row).join('')}</ol>${axisRow(ticks, x, lab)}</figure>`;
+}
+// per task: the live sea's full answer (a ring), the short answer (a dot), the modelled search loop (a band)
+function compactChart(d, L) {
+  const s = L.summary.finding[TOK], before = new Map(d.tasks.filter((t) => t.brain?.tokens?.[TOK] > 0).map((t) => [t.id, t.brain.tokens[TOK]]));
+  const rows = L.tasks.filter((t) => t.brainCompact?.tokens?.[TOK] > 0);
+  if (!rows.length || s.low == null) return '';
+  const top = Math.max(s.high, ...rows.map((t) => Math.max(t.brainCompact.tokens[TOK], before.get(t.id) || 0))), step = [500, 1000, 2000, 2500, 5000, 10000].find((k) => top / k <= 5) || 10000, max = Math.ceil(top / step) * step;
+  const x = (v) => (2 + (v / max) * 96).toFixed(2), ticks = []; for (let v = 0; v <= max; v += step) ticks.push(v);
+  const sorted = [...rows].sort((a, b) => (before.get(b.id) || 0) - (before.get(a.id) || 0));
+  const row = (t) => { const v = t.brainCompact.tokens[TOK], w = before.get(t.id);
+    return `<li><span class="vz-n">${esc(t.task)}</span><svg class="vz-s" width="100%" height="22" aria-hidden="true" focusable="false"><rect class="vz-band" x="${x(s.low)}%" y="-1" width="${(x(s.high) - x(s.low)).toFixed(2)}%" height="24"/><line class="vz-edge" x1="${x(s.low)}%" x2="${x(s.low)}%" y1="-1" y2="23"/><line class="vz-edge" x1="${x(s.high)}%" x2="${x(s.high)}%" y1="-1" y2="23"/>${gridOf(ticks, x, 22)}${w ? `<line class="vz-span" x1="${x(Math.min(v, w))}%" x2="${x(Math.max(v, w))}%" y1="11" y2="11"/><circle class="vz-ring" cx="${x(w)}%" cy="11" r="5.5"><title>${esc(t.task)}: the full answer on the live sea ${n(w)} tokens</title></circle>` : ''}<circle class="vz-md" cx="${x(v)}%" cy="11" r="5.5"><title>${esc(t.task)}: the short answer ${n(v)} tokens</title></circle></svg><span class="vz-vh">the full answer on the live sea ${n(w)} tokens, the short answer ${n(v)} tokens</span></li>`; };
+  return `<figure class="vz wide" id="chart-compact"><figcaption>Finding the page, before and after (${TOK}, one row per task): the brain's full answer on the live sea, its short answer from the branch, the search loop modelled</figcaption><ul class="vz-k"><li><i class="vz-ringkey"></i>the full answer, live sea, measured</li><li><i class="vz-md"></i>the short answer (fmt=compact), local node, measured</li><li><i class="vz-bandkey"></i>search loop without the sea, modelled: ${n(s.low)} to ${n(s.high)}</li></ul>${axisRow(ticks, x, n)}<ol class="vz-r">${sorted.map(row).join('')}</ol>${axisRow(ticks, x, n)}</figure>`;
+}
+function leanSection(d, L) {
+  if (!L?.summary || !d?.summary) return '';
+  const b = L.bench, m = L.method || {};
+  return `<h2>Before and after: the lean reader</h2>
+<p class="vz-note" data-lean><b>Not live yet.</b> ${esc(sentence(m.run || 'a run of a branch before its deploy'))} Measured on ${esc(ago(L))}: the reader and the brain of the branch on a local node (${esc(b.sea)}), the same ${n(L.summary.tasks)} tasks, the same pages read again. Beside it the run above: the live sea. After the deploy, the node's hourly re-read and the next run of the bench measure it on mareliberum.dev.</p>
+<p>What changed: the reader keeps the main part of a page and leaves menus, cookie banners, footers, galleries, other products and repeated links out; a product page starts with what an agent buys by (name, price and currency, stock, options, the page's address), its own text after. The /r/ answer carries one line of source above the page and one line of how to cite it below. The brain answers short when asked (<code>/brain?q=&lt;task&gt;&amp;fmt=compact</code>): the confirmed pathways, one line of reason each, the one next step. The full answers stay as they were.</p>
+<div class="box vz-say"><h3>What the two runs say</h3><ul>${leanSays(d, L).map((x) => `<li>${x}</li>`).join('')}</ul></div>
+${leanTable(d, L)}
+${leanReadingChart(L)}
+${compactChart(d, L)}
+<p class="vz-note">${esc(sentence(m.brain || ''))} ${esc(sentence(m.prior || ''))} The run as data: <a href="/proof/${esc(L.file)}">/proof/${esc(L.file)}</a>.</p>`;
+}
+export function leanJson(base, d, L) {
+  if (!L?.summary || !d?.summary) return null;
+  const a = d.summary, b = L.summary, ra = a.reading[TOK], rb = b.reading[TOK];
+  return { live: false, what: L.method?.run || 'a run of a branch before its deploy', data: `${base}/proof/${L.file}`, date: L.date, startedAt: L.startedAt, endedAt: L.endedAt, sea: L.bench.sea, base: L.bench.base, prior: L.bench.prior, commit: L.bench.commit,
+    before: { run: d.file, medianPage: { text: ra.text?.median, markdown: ra.markdown?.median, served: ra.served?.median, mcp: ra.mcp?.median }, keeps: a.keeps.all.markdown, brain: a.finding[TOK].brain.median, markdownPerText: a.times[TOK].markdownPerText },
+    after: { medianPage: { text: rb.text?.median, prior: rb.prior?.median, markdown: rb.markdown?.median, served: rb.served?.median, servedFull: rb.servedFull?.median, mcp: rb.mcp?.median }, keeps: b.keeps.all.markdown, keepsText: b.keeps.all.text, keepsPrior: b.keeps.all.prior, brain: b.finding[TOK].brain.median, compact: b.finding[TOK].compact, ledCompact: b.ledCompact, compacts: b.compacts, markdownPerText: b.times[TOK].markdownPerText, priorPerMarkdown: b.times[TOK].priorPerMarkdown, loop: [b.finding[TOK].low, b.finding[TOK].high], wholeCompact: b.whole[TOK].seaCompact?.median },
+    says: leanSays(d, L).map((x) => x.replace(/<[^>]+>/g, '')), summary: b };
+}
+
+export function proofPage(base, d, live, lean = loadLean()) {
   const title = 'Proof of function: what an agent reads with and without the sea | Mare Liberum';
   if (!d?.summary) return page(base, '/proof', title, 'A public, repeatable measurement of the tokens an agent reads with the open sea and without it.', `<p>Proof of function</p><h1>What an agent reads, with and without the sea</h1><p>No run of the bench is on this node yet. Run <code>node tools/proof-bench.mjs</code> from a session; it writes <code>proof/bench-&lt;day&gt;.json</code>.</p>`, undefined, '/og.png', { robots: 'noindex, follow' });
   const s = d.summary, r = s.reading[TOK], f = s.finding[TOK], rows = measuredRows(d), c = caveats(d);
@@ -283,6 +380,7 @@ ${taskTable(d)}
 <pre>${esc(installLine(d))}
 git clone https://github.com/daoudandiaye98-alt/mare-liberum &amp;&amp; cd mare-liberum
 node tools/proof-bench.mjs --deps ~/.cache/mare-proof</pre>
+${leanSection(d, lean)}
 ${liveBlock(live)}
 <p><small>The run as data: <a href="/proof/${esc(d.file || `bench-${d.date}.json`)}">/proof/${esc(d.file || `bench-${d.date}.json`)}</a> · the task set: <a href="/proof/tasks.json">/proof/tasks.json</a> · this page as data: <a href="/proof.json">/proof.json</a> · for agents as Markdown: <a href="/proof.md">/proof.md</a> · what the shared brain saves: <a href="/savings">/savings</a> · everything the sea counts, in the open: <a href="/open">/open</a></small></p>`;
   const ld = { '@context': 'https://schema.org', '@type': 'Dataset', name: 'Proof of function: what an agent reads with and without the sea', description: desc, url: `${base}/proof`, dateModified: d.endedAt, temporalCoverage: d.date, license: 'https://opensource.org/licenses/MIT', isAccessibleForFree: true,
@@ -291,7 +389,7 @@ ${liveBlock(live)}
   return page(base, '/proof', title, desc, body, ld);
 }
 
-export function proofJson(base, d, live) {
+export function proofJson(base, d, live, lean = loadLean()) {
   if (!d?.summary) return { what: 'Proof of function: what an agent reads with the open sea and without it', measured: false, note: 'no run of the bench on this node yet', how: 'node tools/proof-bench.mjs' };
   const s = d.summary, r = s.reading[TOK], f = s.finding[TOK], w = s.whole[TOK], c = caveats(d), file = d.file || `bench-${d.date}.json`;
   return {
@@ -306,6 +404,7 @@ export function proofJson(base, d, live) {
     tasks: d.tasks.map((t) => ({ id: t.id, task: t.task, group: t.group, source: t.source, url: t.url, tokens: t.page?.tokens?.[TOK], keeps: t.page?.keeps, skipped: t.skipped, brain: t.brain?.tokens ? { tokens: t.brain.tokens[TOK], led: t.brain.destinationHost, pathRank: t.brain.pathRank } : { status: t.brain?.status } })),
     live: live?.last || null, reproduce: [installLine(d), 'node tools/proof-bench.mjs --deps ~/.cache/mare-proof'],
     links: { savings: `${base}/savings`, open: `${base}/open` },
+    ...(leanJson(base, d, lean) ? { lean: leanJson(base, d, lean) } : {}),
   };
 }
 
