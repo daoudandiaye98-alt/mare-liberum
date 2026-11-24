@@ -263,13 +263,15 @@ await proof('/open.json: the same numbers as data, aggregated only, 14 days by k
   const paths = j.endpoints.map((e) => e.path); for (const p of ['/census', '/pulse', '/treasury', '/stats', '/brain?format=json', '/brain/market.json', '/savings.json', '/proof.json', '/attention.json', '/connect.json', '/lighthouse.json', '/instinct.json', '/immune.json', '/open.json']) assert.ok(paths.includes(p), p);
   for (const ip of IPS) assert.ok(!r.text.includes(ip), `no address in the data: ${ip}`);
 });
-await proof('every public door the index names answers as data (but the three of 3.33.0 that other parts bring, and the one that needs an identifier)', async () => {
-  const skip = (p, since) => since || /<identifier>/.test(p);
+await proof('every public door the index names answers as data, the three that other parts of 3.33.0 brought among them (but the one that needs an identifier)', async () => {
+  const skip = (p) => /<identifier>/.test(p); let fresh = 0;
   for (const [, list] of ENDPOINTS) for (const [path, , since] of list) {
-    if (skip(path, since)) continue;
+    if (skip(path)) continue; if (since) fresh++;
     const r = await call(exampleOf(path), { accept: 'application/json' });
     assert.ok(r.status < 500, `${path}: ${r.status}`); assert.match(r.headers.get('content-type') || '', /json/, `${path}: ${r.headers.get('content-type')}`);
+    if (since) assert.equal(r.status, 200, `${path} (new in ${since}) answers`);
   }
+  assert.ok(fresh >= 3, `${fresh} doors new in 3.33.0 were asked`);
 });
 await proof('/open.md is the page for agents: Markdown, the doors as rows with their addresses, no markup', async () => {
   const r = await call('/open.md'); assert.equal(r.status, 200); assert.match(r.headers.get('content-type'), /^text\/markdown/); assert.match(r.text, /^# Every number of the open sea, in public/);

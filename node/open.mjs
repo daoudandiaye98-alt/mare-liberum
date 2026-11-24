@@ -114,7 +114,7 @@ export const ENDPOINTS = [
   ]],
   ['New in 3.33.0', [
     ['/proof.json', 'the proof that the sea works, measured rather than claimed', '3.33.0'],
-    ['/attention.json', 'where the attention of agents and people goes, and which offers they follow', '3.33.0'],
+    ['/attention.json', 'what AI crawlers, search engines and assistants read of the listings, per day and family, and the clicks to the paid services', '3.33.0'],
     ['/connect.json', 'how to connect an agent, client by client', '3.33.0'],
   ]],
 ];
