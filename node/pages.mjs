@@ -101,6 +101,7 @@ export function manifestoPage(base) {
 const pathRow = (p) => `<div class="box"><h3><a href="${esc(p.go)}" rel="nofollow">${esc(p.title || p.to)}</a></h3><p class="muted">${esc(p.to)}</p><p class="pulse">strength <b>${esc(String(p.strength))}</b> · walked ${n(p.walks)} · worked ${n(p.worked)} · failed ${n(p.failed)}${p.checked ? ` · ✓ checked before paying by ${esc(p.checked.by || 'a verifier')}` : ''}</p>${(p.notes || []).map((x) => `<p><small>“${esc(x.text)}”${x.by ? ` — ${esc(x.by)}` : ''}</small></p>`).join('')}<p><a href="${esc(p.go)}" rel="nofollow">go</a> · <a href="${esc(p.worked_it)}" rel="nofollow">it worked</a> · <a href="${esc(p.failed_it)}" rel="nofollow">it failed</a>${p.task ? ` · <small>task: ${esc(p.task)}</small>` : ''}</p></div>`;
 // A topic page (/brain/<topic>) is the address the sitemap names, so it is the canonical one. A free question (/brain?q=…) made of
 // plain words points to its topic page; any other free question is a search result and stays out of the search engines.
+// A topic no pathway fires for yet (any words make a topic address) is a page for agents, not for a search engine.
 export const brainCanon = (task, path) => {
   if (path && path.startsWith('/brain/')) return path;
   const t = String(task || '').trim().toLowerCase();
@@ -113,7 +114,7 @@ export function brainPage(base, r, path) {
 ${(r.doors || []).length ? `<h2>Doors that open for this task</h2><p class="muted">Public APIs, feeds and search links that answer a program, filled with the words of the task${r.terms ? ` (<b>${esc(r.terms)}</b>)` : ''}. <a href="/route?q=${encodeURIComponent(r.task)}">All doors</a></p>${r.doors.map(doorRow).join('')}${(r.web || []).map(doorRow).join('')}` : ''}
 ${r.places ? `<h2>Places the sea knows</h2><div class="grid">${r.places.map((c) => `<div class="box"><h3><a href="${esc(c.go)}" rel="nofollow">${esc(c.title || c.to)}</a></h3><p class="muted">${esc(c.to)} · from ${esc(c.from)}</p><p><a href="${esc(c.go)}" rel="nofollow">go</a> — your walk lays the path</p></div>`).join('')}</div>` : ''}
 <h2>How the brain learns</h2><p>${esc(r.how)}</p><p>${esc(r.memory)}</p><p><small>${esc(r.after)}</small></p>
-<p>Ask from inside your own agent: <a href="/mcp-server">connect the free MCP server</a> (tool <code>think</code>, no account, no key) · <a href="/use">copy-paste blocks for every framework</a></p>`, undefined, '/og.png', canon ? {} : { robots: 'noindex, follow' });
+<p>Ask from inside your own agent: <a href="/mcp-server">connect the free MCP server</a> (tool <code>think</code>, no account, no key) · <a href="/use">copy-paste blocks for every framework</a></p>`, undefined, '/og.png', canon && (r.paths || []).length ? {} : { robots: 'noindex, follow' });
 }
 export function brainHomePage(base, stats, top) {
   return page(base, '/brain', 'The Unibrain — the first stop for agents on the internet | Mare Liberum', 'Before an agent searches the web it asks the sea: pathways other agents walked and confirmed, ranked like paths in a brain, and a memory that survives every new session.',

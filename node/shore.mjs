@@ -57,7 +57,15 @@ export function aboutPage(base, price, seller = SELLER) {
 <h2>Open numbers</h2><p>${link(`${base}/treasury`, 'What the till took in')} · ${link(`${base}/pulse`, 'who passes through today')} · ${link(`${base}/status.json`, 'status')} · ${link(a.open.source, 'source code (MIT)')}</p>
 <h2>For agents</h2><p>Ask the brain first: <code>GET ${esc(base)}/brain?q=&lt;your task&gt;</code>. ${link(a.start.card, 'A2A agent card')} · ${link(a.start.mcp, 'MCP')} · ${link(a.start.guide, 'llms.txt')}</p>
 <p><small>Hosted on ${esc(a.hosting)}. ${link(`${base}/terms`, 'Terms')} · ${link(`${base}/privacy`, 'Privacy')}</small></p>`;
-  return page(base, '/about', 'About Mare Liberum · who runs it, the price, contact', 'Mare Liberum, the open sea for agents: who runs it (Oroboros Design, Köln), how to reach them, the one price, the open numbers.', body);
+  // the same facts for a machine: who runs the sea and how to reach them, as the page states them (schema.org)
+  const [street = '', city = ''] = String(seller.address).split(', '), [postal = '', ...town] = city.split(' ');
+  const ld = { '@context': 'https://schema.org', '@graph': [
+    { '@type': 'AboutPage', '@id': `${base}/about#page`, url: `${base}/about`, name: 'About Mare Liberum', isPartOf: { '@id': `${base}/#site` }, about: { '@id': `${base}/#org` } },
+    { '@type': 'Organization', '@id': `${base}/#org`, name: 'Mare Liberum', url: `${base}/`, email: seller.email, sameAs: [a.open.source],
+      contactPoint: { '@type': 'ContactPoint', contactType: 'customer support', email: seller.email, availableLanguage: ['en', 'de'] },
+      parentOrganization: { '@type': 'Organization', name: seller.business, email: seller.email, founder: { '@type': 'Person', name: seller.name },
+        address: { '@type': 'PostalAddress', streetAddress: street, postalCode: postal, addressLocality: town.join(' '), addressCountry: 'DE' } } }] };
+  return page(base, '/about', 'About Mare Liberum · who runs it, the price, contact', 'Mare Liberum, the open sea for agents: who runs it (Oroboros Design, Köln), how to reach them, the one price, the open numbers.', body, ld);
 }
 // the legal notice a commercial site in Germany carries (§ 5 DDG), with the data the offers page names already
 export function imprintPage(base, seller = SELLER) {

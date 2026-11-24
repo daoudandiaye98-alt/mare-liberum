@@ -4,7 +4,7 @@
 // Line format: id \t kind|paid|domain|quality|lake|hasEndpoint \t haystack \t json-row
 import { readFileSync, existsSync } from 'node:fs';
 import { gunzipSync } from 'node:zlib';
-import { kindOf } from './core.mjs';
+import { kindOf, THIN_LAKES } from './core.mjs';
 
 const KINDS = ['mcp', 'a2a', 'x402', 'skill', 'registry', 'catalog', 'api', 'other', 'merchant', 'agent'];
 const low = (s) => String(s || '').toLowerCase();
@@ -115,18 +115,20 @@ export function createMem({ file, base, blobToken } = {}) {
       }
       return { results: top.slice(off, off + lim).map((h) => ({ ...pub(h[2] || row(h[1]), false), score: h[0] })) };
     },
-    // identifiers that carry a description and an endpoint: they get a page of their own in the agent-readable web
+    // identifiers that carry a description and an endpoint: they get a page of their own in the agent-readable web (the
+    // thin registrations of THIN_LAKES keep their page, but not a place in the sitemaps)
     async mare_pages(p) {
       const off = Math.max(Number(p?.offset) || 0, 0), lim = Math.min(Math.max(Number(p?.limit) || 45000, 1), 50000), out = [];
       let seen = 0;
       for (let i = 0; i < n && out.length < lim; i++) {
         if (!ep[i]) continue; const h = hays[i], b2 = h.indexOf('\u0001', h.indexOf('\u0001') + 1);
         if (h.length - b2 < 40) continue;
+        if (THIN_LAKES.has(lakes[lake[i]]) && !paid[i] && !dom[i]) continue;
         if (seen++ >= off) out.push(ids[i]);
       }
       return { ids: out };
     },
-    async mare_pages_count() { let c = 0; for (let i = 0; i < n; i++) { if (!ep[i]) continue; const h = hays[i], b2 = h.indexOf('\u0001', h.indexOf('\u0001') + 1); if (h.length - b2 >= 40) c++; } return { count: c }; },
+    async mare_pages_count() { let c = 0; for (let i = 0; i < n; i++) { if (!ep[i] || (THIN_LAKES.has(lakes[lake[i]]) && !paid[i] && !dom[i])) continue; const h = hays[i], b2 = h.indexOf('\u0001', h.indexOf('\u0001') + 1); if (h.length - b2 >= 40) c++; } return { count: c }; },
     async mare_get(p) { await syncExtra(); const x = extra.get(p?.id); if (x) return pub(x.r, true); const i = find(String(p?.id || '')); return i < 0 ? null : pub(row(i), true); },
     async mare_list(p) {
       await syncExtra();
