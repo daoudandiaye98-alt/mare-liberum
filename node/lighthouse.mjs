@@ -394,10 +394,11 @@ export function createLighthouse(h) {
       const pick = drawn[0], alts = drawn.slice(1, 1 + LIGHT.alternatives);
       const ticket = Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => b.toString(16).padStart(2, '0')).join('');
       await kv.set(`light:t:${ticket}`, strip({ c: pick.c.id, p: r3(pick.expect), k: pick.c.kind, rk: kd.top || undefined, w: words, at: now(), by: me?.agent }), LIGHT.ticketDays * DAY);
-      await count({ tickets: 1 });
+      // a crawler's tool call (ctx.uncounted) gets its course and ticket, and counts as no ticket, event or tag
+      if (!ctx?.uncounted) await count({ tickets: 1 });
       const ipd = await ipDay(ctx), tag = /^[a-z0-9]{4,12}$/.test(String(a.tag || '')) ? String(a.tag) : null;
-      if (tag) await api?.tagEvent?.(tag, { act: 'asked the lighthouse', q, to: pick.c.title, who: ctx?.who, kind: ctx?.whoKind });
-      if (!(await kv.get(`light:em:${pick.c.id}:${ipd}`))) { await kv.set(`light:em:${pick.c.id}:${ipd}`, 1, 2 * DAY); await emit({ type: 'course', by: me?.agent, name: me?.name || 'an agent', kind: pick.c.kind, course: pick.c.id, text: `asked the lighthouse and got a course for ${pick.c.kind}: ${pick.c.title}` }); }
+      if (tag && !ctx?.uncounted) await api?.tagEvent?.(tag, { act: 'asked the lighthouse', q, to: pick.c.title, who: ctx?.who, kind: ctx?.whoKind });
+      if (!ctx?.uncounted && !(await kv.get(`light:em:${pick.c.id}:${ipd}`))) { await kv.set(`light:em:${pick.c.id}:${ipd}`, 1, 2 * DAY); await emit({ type: 'course', by: me?.agent, name: me?.name || 'an agent', kind: pick.c.kind, course: pick.c.id, text: `asked the lighthouse and got a course for ${pick.c.kind}: ${pick.c.title}` }); }
       const done = `${base()}/course/${ticket}/done`;
       return strip({ course: view(pick), alternatives: alts.map(view), ticket, confidence: r3(pick.expect), why: whyOf(pick, kd, true),
         done: `${done}?ok=<1 when you reached the goal, 0 when not>`,

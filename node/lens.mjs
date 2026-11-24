@@ -45,7 +45,7 @@ export function createLens(h) {
       if (cachedOnly) return { host, notChecked: true, note: 'not checked in the last hour — run the check in a browser at /check/' + host };
       await allow(ctx, 'check', 20, 3600);
       const r = await checkSite(host);
-      if (r.reachable !== false) { await kv.set(`check:${host}`, r, 3600); const day = now().slice(0, 10); await kv.set(`check:count:${day}`, (Number(await kv.get(`check:count:${day}`)) || 0) + 1, 3 * DAY); await kv.set('check:total', (Number(await kv.get('check:total')) || 0) + 1, 400 * DAY); }
+      if (r.reachable !== false) { await kv.set(`check:${host}`, r, 3600); const day = now().slice(0, 10); if (!ctx?.uncounted) { await kv.set(`check:count:${day}`, (Number(await kv.get(`check:count:${day}`)) || 0) + 1, 3 * DAY); await kv.set('check:total', (Number(await kv.get('check:total')) || 0) + 1, 400 * DAY); } }
       return { ...r, offers: await lens.offers() };
     },
     // the reader: any public page as Markdown — free for every agent up to a fair daily amount, then Angel reads on
@@ -61,7 +61,8 @@ export function createLens(h) {
       if (!hit && r.markdown) await kv.set(key, r, 3600);
       // the reading area spares what the page weighs as HTML against its Markdown (node/areas.mjs); the size stays out of the answer
       if (r.markdown && r.htmlBytes) api.countBytes?.('read', r.htmlBytes, r.markdown.length, ctx, r.final || r.url);
-      if (r.host && (r.markdown || r.blocked)) {
+      // a crawler's tool call (ctx.uncounted) is read like any other and counted nowhere: no read of the day, no event, no path
+      if (r.host && (r.markdown || r.blocked) && !ctx?.uncounted) {
         const day = now().slice(0, 10), role = ctx?.whoKind || 'unknown';
         await update(`reads:${day}`, 3 * DAY, (cur) => { const m = cur && typeof cur === 'object' ? cur : { total: 0, hosts: {}, roles: {} }; m.total++; m.roles[role] = (m.roles[role] || 0) + 1; if (m.hosts[r.host] || Object.keys(m.hosts).length < 3000) m.hosts[r.host] = (m.hosts[r.host] || 0) + 1; return m; }, () => true);
         if (!(await kv.get(`reademit:${r.host}`))) { await kv.set(`reademit:${r.host}`, 1, 3600); await emit({ type: 'read', name: ctx?.who || 'an agent', text: `${ctx?.who || 'An agent'} read a page of ${r.host} through the sea`, url: `https://${r.host}/` }); }

@@ -785,9 +785,12 @@ const OPEN_TOOLS = openTools(TOOLS);
 const strip0 = (o) => Object.fromEntries(Object.entries(o).filter(([, v]) => v != null && v !== ''));
 async function entryWithTraces(db, id) { const e = await db('mare_get', { id: String(id || '') }); if (!e) return null; const t = db.flow ? await db.flow.tracesOf(e.identifier).catch(() => null) : null; return t ? { ...e, trace: t.standing, traces: t.traces } : e; }
 // own: the call came from the sea itself (its sessions, proofs and buoy): answered like any other, counted nowhere and
-// strengthening no path, as over HTTP (ctx.own in handleOne)
-async function mcpCall(db, base, name, a, ip, own = false, house = false) {
-  const sea = db.flow, ctx = { ip, door: '/mcp', ...(own ? { own: true } : {}), ...(house ? { house: true } : {}) };
+// strengthening no path, as over HTTP (ctx.own in handleOne). uncounted: a crawler called the tool (the census kinds that
+// are read-only over HTTP): answered exactly as an agent is, but it counts as no reuse, saving, ask, walk, read or site
+// check (node/areas.mjs, brain.mjs, route.mjs, flow.mjs, lens.mjs, atlas-sea.mjs); the door counts no working session
+// and no tool call for it either. readOnly is not passed: it would change the answers.
+async function mcpCall(db, base, name, a, ip, own = false, house = false, uncounted = false) {
+  const sea = db.flow, ctx = { ip, door: '/mcp', ...(own ? { own: true } : {}), ...(house ? { house: true } : {}), ...(uncounted ? { uncounted: true } : {}) };
   if (name === 'ask') return await sea.ask(a, ctx);
   if (name === 'route') return await sea.route(a, ctx);
   if (name === 'decide') return await sea.ask({ ...a, kind: a?.kind || 'merchant', compact: true }, ctx);
@@ -845,7 +848,7 @@ async function mcpCall(db, base, name, a, ip, own = false, house = false) {
     if (!a?.kind) return { blueprints: yardKinds().map((k) => ({ kind: k.id, title: k.title, what: k.line, needsHarbour: k.harbour })), build: 'build_agent {name, kind, purpose, rules}', page: `${base}/yard` };
     let r; try { r = buildAgent({ name: a.name, kind: a.kind, purpose: a.purpose, rules: a.rules, language: a.language, harbour: a.harbour }, { base, version: VERSION }); } catch (e) { throw new Error(String(e?.message || 'failed').replace(/^yard_[a-z]+: /, '')); }
     const m = r.manifest, q = new URLSearchParams(strip0({ kind: m.kind, name: m.name, purpose: a.purpose ? m.purpose : '', rules: Array.isArray(a.rules) ? a.rules.join('\n') : a.rules || '', language: m.language === 'auto' ? '' : m.language, harbour: a.harbour ? '1' : '' }));
-    sea.yardBuilt?.().catch(() => {});
+    if (!ctx.uncounted) sea.yardBuilt?.().catch(() => {});
     return { agent: { name: m.name, kind: m.kind, purpose: m.purpose, tools: m.tools, memory: m.memory, limits: m.limits }, instructions: r.files['AGENT.md'], connect: JSON.parse(r.files['mcp.json']), download: { program: `${base}/yard/agent.mjs?${q}`, manifest: `${base}/yard/agent.json?${q}` }, run: 'Save the program as agent.mjs in a folder of its own. Then: AGENT_MODEL=anthropic:<model id> (or openai:<model id>, ollama:<model>) with the key in the environment, and: node agent.mjs "task". --check runs its test cases, --launch enters the sea.', note: 'The program asks before every tool that changes something, treats everything it reads as data, and never sends a secret through a tool.' };
   }
   if (name === 'join') {
@@ -903,7 +906,7 @@ function firstContact(name, a, out, base) {
   }
   return out;
 }
-async function mcp(db, base, msg, ip, app = false, own = false, house = false) {
+async function mcp(db, base, msg, ip, app = false, own = false, house = false, uncounted = false) {
   const ok = (result) => ({ jsonrpc: '2.0', id: msg.id, result });
   const err = (code, message) => ({ jsonrpc: '2.0', id: msg.id ?? null, error: { code, message } });
   if (!msg || msg.jsonrpc !== '2.0' || typeof msg.method !== 'string') return err(-32600, 'Invalid Request');
@@ -921,7 +924,7 @@ async function mcp(db, base, msg, ip, app = false, own = false, house = false) {
       try {
         if (app && !APP_TOOLS.has(msg.params?.name)) return ok({ content: [{ type: 'text', text: `unknown tool for this endpoint: ${String(msg.params?.name || '').slice(0, 40)} — the full set is at ${base}/mcp` }], isError: true });
         const args = { ...(msg.params?.arguments || {}) }; if (app) { delete args.by; delete args.pass; if (msg.params?.name === 'read_page') delete args.q; }
-        const out = await mcpCall(db, base, msg.params?.name, args, ip, own, house);
+        const out = await mcpCall(db, base, msg.params?.name, args, ip, own, house, uncounted);
         if (app && out && typeof out === 'object') appClean(msg.params?.name, out);
         if (!app) firstContact(msg.params?.name, args, out, base);
         return ok({ content: [{ type: 'text', text: JSON.stringify(out) }], structuredContent: out, isError: false });
@@ -2280,7 +2283,7 @@ async function handleOne(req, db, cfg = {}) {
       if (working) workMcp(sea, list.slice(0, 16), workKey(ip, req.headers), req.headers.get('user-agent'), s.app ? 'app' : 'mcp', workNet(ip));
       if (list.length > 1) { const wait = immune.spend(ip, 5 * (list.length - 1)); if (wait) return json({ jsonrpc: '2.0', id: null, error: { code: -32000, message: 'the sea asks for a calmer pace from this address; come back in a moment' } }, 429, { 'retry-after': String(wait) }); }
       // accepted at once; the answers travel on the stream
-      const work = (async () => { for (const m of list) { tallyTool(sea, m, s.app || ctx.own || ctx.readOnly); const r = await mcp(db, base, m, ip, s.app, ctx.own, ctx.house).catch(() => null); if (r) s.send(r); } })();
+      const work = (async () => { for (const m of list) { tallyTool(sea, m, s.app || ctx.own || ctx.readOnly); const r = await mcp(db, base, m, ip, s.app, ctx.own, ctx.house, ctx.readOnly).catch(() => null); if (r) s.send(r); } })();
       try { cfg.waitUntil?.(work); } catch {}
       return new Response('Accepted', { status: 202, headers: { 'content-type': 'text/plain; charset=utf-8', ...CORS } });
     }
@@ -2296,11 +2299,11 @@ async function handleOne(req, db, cfg = {}) {
         // a batch has an end, is answered one call after the other, and every call in it counts in the caller's pace
         if (msg.length > 16) return json({ jsonrpc: '2.0', id: null, error: { code: -32600, message: 'at most 16 calls in one batch' } }, 400);
         const wait = immune.spend(ip, 5 * (msg.length - 1)); if (wait) return json({ jsonrpc: '2.0', id: null, error: { code: -32000, message: 'the sea asks for a calmer pace from this address; come back in a moment' } }, 429, { 'retry-after': String(wait) });
-        const out = []; for (const m of msg) { tallyTool(sea, m, app || ctx.own || ctx.readOnly); const r = await mcp(db, base, m, ip, app, ctx.own, ctx.house); if (r) out.push(r); }
+        const out = []; for (const m of msg) { tallyTool(sea, m, app || ctx.own || ctx.readOnly); const r = await mcp(db, base, m, ip, app, ctx.own, ctx.house, ctx.readOnly); if (r) out.push(r); }
         return out.length ? json(out) : new Response(null, { status: 202, headers: CORS });
       }
       tallyTool(sea, msg, app || ctx.own || ctx.readOnly);
-      const out = await mcp(db, base, msg, ip, app, ctx.own, ctx.house);
+      const out = await mcp(db, base, msg, ip, app, ctx.own, ctx.house, ctx.readOnly);
       return out ? json(out) : new Response(null, { status: 202, headers: CORS });
     }
     if (path.startsWith('/ingest/') && req.method === 'POST') {

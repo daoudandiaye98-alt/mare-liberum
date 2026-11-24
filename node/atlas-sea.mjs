@@ -98,7 +98,7 @@ export function createAtlas(h) {
         if (np) { p = np; await remember(np); await want(d); }
       }
       if (!p) return { site: d, mapped: false, note: ctx?.readOnly ? 'not on the map yet; it is mapped the first time an agent or a person asks' : 'the site did not answer in time; try again in a minute', map: `${base()}/site/${d}` };
-      if (ctx && !ctx.readOnly) update(`atlas:asked:${now().slice(0, 10)}`, 3 * DAY, (cur) => ({ ...(cur || {}), [d]: ((cur || {})[d] || 0) + 1 }), () => true).catch(() => {});
+      if (ctx && !ctx.readOnly && !ctx.uncounted) update(`atlas:asked:${now().slice(0, 10)}`, 3 * DAY, (cur) => ({ ...(cur || {}), [d]: ((cur || {})[d] || 0) + 1 }), () => true).catch(() => {});
       return expand(p, base());
     },
     // the search of the Atlas: sites that answer the words, the most usable for agents first

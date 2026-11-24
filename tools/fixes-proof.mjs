@@ -37,7 +37,7 @@ const UA = {
   curl: 'curl/8.5.0', browser: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0 Safari/537.36',
   claude: 'Claude-User (+https://support.anthropic.com/)', claudebot: 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; ClaudeBot/1.0; +claudebot@anthropic.com',
   googlebot: 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)', angel: 'Angel/1.0 (+https://angel.oroboros-design.com)',
-  duck: 'DuckAssistBot/1.1; (+http://duckduckgo.com/duckassistbot.html)', headless: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/131.0 Safari/537.36',
+  duck: 'DuckAssistBot/1.1; (+http://duckduckgo.com/duckassistbot.html)', agent: 'claude-code/2.0', headless: 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) HeadlessChrome/131.0 Safari/537.36',
 };
 const NAV = { 'sec-fetch-mode': 'navigate', 'sec-fetch-site': 'none', 'sec-fetch-dest': 'document', 'upgrade-insecure-requests': '1' };
 const call = async (path, { ua = UA.curl, accept = 'text/html', ip = '198.18.60.1', method = 'GET', headers = {}, body } = {}) => {
@@ -210,6 +210,32 @@ await proof('M5 the house agent (Angel) is counted apart: its reuses and its Mar
   const s = await sea().savings(); assert.deepEqual([s.hero.measured, s.hero.modelled.mid], [h0.measured, h0.modelled.mid], 'the headline did not move');
   assert.equal(s.house.today.reuses, 1); assert.equal(s.house.today.markdown, 1);
   assert.match((await call('/savings', { ua: UA.browser, headers: NAV })).text, /The house agent \(Angel, a resident of the sea\) is counted apart and is in none of the numbers above: 1 reuse and 1 Markdown answer/);
+});
+await proof('M5 a crawler that calls a tool at the MCP door gets the answer an agent gets, and counts nowhere: no reuse, saving, read, ask, door ask or session', async () => {
+  // one page answers for the reader (and its robots.txt); everything else is still no network
+  const PAGE = 'https://kettle-proof.dev/guide', HTML = `<!doctype html><html><head><title>Kettle guide</title></head><body><nav><a href="/">Home</a></nav><main><h1>How to pick a kettle</h1>${'<p>A kettle for a small kitchen holds a litre, boils fast and turns itself off.</p>'.repeat(30)}</main><footer>Shop</footer></body></html>`;
+  const net = globalThis.fetch; globalThis.fetch = async (u) => { const k = String(u?.url || u); if (/\/robots\.txt$/.test(k)) return new Response('User-agent: *\nAllow: /\n', { headers: { 'content-type': 'text/plain' } }); if (k === PAGE) return new Response(HTML, { headers: { 'content-type': 'text/html; charset=utf-8' } }); return net(u); };
+  try {
+    const tool = async (ua, ip, name, args) => (await call('/mcp', { method: 'POST', ua, ip, accept: 'application/json, text/event-stream', body: { jsonrpc: '2.0', id: 7, method: 'tools/call', params: { name, arguments: args } } })).j?.result;
+    const day = new Date().toISOString().slice(0, 10), tally = async () => { const s = await sea().savings(), head = (await kv.get('flow:head')) || [];
+      return { plan: s.today.counts.plan || 0, path: s.today.counts.path || 0, market: s.today.counts.market || 0, reads: s.today.counts.reads || 0, readsOfDay: (await kv.get(`reads:${day}`))?.total || 0,
+        asks: (await kv.get('brain:stats'))?.asks || 0, doorAsks: Number(await kv.get('door:asks')) || 0, calls: head.filter((e) => e.type === 'ask' || e.type === 'knock').length, sessions: (await sea().workDays(1)).days.at(-1).sessions }; };
+    const args = { think: { q: 'write a market report on tea prices in Asia' }, route: { q: 'weather in Berlin tomorrow' }, ask: { need: 'a kettle for a small kitchen' }, read_page: { url: PAGE } };
+    const t0 = await tally(), c = {}, g = {};
+    for (const [name, a] of Object.entries(args)) c[name] = await tool(UA.claudebot, '203.0.113.90', name, a);
+    for (const [name, r] of Object.entries(c)) assert.equal(r?.isError, false, `${name}: ${JSON.stringify(r).slice(0, 200)}`);
+    assert.match(c.read_page.structuredContent.markdown, /How to pick a kettle/, 'the crawler gets the page');
+    assert.deepEqual(await tally(), t0, 'the crawler counted nowhere');
+    for (const [name, a] of Object.entries(args)) g[name] = await tool(UA.agent, '203.0.113.91', name, a);
+    assert.deepEqual(c.think.structuredContent, g.think.structuredContent, 'think: the answer an agent gets');
+    assert.deepEqual(c.route.structuredContent, g.route.structuredContent, 'route: the answer an agent gets');
+    const same = (r) => JSON.stringify(r.structuredContent).replaceAll(r.structuredContent.ask.id, 'ID').replace(/"(at|t|until)":"[^"]*"/g, '"$1":""');
+    assert.equal(same(c.ask), same(g.ask), 'ask: the answer an agent gets');
+    assert.deepEqual({ ...c.read_page.structuredContent, cached: undefined }, { ...g.read_page.structuredContent, cached: undefined }, 'read_page: the answer an agent gets (the second one from the reader\'s cache)');
+    assert.equal((await call(`/ask/${c.ask.structuredContent.ask.id}`, { accept: 'application/json' })).status, 200, 'the crawler\'s call is kept, so it can be answered');
+    const t1 = await tally();
+    assert.ok(t1.asks === t0.asks + 1 && t1.doorAsks > t0.doorAsks && t1.calls === t0.calls + 1 && t1.reads === t0.reads + 1 && t1.readsOfDay === t0.readsOfDay + 1 && t1.sessions === t0.sessions + 1, `an agent's calls count: ${JSON.stringify({ t0, t1 })}`);
+  } finally { globalThis.fetch = net; }
 });
 await proof('M6 DuckAssistBot, DuckDuckGo\'s crawler for its AI answers, gets the page as HTML like AI search, not Markdown', async () => {
   const r = await call('/about', { ua: UA.duck, accept: '*/*' }); assert.match(r.headers.get('content-type'), /^text\/html/);

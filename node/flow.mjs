@@ -246,6 +246,9 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
       // crawlers that follow the ready ask links on pages read the answer but leave no call in the flow
       // a resident that decides again for a call already in the sea (quiet) leaves no second call behind
       const readOnly = !!ctx?.readOnly, quiet = readOnly || a.quiet === true || a.quiet === '1' || a.quiet === 1;
+      // a crawler's tool call (ctx.uncounted) gets the same answer, kept and carried as any call, but it is no call in the flow:
+      // no event, so it counts as no need called into the sea
+      const counted = !ctx?.uncounted;
       const compact = a.compact === true || a.compact === 'true' || a.compact === '1' || a.compact === 1;
       // verified: only offers from stores in the verified market of the Unibrain (node/areas.mjs), for agents that buy without a person watching
       const verified = [a.verified, a.safe].some((v) => v === true || v === 'true' || v === '1' || v === 1);
@@ -255,7 +258,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
       const base0 = String(profile || '').replace(/\/ucp\/agent\.json$/, '');
       // a knock: the agent introduces itself. The sea answers with the way in, and the call stays in the flow as a knock
       if (!a.kind && ask.budget == null && KNOCK.test(need) && !toks(need).some((w) => NEED_WORDS.has(w))) {
-        if (!quiet) await emit({ type: 'knock', id, by: ask.by, name: ask.name, text: need });
+        if (!quiet && counted) await emit({ type: 'knock', id, by: ask.by, name: ask.name, text: need });
         const routes = await api.routes(topic, undefined, 5).catch(() => []);
         return strip({ ask: { id, need }, knock: true, welcome: strip({ read: 'the sea read your call as an introduction, not a purchase', stay: me ? undefined : { why: 'agents that need what you offer find you here: calls that match your offers reach your inbox, your work raises your standing', request: `POST ${base0}/enter`, body: { name: '<your name>', offers: clean(need, 200), endpoint: '<https address where agents reach you, optional>', secret: '<32 to 200 characters you keep: your identity>' } }, earn: `${base0}/mining — lend the sea compute between your tasks (MCP tools work and work_done) and earn shells for confirmed work`, jobs: `${base0}/jobs`, residents: `${base0}/here`, skill: `${base0}/skill.md` }), routes: routes.length ? routes : undefined, answers: `GET /ask/${id}`, notice: SEA_NOTICE });
       }
@@ -264,7 +267,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
         const slug = slugOf(need), snap = (await kv.get(`tide:${slug}`)) || (topic !== need ? await kv.get(`tide:${slugOf(topic)}`) : null);
         const age = snap?.t ? (Date.now() - Date.parse(snap.t)) / 60000 : Infinity;
         if (snap?.url && age < FAST_MIN) {
-          if (!quiet) { await api.carry(ask).catch(() => 0); await emit({ type: 'ask', id, by: ask.by, name: ask.name, text: need, fast: true }); }
+          if (!quiet) { await api.carry(ask).catch(() => 0); if (counted) await emit({ type: 'ask', id, by: ask.by, name: ask.name, text: need, fast: true }); }
           const pick = strip({ title: snap.title, price: snap.price, currency: snap.currency, store: snap.store, url: snap.url, checkout: snap.url, entry: snap.entry });
           const decision = await api.sealDecision({ pick, rule: 'fast lane: the pick the current of the sea read for this need', why: [`read ${Math.round(age)} minutes ago at the store's own catalog`, ...(snap.min != null && snap.min < snap.price ? [`lowest price seen then: ${snap.min} ${snap.currency}`] : [])] });
           const seen = await kv.get(`tide:seen:${slugOf(snap.need)}`);
@@ -279,7 +282,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
       let market;
       if (verified) { const f = products.length ? await api.marketFilter(products, ctx, need) : { keep: [], held: { notYetChecked: 0, notPassing: 0 } }; products.splice(0, products.length, ...f.keep);
         market = strip({ only: 'stores in the verified market of the Unibrain', held: f.held.notYetChecked || f.held.notPassing ? f.held : undefined, note: f.held.notYetChecked ? 'stores not checked yet are being checked now; ask again in a few minutes' : undefined, rule: `${base0}/brain/market` }); }
-      if (!quiet) await emit({ type: 'ask', id, by: ask.by, name: ask.name, text: need, budget: ask.budget, currency: ask.currency, region: ask.region, empty: readOnly || products.length ? undefined : true });
+      if (!quiet && counted) await emit({ type: 'ask', id, by: ask.by, name: ask.name, text: need, budget: ask.budget, currency: ask.currency, region: ask.region, empty: readOnly || products.length ? undefined : true });
       const understood = strip({ budget: ask.budget, currency: ask.currency, region: ask.region, size: c.size, colour: c.colour, for: c.for, topic });
       const traces = products.length ? await traceMap() : {};
       const decision0 = products.length ? decide(products, { ...understood }, (p) => { const t = traces[p.entry || (p.storeHost ? `urn:air:${p.storeHost}:ucp:store` : '')]; return t ? { worked: t.w || 0, partly: t.p || 0, failed: t.f || 0 } : null; }) : undefined;
