@@ -65,9 +65,21 @@ const WAIT = 'Loading live data…';
 // The waterline of the CSS sea: the wave the shader draws and the page script cuts the monument by, at its first moment,
 // taken from the page script itself so there is one formula. Points in px from the left edge, 12 px apart, far enough for
 // any screen; beyond that the line runs level.
-const waveAt = new Function('return ' + ((rd('src/app.js').match(/const waveAt = (\(x, t\) => [^;]+);/) || [])[1] || 'null'))();
-if (typeof waveAt !== 'function') throw new Error('the wave formula was not found in the page script');
-const WAVE = (() => { let p = ''; for (let x = 0; x <= 4008; x += 12) p += `${x}px ${(14 + waveAt(x, 0)).toFixed(1)}px,`; return p + 'max(100%,4008px) 14px,max(100%,4008px) 100%,0 100%'; })();
+// (3.34: the journey page draws no CSS sea, so the formula is only read where the stylesheet still asks for it)
+const WAVE = (() => { if (!rd('src/style.css').includes('/*@WAVE*/')) return '';
+  const waveAt = new Function('return ' + ((rd('src/app.js').match(/const waveAt = (\(x, t\) => [^;]+);/) || [])[1] || 'null'))();
+  if (typeof waveAt !== 'function') throw new Error('the wave formula was not found in the page script');
+  let p = ''; for (let x = 0; x <= 4008; x += 12) p += `${x}px ${(14 + waveAt(x, 0)).toFixed(1)}px,`; return p + 'max(100%,4008px) 14px,max(100%,4008px) 100%,0 100%'; })();
+
+// The journey (3.34, "Die Reise"): seven scenes, each with its painting (site/film/<scene>/p.webp) and the colours at the
+// painting's edges (top, middle, bottom; measured once from the files) that continue it where a wide screen shows more
+// than the painting. The first is in the page; the script fetches the others after the page stands.
+const JOURNEY = [['home', '#799396', '#254249', '#091013'], ['sheet', '#0a1e26', '#090f15', '#0d1516'], ['strands', '#111a1d', '#0f1418', '#0b0d0d'], ['city', '#193b42', '#1a2522', '#0a0e0d'], ['sonar', '#0b1820', '#0a1821', '#0b1216'], ['pearls', '#081319', '#091119', '#0b1113'], ['harbour', '#9eaa9e', '#556356', '#0a1316']];
+const plates = (B) => (FILM ? JOURNEY.map(([scene, a1, a2, a3], k) => { const f = FILM.films?.[scene]; if (!f) throw new Error(`the journey needs the painting ${scene}`); const src = `${B}/film/${scene}/p.webp?v=${FILM.v}`;
+  return `  <div class="plate p${k}" style="--fy:${f.fy}%;--a1:${a1};--a2:${a2};--a3:${a3}"><img ${k ? `data-src="${src}"` : `src="${src}" fetchpriority="high"`} alt="" width="716" height="1284" decoding="async"></div>`; }).join('\n') : '');
+// what the page carries of a source file: no comment lines, no indentation
+const lean = (t) => t.split('\n').filter((l) => !/^\s*\/\//.test(l)).map((l) => l.trim()).filter(Boolean).join('\n');
+const leanCss = (t) => t.replace(/\/\*[\s\S]*?\*\//g, '').split('\n').map((l) => l.trim()).filter(Boolean).join('\n');
 
 function head(mode) {
   if (mode === 'preview') return `<title>Mare Liberum Homepage</title>\n<meta name="description" content="Preview of the Mare Liberum home page: the internet of AI agents, live. Numbers are a real snapshot of ${snap.at.slice(0, 10)}.">\n<meta name="theme-color" content="#dbe9f3">`;
@@ -88,7 +100,7 @@ function head(mode) {
     for (const o of g) { const raw = JSON.stringify(o); if (o['@type'] === 'WebSite' && (!Array.isArray(o.potentialAction) || o.potentialAction.length !== 3)) throw new Error('structured data: expected the three searches of the site in one list, found ' + raw.slice(0, 200)); }
     if ((m[1].match(/"potentialAction":/g) || []).length !== 1) throw new Error('structured data: "potentialAction" is named more than once');
   }
-  return h.trim() + `\n<link rel="preload" href="/fonts/anybody-display.woff2" as="font" type="font/woff2" crossorigin>\n<link rel="preload" href="/fonts/public-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>`;
+  return h.trim() + `\n<link rel="preload" href="/fonts/anybody-display.woff2" as="font" type="font/woff2" crossorigin>\n<link rel="preload" href="/fonts/public-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin>${FILM?.films?.home ? `\n<link rel="preload" href="/film/home/p.webp?v=${FILM.v}" as="image" fetchpriority="high">` : ''}`;
 }
 
 function build(mode) {
@@ -112,12 +124,13 @@ function build(mode) {
   };
   for (const k of ['ai', 'people', 'ratio', 'one', 'residents', 'index', 'paths', 'walks', 'ratings', 'memories', 'countries', 'webChecked', 'webBlock', 'webAssist', 'webLlms', 'webAvg', 'market', 'plans', 'tokens30', 'spared', 'sparedM', 'sparedE']) v[k] = num(k);
   v.painted = live && FILM?.films?.home ? ' painted' : '';
-  const js = (rd('src/render.js') + '\n' + rd('src/app.js'))
+  v.plates = plates(live ? '' : PUBLIC);
+  const js = lean(rd('src/app.js'))
     .replace('/*@LIVE*/false', String(live)).replace("'/*@B*/'", JSON.stringify(B)).replace('/*@EX*/null', live ? 'null' : safe(examples()))
     .replace("'/*@LAND*/'", JSON.stringify(LAND)).replace("'/*@CC*/'", JSON.stringify(CC)).replace("'/*@SV*/'", JSON.stringify(LOOK.v)).replace('`/*@FRAG*/`', () => '`' + rd('src/sea.frag').replace(/^\s*\/\/.*$/gm, '').replace(/\n{2,}/g, '\n').trim() + '`');
   if (/<\/script/i.test(js)) throw new Error('script would close early');
   let out = rd('src/page.html')
-    .replace('<!--@HEAD-->', () => head(mode)).replace('/*@FONTFACE*/', () => face(!live)).replace('/*@CSS*/', () => rd('src/style.css').replace('/*@WAVE*/', WAVE))
+    .replace('<!--@HEAD-->', () => head(mode)).replace('/*@FONTFACE*/', () => face(!live)).replace('/*@CSS*/', () => leanCss(rd('src/style.css').replace('/*@WAVE*/', WAVE)))
     .replace('<!--@SNAP-->', () => (live ? '' : `<script type="application/json" id="snap">${safe(slim(d))}</script>`))
     .replace('/*@JS*/', () => js)
     // the paintings are the node's files: the page of the node shows them, the preview (no node behind it) does without
