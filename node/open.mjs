@@ -43,7 +43,8 @@ export const COSTS = [{ what: 'the server: one Hetzner CX23 (2 vCPU, 4 GB) behin
 // then the page says how long this node has run it. No day is written before it happened.
 const REPO = 'https://github.com/daoudandiaye98-alt/mare-liberum';
 export const RELEASES = [
-  ['3.34.1', null, null, 'the homepage carries the verification tag of the Internet Licensing Collective (ILC), so the sea can join it as a publisher'],
+  ['3.35.0', null, null, 'the engine room: six measured levers that spare agents tokens — fields= and fmt=toon on every JSON door, the lean MCP door /mcp/lean (four tools instead of 55, answers as text), POST /compress for programs, and on the reader since= (only what changed) and budget= (a page fitted to a token budget); /engine shows each lever live, with a tokenizer bench'],
+  ['3.34.1', '2026-11-25T14:11:18+01:00', 24, 'the homepage carries the verification tag of the Internet Licensing Collective (ILC), so the sea can join it as a publisher'],
   ['3.34.0', '2026-11-25T13:31:13+01:00', 23, 'Fair Share: a receipt for every saving, a voluntary fair share settled over x402, the drop as a unit of account, commission-ready shop links, a second IndexNow path, and the journey homepage'],
   ['3.33.1', '2026-11-25T00:34:58+01:00', 22, 'the open numbers page without the sections on money, releases and the list of public doors (they stay in /open.json)'],
   ['3.33.0', '2026-11-24T20:29:32+01:00', 21, 'Der Beweis: every number in public, the proof of function, a lean reader and a short brain answer, what the AIs read, a way into every agent client'],
