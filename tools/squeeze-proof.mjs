@@ -23,7 +23,7 @@ import { payConfig } from '../node/pay.mjs';
 import { setViaKey } from '../node/via.mjs';
 import { immune } from '../node/immune.mjs';
 import { leanMarkdown, cleanUrl } from '../node/lean.mjs';
-import { squeeze, fitBudget, focusOn, diffLines, detectType, jsonDepth, toonHook, toonReady, SQUEEZE } from '../node/squeeze.mjs';
+import { squeeze, fitBudget, focusOn, diffLines, detectType, jsonDepth, toonHook, toonReady, SQUEEZE, TOON_MIN_GAIN } from '../node/squeeze.mjs';
 import { createVersions, sinceOf, readerParams, counter } from '../node/press.mjs';
 import { tokensOf, bytesOf } from '../node/engine.mjs';
 
@@ -56,6 +56,8 @@ const SECTIONS = ['Arrival', 'Berths', 'Pilots', 'Ferries', 'Cargo', 'Cranes', '
 const handbook = () => { seed = 7; const out = ['# Harbour handbook', '', para()]; for (const s of SECTIONS) { out.push('', `## ${s}`, '', para(), ''); if (ANSWERS[s]) out.push(ANSWERS[s], ''); out.push(para()); if (rnd() > 0.5) out.push('', `- ${sentence()}`, `- ${sentence()}`); } return out.join('\n'); };
 const HANDBOOK = handbook();
 const QA = [['When does the ferry to Helgoland leave?', '09:30', '## Ferries'], ['How much does diesel cost per litre?', '1.89 EUR', '## Fuel'], ['Wann hat das Hafenbüro am Samstag geöffnet?', '9 bis 12 Uhr', '## Öffnungszeiten']];
+// a table whose long texts outweigh its keys: TOON is smaller, but by about 12 % only (below TOON_MIN_GAIN)
+const NOTES = { notes: Array.from({ length: 10 }, (_, i) => ({ id: i + 1, text: 'A fairly long sentence of about eighty characters so that the values outweigh the keys' })) };
 const asHtml = (md) => `<!doctype html><html><head><title>Harbour handbook</title></head><body><nav><a href="/">Home</a> <a href="/about">About</a></nav><main>${md.split('\n\n').map((b) => (/^## /.test(b) ? `<h2>${b.slice(3)}</h2>` : /^# /.test(b) ? `<h1>${b.slice(2)}</h1>` : /^- /m.test(b) ? `<ul>${b.split('\n').map((l) => `<li>${l.slice(2)}</li>`).join('')}</ul>` : `<p>${b}</p>`)).join('\n')}</main><footer>© 2026 Harbour · <a href="/imprint">Imprint</a></footer></body></html>`;
 
 // facts: every number outside a link, every link (without its tracking), every path link of Markdown
@@ -154,7 +156,8 @@ await proof('JSON: minified, parses back to the same value; deep nesting refused
   assert.equal(squeeze('['.repeat(64) + ']'.repeat(64)).type, 'json');
   assert.equal(jsonDepth('{"a":"[[[[[[[["}'), 1, 'brackets inside a string do not count');
 });
-await proof('TOON hook: without node/toon.mjs JSON is minified only; with a TOON encoder, tabular JSON goes as TOON when smaller and decodes to the same value (reference implementation, dev only)', async () => {
+await proof('TOON hook: without node/toon.mjs JSON is minified only; with a TOON encoder, JSON goes as TOON only when that spares at least 20 % (TOON_MIN_GAIN), and decodes to the same value (reference implementation, dev only)', async () => {
+  const live = [(await call('/savings.json', { accept: 'application/json' })).j, (await call('/fair.json', { accept: 'application/json' })).j];
   assert.equal(squeeze(JSON.stringify([{ a: 1 }, { a: 2 }], null, 2)).form, toonReady() ? 'toon' : 'json');
   const ref = `${homedir()}/.cache/mare-proof/node_modules/@toon-format/toon/dist/index.mjs`;
   if (toonReady() || !existsSync(ref)) { console.log(`       (${toonReady() ? 'node/toon.mjs is there: TOON already in use' : 'reference TOON not installed: path not exercised'})`); return; }
@@ -163,8 +166,13 @@ await proof('TOON hook: without node/toon.mjs JSON is minified only; with a TOON
     const rows = Array.from({ length: 40 }, (_, i) => ({ id: i + 1, host: `shop${i}.dev`, verified: i % 3 === 0, price: 10 + i / 4 }));
     const r = squeeze(JSON.stringify({ rows }, null, 2));
     assert.equal(r.form, 'toon'); assert.deepEqual(r.steps.map((s) => s.step), ['json minified', 'json as TOON']); assert.deepEqual(T.decode(r.out), { rows });
-    assert.ok(bytesOf(r.out) < bytesOf(JSON.stringify({ rows })), 'smaller than the minified JSON');
+    assert.ok(tokensOf('toon', r.out) <= 0.8 * tokensOf('json', JSON.stringify({ rows })), 'at least 20 % smaller than the minified JSON');
     console.log(`       tabular JSON: pretty ${r.steps[0].before} → minified ${r.steps[0].after} → TOON ${r.steps[1].after} tokens`);
+    // the threshold: semi-uniform and nested JSON stays JSON unless TOON spares 20 % (TOON_MIN_GAIN)
+    const shapes = [NOTES, { a: { b: { c: [{ x: 1, y: { z: 2 } }, { x: 2, w: [3, 4] }], d: 'e' } } }, { items: Array.from({ length: 12 }, (_, i) => (i % 2 ? { id: i, name: `n${i}`, tags: ['a', 'b'] } : { id: i, title: `t${i}`, meta: { k: i } })) }, live[0], live[1]];
+    for (const v of shapes) { const min = JSON.stringify(v), t = T.encode(v), x = squeeze(JSON.stringify(v, null, 2)), worth = tokensOf('toon', t) <= 0.8 * tokensOf('json', min);
+      assert.equal(x.form, worth ? 'toon' : 'json', `TOON ${tokensOf('toon', t)} vs JSON ${tokensOf('json', min)} tokens`); assert.deepEqual(worth ? T.decode(x.out) : JSON.parse(x.out), v); }
+    assert.equal(TOON_MIN_GAIN, 0.2); assert.equal(squeeze(JSON.stringify(NOTES, null, 2)).form, 'json', 'a table of long texts: TOON spares about 12 %, below the threshold');
   } finally { toonHook(null); }
 });
 await proof('type detection: HTML, JSON, Markdown, text; a given type wins', () => {
@@ -388,6 +396,11 @@ await negative('a door that logs what was sent is caught by the privacy check', 
 await negative('a door that keeps what was sent in the kv is caught by the privacy check', () => privateRun(async () => { await posts(); await kv.set('compress:last', MARK, 60); }));
 await negative('a default answer with a line added (the since= hint in the body) is caught by the byte check', async () => { const a = await call(`/r/${HB}`); const b = Buffer.from(`${a.text}Read it again for only what changed: ${a.h['x-sea-delta']}\n`); assert.ok(a.buf.equals(b)); });
 await negative('a reader that takes every since= as its own (a page\'s since=2024-01-01 too) is caught', () => { const strip = (url) => ['since']; assert.deepEqual(strip(new URL(`${BASE}/r/x?since=2024-01-01`)), readerParams(new URL(`${BASE}/r/x?since=2024-01-01`), '/r/x').strip); });
+const REF_TOON = `${homedir()}/.cache/mare-proof/node_modules/@toon-format/toon/dist/index.mjs`;
+if (!toonReady() && existsSync(REF_TOON)) await negative('a squeeze that takes TOON whenever it is smaller (no 20 % threshold) is caught', async () => {
+  const T = await import(REF_TOON), min = JSON.stringify(NOTES), t = T.encode(NOTES), broken = bytesOf(t) < bytesOf(min) ? 'toon' : 'json';
+  assert.equal(broken, (tokensOf('toon', t) <= 0.8 * tokensOf('json', min)) ? 'toon' : 'json');
+});
 await negative('a 1 MB limit that lets one byte more through is caught', async () => { const r = await call('/compress', { method: 'POST', accept: 'application/json', headers: { 'content-type': 'text/plain' }, body: 'a'.repeat(SQUEEZE.maxBytes + 1), ip: '127.0.0.1' }); assert.notEqual(r.status, 413); });
 
 // ---------------------------------------------------------------- the sea's own pages, before and after (printed)

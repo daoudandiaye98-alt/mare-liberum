@@ -48,7 +48,7 @@ import { openTools } from './opentools.mjs';
 import { netKey } from './guard.mjs';
 import { createFair, withReceipt, fairSwitch, fairData, fairPage, receiptJson, receiptPage, FAIR, usd6 } from './fair.mjs';
 import { tallyDrop } from './tally.mjs';
-import { compressDoor, pressRead, readerParams, createVersions, counter, engineOn } from './press.mjs';
+import { compressDoor, pressRead, readerParams, createVersions, counter, engineOn, useCors } from './press.mjs';
 
 export const VERSION = '3.34.1';
 const UA = 'MareLiberum/1.0 (open agent index; pull-only; +/.well-known/ard.json)';
@@ -1367,6 +1367,7 @@ async function sitemap(db, base, n, kv) {
 
 // ------------------------------------------------------------------ HTTP
 const CORS = { 'access-control-allow-origin': '*', 'access-control-allow-methods': 'GET,POST,OPTIONS', 'access-control-allow-headers': 'content-type,mcp-protocol-version,mcp-session-id,accept,authorization,payment-signature,x-payment', 'access-control-expose-headers': 'payment-required,payment-response,x-payment-response,x402-payment-required,x-pay-to,x-settle-window,x-via,x-via-target,x-agent-hint,link,retry-after', 'access-control-max-age': '86400' };
+useCors(CORS);
 // the reader hands out the page's address twice (as asked, and where it led) and the links it found: all through the sea
 const READ_KEYS = new Set([...ADDRESS_KEYS, 'final']);
 // the record of the till and of the via addresses (node/ledger.mjs): a node without one of its own keeps it in memory

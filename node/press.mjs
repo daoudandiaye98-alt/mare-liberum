@@ -19,7 +19,10 @@ import { cleanUrl } from './lean.mjs';
 import { readAnswer } from './compact.mjs';
 
 export const engineOn = (cfg) => engineSwitch(cfg) && !immune.atRest?.('engine');
-const CORS = { 'access-control-allow-origin': '*' };
+let CORS = { 'access-control-allow-origin': '*' };
+const ENGINE_EXPOSE = 'etag,x-sea-delta,x-sea-engine,x-sea-engine-tokens,x-sea-engine-saved,x-sea-engine-lossy';
+// the sea's CORS headers (node/core.mjs), with the engine's headers readable from a page's script
+export function useCors(c) { if (c && typeof c === 'object') { const ex = c['access-control-expose-headers']; CORS = { ...c, 'access-control-expose-headers': ex ? `${ex},${ENGINE_EXPOSE}` : ENGINE_EXPOSE }; } return CORS; }
 const n = (x) => Number(x || 0).toLocaleString('en-US');
 
 // ---------------------------------------------------------------- counting (rule 17)
@@ -40,7 +43,7 @@ export function compressUse(base) {
     post: `${base}/compress`, body: { 'text | html | json': 'what to make smaller (one of the three)', q: 'optional: a question; keeps the parts that answer it (lossy)', budget: 'optional: tokens; fits the text into them (lossy)', type: 'optional: html | json | md | text (else it is found out)', url: 'optional: the page an HTML text came from' },
     raw: 'or send the text itself with its Content-Type (text/html, application/json, text/markdown, text/plain); q, budget and type then as query parameters',
     answers: 'JSON { out, form, tokens: { before, after, saved }, steps, lossy, note }; only the text with Accept: text/plain or text/markdown. Headers: x-sea-engine, x-sea-engine-tokens (before->after), x-sea-engine-saved, x-sea-engine-lossy (only when lossy)',
-    lossless: ['HTML → the lean reader\'s Markdown', 'JSON → minified (TOON where that is smaller, when the node has it)', 'whitespace normalised', 'a line or paragraph said again word for word said once (40+ characters; not in code or tables)', 'tracking parameters cut from links'],
+    lossless: ['HTML → the lean reader\'s Markdown', 'JSON → minified (TOON where that spares at least 20 % more, when the node has it)', 'whitespace normalised', 'a line or paragraph said again word for word said once (40+ characters; not in code or tables)', 'tracking parameters cut from links'],
     lossy: ['q: BM25 over the blocks (paragraphs, lists, tables, code), stop words English and German left out; the best blocks in their order, under their headings', 'budget: blocks kept until the budget; each gap marked [… n tokens left out]; without q every heading, the first block of each section, then the densest'],
     tokens: `UTF-8 bytes over the bytes per token the bench measured for each form (o200k_base)${RATIO.assumption ? '; JSON and TOON with the ratio of Markdown until the bench measured them' : ''}`,
     limits: { body: '1 MB (413 above), an empty body is 400', jsonDepth: SQUEEZE.jsonDepth, pace: 'per network, weighed by size (the sea\'s pace of every door)' },
@@ -152,13 +155,15 @@ export function pressRead(P, { r, md, st, a = {}, target, base, req, versions, c
   const again = `${base}/r/${target}${target.includes('?') ? '&' : '?'}since=${tag}${a.format === 'full' ? '&format=full' : ''}`;
   const H = { ...hdr, etag, 'x-sea-delta': again };
   const type = { 'content-type': 'text/markdown; charset=utf-8' }, subject = src;
-  const send = (body, s, extra = {}) => new Response(body, { status: 200, headers: { ...type, ...H, ...(s?.saved > 0 ? engineHeaders(s) : {}), ...extra } });
+  // (an answer the engine shaped lets a page's script read its headers; the default answer keeps the headers it had, and the two)
+  const shaped = { ...H, ...(H['access-control-expose-headers'] ? { 'access-control-expose-headers': CORS['access-control-expose-headers'] } : {}) };
+  const send = (body, s, extra = {}) => new Response(body, { status: 200, headers: { ...type, ...shaped, ...(s?.saved > 0 ? engineHeaders(s) : {}), ...extra } });
   versions?.put(key, tag, stable);
   // If-None-Match with the ETag of the page: 304, no body (what the agent did not have to read again is counted)
   const inm = req?.headers?.get?.('if-none-match');
   if (inm && matches(inm, tag)) {
     const s = savingOf('delta', { before: md, beforeForm: 'md', after: '', afterForm: 'md' }); count('delta', s, subject);
-    return new Response(null, { status: 304, headers: { ...H, ...engineHeaders(s) } });
+    return new Response(null, { status: 304, headers: { ...shaped, ...engineHeaders(s) } });
   }
   const when = new Date().toISOString().slice(0, 16).replace('T', ' ');
   if (P?.since) {
@@ -181,17 +186,17 @@ export function pressRead(P, { r, md, st, a = {}, target, base, req, versions, c
     return send(`Note: the version ${P.since} of this page is not kept here (the reader keeps versions 24 hours, in memory); the whole page follows (ETag now ${tag}).\n\n${md}Read it again for only what changed: ${again}\n`, null);
   }
   if (P?.budget && tokensOf('md', md) > P.budget) {
-    const q = typeof a.q === 'string' ? a.q.trim().slice(0, 200) : '', whole = `${base}/r/${target}`;
+    const q = typeof a.q === 'string' ? a.q.trim().slice(0, 200) : '';
     // the frame (this line, the source, how to cite, how to read again) and at least minBudget tokens of the page: a smaller
     // budget is raised to that, and said so
     const foot = `Read it again for only what changed: ${again}\n`, env = readAnswer({ ...r, markdown: '' });
-    const line = (B, kept, of, left) => `Fitted to ${B > P.budget ? `${n(B)} tokens, the least this page takes (you asked for ${n(P.budget)})` : `your budget of ${n(B)} tokens`} (lossy): ${n(kept)} of ${n(of)} blocks of the page kept, about ${n(left)} tokens left out${q ? `, the parts that answer "${q}" first` : ''}. The whole page: ${whole}\n`;
+    const line = (B, kept, of, left, matched = 1) => `Fitted to ${B > P.budget ? `${n(B)} tokens, the least this page takes (you asked for ${n(P.budget)})` : `your budget of ${n(B)} tokens`} (lossy): ${n(kept)} of ${n(of)} blocks of the page kept, about ${n(left)} tokens left out${q ? (matched ? `, the parts that answer "${q}" first` : `; nothing matched "${q}": headings and first blocks`) : ''}. The whole page: without budget=\n`;
     const frameOf = (B) => tokensOf('md', line(B, 1e6, 1e6, 1e9) + env + foot);
-    const B = Math.max(P.budget, frameOf(P.budget + 1e7) + SQUEEZE.minBudget), top = (kept, of, left) => line(B, kept, of, left);
+    const B = Math.max(P.budget, frameOf(P.budget + 1e7) + SQUEEZE.minBudget);
     const room = B - frameOf(B) - 1;                 // (one token for the rounding of the parts)
     const f = fitBudget(r.markdown || '', { q, budget: Math.max(SQUEEZE.minBudget, room) });
     if (!f.lossy) return new Response(md, { status: st, headers: { ...type, ...H } });
-    const body = top(f.kept, f.of, Math.max(0, tokensOf('md', md) - tokensOf('md', readAnswer({ ...r, markdown: f.out })))) + readAnswer({ ...r, markdown: f.out }) + foot;
+    const body = line(B, f.kept, f.of, Math.max(0, tokensOf('md', md) - tokensOf('md', readAnswer({ ...r, markdown: f.out }))), f.matched) + readAnswer({ ...r, markdown: f.out }) + foot;
     const s = savingOf('budget', { before: md, beforeForm: 'md', after: body, afterForm: 'md', lossy: true });
     if (s.saved > 0) { count('budget', s, subject); return send(body, s); }
   }

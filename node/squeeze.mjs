@@ -2,7 +2,7 @@
 // "squeeze"; the reader's levers "delta" and "budget" use the same parts, see node/press.mjs)
 // Lossless steps first, each measured (node/engine.mjs, one rule for every lever):
 //   HTML       → the lean reader's Markdown (node/lean.mjs leanMarkdown: the page's own text, its facts and links once)
-//   JSON       → minified; TOON where that is smaller, once node/toon.mjs is there (the hook below)
+//   JSON       → minified; TOON where that spares at least 20 % more, once node/toon.mjs is there (the hook below)
 //   text, Markdown → whitespace normalised; a line or a paragraph said again word for word is said once (40 characters
 //                and more, never inside code or a table); tracking parameters cut from every link (lean.mjs cleanUrl)
 // Lossy steps only when the agent names them, and then said so:
@@ -17,12 +17,18 @@ import { savingOf, tokensOf, bytesOf, RATIO } from './engine.mjs';
 
 // ---------------------------------------------------------------- TOON (E1's node/toon.mjs), when it is there
 // HOOK: one guarded dynamic import, so this file works alone and after the branches meet. Without the file JSON is minified
-// only. TOON is taken only where it is smaller than the minified JSON (lossless: E1 proves the round trip).
+// only. TOON is taken only where it is at least TOON_MIN_GAIN smaller than the minified JSON (lossless: E1 proves the round
+// trip).
 let TOON = await import('./toon.mjs').then((m) => (typeof m?.toToon === 'function' ? m : null)).catch(() => null);
 // the proofs hand in the reference implementation to prove the path; nothing else calls this
 export function toonHook(m) { TOON = m && typeof m.toToon === 'function' ? m : null; return !!TOON; }
 export const toonReady = () => !!TOON;
 function toonOf(v) { if (!TOON) return null; try { const t = TOON.toToon(v); return typeof t === 'string' && t.length ? t : null; } catch { return null; } }
+// TOON only where it spares at least this share of the compact JSON's tokens (integrator, 3.35, from the research: TOON
+// saves on tables, is larger or barely smaller on semi-uniform and nested data, and models read it a little less surely).
+// E1's node/toon.mjs names the threshold; until the branches meet this one stands, and theirs wins once it is there
+export const TOON_MIN_GAIN = 0.2;
+export const toonGain = () => { for (const v of [TOON?.TOON_MIN_GAIN, TOON?.TOON_MIN_SAVING, TOON?.TOON_THRESHOLD, TOON?.TOON?.minGain, TOON?.TOON?.minSaving, TOON?.TOON?.threshold]) if (Number.isFinite(v) && v > 0 && v < 1) return v; return TOON_MIN_GAIN; };
 
 // ---------------------------------------------------------------- limits
 export const SQUEEZE = Object.freeze({
@@ -168,7 +174,8 @@ const withHeads = (blocks, i) => [...(blocks[i].under || []), i];
 // how much one block says per byte: different words, numbers, links
 const density = (b) => { const t = termsOf(b.text), nums = (b.text.match(/\d+(?:[.,]\d+)?/g) || []).length, links = (b.text.match(/\]\(|https?:\/\//g) || []).length; return (new Set(t).size + 2 * nums + links) / (bytesOf(b.text) + 1); };
 // the order blocks are taken in: with a question, the ones that answer it best (blocks without a match are not taken); without
-// one (or when nothing matches), every heading, then the first block of each section, then the densest
+// one (or when nothing matches), the page's first block (its lead, cut if it must be), every heading, then the first block of
+// each section, then the densest
 function orderOf(blocks, q) {
   const idx = blocks.map((_, i) => i);
   if (q && termsOf(q).length) {
@@ -179,7 +186,28 @@ function orderOf(blocks, q) {
   const heads = idx.filter((i) => blocks[i].kind === 'heading'), firsts = [], seen = new Set();
   for (const i of idx) { const b = blocks[i]; if (b.kind === 'heading' || seen.has(b.section)) continue; seen.add(b.section); firsts.push(i); }
   const rest = idx.filter((i) => blocks[i].kind !== 'heading' && !firsts.includes(i)).map((i) => [i, density(blocks[i])]).sort((a, b) => b[1] - a[1] || a[0] - b[0]).map(([i]) => i);
-  return { order: [...heads, ...firsts, ...rest], scores: null, matched: 0 };
+  // the lead: the first paragraph that says a sentence (a page may open with a list of links: that is no lead)
+  const prose = (t) => t.replace(/\]\([^)]*\)/g, ']').replace(/https?:\/\/\S+/g, '');
+  const li = idx.find((i) => blocks[i].kind === 'para' && prose(blocks[i].text).length >= 80 && /\p{L}[.!?](\s|$)/u.test(prose(blocks[i].text))), lead = li != null ? [li] : firsts.slice(0, 1);
+  const without = (xs) => xs.filter((i) => !lead.includes(i));
+  return { order: [...lead, ...heads, ...without(firsts), ...without(rest)], scores: null, matched: 0 };
+}
+// the part of a block that fits into room bytes: its sentences (lines of a list or table) that answer the question best, else
+// its first ones, in their order; what it leaves out marked like a gap. null when too little fits to say anything
+const MAX_CUTS = 3;
+function cutTo(b, room, qs) {
+  const units = b.kind === 'para' ? b.text.match(/[^.!?]+(?:[.!?]+["')\]]*(?:\s+|$)|$)/g)?.filter((u) => u.trim()) || [b.text] : b.text.split('\n');
+  if (units.length < 2 || room < 100) return null;
+  const join = b.kind === 'para' ? '' : '\n', order = units.map((u, i) => i);
+  if (qs?.size) { const hits = units.map((u) => termsOf(u).filter((w) => qs.has(w)).length); order.sort((x, y) => hits[y] - hits[x] || x - y); }
+  const pick = new Set(); let size = 0;
+  for (const i of order) { const c = bytesOf(units[i]) + 1; if (size + c + GAP_MAX > room) continue; pick.add(i); size += c; }
+  if (!pick.size || size < 60) return null;
+  const parts = []; let gap = 0;
+  units.forEach((u, i) => { if (pick.has(i)) { if (gap) parts.push(b.kind === 'para' ? `${gapLine(gap)} ` : gapLine(gap)); gap = 0; parts.push(b.kind === 'para' ? u : u); } else gap += bytesOf(u); });
+  if (gap) parts.push(b.kind === 'para' ? ` ${gapLine(gap)}` : gapLine(gap));
+  const text = (b.kind === 'para' ? parts.join('') : parts.join(join)).replace(/ +/g, ' ').trim();
+  return bytesOf(text) <= room ? text : null;
 }
 // fit a Markdown text into a budget of tokens (counted the sea's one way: UTF-8 bytes over the bench ratio for Markdown)
 // → { out, lossy, kept, of, left (tokens left out), budget, tokens, matched }
@@ -191,10 +219,17 @@ export function fitBudget(markdown, { q = '', budget } = {}) {
   // greedy: a block goes in with the headings above it while the bytes, with one gap mark per gap at most, stay under the cap
   let used = 0, gaps = 0;
   const gapsOf = (k) => { let n = 0, inGap = false; for (let i = 0; i < blocks.length; i++) { if (k.has(i)) inGap = false; else if (!inGap) { n++; inGap = true; } } return n; };
+  // a block too long for what is left goes in cut (its best sentences, at most MAX_CUTS blocks), not at all if too little fits
+  const qs = matched ? new Set(termsOf(q)) : null; let cuts = 0;
   for (const i of order) {
     const add = withHeads(blocks, i).filter((j) => !keep.has(j)); if (!add.length) continue;
     const cost = add.reduce((s, j) => s + bytesOf(blocks[j].text) + SEP, 0), next = new Set([...keep, ...add]), g = gapsOf(next);
-    if (used + cost + g * GAP_MAX > cap) continue;
+    if (used + cost + g * GAP_MAX > cap) {
+      if (cuts >= MAX_CUTS || !['para', 'list', 'table'].includes(blocks[i].kind)) continue;
+      const heads = cost - bytesOf(blocks[i].text) - SEP, t = cutTo(blocks[i], cap - used - heads - SEP - g * GAP_MAX, qs); if (!t) continue;
+      blocks[i] = { ...blocks[i], text: t, cut: true }; cuts++;
+      for (const j of add) keep.add(j); used += heads + bytesOf(t) + SEP; gaps = g; continue;
+    }
     for (const j of add) keep.add(j); used += cost; gaps = g;
   }
   let out = render(blocks, keep);
@@ -240,7 +275,7 @@ export function squeeze(input, { type, q, budget, url } = {}) {
     let v; if (isValue) v = input; else { try { v = JSON.parse(src); } catch { throw new SqueezeError('this is not valid JSON (send it as text, or fix it)'); } }
     const min = JSON.stringify(v) ?? '';
     step('json minified', min, 'json');
-    const t = toonOf(v); if (t != null && bytesOf(t) < bytesOf(cur)) step('json as TOON', t, 'toon');
+    const t = toonOf(v); if (t != null && tokensOf('toon', t) <= (1 - toonGain()) * tokensOf('json', cur)) step('json as TOON', t, 'toon');
     if (q || budget) notes.push('a question or a budget is applied to text and HTML; JSON is only made smaller without loss');
   } else {
     if (kind === 'html') { let base = 'https://page.invalid/'; try { if (url) base = new URL(String(url)).href; } catch {} const lean = leanMarkdown(src, base); if (lean.md.trim()) step('html to Markdown (the lean reader)', lean.md, 'md', true, true); else notes.push('the HTML holds no text the lean reader keeps'); }
