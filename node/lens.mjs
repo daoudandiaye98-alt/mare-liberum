@@ -65,7 +65,7 @@ export function createLens(h) {
       if (!hit && r.markdown) await kv.set(key, markup ? { ...r, html: undefined, rawHtml: undefined, type: r.type && r.htmlBytes ? undefined : r.type } : r, 3600);
       // the reading area spares what the page weighs as HTML against its Markdown (node/areas.mjs); the size stays out of the answer
       // (an answer that hands the page's markup over spared nothing against it: not counted)
-      if (r.markdown && r.htmlBytes && !markup) api.countBytes?.('read', r.htmlBytes, r.markdown.length, ctx, r.final || r.url);
+      if (r.markdown && r.htmlBytes && !markup && !shape) api.countBytes?.('read', r.htmlBytes, r.markdown.length, ctx, r.final || r.url);
       // a crawler's tool call (ctx.uncounted) is read like any other and counted nowhere: no read of the day, no event, no path
       if (r.host && (r.markdown || r.blocked) && !ctx?.uncounted) {
         const day = now().slice(0, 10), role = ctx?.whoKind || 'unknown';

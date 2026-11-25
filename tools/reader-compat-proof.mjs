@@ -304,6 +304,15 @@ await proof('once per network and page per UTC day across /r/, Jina and the scra
   assert.deepEqual(await savingsOf(node), s1, 'the same page from the same network the same day: not again');
   await node.call('/v2/scrape', { method: 'POST', accept: 'application/json', ip: fresh(), body: { url: `${P}/handbook`, maxAge: 0 } }); assert.equal((await savingsOf(node)).reads, s1.reads + 1, 'another network');
 });
+await proof('a read narrowed by a selector (X-Target-Selector, X-Remove-Selector, includeTags, excludeTags) is never counted as a saving against the whole page (R6); the same page read plainly is', async () => {
+  const s0 = await savingsOf(node), ip = fresh();
+  await node.call(`/r/${P}/handbook`, { ip, headers: { 'x-target-selector': '#berths', 'x-no-cache': 'true' } });
+  await node.call('/v2/scrape', { method: 'POST', accept: 'application/json', ip, body: { url: `${P}/handbook`, includeTags: ['#berths'], maxAge: 0 } });
+  await node.call('/v1/scrape', { method: 'POST', accept: 'application/json', ip, body: { url: `${P}/handbook`, excludeTags: ['.ad'] } });
+  assert.deepEqual(await savingsOf(node), s0, 'selector reads add nothing to the ledger');
+  await node.call('/v2/scrape', { method: 'POST', accept: 'application/json', ip, body: { url: `${P}/handbook`, maxAge: 0 } });
+  assert.equal((await savingsOf(node)).reads, s0.reads + 1, 'the plain read of the same page counts');
+});
 await proof('never for crawlers or the sea\'s own calls; never an answer that hands the page\'s markup over (html, rawHtml, X-Return-Format: html)', async () => {
   const s0 = await savingsOf(node), o0 = outgoing.length;
   const c = await node.call('/v2/scrape', { method: 'POST', accept: 'application/json', ip: fresh(), ua: 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko); compatible; GPTBot/1.2; +https://openai.com/gptbot', body: { url: `${P}/handbook`, maxAge: 0 } });
@@ -335,7 +344,8 @@ const BREAK = [
   ['X-No-Cache and maxAge: 0 past the free limit', 'node/lens.mjs', "      if (!hit) {\n        try { await allow(ctx, 'read', 100, 86400);", "      if (!hit && a.fresh !== true) {\n        try { await allow(ctx, 'read', 100, 86400);"],
   ['markup past the free limit', 'node/lens.mjs', "      if (!hit) {\n        try { await allow(ctx, 'read', 100, 86400);", "      if (!hit && !markup) {\n        try { await allow(ctx, 'read', 100, 86400);"],
   ['the immune system skipped on the scrape doors', 'node/core.mjs', 'const met = immune.meet({ ip, path, method: req.method, scripted });', 'const met = /^\\/v[12]\\/scrape$/.test(path) ? null : immune.meet({ ip, path, method: req.method, scripted });'],
-  ['an answer with the page\'s markup counted as a saving', 'node/lens.mjs', 'if (r.markdown && r.htmlBytes && !markup) api.countBytes', 'if (r.markdown && r.htmlBytes) api.countBytes'],
+  ['an answer with the page\'s markup counted as a saving', 'node/lens.mjs', 'if (r.markdown && r.htmlBytes && !markup && !shape) api.countBytes', 'if (r.markdown && r.htmlBytes) api.countBytes'],
+  ['a selector-narrowed read counted against the whole page (R6)', 'node/lens.mjs', 'if (r.markdown && r.htmlBytes && !markup && !shape) api.countBytes', 'if (r.markdown && r.htmlBytes && !markup) api.countBytes'],
   ['the scrape doors count beside the ledger\'s rule', 'node/core.mjs', "if (r.host) passed('read', r.final || r.url || ask.url,", "if (r.markdown && r.htmlBytes !== 0) sea.countBytes?.('read', 9e5, 1, { ...ctx, door: '/v2' }, `${ask.url}#again`); if (r.host) passed('read', r.final || r.url || ask.url,"],
   ['crawlers read and counted on the scrape doors', 'node/core.mjs', 'let r; try { r = await sea.read({ url: ask.url, ...(ask.full ? { full: true } : {}), ...(ask.fresh ? { fresh: true } : {}), ...(ask.shape ? { shape: ask.shape } : {}) }, ctx); }', 'let r; try { r = await sea.read({ url: ask.url, ...(ask.full ? { full: true } : {}), ...(ask.fresh ? { fresh: true } : {}), ...(ask.shape ? { shape: ask.shape } : {}) }, { ...ctx, readOnly: false }); }'],
   ['the key logged', 'node/core.mjs', "if (ask.error) return out(scrapeError(400, 'BAD_REQUEST', ask.error));", "if (ask.error) return out(scrapeError(400, 'BAD_REQUEST', ask.error)); console.error('scrape', req.headers.get('authorization'));"],
