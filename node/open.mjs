@@ -128,6 +128,7 @@ export const ENDPOINTS = [
   ]],
   ['How to reach the sea', [
     ['/openapi.json', 'the free GET doors as an OpenAPI description'],
+    ['/openapi/reader.json', 'the reader /r/ and POST /compress as an OpenAPI 3.1 description'],
     ['/.well-known/agent-card.json', 'the A2A agent card'],
     ['/.well-known/mcp/server-card.json', 'the MCP server card'],
     ['/.well-known/ard.json', 'the ARD manifest of the open index'],
