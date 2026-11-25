@@ -2,7 +2,7 @@
 // It follows robots.txt, reads one page per call, keeps nothing but a short cache and the name of the site that was read.
 import { safeHost, publicDns, grab, robotsGroups, robotsAllows, readPage } from './check.mjs';
 import { aside } from './aside.mjs';
-import { entities, leanMarkdown } from './lean.mjs';
+import { entities, leanMarkdown, parseHtml, attrs, LEAN_MAX } from './lean.mjs';
 export { entities };
 
 export const READER_UA = 'MareLiberum-Reader/1.0 (+https://mareliberum.dev/read; reads one page for an agent and follows robots.txt)';
@@ -43,18 +43,70 @@ export function toMarkdown(html, base, { menus = true } = {}) {
   return md;
 }
 
+// ---------------------------------------------------------------- the shapes other readers are asked for (since 3.38)
+// A request in the form of another reader (Jina's X-Target-Selector and X-Remove-Selector, Firecrawl's includeTags and
+// excludeTags, node/compat.mjs) narrows the page before it is written. Only a safe part of CSS is read: a tag, #id, .class
+// and their combinations (div.note, article#main, .a.b), several split by commas. Anything else (descendants, attributes,
+// pseudo-classes) is not read and is named back as ignored. It runs beside the node with the page (see digest).
+const SIMPLE = /^([a-z][a-z0-9-]*)?((?:[#.][\w-]+)*)$/i;
+export function selectorsOf(list) {
+  const ok = [], bad = [];
+  for (const raw of [].concat(list ?? []).flatMap((x) => String(x ?? '').split(',')).map((x) => x.trim()).filter(Boolean).slice(0, 40)) {
+    const m = SIMPLE.exec(raw); if (!m || raw.length > 120 || (!m[1] && !m[2])) { bad.push(raw.slice(0, 80)); continue; }
+    const parts = m[2].match(/[#.][\w-]+/g) || [], ids = parts.filter((p) => p[0] === '#').map((p) => p.slice(1));
+    if (ids.length > 1) { bad.push(raw.slice(0, 80)); continue; }
+    ok.push({ tag: m[1] ? m[1].toLowerCase() : null, id: ids[0] || null, classes: parts.filter((p) => p[0] === '.').map((p) => p.slice(1)) });
+  }
+  return { ok, bad };
+}
+const VOIDS = new Set('area base br col embed hr img input link meta param source track wbr keygen command'.split(' '));
+const isMatch = (el, s) => { if (s.tag && el.tag !== s.tag) return false; if (!s.id && !s.classes.length) return true; const o = attrs(el); if (s.id && o.id !== s.id) return false; const cls = ` ${String(o.class || '').replace(/\s+/g, ' ')} `; return s.classes.every((c) => cls.includes(` ${c} `)); };
+// a box written back as markup (the insides of scripts, styles and pictures are never kept: the parser skips them)
+const outer = (n) => { if (typeof n === 'string') return n; if (n.tag === '#root') return n.kids.map(outer).join(''); const open = `<${n.tag}${n.a || ''}>`; return VOIDS.has(n.tag) ? open : `${open}${n.kids.map(outer).join('')}</${n.tag}>`; };
+// target: keep only the boxes the selectors name (each once, the outermost); remove: take out the boxes they name.
+// → { html, matched, bad }: the page as it is when nothing can be done (no selector read, nothing matched)
+export function shapeHtml(html, { target = [], remove = [] } = {}) {
+  const T = selectorsOf(target), R = selectorsOf(remove), bad = [...T.bad, ...R.bad];
+  if (!T.ok.length && !R.ok.length) return { html, matched: 0, bad };
+  const root = parseHtml(html, { max: LEAN_MAX }); let removed = 0;
+  if (R.ok.length) { const stack = [root]; while (stack.length) { const n = stack.pop(); n.kids = n.kids.filter((k) => { if (typeof k === 'string') return true; if (R.ok.some((s) => isMatch(k, s))) { removed++; return false; } stack.push(k); return true; }); } }
+  if (!T.ok.length) return { html: removed ? outer(root) : html, matched: removed, bad };
+  const found = [], stack = [root];
+  while (stack.length && found.length < 200) { const n = stack.pop(); if (n !== root && T.ok.some((s) => isMatch(n, s))) { found.push(n); continue; } for (let i = n.kids.length - 1; i >= 0; i--) if (typeof n.kids[i] !== 'string') stack.push(n.kids[i]); }
+  if (!found.length) return { html: removed ? outer(root) : html, matched: 0, bad, none: true };
+  const title = /<title[^>]*>[\s\S]*?<\/title>/i.exec(html)?.[0] || '';
+  return { html: `<html><head>${title}</head><body><main>${found.map(outer).join('\n')}</main></body></html>`, matched: found.length, bad };
+}
+// the main part of a page as markup, without scripts, styles, pictures, frames and comments (Firecrawl's "html"); main:
+// false keeps the whole body (onlyMainContent: false)
+export function cleanHtml(html, { main = true } = {}) {
+  const h = String(html || '').replace(/<!--[\s\S]*?-->/g, ' ');
+  const pick = (tag) => { let best = ''; for (const m of h.matchAll(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'gi'))) if (m[1].length > best.length) best = m[1]; return best; };
+  const m = main ? pick('main') || pick('article') : '', mine = m && m.replace(/<[^>]+>/g, '').trim().length > 200;
+  let out = (mine ? m : /<body\b[^>]*>([\s\S]*)<\/body>/i.exec(h)?.[1] || h).replace(/<(script|style|noscript|svg|template|iframe|canvas|object|embed|head)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<(link|meta|base)\b[^>]*>/gi, '');
+  if (main && !mine) out = out.replace(/<(nav|header|footer|aside|form)\b[\s\S]*?<\/\1>/gi, ' ');
+  return out.replace(/\n\s*\n+/g, '\n').replace(/[ \t]{2,}/g, ' ').trim();
+}
+
 // what the reader takes from one page, in one go (run beside the node, see aside.mjs): the page's own words about itself,
 // and its main part as lean Markdown (node/lean.mjs) with the links it leads on to, each once and as a full address.
 // full: the whole Markdown the reader wrote before the lean one (toMarkdown, every link as it stands): the way back to
 // whatever the lean reader leaves out (/r/<page>?format=full)
-export function digest(html, base, { full = false } = {}) {
+// shape (since 3.38, asked only in the form of another reader, node/compat.mjs): target/remove narrow the page first
+// (shapeHtml); html: the main part as clean markup beside the Markdown. The page's own words about itself are read from
+// the whole page.
+export function digest(html, base, { full = false, shape = null } = {}) {
   const meta = readPage(html);
-  if (full) { const md = toMarkdown(html, base), links = [], seen = new Set(); for (const m of md.matchAll(/\[([^\]]{2,120})\]\((https?:[^)\s]+)\)/g)) { if (seen.has(m[2]) || links.length >= 60) continue; seen.add(m[2]); links.push({ text: m[1], url: m[2] }); } return { meta, md, links, full: true }; }
-  const { md, links, cut } = leanMarkdown(html, base); return { meta, md, links, cut };
+  let src = html, shaped = null;
+  if (shape && (shape.target?.length || shape.remove?.length)) { const s = shapeHtml(html, shape); src = s.html; shaped = { matched: s.matched, bad: s.bad, none: s.none || undefined }; }
+  const more = shape ? { shaped: shaped || undefined, html: shape.html ? cleanHtml(src, { main: !full }) : undefined } : {};
+  if (full) { const md = toMarkdown(src, base), links = [], seen = new Set(); for (const m of md.matchAll(/\[([^\]]{2,120})\]\((https?:[^)\s]+)\)/g)) { if (seen.has(m[2]) || links.length >= 60) continue; seen.add(m[2]); links.push({ text: m[1], url: m[2] }); } return { meta, md, links, full: true, ...more }; }
+  const { md, links, cut } = leanMarkdown(src, base); return { meta, md, links, cut, ...more };
 }
 
 // read one page for an agent; robots(host) returns the site's robots.txt (cached by the caller)
-export async function readUrl(raw, { robots, full = false } = {}) {
+// shape (since 3.38, node/compat.mjs): { target, remove, html, raw } — raw keeps the page's markup as it came (rawHtml)
+export async function readUrl(raw, { robots, full = false, shape = null } = {}) {
   let u; try { u = new URL(/^https?:\/\//i.test(raw) ? raw : `https://${String(raw).trim()}`); } catch { return { error: 'not a web address' }; }
   if (!/^https?:$/.test(u.protocol)) return { error: 'only http and https pages' };
   // web pages live on the web's ports; the reader is not a way to knock on every door of a machine
@@ -69,11 +121,12 @@ export async function readUrl(raw, { robots, full = false } = {}) {
   const type = r.type.toLowerCase(), final = r.url || u.href;
   if (/html|xml\+xhtml/.test(type) || /^\s*</.test(r.body)) {
     // a page can be written to stall whoever reads it: it is read beside the node, with a time limit
-    let meta, md, found, cut; try { ({ meta, md, links: found, cut } = await aside(import.meta.url, 'digest', [r.body, final, { full }])); } catch (e) { return { url: u.href, final, host, status: r.status, error: e?.code === 'EBUSY' ? e.message : 'this page could not be read in time; it is built in a way that stalls readers' }; }
+    let meta, md, found, cut, shaped, clean; try { ({ meta, md, links: found, cut, shaped, html: clean } = await aside(import.meta.url, 'digest', [r.body, final, shape ? { full, shape: { target: shape.target, remove: shape.remove, html: !!shape.html } } : { full }])); } catch (e) { return { url: u.href, final, host, status: r.status, error: e?.code === 'EBUSY' ? e.message : 'this page could not be read in time; it is built in a way that stalls readers' }; }
     // the links the page leads on to, as full addresses (the Markdown writes those on the page's own site as paths)
     const links = (found || []).filter((l) => l.text && l.text.length >= 2).slice(0, 60);
-    return { url: u.href, final, host, status: r.status, htmlBytes: r.body.length, title: meta.title, description: meta.description, lang: meta.lang, words: md.split(/\s+/).filter(Boolean).length, jsOnly: meta.shell || undefined, markdown: md.slice(0, 60_000), truncated: md.length > 60_000 || undefined, partial: cut || undefined, links, full: full || undefined };
+    return { url: u.href, final, host, status: r.status, htmlBytes: r.body.length, title: meta.title, description: meta.description, lang: meta.lang, words: md.split(/\s+/).filter(Boolean).length, jsOnly: meta.shell || undefined, markdown: md.slice(0, 60_000), truncated: md.length > 60_000 || undefined, partial: cut || undefined, links, full: full || undefined,
+      ...(shape ? { shaped: shaped || undefined, html: shape.html ? clean : undefined, rawHtml: shape.raw ? r.body : undefined, type: shape.raw || shape.html ? (type || undefined) : undefined } : {}) };
   }
-  if (/^text\/|json|markdown|xml/.test(type)) return { url: u.href, final, host, status: r.status, type, markdown: r.body.slice(0, 60_000), truncated: r.body.length > 60_000 || undefined };
+  if (/^text\/|json|markdown|xml/.test(type)) return { url: u.href, final, host, status: r.status, type, markdown: r.body.slice(0, 60_000), truncated: r.body.length > 60_000 || undefined, ...(shape?.raw ? { rawHtml: r.body } : {}) };
   return { url: u.href, final, host, status: r.status, type, error: `this reader reads web pages and text, not ${type.split(';')[0] || 'this kind of file'}` };
 }

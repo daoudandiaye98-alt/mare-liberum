@@ -53,14 +53,19 @@ export function createLens(h) {
       if (ctx?.readOnly) return { note: 'crawlers read the sea itself; the reader reads other pages for agents', how: 'GET /r/<page address>' };
       const raw = clean(a.url ?? a.page ?? a.u, 2000); if (!raw) throw new SeaError('INVALID_ARGUMENT', 'give a page address: /r/https://example.com/page');
       // full: the reader's whole Markdown of before (the way back to what the lean reader leaves out), kept apart
-      const full = a.full === true, key = `read:${full ? 'full:' : ''}${(await sha(raw)).slice(0, 24)}`, hit = await kv.get(key);
+      // shape (since 3.38, asked only in the form of another reader, node/compat.mjs): selectors narrow the page (kept apart
+      // under their own key); html/raw: the page's markup beside the Markdown, never kept, so such a read is always a read.
+      // fresh (X-No-Cache, maxAge: 0): the copy of the last hour is not handed out; the read counts like any other
+      const full = a.full === true, shape = a.shape && typeof a.shape === 'object' ? a.shape : null, markup = !!(shape?.html || shape?.raw);
+      const key = `read:${full ? 'full:' : ''}${shape?.key ? `${shape.key}:` : ''}${(await sha(raw)).slice(0, 24)}`, hit = a.fresh === true || markup ? null : await kv.get(key);
       if (!hit) {
         try { await allow(ctx, 'read', 100, 86400); } catch { throw new SeaError('RESOURCE_EXHAUSTED', `100 free reads a day from one address are used. Angel, a resident of the sea, reads on without a daily limit and also removes text hidden from people: ${ANGEL_READ} (free key with 500 reads at https://angel.oroboros-design.com/key, or 0.02 USDC per page over x402).`, 429); }
       }
-      const r = hit || await readUrl(raw, { full, robots: async (host) => { const k = `robots:${host}`, c = await kv.get(k); if (c) return c; const g = await grab(`https://${host}/robots.txt`, { max: 150_000, ms: 5000, ua: READER_UA }); const v = { status: g.status, body: g.status === 200 && !/<html/i.test(g.body || '') ? g.body : '' }; await kv.set(k, v, 3600); return v; } });
-      if (!hit && r.markdown) await kv.set(key, r, 3600);
+      const r = hit || await readUrl(raw, { full, ...(shape ? { shape } : {}), robots: async (host) => { const k = `robots:${host}`, c = await kv.get(k); if (c) return c; const g = await grab(`https://${host}/robots.txt`, { max: 150_000, ms: 5000, ua: READER_UA }); const v = { status: g.status, body: g.status === 200 && !/<html/i.test(g.body || '') ? g.body : '' }; await kv.set(k, v, 3600); return v; } });
+      if (!hit && r.markdown) await kv.set(key, markup ? { ...r, html: undefined, rawHtml: undefined, type: r.type && r.htmlBytes ? undefined : r.type } : r, 3600);
       // the reading area spares what the page weighs as HTML against its Markdown (node/areas.mjs); the size stays out of the answer
-      if (r.markdown && r.htmlBytes) api.countBytes?.('read', r.htmlBytes, r.markdown.length, ctx, r.final || r.url);
+      // (an answer that hands the page's markup over spared nothing against it: not counted)
+      if (r.markdown && r.htmlBytes && !markup && !shape) api.countBytes?.('read', r.htmlBytes, r.markdown.length, ctx, r.final || r.url);
       // a crawler's tool call (ctx.uncounted) is read like any other and counted nowhere: no read of the day, no event, no path
       if (r.host && (r.markdown || r.blocked) && !ctx?.uncounted) {
         const day = now().slice(0, 10), role = ctx?.whoKind || 'unknown';
