@@ -59,8 +59,8 @@ export function compressUse(base) {
 const useMd = (u) => `# POST /compress: what you already hold, smaller\n\n${u.what}.\n\nFor ${u.for}.\n\n${u.example}\n\nBody: JSON {"text" | "html" | "json": …, "q"?, "budget"?, "type"?, "url"?} — ${u.raw}.\n\nAnswer: ${u.answers}.\n\nLossless: ${u.lossless.join('; ')}.\n\nLossy, only when asked: ${u.lossy.join('; ')}.\n\nTokens: ${u.tokens}.\n\nLimits: body ${u.limits.body}; JSON nested at most ${u.limits.jsonDepth} levels; ${u.limits.pace}.\n\nPrivacy: ${u.privacy}.\n\nThe rule: ${u.rule}\n`;
 // req: the request (its body read here, once); count: counter(sea, ctx); toll: the toll at this request (core.mjs tollGate,
 // node/toll.mjs, since 3.37) or nothing. With it the lossless part is decided before anything is counted: under the free quota
-// the answer is the very same; tolled, it carries the toll's headers; while the toll is due, the text comes back as it was
-// sent (the normal answer: no lever applied, no step taken, nothing counted), and says so
+// the answer is the very same; tolled, it carries the toll's headers; while the lossless steps rest (the toll due), the text
+// comes back as it was sent, with only the lossy steps of the request (q, budget: free) applied to it, and says so
 export async function compressDoor(req, { base, ip, cfg = {}, count = () => false, toll = null } = {}) {
   try {
     const url = new URL(req.url), acc = req.headers.get('accept') || '', sp = url.searchParams;
@@ -102,9 +102,15 @@ export async function compressDoor(req, { base, ip, cfg = {}, count = () => fals
     // beside the node, with a time limit (rule 19): a text written to be slow stops one helper, never the node
     const opts = { type, q: q || undefined, budget: budget === '' || budget == null ? undefined : Number(budget), url: typeof page === 'string' ? page : undefined };
     if (pressing >= PRESS_AT_ONCE) return fail(503, 'UNAVAILABLE', '/compress works on one text at a time; try again in a moment', { headers: { 'retry-after': '3' } });
+    const run = (o) => aside(SQUEEZE_FILE, 'squeezeAside', [input, o], { ms: SQUEEZE.timeMs, wait: 0 });
     pressing++;
-    let r; try { r = await aside(SQUEEZE_FILE, 'squeezeAside', [input, opts], { ms: SQUEEZE.timeMs, wait: 0 }); }
-    catch (e) {
+    let r, d = null, raw = null;
+    try {
+      r = await run(opts);
+      // the toll decides on the lossless part before anything is counted; while the lossless steps rest, the lossy steps the
+      // request named (q, budget) are taken alone on the text as it was sent (lossy, and free)
+      if (toll && !r?.error) { d = toll.decide(r.parts.lossless?.saved || 0); if (!d.lever && (opts.q || opts.budget) && r.type !== 'json') raw = await run({ ...opts, lossless: false }).catch(() => null); }
+    } catch (e) {
       if (e?.code === 'EBUSY') return fail(503, 'UNAVAILABLE', 'the helpers are all busy; try again in a moment', { headers: { 'retry-after': '5' } });
       if (e?.code === 'ESLOW') return fail(422, 'TOO_SLOW', `this text could not be made smaller within ${SQUEEZE.timeMs / 1000} s: send less, or read a page with /r/<address>`);
       return fail(500, 'INTERNAL', 'this text could not be made smaller');
@@ -113,12 +119,19 @@ export async function compressDoor(req, { base, ip, cfg = {}, count = () => fals
     // counted by size only, lossless and lossy apart (each part once a day per network and input)
     const subject = subjectOf(buf);
     const wantText = !/application\/json/.test(acc) && /text\/(plain|markdown)/.test(acc);
-    const d = toll ? toll.decide(r.parts.lossless?.saved || 0) : null;
     if (d && !d.lever) {
-      // the toll is due: the text as it was sent, unchanged, with a status that says why (lossy steps rest on the lossless ones)
-      const same = typeof input === 'string' ? input : JSON.stringify(input), H0 = { 'cache-control': 'no-store', 'x-robots-tag': 'noindex', vary: 'accept', ...CORS };
+      // the lossless steps rest: the text as it was sent, or with the lossy steps alone, with a status that says why
+      const why = { paused: 'the toll is paused', settling: 'the toll is settling', full: 'the toll keeps no more networks today' }[d.state] || `the toll is ${d.state}`;
+      const H0 = { 'cache-control': 'no-store', 'x-robots-tag': 'noindex', vary: 'accept', ...CORS };
+      if (raw && !raw.error && raw.lossy) {
+        if (raw.parts.lossy) count('squeeze', raw.parts.lossy, `${subject}:lossy`);
+        const H1 = { ...H0, ...(raw.saving.saved > 0 ? engineHeaders(raw.saving) : {}) };
+        if (wantText) return toll.seal(new Response(raw.out, { headers: { 'content-type': `${/text\/markdown/.test(acc) && raw.form !== 'json' ? 'text/markdown' : raw.form === 'json' ? 'application/json' : 'text/plain'}; charset=utf-8`, ...H1 } }), d);
+        return toll.seal(new Response(JSON.stringify({ out: raw.out, form: raw.form, tokens: { before: raw.saving.before, after: raw.saving.after, saved: raw.saving.saved }, steps: raw.steps, lossy: true, status: `the lossy steps only: ${why}`, toll: { state: d.state, open_usd: ((d.open || 0) / 1e6).toFixed(6), id: d.id || undefined, line: toll.line(d) }, note: [raw.note, `the lossless steps rest: ${toll.line(d)}`, 'nothing you sent is kept or logged'].filter(Boolean).join('; ') }), { headers: { 'content-type': 'application/json; charset=utf-8', ...H1 } }), d);
+      }
+      const same = typeof input === 'string' ? input : JSON.stringify(input);
       if (wantText) return toll.seal(new Response(same, { headers: { 'content-type': `${r.type === 'json' ? 'application/json' : /text\/markdown/.test(acc) ? 'text/markdown' : 'text/plain'}; charset=utf-8`, ...H0 } }), d);
-      return toll.seal(new Response(JSON.stringify({ out: same, form: r.type, tokens: { before: r.saving.before, after: r.saving.before, saved: 0 }, steps: [], lossy: false, status: `unchanged: the toll is ${d.state}`, toll: { state: d.state, open_usd: (d.open / 1e6).toFixed(6), id: d.id || undefined, line: toll.line(d) }, note: `the text comes back as it was sent: ${toll.line(d)}; nothing you sent is kept or logged` }), { headers: { 'content-type': 'application/json; charset=utf-8', ...H0 } }), d);
+      return toll.seal(new Response(JSON.stringify({ out: same, form: r.type, tokens: { before: r.saving.before, after: r.saving.before, saved: 0 }, steps: [], lossy: false, status: `unchanged: ${why}`, toll: { state: d.state, open_usd: ((d.open || 0) / 1e6).toFixed(6), id: d.id || undefined, line: toll.line(d) }, note: `the text comes back as it was sent: ${toll.line(d)}; nothing you sent is kept or logged` }), { headers: { 'content-type': 'application/json; charset=utf-8', ...H0 } }), d);
     }
     count('squeeze', r.parts.lossless, subject);
     if (r.parts.lossy) count('squeeze', r.parts.lossy, `${subject}:lossy`);

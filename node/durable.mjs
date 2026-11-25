@@ -111,6 +111,8 @@ export function durableKv(kv, store, { waitUntil, log = () => {}, missTtl = 2160
       if (v == null) { await kv.set(k, { [GONE]: 1 }, Math.max(Number(ttl) || 0, missTtl)); write(k, null, null); return; }
       await kv.set(k, v, ttl); stored.add(k); write(k, v, ttl);
     },
+    // at once on the disk (node/disk.mjs setNow, since 3.37), for names the database does not keep
+    ...(typeof kv.setNow === 'function' ? { setNow: (k, v, ttl) => (KEPT.test(k) ? false : kv.setNow(k, v, ttl)) } : {}),
     // copy keys the cache holds into the database (for what was written before the long memory existed)
     async keep(keys) {
       const ks = [...new Set(keys)].filter((k) => KEPT.test(k)), items = [];

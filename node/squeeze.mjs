@@ -267,13 +267,14 @@ export function focusOn(markdown, q) {
 // ---------------------------------------------------------------- squeeze
 const FORM = { html: 'html', json: 'json', md: 'md', text: 'text' };
 // input: a text (or a JSON value); type: html | json | md | text (else found out); q, budget: the lossy steps, only when
-// named; url: the page an HTML text came from (its links stay whole)
+// named; url: the page an HTML text came from (its links stay whole); lossless: false takes the lossy steps alone, on the text
+// as it came (since 3.37: /compress while the toll of the lossless levers is due, node/press.mjs)
 // → { out, form, type, steps: [{ step, lossless, before, after }], lossy, saving, parts: { lossless, lossy }, note }
 // squeeze for a helper beside the node (node/aside.mjs): an error of the input comes back as data, so its status survives
 export function squeezeAside(input, opts) {
   try { return squeeze(input, opts); } catch (e) { if (e instanceof SqueezeError) return { error: { status: e.status, message: e.message } }; throw e; }
 }
-export function squeeze(input, { type, q, budget, url } = {}) {
+export function squeeze(input, { type, q, budget, url, lossless = true } = {}) {
   const given = kindOf(type), isValue = input !== null && typeof input === 'object';
   const src = isValue ? JSON.stringify(input) : String(input ?? '');
   const kind = given || (isValue ? 'json' : detectType(src));
@@ -285,7 +286,8 @@ export function squeeze(input, { type, q, budget, url } = {}) {
     if (!(after < before) && !force) return false;
     steps.push({ step: name, lossless, before, after }); cur = next; form = nextForm; return true;
   };
-  if (kind === 'json') {
+  if (!lossless) { if (kind === 'json' && (q || budget)) notes.push('a question or a budget is applied to text and HTML; JSON is only made smaller without loss'); }
+  else if (kind === 'json') {
     if (jsonDepth(src) > SQUEEZE.jsonDepth) throw new SqueezeError(`JSON nested deeper than ${SQUEEZE.jsonDepth} levels is not taken`);
     let v; if (isValue) v = input; else { try { v = JSON.parse(src); } catch { throw new SqueezeError('this is not valid JSON (send it as text, or fix it)'); } }
     const min = JSON.stringify(v) ?? '';

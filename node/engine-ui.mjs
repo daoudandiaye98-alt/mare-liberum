@@ -113,7 +113,8 @@ const zero = { answers: 0, before: 0, after: 0, saved: 0 };
 const lev = (period, lever, c) => period?.engine?.levers?.[lever]?.[c] || zero;
 
 // what the page and /engine.json say: the levers with their live numbers, the bench, the rules, the state of the switch
-// toll (since 3.37): { on, facts, totals } of the harbour toll (node/toll.mjs), handed in by core.mjs
+// toll (since 3.37): { on, facts } of the harbour toll (node/toll.mjs), handed in by core.mjs; what it brought in is shown only
+// under toll on /treasury and /open.json
 export function engineData(base, { savings, on = true, bench = loadEngineBench(), toll = null } = {}) {
   const T = LEVER_TEXT(base), s = savings || null;
   const levers = Object.entries(LEVERS).map(([id, L]) => {
@@ -136,8 +137,7 @@ export function engineData(base, { savings, on = true, bench = loadEngineBench()
     rules: ENGINE_RULES, sources: SOURCES,
     headers: { 'x-sea-engine': 'the lever that shaped the answer', 'x-sea-engine-tokens': 'tokens before->after, by the one rule', 'x-sea-engine-saved': 'tokens saved', 'x-sea-engine-lossy': '1 when the saving lost something (only then)' },
     links: { savings: `${base}/savings`, proof: `${base}/proof`, fair: `${base}/fair`, llms: `${base}/llms.txt`, markdown: `${base}/engine.md`, ...(bench ? { bench: `${base}/engine/bench-${bench.date}.json` } : {}) },
-    ...(toll ? { toll: { on: !!toll.on, state: toll.on ? 'on: above the free quota the lossless levers are tolled' : 'resting or switched off on this node (or the till rests or cannot settle): no toll is asked, and every answer is what it was in 3.36', ...toll.facts,
-      settledOnChainUsd: ((toll.totals?.settledMicro || 0) / 1e6).toFixed(6), onItsWayUsd: ((toll.totals?.onItsWayMicro || 0) / 1e6).toFixed(6), payments: toll.totals?.payments || 0 } } : {}),
+    ...(toll ? { toll: { on: !!toll.on, state: toll.on ? 'on: above the free quota the lossless levers are tolled' : 'resting or switched off on this node (or the till rests or cannot settle, or no server secret keys its accounts): no toll is asked, and every lever answer is what it was in 3.36', ...toll.facts, treasury: `${base}/treasury` } } : {}),
   };
 }
 // the bench in a few numbers: per fixture JSON, minified JSON and TOON in tokens; the MCP list in full and lean
@@ -229,7 +229,7 @@ ${v.toll ? `<h2 id="toll">The toll</h2>
 <p>${esc(v.toll.example)}</p>
 <p>${esc(v.toll.settle)}</p>
 <p>${esc(v.toll.unpaid)}</p>
-<p><small>Tolled: ${esc(v.toll.levers)}. Free: ${esc(v.toll.free)}. ${esc(v.toll.never)} ${esc(v.toll.headers)} ${esc(v.toll.switch)} This node: <b>${esc(v.toll.state)}</b>. Settled so far: $${esc(v.toll.settledOnChainUsd)} on chain from ${n(v.toll.payments)} ${v.toll.payments === 1 ? 'payment' : 'payments'} (<a href="/treasury">/treasury</a>).</small></p>
+<p><small>Tolled: ${esc(v.toll.levers)}. Free: ${esc(v.toll.free)}. A network: ${esc(v.toll.network)}. ${esc(v.toll.never)} ${esc(v.toll.headers)} ${esc(v.toll.books)} ${esc(v.toll.switch)} This node: <b>${esc(v.toll.state)}</b>. What it brought in: <a href="/treasury">/treasury</a>.</small></p>
 ` : ''}<h2>Switched off, nothing acts</h2>
 <p>${esc(ENGINE_RULES.rest)} This node: <b>${esc(v.state)}</b>.</p>
 <p><small>What the sea saves in all: <a href="/savings">/savings</a> · how it is measured: <a href="/proof">/proof</a> · the fair share of a saving: <a href="/fair">/fair</a> · the guide for agents: <a href="/llms.txt">/llms.txt</a> · as data: <a href="/engine.json">/engine.json</a> · for agents: <a href="/engine.md">/engine.md</a></small></p>`;

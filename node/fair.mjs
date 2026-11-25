@@ -245,26 +245,26 @@ export function createFair({ kv, now = () => new Date().toISOString(), base: bas
       for (const id of ask) looked.set(id, t);
       const st = !open.length ? {} : ledger?.saleStatuses ? await ledger.saleStatuses(ask.length ? ask : []).catch(() => ({})) : {};
       for (const p of open) { const s = st[p.sale] || ledger?.mem?.sales?.find((x) => x.id === p.sale); if (s?.status && s.status !== p.status) { p.status = s.status; if (s.tx) p.tx = s.tx; changed = true; if (s.status === 'settled') landed.push([p, s]); } }
-      if (changed) await serial(() => kv.set('fair:pay', list, 400 * DAY));
-      for (const [p, s] of landed) await fair.book(p, s);
-      return list;
+      if (!changed) return list;
+      // (read again inside the lock and changed there: a payment recorded while the till was asked stays in the registry, 3.37)
+      const now1 = await serial(async () => { const cur = (await kv.get('fair:pay')) || []; for (const p of open) { const x = cur.find((y) => y.sale === p.sale); if (x && x.status !== p.status && OPEN.has(x.status)) { x.status = p.status; if (p.tx) x.tx = p.tx; } } await kv.set('fair:pay', cur, 400 * DAY); return cur; });
+      for (const [p, s] of landed) await fair.book(now1.find((x) => x.sale === p.sale) || p, s);
+      return now1;
     },
     async paidIds(ledger) { const s = new Map(); for (const p of await fair.payments(ledger)) if (HOLDS.has(p.status)) for (const id of p.ids) if (!s.has(id)) s.set(id, p); return s; },
-    // payments are kept 400 days (receipts 30): a receipt in a payment that holds can never be asked for again while it exists.
-    // Since 3.37 the payments of the toll (node/toll.mjs) are kept here as well, marked kind toll; the books mark them the same way
+    // payments are kept 400 days (receipts 30): a receipt in a payment that holds can never be asked for again while it exists
     async record(pay) { return serial(async () => { const list = (await kv.get('fair:pay')) || []; const i = list.findIndex((x) => x.sale === pay.sale); if (i >= 0) list[i] = { ...list[i], ...pay }; else list.unshift(pay); const cut = Date.parse(now()) - 400 * DAY * 1000; await kv.set('fair:pay', list.filter((x) => !x.at || Date.parse(x.at) >= cut || OPEN.has(x.status)).slice(0, 100_000), 400 * DAY); }); },
     // into the books, once per sale, when its money is seen to arrive: time, amount, rate source, transaction, paying wallet
     async book(p, sale = {}) {
       if (p?.status !== 'settled') return false;
       return serial(async () => { const list = (await kv.get('fair:book')) || []; if (list.some((x) => x.sale === p.sale)) return false;
-        list.unshift({ booked: now(), settled_at: sale.settled_at || now(), sale: p.sale, receipts: p.ids, amount_micro: p.micro, amount: usd6(p.micro), asset: 'USDC', network: 'eip155:8453', tx: sale.tx || p.tx || null, payer: sale.payer || null, rate: { source: RATE_SOURCE, day: String(sale.settled_at || now()).slice(0, 10) }, ...(p.kind ? { kind: p.kind } : {}) });
+        list.unshift({ booked: now(), settled_at: sale.settled_at || now(), sale: p.sale, receipts: p.ids, amount_micro: p.micro, amount: usd6(p.micro), asset: 'USDC', network: 'eip155:8453', tx: sale.tx || p.tx || null, payer: sale.payer || null, rate: { source: RATE_SOURCE, day: String(sale.settled_at || now()).slice(0, 10) } });
         await kv.set('fair:book', list, 4000 * DAY); return true; });
     },
     books: async () => (await kv.get('fair:book')) || [],
     // the public ledger: receipts, tokens per basis, value, share accrued and settled, drops
     async totals(ledger) {
-      // (the registry holds the payments of the toll too since 3.37, kind toll: they are no fair share and are left out here)
-      const [t, since, pays] = await Promise.all([kv.get('fair:total'), kv.get('fair:since'), fair.payments(ledger).then((l) => l.filter((p) => p.kind !== 'toll'))]);
+      const [t, since, pays] = await Promise.all([kv.get('fair:total'), kv.get('fair:since'), fair.payments(ledger)]);
       const a = add(t || {}, inc), sum = (st) => pays.filter((p) => st.has(p.status)).reduce((s, p) => s + (p.micro || 0), 0);
       return { since: since || (pend.size ? [...pend.values()][0].at.slice(0, 10) : null), receipts: a.receipts || 0, due: a.due || 0,
         tokens: { lower: a.lower || 0, modelled: a.modelled || 0, upper: a.upper || 0, conservative: a.conservative || 0 },
@@ -406,7 +406,8 @@ ${j.pay ? `<h2>Pay it</h2><pre>curl -si -X POST '${esc(j.pay.post)}'</pre><p><sm
 <p><small><a href="/fair">The rules and the public ledger</a> · as data: <a href="/fair/r/${esc(r.id)}.json">/fair/r/${esc(r.id)}.json</a></small></p>`, undefined, '/og.png', { robots: 'noindex, follow' });
 }
 
-// toll (since 3.37): the facts and numbers of the harbour toll (node/toll.mjs, handed in by core.mjs), shown apart from fair share
+// toll (since 3.37): the facts of the harbour toll (node/toll.mjs, handed in by core.mjs), shown apart from fair share; what it
+// brought in is shown only under toll on /treasury and /open.json
 export async function fairData(base, fair, { on, ledger, toll } = {}) {
   const [t, recent, paid] = await Promise.all([fair.totals(ledger), fair.recent(12), fair.paidIds(ledger)]);
   const P = TOKEN_PRICE, w = BENCH?.whole;
@@ -425,7 +426,7 @@ export async function fairData(base, fair, { on, ledger, toll } = {}) {
     recent: recent.map((r) => ({ id: r.id, at: r.at, door: r.door, conservative: r.tokens.conservative, upper: r.tokens.upper, shareUsd: usd6(r.shareMicro.mid), shareNote: FAIR.usdNote, shareMicro: r.shareMicro.mid, status: statusOf(r, paid), url: `${base}/fair/r/${r.id}` })),
     never: [FAIR.voluntary, 'The sea only receives: no bot of the sea pays, no wallet of the sea pays out, nothing is minted, sold or transferred.', 'Crawlers and the sea\'s own calls get no receipt; the house agent (Angel) and the app door (/mcp/app) get none either.', 'A receipt in a payment is retired: it is never counted or asked for again.', FAIR.drops],
     links: { savings: `${base}/savings`, proof: `${base}/proof`, pricing: `${base}/pricing`, treasury: `${base}/treasury`, open: `${base}/open` },
-    ...(toll ? { toll: { what: 'the harbour toll: not fair share. Fair share stays voluntary; the toll is the price of the lossless levers above a free quota, and without it the lean answers pause while the normal answers continue', on: !!toll.on, rule: toll.facts.rule, formula: toll.facts.formula, example: toll.facts.example, settle: toll.facts.settle, unpaid: toll.facts.unpaid, settledOnChainUsd: usd6(toll.totals?.settledMicro || 0), onItsWayUsd: usd6(toll.totals?.onItsWayMicro || 0), payments: toll.totals?.payments || 0, page: `${base}/engine#toll` } } : {}) };
+    ...(toll ? { toll: { what: 'the harbour toll: not fair share. Fair share stays voluntary; the toll is the price of the lossless levers above a free quota, and without it the lean answers pause while the normal answers continue', on: !!toll.on, rule: toll.facts.rule, formula: toll.facts.formula, example: toll.facts.example, settle: toll.facts.settle, unpaid: toll.facts.unpaid, books: toll.facts.books, page: `${base}/engine#toll`, numbers: `${base}/treasury` } } : {}) };
 }
 
 const STYLE = `<style>
@@ -477,7 +478,7 @@ ${c ? `<form id="fcalc" class="calc" data-mid="${P.mid}" onsubmit="return false"
 ${v.toll ? `<h2 id="toll">The toll, apart from fair share</h2>
 <p>${esc(v.toll.rule)} ${esc(v.toll.example)}</p>
 <p>${esc(v.toll.settle)} ${esc(v.toll.unpaid)}</p>
-<p><small>The toll is no fair share and never enters the figures above: ${money(Math.round(Number(v.toll.settledOnChainUsd) * 1e6))} settled on chain from ${n(v.toll.payments)} ${v.toll.payments === 1 ? 'payment' : 'payments'} so far, apart. ${v.toll.on ? 'It acts on this node.' : '<b>It does not act on this node right now</b> (switched off, resting, or the till rests or cannot settle).'} The rule and every number: <a href="/engine#toll">/engine#toll</a>.</small></p>
+<p><small>The toll is no fair share and never enters the figures above. ${esc(v.toll.books)} ${v.toll.on ? 'It acts on this node.' : '<b>It does not act on this node right now</b> (switched off, resting, or the till rests or cannot settle).'} The rule: <a href="/engine#toll">/engine#toll</a> · what it brought in: <a href="/treasury">/treasury</a>.</small></p>
 ` : ''}<h2>The newest receipts</h2>
 <div data-fair-live>${v.recent.length ? `<div class="tw"><table class="tbl"><thead><tr><th>receipt</th><th>door</th><th>saved, conservative</th><th>upper</th><th>share</th><th>status</th></tr></thead><tbody>${v.recent.slice(0, 6).map((r) => `<tr><td><a href="/fair/r/${esc(r.id)}">${esc(r.at.slice(5, 16).replace('T', ' '))}</a></td><td><code>${esc(r.door)}</code></td><td>${n(r.conservative)}</td><td>${n(r.upper)}</td><td>${money(r.shareMicro)}</td><td>${esc(r.status)}</td></tr>`).join('')}</tbody></table></div><p><small>Shares: ${esc(FAIR.usdNote)}. Every receipt of the last ${n(FAIR.keepDays)} days answers at its own address; the newest ${n(v.recent.length)} are in <a href="/fair.json">/fair.json</a>.</small></p>` : '<p class="muted">No receipt yet.</p>'}</div><!--/fair-live-->
 <h2 id="method">The method, rule ${esc(v.method.version)}</h2><ol><li><b>Bases.</b> ${esc(v.method.bases)}.</li><li><b>Value.</b> ${esc(v.method.valuation)}.</li><li><b>Share.</b> ${esc(v.method.share)}.</li><li><b>Conservative.</b> ${esc(v.method.conservative)}.</li><li><b>Registry.</b> ${esc(v.method.registry)}.</li><li><b>Drops.</b> ${esc(v.method.drops)}.</li></ol><p><small>Every receipt names the rule it was made under; a new rule gets a new version, and old receipts keep theirs.</small></p>

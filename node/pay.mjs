@@ -174,7 +174,9 @@ export async function facilitate(cfg, kind, pay, t, ms, get = (...a) => fetch(..
 // Returns { status, headers, body } for the caller to send.
 // label and extra (since 3.34, for the fair share, node/fair.mjs): the sale's method is written "<label>-x402-v<n>" and
 // extra fields (amount_micro, kind) go with the sale; without them the sale is written exactly as before
-export async function takePayment({ cfg, t, pay, q, ledger, work, callerHash, waitUntil, get, base, label, extra }) {
+// strict (since 3.37, for the toll, node/toll.mjs): a payment the facilitator gives no verdict on is not taken (refuse, try
+// again) instead of being delivered unverified; without strict the hard rule of the till stands as it was
+export async function takePayment({ cfg, t, pay, q, ledger, work, callerHash, waitUntil, get, base, label, extra, strict = false }) {
   const local = checkPayment(pay, t);
   if (!local.ok) return { refuse: local.reason };
   let verified = false, reason = null, payer = local.payer;
@@ -186,6 +188,7 @@ export async function takePayment({ cfg, t, pay, q, ledger, work, callerHash, wa
       else reason = `the facilitator gave no verdict (HTTP ${v.status})`;
     } catch (e) { reason = `the facilitator did not answer (${String(e?.name === 'TimeoutError' ? 'timeout' : e?.message || e).slice(0, 80)})`; }
   } else reason = 'no facilitator is set on this node';
+  if (strict && !verified) return { refuse: `${reason}: the payment was not taken and nothing was charged; try again in a moment`, retry: true };
   const network = pay.version === 2 ? 'eip155:8453' : 'base';
   const sale = ledger.sale({ q, amount_cents: t.cents, status: verified ? 'pending' : 'unverified', agent_ua_hash: callerHash, method: `${label ? `${label}-` : ''}x402-v${pay.version}`, payer, network, ...(extra || {}) });
   const answer = await work(sale);
