@@ -2114,7 +2114,7 @@ async function handleOne(req, db, cfg = {}) {
     const fresh = cfg.openMemoMs ?? OPEN.memoMs;
     if (/^\/(open(\.json|\/visits\.csv)?|savings(\.csv|\/badge\.svg))$/.test(path) && req.method === 'GET') {
       const hdr = { 'cache-control': 'public, max-age=60, s-maxage=60', ...CORS }, file = (name) => ({ 'content-type': 'text/csv; charset=utf-8; header=present', 'content-disposition': `inline; filename="${name}"`, 'x-robots-tag': 'noindex', ...hdr });
-      if (path === '/savings/badge.svg') { const s = await memoOf(sea, 'savings', () => sea.savings(), fresh), m = fmtN(s?.hero?.measured ?? 0); return new Response(badgeSvg(SAVINGS_BADGE.label, m, `${SAVINGS_BADGE.title}: ${m}`), { headers: { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'public, max-age=300, s-maxage=300', ...CORS } }); }
+      if (path === '/savings/badge.svg') { const s = await memoOf(sea, 'savings', () => sea.savings(), fresh), m = fmtN(s?.engine?.measuredBy?.markdown ?? s?.hero?.measured ?? 0); return new Response(badgeSvg(SAVINGS_BADGE.label, m, `${SAVINGS_BADGE.title}: ${m}`), { headers: { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'public, max-age=300, s-maxage=300', ...CORS } }); }
       if (path === '/savings.csv') return new Response(savingsCsv((await memoOf(sea, 'savings:400', () => sea.savings({ days: 400 }), fresh)).daily), { headers: file('mare-liberum-savings.csv') });
       if (path === '/open/visits.csv') return new Response(visitsCsv(await memoOf(sea, 'census:40', () => sea.censusDays(OPEN.csvDays), fresh)), { headers: file('mare-liberum-visits.csv') });
       const v = await memoOf(sea, 'open', () => openOf({ sea, ledger: ledgerOf(cfg), version: VERSION, base, tools: [...TOOL_NAMES] }), fresh);

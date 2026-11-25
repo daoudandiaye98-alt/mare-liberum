@@ -21,6 +21,7 @@ import { page, esc } from './pages.mjs';
 import { TOKEN_RATIO as CALIBRATED } from './proof.mjs';
 import { createOnce, pageSubject, taskSubject } from './once.mjs';
 import { tallyNote } from './tally.mjs';
+import { LEVERS } from './engine.mjs';
 
 export const MARKET_TOKEN = 'MareLiberum-Market';
 export const MARKET_UA = `${MARKET_TOKEN}/1.0 (+https://mareliberum.dev/brain/market; reads a store's UCP profile, robots.txt and home page about once a month)`;
@@ -41,8 +42,9 @@ export const SAVE = {
       basis: 'Checking a shop means reading its home and legal pages, its registration and what others say: about 2 to 4 reads of 5,000 to 15,000 tokens for each of 2 or 3 shops, and the judgement. Energy: 3 to 15 ordinary queries.' },
   },
   mix: { path: 0.5, plan: 0.3, market: 0.2 },
-  // one network adds at most this many counts a day: Markdown answers (measured), solved parts handed out (reuses)
-  cap: { measured: 500, reuse: 500 },
+  // one network adds at most this many counts a day: Markdown answers (measured), solved parts handed out (reuses), answers
+  // the engine room shaped (engine, every lever together; since 3.35)
+  cap: { measured: 500, reuse: 500, engine: 500 },
   sources: [
     { what: 'Energy of one query to a frontier model: median 0.31 Wh (0.16–0.60); a long reasoning query (test-time scaling, about 5,000 output tokens) 3.91 Wh (2.15–7.05)', by: 'Oviedo et al., Joule (2026), doi 10.1016/j.joule.2026.102430', url: 'https://arxiv.org/abs/2509.20241' },
     { what: 'Median Gemini text prompt: 0.24 Wh', by: 'Google (August 2025)', url: 'https://arxiv.org/abs/2508.15734' },
@@ -120,11 +122,29 @@ export function measuredOf(n = {}, kind) {
   const rest = Math.max(0, saved - (html - out));
   return Math.max(0, tokensOfBytes('html', html, unit) - tokensOfBytes('md', out, unit) + tokensOfBytes('md', rest, MEASURED_UNIT.before));
 }
+// what the engine room spared (since 3.35, node/engine.mjs): every lever counts its answers through countEngine, each with
+// what the agent would have read (before), what it read (after) and the difference (saved), in tokens by the one rule of
+// savingOf, lossless and lossy apart. A count is kept in the day as "eng:<lever>:<lossless|lossy>:<answers|before|after|saved>".
+// Lossless savings join measured as their own kind (measuredBy.engine); lossy ones are shown apart and never in the headline.
+export const ENGINE_CLASSES = ['lossless', 'lossy'];
+// callers the engine room never counts, whatever ctx says besides: the sea itself and every kind of crawler
+const ENGINE_SKIP = new Set(['self', 'ai-crawler', 'crawler', 'search', 'search-ai']);
+export const ENGINE_FIELDS = ['answers', 'before', 'after', 'saved'];
+export const engineKey = (lever, cls, field) => `eng:${lever}:${cls}:${field}`;
+export function engineOf(n = {}) {
+  const v = (k) => Number(n[k]) || 0, zero = () => ({ answers: 0, before: 0, after: 0, saved: 0 }), all = { lossless: zero(), lossy: zero() }, levers = {};
+  for (const lever of Object.keys(LEVERS)) {
+    levers[lever] = {};
+    for (const c of ENGINE_CLASSES) { const o = zero(); for (const f of ENGINE_FIELDS) { o[f] = v(engineKey(lever, c, f)); all[c][f] += o[f]; } levers[lever][c] = o; }
+  }
+  return { lossless: all.lossless, lossy: all.lossy, levers };
+}
 // the savings that follow from counted reuses: { path, plan, market, readBytes, mdBytes, reads, md, mdAgent, … }
 export function savingsOf(n = {}) {
   const tok = [0, 0, 0], wh = [0, 0, 0];
   for (const k of Object.keys(SAVE.per)) for (let i = 0; i < 3; i++) { tok[i] += (Number(n[k]) || 0) * SAVE.per[k].tokens[i]; wh[i] += (Number(n[k]) || 0) * SAVE.per[k].wh[i]; }
-  const measured = Object.keys(MEASURED).reduce((s, k) => s + measuredOf(n, k), 0);
+  // measured: Markdown against raw HTML (an upper bound), and since 3.35 the lossless savings of the engine room, each its own kind
+  const markdown = Object.keys(MEASURED).reduce((s, k) => s + measuredOf(n, k), 0), engine = engineOf(n), measured = markdown + engine.lossless.saved;
   // the lower view (pages of the sea, since 3.33.0): the answers whose page's plain text was taken too, what they spared
   // against plain text and, like for like, against raw HTML
   const sumOf = (sfx) => Object.keys(MEASURED).reduce((s, k) => s + (Number(n[`${k}${sfx}`]) || 0), 0);
@@ -132,7 +152,8 @@ export function savingsOf(n = {}) {
     tokens: { measured, low: tok[0] + measured, mid: tok[1] + measured, high: tok[2] + measured }, modelled: { low: tok[0], mid: tok[1], high: tok[2] },
     vsText: { tokens: sumOf('TextTok'), raw: sumOf('TextRaw'), answers: sumOf('Texted') },
     usd: { low: usdOf(tok[0] + measured, TOKEN_PRICE.low), mid: usdOf(tok[1] + measured, TOKEN_PRICE.mid), high: usdOf(tok[2] + measured, TOKEN_PRICE.high), measuredLow: usdOf(measured, TOKEN_PRICE.low), measuredMid: usdOf(measured, TOKEN_PRICE.mid), measuredHigh: usdOf(measured, TOKEN_PRICE.high) },
-    wh: { low: r1(wh[0]), mid: r1(wh[1]), high: r1(wh[2]) } };
+    wh: { low: r1(wh[0]), mid: r1(wh[1]), high: r1(wh[2]) },
+    measuredBy: { markdown, engine: engine.lossless.saved }, engine };
 }
 // one reuse of the usual mix, and what a number of reuses a day would spare in a year
 export const perReuse = () => { const m = SAVE.mix, s = (i, f) => Object.entries(m).reduce((t, [k, w]) => t + w * SAVE.per[k][f][i], 0); return { tokens: [0, 1, 2].map((i) => Math.round(s(i, 'tokens'))), wh: [0, 1, 2].map((i) => Math.round(s(i, 'wh') * 100) / 100) }; };
@@ -373,6 +394,23 @@ export function createAreas(h) {
       // the same answer, noted for its receipt (node/tally.mjs, node/fair.mjs): the house agent is counted apart and gets none
       if (!ctx?.house) tallyNote({ k: kind, html: h, md: m, text: Number.isFinite(t) && t >= 0 ? t : null, door: doorOf(ctx) });
     },
+    // what the engine room spared on one answer (since 3.35; the doors of the levers call it optional-chained, gated like
+    // countBytes): saving is what savingOf in node/engine.mjs returned. One rule: whole tokens, saved = before − after,
+    // no saving, no count. Never the sea's own calls, crawlers or HEAD; the house agent apart; once a day per network,
+    // lever, kind of saving and subject (a page by its site and path, a hash of the input, a tool's name); one network
+    // adds at most SAVE.cap.engine such answers a day. Lossy unless the saving says lossless and the lever can be (budget
+    // never is). No receipt and no fair share for it: x-sea-saved-tokens keeps its meaning. True when it counted.
+    countEngine(lever, saving, ctx, subject = '') {
+      const L = Object.hasOwn(LEVERS, lever) ? LEVERS[lever] : null, s = saving && typeof saving === 'object' ? saving : {};
+      if (!L || (s.lever != null && s.lever !== lever) || ENGINE_SKIP.has(ctx?.whoKind)) return false;
+      const before = Number(s.before), after = Number(s.after), saved = Number(s.saved);
+      if (![before, after, saved].every((x) => Number.isSafeInteger(x) && x >= 0) || !(saved > 0) || saved !== before - after) return false;
+      const cls = s.lossy === false && L.lossless !== false ? 'lossless' : 'lossy', sub = String(subject ?? '').trim();
+      if (!firstToday(ctx, `eng:${lever}:${cls}`, /^(\/|https?:)/i.test(sub) ? pageSubject(sub) : sub.toLowerCase().slice(0, 300), 'engine')) return false;
+      const k = (f) => engineKey(lever, cls, f), quiet = { ...ctx, door: undefined };
+      count(k('answers'), 1, ctx); count(k('before'), before, quiet); count(k('after'), after, quiet); count(k('saved'), saved, ctx);
+      return true;
+    },
     async flushSave() {
       const p = pend; pend = {};
       for (const [d, b] of Object.entries(p)) { await update(`save:${d}`, 400 * DAY, (cur) => add(cur, b), () => true); await update('save:total', 4000 * DAY, (cur) => add(cur, b), () => true); }
@@ -389,24 +427,30 @@ export function createAreas(h) {
       const view = (n) => ({ counts: strip({ path: n.path, plan: n.plan, market: n.market, reads: n.reads, md: n.md, mdAgent: n.mdAgent, readBytes: n.readBytes, mdBytes: n.mdBytes, mdAgentBytes: n.mdAgentBytes, readHtml: n.readHtml, readOut: n.readOut, mdHtml: n.mdHtml, mdOut: n.mdOut, mdAgentHtml: n.mdAgentHtml, mdAgentOut: n.mdAgentOut }), ...savingsOf(flat(n)) });
       // the same counts by kind (what was spared) and by door (where the agent came in)
       const kinds = (n) => [...Object.entries(MEASURED).map(([k, [answers, name]]) => ({ kind: name, how: 'measured', answers: Number(n[answers]) || 0, bytesHtml: Number(n[`${k}Html`]) || undefined, bytesMarkdown: Number(n[`${k}Out`]) || undefined, bytesSpared: Number(n[`${k}Bytes`]) || 0, tokens: measuredOf(n, k) })),
-        ...Object.keys(SAVE.per).map((k) => ({ kind: k, how: 'modelled', reuses: Number(n[k]) || 0, tokens: { low: (Number(n[k]) || 0) * SAVE.per[k].tokens[0], mid: (Number(n[k]) || 0) * SAVE.per[k].tokens[1], high: (Number(n[k]) || 0) * SAVE.per[k].tokens[2] } }))].map((x) => strip(x));
-      const doors = (n) => Object.entries(byDoorOf(n)).map(([door, c]) => { const s = savingsOf(c); return { door, answers: s.markdown, reuses: s.reuses, measured: s.tokens.measured, modelled: s.modelled }; })
+        ...Object.keys(SAVE.per).map((k) => ({ kind: k, how: 'modelled', reuses: Number(n[k]) || 0, tokens: { low: (Number(n[k]) || 0) * SAVE.per[k].tokens[0], mid: (Number(n[k]) || 0) * SAVE.per[k].tokens[1], high: (Number(n[k]) || 0) * SAVE.per[k].tokens[2] } })),
+        // the engine room (since 3.35): a lever and kind of saving is named here once it has counted an answer
+        ...Object.entries(engineOf(n).levers).flatMap(([lever, o]) => ENGINE_CLASSES.filter((c) => o[c].answers > 0).map((c) => ({ kind: `engine:${lever}`, how: c === 'lossless' ? 'measured' : 'lossy', lossless: c === 'lossless', answers: o[c].answers, tokensBefore: o[c].before, tokensAfter: o[c].after, tokens: o[c].saved })))].map((x) => strip(x));
+      const doors = (n) => Object.entries(byDoorOf(n)).map(([door, c]) => { const s = savingsOf(c), e = s.engine.lossless.answers + s.engine.lossy.answers; return { door, answers: s.markdown, reuses: s.reuses, measured: s.tokens.measured, modelled: s.modelled, ...(e ? { engine: { answers: e, lossless: s.engine.lossless.saved, lossy: s.engine.lossy.saved } } : {}) }; })
         .sort((a, b) => b.measured + b.modelled.mid - (a.measured + a.modelled.mid) || (a.door < b.door ? -1 : 1));
       // day by day, oldest first: what was spared each day, measured and modelled
-      const series = []; for (let i = days.length - 1; i >= 0; i--) { const d = days[i], v = live(d, ds[i]), s = savingsOf(flat(v)); series.push({ day: d, recorded: d >= (since || day), measured: s.tokens.measured, modelled: s.modelled, reuses: s.reuses, markdown: s.markdown, counts: strip(flat(v)) }); }
+      const series = []; for (let i = days.length - 1; i >= 0; i--) { const d = days[i], v = live(d, ds[i]), s = savingsOf(flat(v)); series.push({ day: d, recorded: d >= (since || day), measured: s.tokens.measured, modelled: s.modelled, reuses: s.reuses, markdown: s.markdown, ...(s.engine.lossless.answers + s.engine.lossy.answers ? { engine: { lossless: s.engine.lossless.saved, lossy: s.engine.lossy.saved } } : {}), counts: strip(flat(v)) }); }
       const a = savingsOf(flat(all));
       // the house agent (Angel) apart: what it was handed counts here, never in the numbers above
-      const house = (n) => { const o = {}; for (const [k, v] of Object.entries(n || {})) if (k.startsWith('h:')) o[k.slice(2)] = v; const x = savingsOf(o); return { reuses: x.reuses, markdown: x.markdown, measured: x.tokens.measured, modelled: x.modelled, note: 'Angel, the house agent of the sea: counted apart, never in the headline' }; };
+      const house = (n) => { const o = {}; for (const [k, v] of Object.entries(n || {})) if (k.startsWith('h:')) o[k.slice(2)] = v; const x = savingsOf(o), e = x.engine.lossless.answers + x.engine.lossy.answers; return { reuses: x.reuses, markdown: x.markdown, measured: x.tokens.measured, modelled: x.modelled, ...(e ? { engine: { answers: e, lossless: x.engine.lossless.saved, lossy: x.engine.lossy.saved } } : {}), note: 'Angel, the house agent of the sea: counted apart, never in the headline' }; };
       return { what: 'what the shared brain saves: reuses of parts someone already solved, and Markdown instead of HTML', since: since || day,
         hero: { tokens: a.tokens.mid, measured: a.tokens.measured, measuredVsText: a.vsText.tokens, lowerView: { answers: a.vsText.answers, againstRawHtml: a.vsText.raw, againstPlainText: a.vsText.tokens }, modelled: a.modelled, usd: a.usd, wh: a.wh,
           note: 'tokens = measured + the middle of the modelled range. measured is versus raw HTML, an upper bound. lowerView: the answers measured against a page\'s plain text as well (pages of the sea, since 3.33.0), what they spared against raw HTML and against plain text, like for like; measuredVsText is its plain-text figure' },
+        // the engine room (since 3.35): the two kinds measured holds, named apart, and the lossy savings that are in no figure
+        // of the headline (per lever and day: engine in today, last30days and all)
+        engine: { measuredBy: a.measuredBy, lossless: a.engine.lossless.saved, lossy: a.engine.lossy.saved, answers: a.engine.lossless.answers + a.engine.lossy.answers, levers: a.engine.levers, page: `${base()}/engine`,
+          note: 'measured (hero.measured) holds two kinds since 3.35: measuredBy.markdown is Markdown against raw HTML (an upper bound); measuredBy.engine is what the engine room spared without losing anything (TOON instead of JSON, the lean MCP door, a page read again as its changes, lossless squeezing), measured like for like by the one rule of savingOf and counted once a day per network and subject. lossy (a page or text fitted to a budget or a question) is shown apart and is in no figure of the headline' },
         house: { today: house(today), last30days: house(month), all: house(all) },
         today: view(today), last30days: view(month), all: view(all),
         byKind: { all: kinds(all), last30days: kinds(month) }, byDoor: { all: doors(all), last30days: doors(month) },
         series: series.slice(-30).map(({ counts, ...x }) => x), ...(Number(span) > 30 ? { daily: series } : {}),
         perReuse: Object.fromEntries(Object.entries(SAVE.per).map(([k, v]) => [k, { tokens: v.tokens, wh: v.wh, what: v.what, basis: v.basis }])),
         scenarios: [1e3, 1e5, 1e7, 1e9].map(scenario), mix: SAVE.mix, sources: SAVE.sources, notCounted: SAVE.notCounted, ratio: TOKEN_RATIO.assumption ? TOKEN_RATIO : { ...TOKEN_RATIO, proof: `${base()}/proof`, run: `${base()}${TOKEN_RATIO.run}` }, price: TOKEN_PRICE,
-        read: `A reuse counts once a day per caller network and task when an answer handed an agent a part someone already solved: a confirmed pathway (path), a ready plan (plan), verified offers (market); what it spares is modelled from the ranges in perReuse (low, mid, high). Markdown is measured: md counts pages of the sea asked for as Markdown, mdAgent pages of the sea sent as Markdown to an assistant reading for a person (md-agent), reads pages of other sites through the reader, each with what it spared against the page as HTML (UTF-8 bytes for pages of the sea, characters for pages through the reader); counts become tokens by one rule (ratio: ${TOKEN_RATIO.assumption ? `${TOKEN_RATIO.html} bytes a token, an assumption` : `HTML ${TOKEN_RATIO.bytes.html} bytes or ${TOKEN_RATIO.html} characters a token, Markdown ${TOKEN_RATIO.bytes.md} bytes or ${TOKEN_RATIO.md} characters, measured with ${TOKEN_RATIO.tokenizer} on the proof of function (${base()}/proof)`}). usd prices the tokens at list prices for uncached input tokens (price): low, mid (the headline) and high. A Markdown answer counts once a day per network and page; one network adds at most ${SAVE.cap.measured} Markdown answers and ${SAVE.cap.reuse} reuses a day. measured is against raw HTML, an upper bound; vsText is the same answers against plain text (pages of the sea), the lower view. The sea's own calls and crawlers are never counted; the house agent (Angel) is counted apart (house).` };
+        read: `A reuse counts once a day per caller network and task when an answer handed an agent a part someone already solved: a confirmed pathway (path), a ready plan (plan), verified offers (market); what it spares is modelled from the ranges in perReuse (low, mid, high). Markdown is measured: md counts pages of the sea asked for as Markdown, mdAgent pages of the sea sent as Markdown to an assistant reading for a person (md-agent), reads pages of other sites through the reader, each with what it spared against the page as HTML (UTF-8 bytes for pages of the sea, characters for pages through the reader); counts become tokens by one rule (ratio: ${TOKEN_RATIO.assumption ? `${TOKEN_RATIO.html} bytes a token, an assumption` : `HTML ${TOKEN_RATIO.bytes.html} bytes or ${TOKEN_RATIO.html} characters a token, Markdown ${TOKEN_RATIO.bytes.md} bytes or ${TOKEN_RATIO.md} characters, measured with ${TOKEN_RATIO.tokenizer} on the proof of function (${base()}/proof)`}). usd prices the tokens at list prices for uncached input tokens (price): low, mid (the headline) and high. A Markdown answer counts once a day per network and page; one network adds at most ${SAVE.cap.measured} Markdown answers and ${SAVE.cap.reuse} reuses a day. measured is against raw HTML, an upper bound; vsText is the same answers against plain text (pages of the sea), the lower view. The sea's own calls and crawlers are never counted; the house agent (Angel) is counted apart (house). Since 3.35 the engine room (${base()}/engine) counts here too: per lever (toon, lean, squeeze, delta, budget) its answers and the tokens before, after and saved, lossless and lossy apart (engine in today, last30days and all), by the one rule of savingOf; lossless savings join measured as their own kind (measuredBy.engine), lossy ones are in no figure of the headline; once a day per network and subject, at most ${SAVE.cap.engine} a day per network.` };
     },
     // the map of the brain: every area with its job, its door and its numbers
     async areasLive() {
@@ -414,8 +458,8 @@ export function createAreas(h) {
       const by = [0, 0, 0, 0]; for (const v of Object.values(idx || {})) by[v[0]] = (by[v[0]] || 0) + 1;
       return { market: { verified: by[2] + by[3], proven: by[3], checked: Object.keys(idx || {}).length, waiting: (q || []).length }, thinking: { kinds: BRIEF_KINDS.length, courses: CHARTS.length, plansToday: sv?.today?.counts?.plan || 0 },
         pathways: { pathways: st?.pathways || 0, walks: st?.walks || 0, ratings: st?.ratings || 0 }, memory: { minds: st?.minds || 0, memories: st?.memories || 0 },
-        reading: { readsToday: reads?.total || 0, tokensSpared30d: sv?.last30days?.tokens?.measured || 0 }, doors: { doors: DOORS.length },
-        saved: sv ? { reuses30d: sv.last30days.reuses, tokens30d: sv.last30days.tokens, wh30d: sv.last30days.wh, reusesAll: sv.all.reuses, whAll: sv.all.wh, since: sv.since,
+        reading: { readsToday: reads?.total || 0, tokensSpared30d: sv?.last30days?.measuredBy?.markdown ?? sv?.last30days?.tokens?.measured ?? 0 }, doors: { doors: DOORS.length },
+        saved: sv ? { reuses30d: sv.last30days.reuses, tokens30d: sv.last30days.tokens, wh30d: sv.last30days.wh, reusesAll: sv.all.reuses, whAll: sv.all.wh, since: sv.since, engine30d: sv.last30days.measuredBy?.engine || 0,
           // every token spared so far: measured (Markdown) and modelled (reuses), mid = measured + the middle of the modelled range
           tokensAll: { mid: sv.all.tokens.mid, measured: sv.all.tokens.measured, modelled: sv.all.modelled.mid, low: sv.all.tokens.low, high: sv.all.tokens.high } } : null };
     },
@@ -458,7 +502,7 @@ export function areasPage(base, L) {
     `<h1>The areas of the Unibrain</h1><p class="pulse">One brain for every agent, with an area for every job.</p>
 <p>A brain is not one lump. It has areas, and each one does one thing well. The Unibrain has them too. Each area below has a door an agent calls, a rule anyone can read, and its own live numbers. Everywhere in the world, people give their agents tasks other people's agents already solved; every area is a place where the solved part waits, so no agent has to work it out again.</p>
 <div class="grid">${AREA_DEF(base, L).map((a) => `<div class="box" id="${a.id}"><h3><a href="${esc(a.page)}">${esc(a.name)}</a></h3><p class="muted"><i>${esc(a.like)}</i></p><p>${esc(a.job)}</p>${a.nums.length ? `<p class="pulse">${a.nums.map(([v, k]) => `<b>${n(v)}</b> ${esc(k)}`).join(' · ')}</p>` : ''}<p><small><code>${esc(a.door)}</code></small></p></div>`).join('')}</div>
-<h2>What the shared brain saves</h2>${s ? `<p class="pulse">Last 30 days: <b>${n(s.reuses30d)}</b> reuses · <b>${n(s.tokens30d?.mid)}</b> tokens spared (${n(s.tokens30d?.measured)} of them measured against raw HTML, an upper bound; the rest modelled) · about <b>${n(s.wh30d?.mid)}</b> Wh (${n(s.wh30d?.low)}–${n(s.wh30d?.high)})</p>` : ''}
+<h2>What the shared brain saves</h2>${s ? `<p class="pulse">Last 30 days: <b>${n(s.reuses30d)}</b> reuses · <b>${n(s.tokens30d?.mid)}</b> tokens spared (${n(s.tokens30d?.measured)} of them measured${s.engine30d ? `: ${n(s.tokens30d.measured - s.engine30d)} Markdown against raw HTML, an upper bound, and ${n(s.engine30d)} by the <a href="/engine">engine room</a>, lossless` : ' against raw HTML, an upper bound'}; the rest modelled) · about <b>${n(s.wh30d?.mid)}</b> Wh (${n(s.wh30d?.low)}–${n(s.wh30d?.high)})</p>` : ''}
 <p>Every answer that hands an agent a part someone already solved is counted once: a confirmed pathway, a ready plan, verified offers. Markdown counts the bytes it really spared. What that is in tokens and energy follows with every assumption stated and sourced: <a href="/savings">the whole calculation</a>.</p>
 <p><small>The same map as data: <a href="/brain/areas.json">/brain/areas.json</a> · for agents as Markdown: <a href="/brain/areas.md">/brain/areas.md</a></small></p>`,
     { '@context': 'https://schema.org', '@type': 'WebPage', name: 'The areas of the Unibrain', url: `${base}/brain/areas`, isPartOf: { '@type': 'WebSite', name: 'Mare Liberum', url: base } });
