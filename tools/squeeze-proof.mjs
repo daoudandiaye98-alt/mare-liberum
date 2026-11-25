@@ -73,7 +73,7 @@ function keepsFacts(input, out) {
 
 // ---------------------------------------------------------------- the node, without the network
 let PAGE_HB = asHtml(HANDBOOK);
-const PAGES = () => ({ 'https://bakery-proof.dev/hours': PLAIN, 'https://docs.harbour-proof.dev/guide/streams/lines': DOC, 'https://harbour-proof.dev/handbook': PAGE_HB, 'https://harbour-proof.dev/handbook?since=2024-01-01': PAGE_HB });
+const PAGES = () => ({ 'https://bakery-proof.dev/%C3%B6ffnungszeiten': PLAIN, 'https://bakery-proof.dev/%E8%90%A5%E4%B8%9A%E6%97%B6%E9%97%B4': PLAIN, 'https://bakery-proof.dev/hours': PLAIN, 'https://docs.harbour-proof.dev/guide/streams/lines': DOC, 'https://harbour-proof.dev/handbook': PAGE_HB, 'https://harbour-proof.dev/handbook?since=2024-01-01': PAGE_HB });
 if (!WEB) {
   globalThis.fetch = async (u) => {
     const k = String(u?.url || u);
@@ -311,6 +311,12 @@ await proof('since=<etag>: unchanged → one line; changed → the changed lines
   assert.deepEqual(counts.map((k) => k.lever), ['delta', 'delta'], 'unchanged and changed counted, the whole page not');
   PAGE_HB = asHtml(HANDBOOK); bust(HB);
 });
+await proof('an address with letters outside ASCII (/read?url=…/öffnungszeiten) is answered as in 3.34.1, its x-sea-delta percent-encoded', async () => {
+  const r = await call(`/read?url=${enc('https://bakery-proof.dev/öffnungszeiten')}`); assert.equal(r.status, 200); assert.ok(r.text.includes('Opening hours'));
+  assert.equal(r.h['x-sea-delta'], `${BASE}/r/https://bakery-proof.dev/%C3%B6ffnungszeiten?since=${sinceOf(r.h.etag)}`);
+  const off = await call(`/read?url=${enc('https://bakery-proof.dev/öffnungszeiten')}`, { c: OFF }); assert.equal(off.status, 200);
+  const cjk = await call(`/read?url=${enc('https://bakery-proof.dev/营业时间')}`); assert.equal(cjk.status, 200, 'letters beyond Latin-1 too'); assert.match(cjk.h['x-sea-delta'], /%E8%90%A5%E4%B8%9A/);
+});
 await proof('a since= or budget= of the page\'s own (not in the engine\'s form) stays part of its address, as in 3.34.1', async () => {
   const r = await call(`/r/${HB}?since=2024-01-01`); assert.ok(r.text.includes(`URL Source: ${HB}?since=2024-01-01`));
   assert.deepEqual(readerParams(new URL(`${BASE}/r/x?since=2024-01-01&budget=low`), '/r/x').strip, []);
@@ -401,6 +407,7 @@ if (!toonReady() && existsSync(REF_TOON)) await negative('a squeeze that takes T
   const T = await import(REF_TOON), min = JSON.stringify(NOTES), t = T.encode(NOTES), broken = bytesOf(t) < bytesOf(min) ? 'toon' : 'json';
   assert.equal(broken, (tokensOf('toon', t) <= 0.8 * tokensOf('json', min)) ? 'toon' : 'json');
 });
+await negative('an x-sea-delta header with the address as it came (not percent-encoded) breaks on letters beyond Latin-1', () => { new Response('x', { headers: { 'x-sea-delta': `${BASE}/r/https://bakery-proof.dev/营业时间?since=e1-0` } }); });
 await negative('a 1 MB limit that lets one byte more through is caught', async () => { const r = await call('/compress', { method: 'POST', accept: 'application/json', headers: { 'content-type': 'text/plain' }, body: 'a'.repeat(SQUEEZE.maxBytes + 1), ip: '127.0.0.1' }); assert.notEqual(r.status, 413); });
 
 // ---------------------------------------------------------------- the sea's own pages, before and after (printed)

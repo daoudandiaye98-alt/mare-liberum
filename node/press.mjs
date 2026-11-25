@@ -152,7 +152,9 @@ export function pressRead(P, { r, md, st, a = {}, target, base, req, versions, c
   if (st !== 200 || !r || r.error || r.blocked || r.note) return null;
   const stable = pagePart(r), tag = tagOf(stable), etag = `W/"${tag}"`, src = cleanUrl(r.final || r.url || target);
   const key = `${a.format === 'full' ? 'full' : 'lean'} ${cleanUrl(target)}`;
-  const again = `${base}/r/${target}${target.includes('?') ? '&' : '?'}since=${tag}${a.format === 'full' ? '&format=full' : ''}`;
+  // (a header carries only visible ASCII: an address with other letters goes percent-encoded, as a browser sends it)
+  const addr = (() => { try { return new URL(target).href; } catch { return encodeURI(target); } })().replace(/[^\x21-\x7e]/g, (c) => encodeURIComponent(c));
+  const again = `${base}/r/${addr}${addr.includes('?') ? '&' : '?'}since=${tag}${a.format === 'full' ? '&format=full' : ''}`;
   const H = { ...hdr, etag, 'x-sea-delta': again };
   const type = { 'content-type': 'text/markdown; charset=utf-8' }, subject = src;
   // (an answer the engine shaped lets a page's script read its headers; the default answer keeps the headers it had, and the two)
