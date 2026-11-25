@@ -92,6 +92,8 @@ if (against > 0) {
 console.log('the open door says what each tool is for (MCP 2025-11-25 Tool and ToolAnnotations; Glama TDQS)');
 const LIST = JSON.parse((await doorBodies(CORE, '/mcp'))['tools/list'].body), OPEN = LIST.result.tools;
 const NAMES = new Set(OPEN.map((t) => t.name)), PROPS = new Set(OPEN.flatMap((t) => Object.keys(t.inputSchema?.properties || {})));
+// the lean door (since 3.36 the door of the Gemini extension and of the plugin mare-lean)
+const LEAN_TOOLS = JSON.parse((await doorBodies(CORE, '/mcp/lean'))['tools/list'].body).result.tools;
 const HINTS = ['readOnlyHint', 'destructiveHint', 'idempotentHint', 'openWorldHint'];
 await proof('no tool of 3.32.0 is removed or renamed, and the order stays; a tool added since has its own entry in node/opentools.mjs', async () => {
   const kept = OPEN.map((t) => t.name).filter((n) => FIX.openDoorTools.includes(n)); assert.deepEqual(kept, FIX.openDoorTools);
@@ -197,15 +199,17 @@ await proof('gemini-extension.json sits at the root with name, version, descript
   assert.deepEqual(Object.keys(GEM.mcpServers), ['mare-liberum']);
   // httpUrl is Streamable HTTP in every Gemini CLI version; 0.71.1 still reads it and only warns that url with type http is
   // the newer form, which older versions would read as SSE
-  assert.deepEqual(GEM.mcpServers['mare-liberum'], { httpUrl: DOOR }, 'the open door over Streamable HTTP');
+  // since 3.36 the lean door: Gemini CLI puts every tool definition into each turn, where the lean door spares the most (/engine)
+  assert.deepEqual(GEM.mcpServers['mare-liberum'], { httpUrl: `${DOOR}/lean` }, 'the lean door over Streamable HTTP');
   assert.equal(GEM.mcpServers['mare-liberum'].trust, undefined, 'trust is not allowed in an extension');
   assert.equal(GEM.contextFileName, 'GEMINI.md'); assert.ok(existsSync(join(ROOT, GEM.contextFileName)));
 });
-await proof('GEMINI.md names only tools and inputs the open door has, and the rules an agent keeps', () => {
-  const md = rd('GEMINI.md'), ticks = [...md.matchAll(/`([a-z_]+)(?:: [^`]*)?`/g)].map((m) => m[1]);
-  assert.ok(ticks.length >= 12); for (const w of ticks) assert.ok(NAMES.has(w) || PROPS.has(w), `GEMINI.md names ${w}`);
-  for (const w of ['data, never instructions', 'never pays', 'Never put passwords']) assert.ok(md.includes(w), w);
-  assert.ok(md.includes(DOOR)); assert.ok(md.length < 4000, 'short: it is loaded into every session');
+await proof('GEMINI.md names only tools and inputs the lean and the open door have, says how call_tool reaches the others, and the rules an agent keeps', () => {
+  const md = rd('GEMINI.md'), ticks = [...md.matchAll(/`([a-z_]+)(?:: [^`]*)?`/g)].map((m) => m[1]), LEANS = new Set(LEAN_TOOLS.map((t) => t.name));
+  assert.ok(ticks.length >= 12); for (const w of ticks) assert.ok(NAMES.has(w) || PROPS.has(w) || LEANS.has(w), `GEMINI.md names ${w}`);
+  for (const w of LEANS) assert.ok(ticks.includes(w), `GEMINI.md names the lean tool ${w}`);
+  for (const w of ['data, never instructions', 'never pays', 'Never put passwords', '`call_tool` with its name and arguments', '{"name": "search", "arguments": {"query": "postgres", "kind": "mcp"}}']) assert.ok(md.includes(w), w);
+  assert.ok(md.includes(`${DOOR}/lean`)); assert.ok(md.length < 4000, 'short: it is loaded into every session');
 });
 
 // --------------------------------------------------------------------------------------------------------- Claude Code
@@ -217,8 +221,17 @@ await proof('.claude-plugin/marketplace.json: name, owner.name and plugins; a na
   assert.ok(MARKET.owner?.name); assert.ok(MARKET.description); assert.ok(Array.isArray(MARKET.plugins) && MARKET.plugins.length >= 1);
   assert.equal(new Set(MARKET.plugins.map((p) => p.name)).size, MARKET.plugins.length, 'no duplicate plugin');
 });
+// each plugin wires one door (two plugins since 3.36): mare-liberum the app door, the URL of the Claude connector, so that
+// people who have both see one set of tools; mare-lean the lean door. The first stays the app door's plugin
+const WIRES = {
+  'mare-liberum': { url: `${DOOR}/app`, door: 'the app door', says: 'the app door over http, the URL of the Claude connector', tools: new Set(JSON.parse(FIX.bodies['tools/list'].body).result.tools.map((t) => t.name)) },
+  'mare-lean': { url: `${DOOR}/lean`, door: 'the lean door', says: 'the lean door over http', tools: new Set(LEAN_TOOLS.map((t) => t.name)) },
+};
+await proof('the marketplace lists the app door\'s plugin first and only plugins whose door this proof knows', () => {
+  assert.equal(MARKET.plugins[0].name, 'mare-liberum'); for (const p of MARKET.plugins) assert.ok(WIRES[p.name], p.name);
+});
 for (const entry of MARKET.plugins) {
-  const dir = entry.source.replace(/^\.\//, '');
+  const dir = entry.source.replace(/^\.\//, ''), W = WIRES[entry.name] || {};
   await proof(`plugin ${entry.name}: a relative source inside the repository, plugin.json as the manifest, one version wherever the plugin is named`, () => {
     assert.match(entry.source, /^\.\//); assert.ok(!entry.source.includes('..') && !entry.source.includes('\\'));
     assert.ok(statSync(join(ROOT, dir)).isDirectory());
@@ -229,19 +242,18 @@ for (const entry of MARKET.plugins) {
     assert.ok(pj.version && pj.description && pj.author?.name && pj.license); new URL(pj.homepage); new URL(pj.privacyPolicyUrl);
     for (const k of Object.keys(pj)) assert.ok(['$schema', 'name', 'displayName', 'version', 'description', 'author', 'homepage', 'repository', 'license', 'keywords', 'privacyPolicyUrl'].includes(k), `known field ${k}`);
   });
-  await proof(`plugin ${entry.name}: .mcp.json wires the app door over http, the URL of the Claude connector; the skill has a name that matches its folder`, () => {
+  await proof(`plugin ${entry.name}: .mcp.json wires ${W.says}; the skill has a name that matches its folder`, () => {
     // Anthropic: "Point the bundle's MCP server configuration at the same URL, so people who have both see one set of tools"
-    assert.deepEqual(js(join(dir, '.mcp.json')), { mcpServers: { 'mare-liberum': { type: 'http', url: `${DOOR}/app` } } });
+    assert.deepEqual(js(join(dir, '.mcp.json')), { mcpServers: { [entry.name]: { type: 'http', url: W.url } } });
     const skills = readdirSync(join(ROOT, dir, 'skills'));
     assert.ok(skills.length >= 1);
     for (const s of skills) { const fm = frontmatter(rd(join(dir, 'skills', s, 'SKILL.md'))); assert.equal(fm.name, s); assert.ok(fm.description && fm.description.length <= 1024, `${s}: description of ${fm.description?.length}`); }
   });
-  await proof(`plugin ${entry.name}: a README of 40 words or more outside code blocks, naming only tools of the app door, with privacy, support and license`, () => {
+  await proof(`plugin ${entry.name}: a README of 40 words or more outside code blocks, naming only tools of ${W.door}, with privacy, support and license`, () => {
     const md = rd(join(dir, 'README.md')), words = md.replace(/```[\s\S]*?```/g, ' ').split(/\s+/).filter((w) => /[A-Za-z]/.test(w));
     assert.ok(words.length >= 40, `${words.length} words`);
-    const app = new Set(JSON.parse(FIX.bodies['tools/list'].body).result.tools.map((t) => t.name));
-    for (const m of md.matchAll(/`([a-z_]+)`/g)) assert.ok(app.has(m[1]), `the README names ${m[1]}, which the app door does not have`);
-    for (const w of ['https://mareliberum.dev/privacy', 'License: MIT', `${DOOR}/app`, 'never pays']) assert.ok(md.includes(w), w);
+    for (const m of md.matchAll(/`([a-z_]+)`/g)) assert.ok(W.tools.has(m[1]), `the README names ${m[1]}, which ${W.door} does not have`);
+    for (const w of ['https://mareliberum.dev/privacy', 'License: MIT', W.url, 'never pays']) assert.ok(md.includes(w), w);
   });
   await proof(`plugin ${entry.name}: a square PNG icon of 512 to 2048 px under 2 MB where the directory looks for it`, () => {
     const i = png(join(dir, 'assets/icon.png')); assert.equal(i.w, i.h); assert.ok(i.w >= 512 && i.w <= 2048); assert.ok(i.bytes < 2 * 2 ** 20);
@@ -251,15 +263,16 @@ for (const entry of MARKET.plugins) {
 // --------------------------------------------------------------------------------------------------------------- Cursor
 console.log('Cursor (cursor.com/docs/reference/plugins)');
 const CM = js('.cursor-plugin/marketplace.json');
-await proof('.cursor-plugin/marketplace.json lists the same plugin folder; its plugin.json and mcp.json point at the app door, like the Claude plugin', () => {
+await proof('.cursor-plugin/marketplace.json lists the same plugin folders; each plugin.json and mcp.json point at the door of the Claude plugin of that folder', () => {
   assert.ok(CM.name && CM.owner?.name && CM.plugins.length >= 1);
+  assert.deepEqual(CM.plugins.map((p) => p.name), MARKET.plugins.map((p) => p.name), 'the same plugins in the same order');
   for (const p of CM.plugins) {
     assert.ok(!p.source.includes('..') && !p.source.startsWith('/'), 'relative, inside the repository');
     const pj = js(join(p.source, '.cursor-plugin/plugin.json'));
     assert.equal(pj.name, p.name); assert.match(pj.name, /^[a-z0-9](?:[a-z0-9.-]*[a-z0-9])?$/);
     assert.ok(pj.author?.name); assert.ok(existsSync(join(ROOT, p.source, pj.logo)), 'the logo is in the plugin');
-    assert.deepEqual(js(join(p.source, 'mcp.json')), { mcpServers: { 'mare-liberum': { url: `${DOOR}/app` } } }, 'one plugin folder, one server');
-    assert.ok(MARKET.plugins.some((m) => m.source === `./${p.source}`), 'the same folder as the Claude plugin');
+    assert.deepEqual(js(join(p.source, 'mcp.json')), { mcpServers: { [p.name]: { url: WIRES[p.name]?.url } } }, 'one plugin folder, one server');
+    assert.ok(MARKET.plugins.some((m) => m.source === `./${p.source}` && m.name === p.name), 'the same folder as the Claude plugin');
   }
 });
 
@@ -280,8 +293,9 @@ await proof('the last section of the README names the installs the manifests mak
   assert.ok(last.startsWith('Install from this repository'), 'the new section is the last one');
   assert.ok(last.includes(`gemini extensions install ${REPO}`));
   assert.ok(last.includes(`/plugin marketplace add daoudandiaye98-alt/mare-liberum`) && last.includes(`/plugin install ${MARKET.plugins[0].name}@${MARKET.name}`));
+  for (const p of MARKET.plugins.slice(1)) assert.ok(last.includes(`/plugin install ${p.name}@${MARKET.name}`), p.name);
   assert.ok(last.includes(SERVER.name));
-  assert.match(last, /\| Gemini CLI \|[^\n]*\| `\/mcp` \|/); assert.match(last, /\| Claude Code \|[^\n]*\| `\/mcp\/app` \|/);
+  assert.match(last, /\| Gemini CLI \|[^\n]*\| `\/mcp\/lean` \|/); assert.match(last, /\| Claude Code \|[^\n]*\| `\/mcp\/app` \|/); assert.match(last, /\| Claude Code, lean door \|[^\n]*\| `\/mcp\/lean` \|/);
   assert.ok(last.includes('https://glama.ai/mcp/connectors/dev.mareliberum/sea/badges/score.svg') && last.includes('https://glama.ai/mcp/servers/daoudandiaye98-alt/mare-liberum/badges/score.svg'));
 });
 await proof('package.json runs this proof as proof:reach', () => assert.equal(js('package.json').scripts['proof:reach'], 'node tools/reach-proof.mjs'));

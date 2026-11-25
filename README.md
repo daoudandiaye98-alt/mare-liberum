@@ -30,6 +30,15 @@ gemini mcp add --transport http --scope user mare-liberum https://mareliberum.de
 - **Agent skills:** `npx skills add daoudandiaye98-alt/mare-liberum`
 - **Any agent that can fetch:** read https://mareliberum.dev/skill.md and follow it
 
+## Plug in
+
+The token levers of [/engine](https://mareliberum.dev/engine), one step away in the clients and gateways agents run in:
+
+- **The lean door** `https://mareliberum.dev/mcp/lean`: 4 tools (`read_page`, `think`, `find_tools`, `call_tool`) that reach all 55 of the open door; its tool list measured 631 tokens instead of 9,695 (o200k_base, bench of 2026-11-25). Every MCP client on [/connect](https://mareliberum.dev/connect) has it as a second option beside the full door, and [/engine#plug](https://mareliberum.dev/engine#plug) has the lines for Claude Code, Cursor, VS Code, Codex, Gemini CLI, the OpenAI Agents SDK, the OpenAI Responses API, LangChain, the Vercel AI SDK and a LiteLLM proxy.
+- **Claude Code:** `claude mcp add --transport http mare-lean https://mareliberum.dev/mcp/lean`, or the plugin with a skill for `since=`, `fields=` and `budget=`: `/plugin marketplace add daoudandiaye98-alt/mare-liberum`, then `/plugin install mare-lean@mare-liberum`.
+- **Reading levers, nothing to install:** `/r/<address>?since=<etag>` reads a page again as only what changed, `budget=<tokens>` fits a page to a budget, `fields=a,b.c` and `fmt=toon` cut any JSON answer.
+- **`POST /compress` in a gateway:** [`integrations/gateways/litellm_mare_compress.py`](integrations/gateways/litellm_mare_compress.py) (a LiteLLM proxy callback) and [`integrations/gateways/vercel-ai-mare-compress.ts`](integrations/gateways/vercel-ai-mare-compress.ts) (Vercel AI SDK middleware) send tool results longer than 2,000 characters to `/compress`, take the answer only when it is smaller, and keep the original text on any error or timeout. Nothing sent is stored.
+
 ## Lend the sea your machine
 
 `curl -O https://mareliberum.dev/buoy.mjs && node buoy.mjs` — one file, Node 18+, no packages. A buoy reads one public store page every 20 seconds from where it stands and reports what the page declares; agents can also sort calls into needs (`work`, `work_done`). Confirmed work earns shells, and each month a share of what the sea earns is paid out by shells. Rule and record: https://mareliberum.dev/mining
@@ -165,14 +174,16 @@ Code: MIT. Compiled index: free to use and mirror, with credit to the lakes it f
 
 ## Install from this repository
 
-This repository is itself an install source. Gemini CLI and the official MCP Registry connect the open MCP door, `https://mareliberum.dev/mcp` (Streamable HTTP, all tools). The Claude Code plugin connects the app door, `https://mareliberum.dev/mcp/app`, the same server as the Mare Liberum connector in the Claude directory, so Claude shows one set of tools. No account, no key.
+This repository is itself an install source. The official MCP Registry connects the open MCP door, `https://mareliberum.dev/mcp` (Streamable HTTP, all tools). The Gemini extension connects the lean door, `https://mareliberum.dev/mcp/lean` (4 tools that reach all of them; Gemini CLI puts every tool definition into each turn). The Claude Code plugin `mare-liberum` connects the app door, `https://mareliberum.dev/mcp/app`, the same server as the Mare Liberum connector in the Claude directory, so Claude shows one set of tools; the plugin `mare-lean` connects the lean door and adds a skill for the token levers. No account, no key.
 
 [![Mare Liberum MCP connector](https://glama.ai/mcp/connectors/dev.mareliberum/sea/badges/score.svg)](https://glama.ai/mcp/connectors/dev.mareliberum/sea) [![daoudandiaye98-alt/mare-liberum MCP server](https://glama.ai/mcp/servers/daoudandiaye98-alt/mare-liberum/badges/score.svg)](https://glama.ai/mcp/servers/daoudandiaye98-alt/mare-liberum)
 
 | Client | Install | Door | Reads |
 |---|---|---|---|
-| Gemini CLI | `gemini extensions install https://github.com/daoudandiaye98-alt/mare-liberum` | `/mcp` | `gemini-extension.json`, `GEMINI.md` |
+| Gemini CLI | `gemini extensions install https://github.com/daoudandiaye98-alt/mare-liberum` | `/mcp/lean` | `gemini-extension.json`, `GEMINI.md` |
 | Claude Code | `/plugin marketplace add daoudandiaye98-alt/mare-liberum`, then `/plugin install mare-liberum@mare-liberum` | `/mcp/app` | `.claude-plugin/marketplace.json` and `plugins/mare-liberum` (the MCP server, the skill, a README) |
+| Claude Code, lean door | `/plugin marketplace add daoudandiaye98-alt/mare-liberum`, then `/plugin install mare-lean@mare-liberum` | `/mcp/lean` | `.claude-plugin/marketplace.json` and `plugins/mare-lean` (the lean door, the skill `token-levers`, a README) |
 | Any client that reads the official MCP Registry | the server `dev.mareliberum/sea` | `/mcp` | `server.json` |
+| Any client that reads the official MCP Registry, lean door | the server `dev.mareliberum/lean` | `/mcp/lean` | `server-lean.json` |
 
-The plugin folder also carries a Cursor plugin manifest (`.cursor-plugin/`, `plugins/mare-liberum/mcp.json`), and `glama.json` names the maintainer for Glama. Every tool of the open door has a title, a description that says when to use it and what it stores, a described input schema and MCP annotations (read-only, destructive, idempotent, open world), in few words: the whole tool list stays at or under its 3.32.0 size (40,576 bytes). `npm run proof:reach` checks that, the manifests against their documented fields, and the app door `/mcp/app` byte for byte against what the assistant directories reviewed.
+Both plugin folders also carry a Cursor plugin manifest (`.cursor-plugin/`, `mcp.json` in each folder), and `glama.json` names the maintainer for Glama. Every tool of the open door has a title, a description that says when to use it and what it stores, a described input schema and MCP annotations (read-only, destructive, idempotent, open world), in few words: the whole tool list stays at or under its 3.32.0 size (40,576 bytes). `npm run proof:reach` checks that, the manifests against their documented fields, and the app door `/mcp/app` byte for byte against what the assistant directories reviewed.

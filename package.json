@@ -42,7 +42,8 @@
     "proof:squeeze": "node tools/squeeze-proof.mjs",
     "proof:engine": "node tools/engine-proof.mjs",
     "proof:toon": "node tools/toon-proof.mjs",
-    "proof:leanmcp": "node tools/leanmcp-proof.mjs"
+    "proof:leanmcp": "node tools/leanmcp-proof.mjs",
+    "proof:pipes": "node tools/pipes-proof.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.9.0",

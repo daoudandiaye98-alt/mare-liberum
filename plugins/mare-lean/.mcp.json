@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "mare-lean": {
+      "type": "http",
+      "url": "https://mareliberum.dev/mcp/lean"
+    }
+  }
+}

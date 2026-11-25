@@ -1,0 +1,22 @@
+{
+  "name": "mare-lean",
+  "version": "1.0.0",
+  "description": "The lean MCP door of Mare Liberum in Cursor (no account, no key): 4 tools, read_page and think plus find_tools and call_tool, which reach every tool of the sea; its tool list measured 631 tokens instead of 9,695 for the open door's 55 tools (o200k_base, 2026-11-25). Plus a skill for the token levers since=, fields= and budget=.",
+  "author": {
+    "name": "Mare Liberum",
+    "email": "oroborosdesign@gmail.com"
+  },
+  "homepage": "https://mareliberum.dev/engine",
+  "repository": "https://github.com/daoudandiaye98-alt/mare-liberum",
+  "license": "MIT",
+  "keywords": [
+    "mcp",
+    "remote-mcp",
+    "agents",
+    "tokens",
+    "context-window",
+    "web-to-markdown",
+    "toon"
+  ],
+  "logo": "assets/icon.png"
+}
