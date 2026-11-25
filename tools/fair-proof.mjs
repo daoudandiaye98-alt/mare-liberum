@@ -233,14 +233,16 @@ await proof('a payment that names no receipt settles nothing: refused before any
   const r = await call('/fair/pay', { method: 'POST', headers: { 'payment-signature': v2(FAIR.minMicro) } });
   assert.equal(r.status, 400); assert.match(r.j.error.message, /Nothing was charged/); assert.equal(asked.length, 0); assert.equal(ledger.mem.sales.length, n0);
 });
-await proof('below 0.05 USDC it asks for nothing: the open sum and about how many receipts are still missing; nothing due and unknown receipts are named; at most 500 in one payment', async () => {
+await proof('below 0.05 USDC it asks for nothing: the open sum and about how many receipts are still missing; nothing due and unknown receipts are named; at most 5,000 in one payment', async () => {
   assert.equal(FAIR.minMicro, 50_000); const one = made(1)[0], r = await call(`/fair/pay?r=${one.id}`, { method: 'POST' });
   assert.equal(r.status, 200); assert.equal(r.h.get('payment-required'), null, 'no 402 below the minimum'); assert.equal(r.j.payable, false); assert.equal(r.j.reason, 'below the minimum'); assert.equal(r.j.open_usd, usd6(one.shareMicro.mid)); assert.equal(r.j.minimum_usd, '0.050000');
   assert.equal(r.j.receipts_missing, Math.ceil((FAIR.minMicro - one.shareMicro.mid) / one.shareMicro.mid)); assert.match(r.j.bundle, /pay them together/); assert.match(r.j.bundle, /docs\.payai\.network/);
   const zero = fairL().make([{ k: 'md', html: 50_000, md: 9_000, text: 4_000 }], { door: '/about' });
   const z = await call(`/fair/pay?r=${zero.id},r20250101zzzzzzzz`, { method: 'POST' }); assert.equal(z.j.payable, false); assert.deepEqual(z.j.nothing_due, [zero.id]); assert.deepEqual(z.j.unknown, ['r20250101zzzzzzzz']);
   assert.equal((await call('/fair/pay?r=r20250101zzzzzzzz', { method: 'POST' })).status, 404);
-  assert.equal((await call('/fair/pay', { method: 'POST', body: { r: Array.from({ length: 501 }, (_, i) => `r20261125${String(i).padStart(8, 'a')}`) } })).status, 400);
+  assert.equal((await call('/fair/pay', { method: 'POST', body: { r: Array.from({ length: FAIR.bundleMax + 1 }, (_, i) => `r20261125${String(i).padStart(8, 'a')}`) } })).status, 400);
+  const tiny = fairL().make([{ k: 'plan', n: 1 }], { answerBytes: 2_700, answerType: 'application/json' }), tr = await call(`/fair/pay?r=${tiny.id}`, { method: 'POST' });
+  if (tiny.shareMicro.mid > 0 && 1 + Math.ceil((FAIR.minMicro - tiny.shareMicro.mid) / tiny.shareMicro.mid) > FAIR.bundleMax) assert.match(tr.j.too_small, /more receipts than one payment bundles/); else assert.equal(tr.j.too_small, undefined);
   const big = made(ENOUGH), viaBody = await call('/fair/pay', { method: 'POST', body: { r: big.map((x) => x.id) } }); assert.equal(viaBody.status, 402, 'receipts in the body work too');
 });
 let paidSet = null, paidSum = 0;

@@ -41,7 +41,8 @@ export const FAIR = {
   minMicro: 50_000,
   minWhy: 'one settlement costs the facilitator about $0.001 to $0.0013 (gas plus 30 %), so below 0.05 USDC the fee would eat a large part of the share',
   minSource: 'https://docs.payai.network/x402/facilitators/pricing.md',
-  bundleMax: 500,
+  // receipts in one payment: in the address while it is short, else in the body ({"r":[…]}); small shares need many
+  bundleMax: 5000,
   keepDays: 30,
   drop: 1000,
   // what the receipt field adds to a JSON answer, in bytes, counted against the saving of that answer (it is about 140)
@@ -175,7 +176,7 @@ export function fairPaymentRequired(t, { base, error, due = [], cors = {} }) {
   const v2 = { x402Version: 2, error: error || 'PAYMENT-SIGNATURE header is required', resource: { url: t.resource, description: t.description, mimeType: 'application/json' }, accepts: [t.v2], extensions: { bazaar: fairBazaar() } };
   const body = { x402Version: 1, error: error || 'X-PAYMENT header is required', accepts: [t.v1],
     amount_usd: usd6(t.micro), unit: 'USDC on Base, 6 decimals (maxAmountRequired is in millionths of a dollar)', what: t.description,
-    receipts: due.map((r) => ({ id: r.id, share_usd: usd6(r.shareMicro.mid), url: `${base}/fair/r/${r.id}` })),
+    receipts: due.slice(0, 100).map((r) => ({ id: r.id, share_usd: usd6(r.shareMicro.mid), url: `${base}/fair/r/${r.id}` })), receipts_count: due.length,
     pay: ['x402 v2: call again with the header PAYMENT-SIGNATURE (the PAYMENT-REQUIRED header holds the terms, base64 JSON)', 'x402 v1: call again with the header X-PAYMENT (the terms are in "accepts" of this body)'],
     pay_to: t.payTo, network: 'Base (eip155:8453)', asset: 'USDC', window_seconds: t.window, rule: FAIR.rule, voluntary: FAIR.voluntary, fair: `${base}/fair`,
     note: 'No account, no key. The USDC goes from your wallet straight to the address above; the sea never holds anyone\'s money.' };
@@ -215,6 +216,12 @@ export function createFair({ kv, now = () => new Date().toISOString(), base: bas
     async get(id) {
       if (!ID.test(String(id || ''))) return null;
       return pend.get(id) || (await kv.get(`fair:d:${dayOfId(id)}`))?.[id] || null;
+    },
+    // many at once: each day's receipts are read once
+    async getMany(ids) {
+      const ok = ids.filter((id) => ID.test(String(id || ''))), days = [...new Set(ok.filter((id) => !pend.has(id)).map(dayOfId))];
+      const kept = Object.fromEntries(await Promise.all(days.map(async (d) => [d, (await kv.get(`fair:d:${d}`)) || {}])));
+      return ok.map((id) => pend.get(id) || kept[dayOfId(id)]?.[id] || null).filter(Boolean);
     },
     // the tide: receipts into their day (kept 31 days), the totals into the running sum
     async flush() {
@@ -275,7 +282,7 @@ export function createFair({ kv, now = () => new Date().toISOString(), base: bas
         return fairPaymentRequired(fairTerms(payCfg, { base, ids: [], micro: FAIR.minMicro }), { base, cors, error: `name the receipts to settle: POST ${base}/fair/pay?r=<id>,<id> answers with their exact unpaid sum; without receipts nothing is due` });
       }
       if (want.length > FAIR.bundleMax) return { status: 400, body: { error: { code: 'INVALID_ARGUMENT', message: `at most ${FAIR.bundleMax} receipts in one payment` } }, headers: { ...PAY_HDR, ...cors } };
-      const found = (await Promise.all(want.map((id) => fair.get(id)))).filter(Boolean), unknown = want.filter((id) => !found.some((r) => r.id === id));
+      const found = await fair.getMany(want), seen = new Set(found.map((r) => r.id)), unknown = want.filter((id) => !seen.has(id));
       if (!found.length) return { status: 404, body: { error: { code: 'NOT_FOUND', message: `no such receipt on this node (receipts are kept ${FAIR.keepDays} days)` }, unknown }, headers: { ...PAY_HDR, ...cors } };
       const paid = await fair.paidIds(ledger);
       const already = found.filter((r) => paid.has(r.id)).map((r) => ({ id: r.id, sale: paid.get(r.id).sale, status: paid.get(r.id).status }));
@@ -283,8 +290,9 @@ export function createFair({ kv, now = () => new Date().toISOString(), base: bas
       const due = found.filter((r) => r.shareMicro.mid > 0 && !paid.has(r.id));
       const micro = due.reduce((s, r) => s + r.shareMicro.mid, 0), tell = { already_paid: already.length ? already : undefined, nothing_due: zero.length ? zero : undefined, unknown: unknown.length ? unknown : undefined };
       if (!due.length) return { status: 200, body: { payable: false, reason: 'nothing is due on these receipts: each one is paid or saved nothing on the billed bases', ...tell, fair: `${base}/fair` }, headers: { ...PAY_HDR, ...cors } };
-      if (micro < FAIR.minMicro) { const missing = Math.ceil((FAIR.minMicro - micro) / (micro / due.length));
-        return { status: 200, body: { payable: false, reason: 'below the minimum', open_usd: usd6(micro), minimum_usd: usd6(FAIR.minMicro), receipts: due.map((r) => r.id), receipts_missing: missing, missing_is: 'about this many more receipts like these, at their average share', ...tell,
+      if (micro < FAIR.minMicro) { const missing = Math.ceil((FAIR.minMicro - micro) / (micro / due.length)), fits1 = due.length + missing <= FAIR.bundleMax;
+        return { status: 200, body: { payable: false, reason: 'below the minimum', open_usd: usd6(micro), minimum_usd: usd6(FAIR.minMicro), receipts: due.map((r) => r.id), receipts_missing: missing, missing_is: 'about this many more receipts like these, at their average share',
+          ...(fits1 ? {} : { too_small: `at these shares the minimum takes more receipts than one payment bundles (${FAIR.bundleMax}): nothing is due now; receipts are kept ${FAIR.keepDays} days` }), ...tell,
           bundle: `One payment settles at least ${usd6(FAIR.minMicro)} USD: ${FAIR.minWhy} (${FAIR.minSource}). Keep the receipt ids of your answers and pay them together: POST ${base}/fair/pay?r=<id>,<id>,… or {"r":[…]} in the body (up to ${FAIR.bundleMax}).`, voluntary: FAIR.voluntary }, headers: { ...PAY_HDR, ...cors } }; }
       const t = fairTerms(payCfg, { base, ids: due.map((r) => r.id), micro }), pay = paymentOf(headers, body || {});
       if (!pay) return fairPaymentRequired(t, { base, due, cors });
