@@ -40,6 +40,7 @@ const ENVELOPE = new Set(['text', 'html', 'json', 'q', 'budget', 'type', 'url'])
 const fail = (status, code, message, extra = {}) => new Response(JSON.stringify({ error: { code, message, use: extra.use } }), { status, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', ...CORS, ...(extra.headers || {}) } });
 export function compressUse(base) {
   return { what: 'squeeze: text, HTML or JSON you already hold, made smaller before it goes into your context', lever: 'squeeze', engine: ENGINE_VERSION,
+    for: 'programs between an agent and its model: a hook, a proxy, a pipeline. A model that pastes text it already holds into a tool call pays for it as output tokens (about five times the price of input) and loses; to read a page short, use /r/<address>?budget=<tokens>',
     post: `${base}/compress`, body: { 'text | html | json': 'what to make smaller (one of the three)', q: 'optional: a question; keeps the parts that answer it (lossy)', budget: 'optional: tokens; fits the text into them (lossy)', type: 'optional: html | json | md | text (else it is found out)', url: 'optional: the page an HTML text came from' },
     raw: 'or send the text itself with its Content-Type (text/html, application/json, text/markdown, text/plain); q, budget and type then as query parameters',
     answers: 'JSON { out, form, tokens: { before, after, saved }, steps, lossy, note }; only the text with Accept: text/plain or text/markdown. Headers: x-sea-engine, x-sea-engine-tokens (before->after), x-sea-engine-saved, x-sea-engine-lossy (only when lossy)',
@@ -50,7 +51,7 @@ export function compressUse(base) {
     privacy: 'nothing you send is kept or logged; only its size counts (bytes and tokens, never the text)',
     example: `curl -s ${base}/compress -H 'content-type: text/html' --data-binary @page.html`, rule: `${base}/engine` };
 }
-const useMd = (u) => `# POST /compress: what you already hold, smaller\n\n${u.what}.\n\n${u.example}\n\nBody: JSON {"text" | "html" | "json": …, "q"?, "budget"?, "type"?, "url"?} — ${u.raw}.\n\nAnswer: ${u.answers}.\n\nLossless: ${u.lossless.join('; ')}.\n\nLossy, only when asked: ${u.lossy.join('; ')}.\n\nTokens: ${u.tokens}.\n\nLimits: body ${u.limits.body}; JSON nested at most ${u.limits.jsonDepth} levels; ${u.limits.pace}.\n\nPrivacy: ${u.privacy}.\n\nThe rule: ${u.rule}\n`;
+const useMd = (u) => `# POST /compress: what you already hold, smaller\n\n${u.what}.\n\nFor ${u.for}.\n\n${u.example}\n\nBody: JSON {"text" | "html" | "json": …, "q"?, "budget"?, "type"?, "url"?} — ${u.raw}.\n\nAnswer: ${u.answers}.\n\nLossless: ${u.lossless.join('; ')}.\n\nLossy, only when asked: ${u.lossy.join('; ')}.\n\nTokens: ${u.tokens}.\n\nLimits: body ${u.limits.body}; JSON nested at most ${u.limits.jsonDepth} levels; ${u.limits.pace}.\n\nPrivacy: ${u.privacy}.\n\nThe rule: ${u.rule}\n`;
 // req: the request (its body read here, once); count: counter(sea, ctx)
 export async function compressDoor(req, { base, ip, cfg = {}, count = () => false } = {}) {
   try {
