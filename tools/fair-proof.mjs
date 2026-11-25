@@ -264,7 +264,7 @@ await proof('M1: /fair keeps its fingerprint while the sea only counts: new rece
 await proof('M6: no selling or billing words for the voluntary share; a payment is a payment; /treasury and /pulse count fair share apart from the paid move', async () => {
   const pages = [(await call('/fair', { accept: 'text/html' })).text, (await call('/fair.json')).text, (await call('/fair.md')).text];
   const rs = made(), ids = rs.map((x) => x.id).join(','), sum = rs.reduce((s2, x) => s2 + x.shareMicro.mid, 0);
-  pages.push((await call(`/fair/r/${rs[0].id}.json`)).text, (await call(`/fair/pay?r=${ids}`, { method: 'POST' })).text);
+  pages.push((await call(`/fair/r/${rs[0].id}.json`)).text, (await call(`/fair/r/${rs[0].id}`, { accept: 'text/html' })).text, (await call(`/fair/pay?r=${ids}`, { method: 'POST' })).text);
   // ("not sold" stays: it says what a drop never is)
   for (const t of pages) { assert.doesNotMatch(t, /\b(bill(s|ed|ing)?|invoic\w*|sales?)\b/i); assert.doesNotMatch(t, /"sale"\s*:/); }
   const fl = createLedger({}), t0 = (await call('/treasury', { cfg: { ...ON, ledger: fl } })).j;

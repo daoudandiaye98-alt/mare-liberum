@@ -393,7 +393,7 @@ export function receiptJson(base, r, paid) {
 }
 export function receiptPage(base, r, paid) {
   const j = receiptJson(base, r, paid);
-  const rows = [['lower: measured against plain text', j.tokens.lower, '20 %'], ['modelled: a solved part reused, calibrated on the bench', j.tokens.modelled, '10 %'], ['upper: measured against raw HTML (shown, never billed)', j.tokens.upper, '0 %']];
+  const rows = [['lower: measured against plain text', j.tokens.lower, '20 %'], ['modelled: a solved part reused, calibrated on the bench', j.tokens.modelled, '10 %'], ['upper: measured against raw HTML (shown, no share asked on it)', j.tokens.upper, '0 %']];
   return page(base, `/fair/r/${r.id}`, `Receipt ${r.id} — what the sea saved one answer | Mare Liberum`, `One receipt of the open sea: ${n(j.tokens.conservative)} tokens saved on the conservative basis, a fair share of ${j.fair_share_usd.mid} USD, voluntary.`,
     `<h1>Receipt of one answer</h1><p class="pulse"><b>${n(j.tokens.conservative)}</b> tokens saved on the conservative basis · fair share <b>${money(r.shareMicro.mid)}</b>, voluntary · ${esc(j.status)}</p><p><small>Every dollar figure here: ${esc(FAIR.usdNote)}.</small></p>
 <div class="tw"><table class="tbl"><thead><tr><th>basis</th><th>tokens</th><th>share</th></tr></thead><tbody>${rows.map(([a, b, c]) => `<tr><td>${esc(a)}</td><td>${n(b)}</td><td>${c}</td></tr>`).join('')}</tbody></table></div>
