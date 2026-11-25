@@ -57,6 +57,7 @@ import { savingOf } from './engine.mjs';
 import { toonAsked, jsonRequest, toonAnswer } from './toondoor.mjs';
 import { leanTools, leanSizes, leanSentence, leanInstructions, findTools, leanText, LEAN_DIRECT, LEAN_FORMAT } from './leanmcp.mjs';
 import { createToll, tollSwitch, tollSecret, tollRpc, tollRequired, tollFacts, TOLL, TOLL_EXPOSE, TOLL_META, TOLL_ID } from './toll.mjs';
+import { jinaAsk, jinaText, jinaJson, scrapeAsk, scrapeAnswer, scrapeError, readerDoc, readerDocPage } from './compat.mjs';
 
 export const VERSION = '3.37.1';
 const UA = 'MareLiberum/1.0 (open agent index; pull-only; +/.well-known/ard.json)';
@@ -2073,6 +2074,26 @@ async function handleOne(req, db, cfg = {}) {
     if (path === '/badge.svg') { const d = await liveNow(sea, db, cfg), h = headline(d), k = url.searchParams.get('show');
       const [label, value] = k === 'index' ? ['Mare Liberum', `${fmtN(h.index)} places in the open index`] : k === 'brain' ? ['Unibrain', `${fmtN(h.paths)} pathways`] : ['Mare Liberum', `${fmtN(h.ai)} AI visits today`];
       return new Response(badgeSvg(label, value), { headers: { 'content-type': 'image/svg+xml; charset=utf-8', 'cache-control': 'public, max-age=300, s-maxage=300', ...CORS } }); }
+    // the reader as a drop-in (node/compat.mjs, since 3.38): the page that says how, and Firecrawl's scrape on the same reader.
+    // No key is needed; an Authorization header is never read, logged, kept or sent on. Options the reader does not have are
+    // ignored and named in data.warning, never an error
+    if ((path === '/reader' || path === '/reader.json') && req.method === 'GET') {
+      const acc = req.headers.get('accept') || '', asJson = path === '/reader.json' || url.searchParams.get('format') === 'json' || (/application\/json/.test(acc) && !/text\/html/.test(acc));
+      return asJson ? ajson(readerDoc(base), 200, { 'cache-control': 'public, max-age=3600', ...(path === '/reader.json' ? { 'x-robots-tag': 'noindex' } : {}) }) : html(readerDocPage(base), 3600);
+    }
+    const fc = /^\/v([12])\/scrape$/.exec(path);
+    if (fc) {
+      const out = (o) => json(o.body, o.status, { 'cache-control': 'no-store', 'x-robots-tag': 'noindex' });
+      if (req.method !== 'POST') return out(scrapeError(405, 'METHOD_NOT_ALLOWED', `POST a JSON body to ${base}${path}: {"url": "https://…", "formats": ["markdown"]}; how: ${base}/reader`));
+      let raw = ''; try { raw = await req.text(); } catch {}
+      let b0 = null; if (raw.length <= 65_536) { try { b0 = JSON.parse(raw || 'null'); } catch {} }
+      const ask = raw.length > 65_536 ? { error: 'the request body is larger than 64 KB' } : scrapeAsk(b0, Number(fc[1]));
+      if (ask.error) return out(scrapeError(400, 'BAD_REQUEST', ask.error));
+      let r; try { r = await sea.read({ url: ask.url, ...(ask.full ? { full: true } : {}), ...(ask.fresh ? { fresh: true } : {}), ...(ask.shape ? { shape: ask.shape } : {}) }, ctx); }
+      catch (e) { if (e instanceof SeaError) return out(scrapeError(e.status || 400, e.status === 429 ? 'RATE_LIMIT_EXCEEDED' : 'BAD_REQUEST', e.message)); throw e; }
+      if (r.host) passed('read', r.final || r.url || ask.url, { status: r.blocked ? 403 : r.error ? (r.status || 502) : 200, outcome: r.blocked ? 'robots' : null });
+      return out(scrapeAnswer(r, ask));
+    }
     // the reader: any public page as Markdown for an agent — /r/<address> or /read?url=<address>
     if (path === '/r' || path.startsWith('/r/') || path === '/read') {
       const a = Object.fromEntries(url.searchParams); let target = '';
@@ -2082,6 +2103,19 @@ async function handleOne(req, db, cfg = {}) {
       else if (path.length > 3) { target = path.slice(3).replace(/^(https?):\/(?!\/)/i, '$1://'); const sp = new URLSearchParams(url.search); for (const k of ['tag', 'q', 'format', '__p', ...(eng?.strip || [])]) sp.delete(k); const rest = sp.toString(); if (rest) target += `?${rest}`; }
       const wantJson = a.format === 'json' || (/application\/json/.test(req.headers.get('accept') || '') && !/text\/html/.test(req.headers.get('accept') || ''));
       if (!target) return new Response(readerPage(base), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=3600', ...CORS } });
+      // a request in Jina Reader's form (node/compat.mjs, since 3.38): only with one of its headers (X-Return-Format …), else
+      // nothing of this runs. The engine's levers and the toll stay with the answers of before: since=, If-None-Match and
+      // budget= act on /r/ without these headers. The markup (X-Return-Format: html) goes out as text, never as a page of the sea
+      const jn = jinaAsk(req.headers);
+      if (jn) {
+        if (eng?.since || eng?.budget) jn.ignored.push('since= and budget= (they act on /r/ without the X- headers)');
+        const r = await sea.read({ url: target, q: a.q, tag: a.tag, ...(a.format === 'full' ? { full: true } : {}), ...(jn.fresh ? { fresh: true } : {}), ...(jn.shape ? { shape: jn.shape } : {}) }, ctx);
+        if (r.note && !r.url && !r.error) return new Response(`${r.note}\n${r.how}\n`, { headers: { 'content-type': 'text/plain; charset=utf-8', 'x-robots-tag': 'noindex', ...CORS } });
+        const st = r.blocked ? 403 : r.error ? (r.status >= 400 ? 502 : 422) : 200, hdr = { 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow', 'x-content-type-options': 'nosniff', ...CORS };
+        if (r.host) passed('read', r.final || r.url || target, { q: a.q, status: r.blocked ? 403 : r.error ? (r.status || 502) : 200, outcome: r.blocked ? 'robots' : null });
+        if (wantJson) return json(jinaJson(r, jn, st), st, hdr);
+        return new Response(st === 200 ? jinaText(r, jn) : `Error: ${r.error || r.note}\nURL Source: ${r.url || target}\n`, { status: st, headers: { 'content-type': 'text/plain; charset=utf-8', ...hdr } });
+      }
       // the toll on reading again (node/toll.mjs, since 3.37): since= in the engine's form or If-None-Match with a tag of the
       // reader, on the Markdown answer (the JSON one knows neither); a caller that pays its due toll pays before the page is read,
       // and every answer after that payment says so, an error too
