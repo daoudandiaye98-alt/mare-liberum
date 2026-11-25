@@ -17,7 +17,7 @@ import { createLedger } from '../node/ledger.mjs';
 import { payConfig } from '../node/pay.mjs';
 import { immune } from '../node/immune.mjs';
 import { savingOf, engineHeaders, engineOn, engineSwitch, tokensOf, bytesOf, LEVERS, RATIO, ENGINE_RATIOS, ENGINE_VERSION } from '../node/engine.mjs';
-import { createAreas, savingsOf, engineOf, engineKey, SAVE } from '../node/areas.mjs';
+import { createAreas, savingsOf, engineOf, engineKey, SAVE, ENGINE_CAP } from '../node/areas.mjs';
 import { TOKEN_RATIO } from '../node/proof.mjs';
 import { tallyRun } from '../node/tally.mjs';
 import { loadEngineBench, ENGINE_RULES } from '../node/engine-ui.mjs';
@@ -108,7 +108,7 @@ await proof('once a day per network and subject: a page by its site and path (qu
 });
 const CAP = 500; // the cap the brief fixes; the loop below never trusts a changed figure
 await proof(`a network adds at most ${CAP} answers of the engine a day, every lever together; another network still counts`, async () => {
-  assert.equal(SAVE.cap.engine, CAP); const { A } = ledgerOf(); let n = 0;
+  assert.equal(ENGINE_CAP, CAP); assert.deepEqual(SAVE.cap, { measured: 500, reuse: 500 }, 'the caps of 3.33.0 stay as they were'); const { A } = ledgerOf(); let n = 0;
   for (let i = 0; i < CAP + 5; i++) if (A.countEngine(i % 2 ? 'toon' : 'lean', i % 2 ? S.toon : savingOf('lean', { before: 'x'.repeat(40000), beforeForm: 'json', after: 'x'.repeat(3000), afterForm: 'json' }), agent('198.18.21.1'), `tool-${i}`)) n++;
   assert.equal(n, CAP); assert.equal(A.countEngine('toon', S.toon, agent('198.18.21.2'), 'tool-0'), true);
   const e = (await A.savings()).today.engine; assert.equal(e.lossless.answers, CAP + 1);
@@ -256,7 +256,7 @@ const BREAK = [
   ['crawlers counted', 'node/areas.mjs', '|| ENGINE_SKIP.has(ctx?.whoKind)) return false;', ') return false;'],
   ['lossy savings in the headline', 'node/areas.mjs', 'measured = markdown + engine.lossless.saved;', 'measured = markdown + engine.lossless.saved + engine.lossy.saved;'],
   ['no once a day', 'node/areas.mjs', "if (!firstToday(ctx, `eng:${lever}:${cls}`,", "if (!ctx?.ip && !firstToday(ctx, `eng:${lever}:${cls}`,"],
-  ['no cap per network', 'node/areas.mjs', 'cap: { measured: 500, reuse: 500, engine: 500 },', 'cap: { measured: 500, reuse: 500, engine: 1e9 },'],
+  ['no cap per network', 'node/areas.mjs', 'export const ENGINE_CAP = 500;', 'export const ENGINE_CAP = 1e9;'],
   ['budget counted lossless', 'node/areas.mjs', "s.lossy === false && L.lossless !== false ? 'lossless'", "s.lossy === false ? 'lossless'"],
   ['a saving that breaks the rule trusted', 'node/areas.mjs', '|| saved !== before - after) return false;', ') return false;'],
   ['the house agent in the headline', 'node/areas.mjs', 'quiet = { ...ctx, door: undefined };', 'quiet = { ...ctx, door: undefined }; ctx = { ...ctx, house: undefined };'],

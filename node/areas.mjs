@@ -42,9 +42,8 @@ export const SAVE = {
       basis: 'Checking a shop means reading its home and legal pages, its registration and what others say: about 2 to 4 reads of 5,000 to 15,000 tokens for each of 2 or 3 shops, and the judgement. Energy: 3 to 15 ordinary queries.' },
   },
   mix: { path: 0.5, plan: 0.3, market: 0.2 },
-  // one network adds at most this many counts a day: Markdown answers (measured), solved parts handed out (reuses), answers
-  // the engine room shaped (engine, every lever together; since 3.35)
-  cap: { measured: 500, reuse: 500, engine: 500 },
+  // one network adds at most this many counts a day: Markdown answers (measured), solved parts handed out (reuses)
+  cap: { measured: 500, reuse: 500 },
   sources: [
     { what: 'Energy of one query to a frontier model: median 0.31 Wh (0.16–0.60); a long reasoning query (test-time scaling, about 5,000 output tokens) 3.91 Wh (2.15–7.05)', by: 'Oviedo et al., Joule (2026), doi 10.1016/j.joule.2026.102430', url: 'https://arxiv.org/abs/2509.20241' },
     { what: 'Median Gemini text prompt: 0.24 Wh', by: 'Google (August 2025)', url: 'https://arxiv.org/abs/2508.15734' },
@@ -127,6 +126,8 @@ export function measuredOf(n = {}, kind) {
 // savingOf, lossless and lossy apart. A count is kept in the day as "eng:<lever>:<lossless|lossy>:<answers|before|after|saved>".
 // Lossless savings join measured as their own kind (measuredBy.engine); lossy ones are shown apart and never in the headline.
 export const ENGINE_CLASSES = ['lossless', 'lossy'];
+// one network adds at most this many answers the engine room shaped a day, every lever together (beside SAVE.cap)
+export const ENGINE_CAP = 500;
 // callers the engine room never counts, whatever ctx says besides: the sea itself and every kind of crawler
 const ENGINE_SKIP = new Set(['self', 'ai-crawler', 'crawler', 'search', 'search-ai']);
 export const ENGINE_FIELDS = ['answers', 'before', 'after', 'saved'];
@@ -245,7 +246,7 @@ export function createAreas(h) {
   // a count one address could repeat in a loop counts once a day per network, kind and subject (the page, the task), and a
   // network adds at most SAVE.cap of each group a day (node/once.mjs; in memory only)
   const once = createOnce({ now });
-  const firstToday = (ctx, kind, subject, group) => !ctx?.own && !ctx?.readOnly && !ctx?.uncounted && !ctx?.head && once.first(ctx?.ip, `${ctx?.house ? 'h:' : ''}${kind}`, subject, { cap: SAVE.cap[group], group });
+  const firstToday = (ctx, kind, subject, group) => !ctx?.own && !ctx?.readOnly && !ctx?.uncounted && !ctx?.head && once.first(ctx?.ip, `${ctx?.house ? 'h:' : ''}${kind}`, subject, { cap: group === 'engine' ? ENGINE_CAP : SAVE.cap[group], group });
   const add = (a, b) => { const o = { ...(a || {}) }; for (const [k, v] of Object.entries(b || {})) o[k] = (o[k] || 0) + v; return o; };
   // the counts of one door, out of a bucket: { '/brain': { path: 2, … }, … }
   const byDoorOf = (n) => { const o = {}; for (const [k, v] of Object.entries(n || {})) { if (k[0] !== '@') continue; const i = k.indexOf('|'); (o[k.slice(1, i)] ||= {})[k.slice(i + 1)] = v; } return o; };
@@ -398,7 +399,7 @@ export function createAreas(h) {
     // countBytes): saving is what savingOf in node/engine.mjs returned. One rule: whole tokens, saved = before − after,
     // no saving, no count. Never the sea's own calls, crawlers or HEAD; the house agent apart; once a day per network,
     // lever, kind of saving and subject (a page by its site and path, a hash of the input, a tool's name); one network
-    // adds at most SAVE.cap.engine such answers a day. Lossy unless the saving says lossless and the lever can be (budget
+    // adds at most ENGINE_CAP such answers a day. Lossy unless the saving says lossless and the lever can be (budget
     // never is). No receipt and no fair share for it: x-sea-saved-tokens keeps its meaning. True when it counted.
     countEngine(lever, saving, ctx, subject = '') {
       const L = Object.hasOwn(LEVERS, lever) ? LEVERS[lever] : null, s = saving && typeof saving === 'object' ? saving : {};
@@ -450,7 +451,7 @@ export function createAreas(h) {
         series: series.slice(-30).map(({ counts, ...x }) => x), ...(Number(span) > 30 ? { daily: series } : {}),
         perReuse: Object.fromEntries(Object.entries(SAVE.per).map(([k, v]) => [k, { tokens: v.tokens, wh: v.wh, what: v.what, basis: v.basis }])),
         scenarios: [1e3, 1e5, 1e7, 1e9].map(scenario), mix: SAVE.mix, sources: SAVE.sources, notCounted: SAVE.notCounted, ratio: TOKEN_RATIO.assumption ? TOKEN_RATIO : { ...TOKEN_RATIO, proof: `${base()}/proof`, run: `${base()}${TOKEN_RATIO.run}` }, price: TOKEN_PRICE,
-        read: `A reuse counts once a day per caller network and task when an answer handed an agent a part someone already solved: a confirmed pathway (path), a ready plan (plan), verified offers (market); what it spares is modelled from the ranges in perReuse (low, mid, high). Markdown is measured: md counts pages of the sea asked for as Markdown, mdAgent pages of the sea sent as Markdown to an assistant reading for a person (md-agent), reads pages of other sites through the reader, each with what it spared against the page as HTML (UTF-8 bytes for pages of the sea, characters for pages through the reader); counts become tokens by one rule (ratio: ${TOKEN_RATIO.assumption ? `${TOKEN_RATIO.html} bytes a token, an assumption` : `HTML ${TOKEN_RATIO.bytes.html} bytes or ${TOKEN_RATIO.html} characters a token, Markdown ${TOKEN_RATIO.bytes.md} bytes or ${TOKEN_RATIO.md} characters, measured with ${TOKEN_RATIO.tokenizer} on the proof of function (${base()}/proof)`}). usd prices the tokens at list prices for uncached input tokens (price): low, mid (the headline) and high. A Markdown answer counts once a day per network and page; one network adds at most ${SAVE.cap.measured} Markdown answers and ${SAVE.cap.reuse} reuses a day. measured is against raw HTML, an upper bound; vsText is the same answers against plain text (pages of the sea), the lower view. The sea's own calls and crawlers are never counted; the house agent (Angel) is counted apart (house). Since 3.35 the engine room (${base()}/engine) counts here too: per lever (toon, lean, squeeze, delta, budget, fields) its answers and the tokens before, after and saved, lossless and lossy apart (engine in today, last30days and all), by the one rule of savingOf; lossless savings join measured as their own kind (measuredBy.engine), lossy ones are in no figure of the headline; once a day per network and subject, at most ${SAVE.cap.engine} a day per network.` };
+        read: `A reuse counts once a day per caller network and task when an answer handed an agent a part someone already solved: a confirmed pathway (path), a ready plan (plan), verified offers (market); what it spares is modelled from the ranges in perReuse (low, mid, high). Markdown is measured: md counts pages of the sea asked for as Markdown, mdAgent pages of the sea sent as Markdown to an assistant reading for a person (md-agent), reads pages of other sites through the reader, each with what it spared against the page as HTML (UTF-8 bytes for pages of the sea, characters for pages through the reader); counts become tokens by one rule (ratio: ${TOKEN_RATIO.assumption ? `${TOKEN_RATIO.html} bytes a token, an assumption` : `HTML ${TOKEN_RATIO.bytes.html} bytes or ${TOKEN_RATIO.html} characters a token, Markdown ${TOKEN_RATIO.bytes.md} bytes or ${TOKEN_RATIO.md} characters, measured with ${TOKEN_RATIO.tokenizer} on the proof of function (${base()}/proof)`}). usd prices the tokens at list prices for uncached input tokens (price): low, mid (the headline) and high. A Markdown answer counts once a day per network and page; one network adds at most ${SAVE.cap.measured} Markdown answers and ${SAVE.cap.reuse} reuses a day. measured is against raw HTML, an upper bound; vsText is the same answers against plain text (pages of the sea), the lower view. The sea's own calls and crawlers are never counted; the house agent (Angel) is counted apart (house). Since 3.35 the engine room (${base()}/engine) counts here too: per lever (toon, lean, squeeze, delta, budget, fields) its answers and the tokens before, after and saved, lossless and lossy apart (engine in today, last30days and all), by the one rule of savingOf; lossless savings join measured as their own kind (measuredBy.engine), lossy ones are in no figure of the headline; once a day per network and subject, at most ${ENGINE_CAP} a day per network.` };
     },
     // the map of the brain: every area with its job, its door and its numbers
     async areasLive() {
