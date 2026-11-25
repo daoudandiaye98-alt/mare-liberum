@@ -351,7 +351,7 @@ const DSE = () => [
     'Bei einer Zahlung über x402 sendet Ihr Programm eine signierte Zahlungsfreigabe: die Adresse der zahlenden Wallet, Empfänger, Betrag, Gültigkeit, eine Einmal-Nummer und die Signatur. Wir geben sie zur Prüfung und Abwicklung an einen Facilitator weiter, derzeit PayAI (facilitator.payai.network), der die Transaktion an die Blockchain Base übermittelt. Bei x402 in Version 1 erhält er mit den Zahlungsbedingungen auch die Adresse der bezahlten Leistung, beim bezahlten Pfad samt der Aufgabe in Worten.',
     'Wallet-Adresse und Transaktion stehen danach dauerhaft und für jeden einsehbar auf der Blockchain; das liegt in der Natur des Netzes, und weder wir noch der Facilitator können sie dort löschen. Eine Wallet-Adresse ist ein Pseudonym; ob sie Ihnen zugeordnet werden kann, hängt davon ab, was Sie selbst über sie bekannt machen.',
     'Je Kauf des bezahlten Pfads speichern wir in der Datenbank: Kennung, Zeitpunkt, Aufgabe (höchstens 300 Zeichen), Betrag, Status, Zahlungsweg, Transaktion, die zahlende Wallet (soweit die Zahlung sie nennt), Netz und einen Hashwert aus Programm und Netz des Käufers, der jeden Tag anders gebildet wird; keine Adresse. /treasury zeigt die letzten fünf Käufe mit gekürzter Aufgabe und gekürzter Transaktion, ohne Wallet. Eine kostenlose Probe (?free=true) wird ebenso mit Aufgabe und Hashwert vermerkt, als Probe und nie als Geld.',
-    'Quittungen des Fair Share enthalten keine Adresse und keinen Hashwert des Aufrufers und werden 30 Tage aufbewahrt. Zahlungen des Fair Share und des Hafenzolls stehen 400 Tage im Verzeichnis der Zahlungen des Knotens (Quittungen oder Zoll-Kennungen, Betrag, Status, Transaktion); abgewickelte Zahlungen gehen mit Zeitpunkt, Betrag, Transaktion, zahlender Wallet und Kursquelle in die Bücher.',
+    'Quittungen des Fair Share enthalten keine Adresse und keinen Hashwert des Aufrufers und werden 30 Tage aufbewahrt. Zahlungen des Fair Share stehen 400 Tage im Verzeichnis der Zahlungen des Knotens (Quittungen, Betrag, Status, Transaktion); abgewickelte Zahlungen gehen mit Zeitpunkt, Betrag, Transaktion, zahlender Wallet und Kursquelle in die Bücher. Zahlungen des Hafenzolls führt der Knoten in eigenen Büchern (Kennung, Zeitpunkt, Betrag, bezahlte Tokens, Zoll-Kennungen, zahlende Wallet, Transaktion): eine abgeschlossene Zahlung 3 Tage, die Tagessummen 40 Tage, die Gesamtsumme dauerhaft; das Konto eines Netzes für einen Tag mit Zoll bleibt 33 Tage.',
     'Kauf- und Zahlungsbelege bewahren wir als Geschäftsunterlagen für die Dauer der gesetzlichen Aufbewahrungsfristen auf (insbesondere § 147 AO, je nach Unterlage bis zu zehn Jahre) und löschen sie danach. Wir fragen nie nach privaten Schlüsseln oder Seed-Phrasen.',
     'Rechtsgrundlagen: Art. 6 Abs. 1 lit. b DSGVO (Vertrag), lit. c (gesetzliche Aufbewahrungspflichten) und lit. f (Schutz vor doppelter Verwendung einer Zahlung, Nachweis der Zahlung).',
   ]],
@@ -392,7 +392,8 @@ const DSE = () => [
 <tr><td>Konto des Hafenzolls</td><td>bis zum Ende des Folgetags; mit Zoll bis zu 33 Tage</td></tr>
 <tr><td>Wege durch das Meer (Via)</td><td>90 Tage</td></tr>
 <tr><td>Quittungen des Fair Share</td><td>30 Tage</td></tr>
-<tr><td>Verzeichnis der Zahlungen (Fair Share, Hafenzoll)</td><td>400 Tage</td></tr>
+<tr><td>Verzeichnis der Zahlungen (Fair Share)</td><td>400 Tage</td></tr>
+<tr><td>Bücher des Hafenzolls</td><td>Zahlung 3 Tage nach Abschluss, Tagessummen 40 Tage, Konto eines Tages mit Zoll 33 Tage</td></tr>
 <tr><td>Kauf- und Zahlungsbelege, Bücher</td><td>gesetzliche Aufbewahrungsfrist, bis zu zehn Jahre</td></tr>
 <tr><td>Zensus</td><td>40 bis 90 Tage</td></tr>
 <tr><td>Besuche von Assistenten</td><td>bis zu 400 Tage</td></tr>
@@ -466,7 +467,7 @@ const PRIVACY = () => [
     'When you pay over x402, your program sends a signed payment authorisation: the address of the paying wallet, recipient, amount, validity, a one-time number and the signature. We pass it to a facilitator to verify and settle it, currently PayAI (facilitator.payai.network), which submits the transaction to the Base blockchain. With x402 version 1 it also receives, with the payment terms, the address of the service paid for — for the paid route including the task in words.',
     'Wallet address and transaction then stand on the blockchain permanently and visibly to anyone; that is the nature of the network, and neither we nor the facilitator can delete them there. A wallet address is a pseudonym; whether it can be linked to you depends on what you make known about it yourself.',
     'For each purchase of the paid route we keep in the database: id, time, task (at most 300 characters), amount, status, method of payment, transaction, the paying wallet (where the payment names one), network and a hash of the buyer\'s program and network made differently every day; no address. /treasury shows the last five purchases with a shortened task and a shortened transaction, without the wallet. A free sample (?free=true) is noted the same way with its task and hash, as a sample and never as money.',
-    'Fair-share receipts hold no address and no caller hash and are kept for 30 days. Payments of fair share and of the harbour toll stand in the node\'s register of payments for 400 days (receipts or toll ids, amount, status, transaction); payments that settled go into the books with time, amount, transaction, paying wallet and the source of the rate.',
+    'Fair-share receipts hold no address and no caller hash and are kept for 30 days. Payments of fair share stand in the node\'s register of payments for 400 days (receipts, amount, status, transaction); payments that settled go into the books with time, amount, transaction, paying wallet and the source of the rate. Payments of the harbour toll stand in the toll\'s own books (id, time, amount, tokens paid, toll ids, paying wallet, transaction): a finished payment for 3 days, the daily totals for 40 days, the overall total for good; a network\'s account for a day with a toll stays 33 days.',
     'We keep purchase and payment records as business records for the statutory retention periods (in particular § 147 AO, the German Fiscal Code: up to ten years depending on the record) and delete them afterwards. We never ask for private keys or seed phrases.',
     'Legal bases: Art. 6(1)(b) GDPR (contract), (c) (statutory retention duties) and (f) (protection against using one payment twice, proof of payment).',
   ]],
@@ -507,7 +508,8 @@ const PRIVACY = () => [
 <tr><td>Account of the harbour toll</td><td>to the end of the following day; with a toll up to 33 days</td></tr>
 <tr><td>Steps through the sea (via)</td><td>90 days</td></tr>
 <tr><td>Fair-share receipts</td><td>30 days</td></tr>
-<tr><td>Register of payments (fair share, harbour toll)</td><td>400 days</td></tr>
+<tr><td>Register of payments (fair share)</td><td>400 days</td></tr>
+<tr><td>Books of the harbour toll</td><td>a payment 3 days after it finished, daily totals 40 days, a network's account for a day with a toll 33 days</td></tr>
 <tr><td>Purchase and payment records, books</td><td>statutory retention period, up to ten years</td></tr>
 <tr><td>Census</td><td>40 to 90 days</td></tr>
 <tr><td>Visits by assistants</td><td>up to 400 days</td></tr>

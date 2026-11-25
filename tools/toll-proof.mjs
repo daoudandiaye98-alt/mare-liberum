@@ -847,10 +847,11 @@ await proof('/engine (a section "The toll" with the example $0.003630), /engine.
     assert.equal(a.status, b.status, path); assert.equal(tmask(a.text, F.version), tmask(b.text, M.version), `${path}: as ${REF}`);
   }
 });
-await proof('3.37.0 in VERSION, server.json, server-dev.json, server-lean.json and gemini-extension.json; RELEASES: 3.37.0 without day and pull request, 3.36.0 on 2026-11-25T19:03:27+01:00 with #27; proof:toll in package.json', async () => {
-  assert.equal(ON.version, '3.37.0'); for (const f of ['server.json', 'server-dev.json', 'server-lean.json', 'gemini-extension.json']) assert.equal(JSON.parse(readFileSync(join(ROOT, f), 'utf8')).version, '3.37.0', f);
-  assert.deepEqual([RELEASES[0].version, RELEASES[0].at, RELEASES[0].pr], ['3.37.0', null, undefined]); assert.ok(RELEASES[0].what.length > 40 && !RELEASES[0].what.includes('\n'));
-  assert.deepEqual([RELEASES[1].version, RELEASES[1].at, RELEASES[1].pr], ['3.36.0', '2026-11-25T19:03:27+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/27']);
+await proof('3.37.1 in VERSION, server.json, server-dev.json, server-lean.json and gemini-extension.json; RELEASES: 3.37.1 without day and pull request, 3.37.0 on 2026-11-25T22:51:04+01:00 with #28, 3.36.0 on 2026-11-25T19:03:27+01:00 with #27; proof:toll in package.json', async () => {
+  assert.equal(ON.version, '3.37.1'); for (const f of ['server.json', 'server-dev.json', 'server-lean.json', 'gemini-extension.json']) assert.equal(JSON.parse(readFileSync(join(ROOT, f), 'utf8')).version, '3.37.1', f);
+  assert.deepEqual([RELEASES[0].version, RELEASES[0].at, RELEASES[0].pr], ['3.37.1', null, undefined]); assert.ok(RELEASES[0].what.length > 40 && !RELEASES[0].what.includes('\n'));
+  assert.deepEqual([RELEASES[1].version, RELEASES[1].at, RELEASES[1].pr], ['3.37.0', '2026-11-25T22:51:04+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/28']);
+  assert.deepEqual([RELEASES[2].version, RELEASES[2].at, RELEASES[2].pr], ['3.36.0', '2026-11-25T19:03:27+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/27']);
   assert.equal(JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).scripts['proof:toll'], 'node tools/toll-proof.mjs');
 });
 
