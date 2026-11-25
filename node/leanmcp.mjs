@@ -47,7 +47,8 @@ const STOP = new Set(('a an and are as at be by can do does for from get how i i
   + 'der die das den dem des ein eine einen einem einer und oder ist sind für mit von zu im in am an auf aus bei wie was wer wo ich du wir sie es mein meine dein bitte etwas mir mich').split(/\s+/));
 const stem = (w) => (w.length > 5 && w.endsWith('ing') ? w.slice(0, -3) : w.length > 4 && w.endsWith('ed') ? w.slice(0, -2) : w.length > 3 && w.endsWith('s') && !w.endsWith('ss') ? w.slice(0, -1) : w);
 export const termsOf = (s) => String(s || '').toLowerCase().replace(/_/g, ' ').split(/[^\p{L}\p{N}]+/u).filter((w) => w && !STOP.has(w)).map(stem);
-const firstLine = (d) => { const s = String(d || ''); const m = /^(.+?[.;])(\s|$)/.exec(s); return (m ? m[1] : s).slice(0, 200); };
+// the first sentence of a description (a semicolon inside it does not end it)
+const firstLine = (d) => { const s = String(d || ''); const m = /^(.+?\.)(\s|$)/.exec(s); return (m ? m[1] : s).slice(0, 200); };
 // one index per list of tools (the open set is fixed for the life of a node)
 const INDEX = new WeakMap();
 function indexOf(open) {
