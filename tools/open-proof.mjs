@@ -318,13 +318,18 @@ await proof('the home page is built from its sources: the build says site/index.
 await proof('the sources carry the areas of the Unibrain (3.32.0) and the two new doors, and the counter of tokens spared near the top', () => {
   const p = readFileSync(new URL('../homepage/src/page.html', import.meta.url), 'utf8');
   for (const x of ['href="{{B}}/brain/market">The verified market</a>', 'href="{{B}}/brain/thinking">Thinking</a>', 'href="{{B}}/savings">What it saves</a>', 'All six areas of the Unibrain', 'href="{{B}}/open">Every number, in public</a>', 'href="{{B}}/connect">Connect your agent</a>']) assert.ok(p.includes(x), x);
-  assert.ok(p.indexOf('id="spared-n"') < p.indexOf('id="readers"'), 'the counter stands in the first section');
+  // 3.34 ("Die Reise"): the page is one journey, and every live number stands in its proof scene, the counter among them
+  // (before 3.34 it stood in the first of eleven sections, ahead of #readers)
+  const proofAt = p.indexOf('id="proof"'), sparedAt = p.indexOf('id="spared-n"');
+  assert.ok(proofAt > 0 && sparedAt > proofAt && sparedAt < p.indexOf('id="fair"'), 'the counter stands in the proof scene');
   // 3.33.0: the proof and what the AIs read are one click from the home page; the foot names About and the Impressum (§ 5 DDG)
   for (const x of ['href="{{B}}/proof">Proof of function</a>', 'href="{{B}}/attention">What the AIs read</a>', '<li><a href="{{B}}/about">About</a></li><li><a href="{{B}}/impressum">Impressum</a></li>']) assert.ok(p.includes(x), x);
   const built = readFileSync(new URL('../site/index.html', import.meta.url), 'utf8');
   for (const x of ['href="/proof"', 'href="/attention"', 'href="/impressum"']) assert.ok(built.includes(x), `built: ${x}`);
   for (const m of built.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/gs)) for (const o of JSON.parse(m[1])['@graph'] || []) if (o['@type'] === 'Dataset') assert.equal(o.creator?.name, 'Mare Liberum', 'the home page Dataset names its creator');
-  assert.match(p, /tokens spared for AI agents so far · measured <span class="snd" data-k="sparedM">\{\{sparedM\}\}<\/span> against raw HTML \(an upper bound\) · modelled <span class="snd" data-k="sparedE">\{\{sparedE\}\}<\/span>/);
+  // 3.34 review (verify-3.34.md, last note): the headline number adds the measured upper bound and modelled reuse, and
+  // its first words say so; the parts follow, each named for what it is
+  assert.match(p, /tokens spared for AI agents so far, an upper bound against raw HTML plus modelled reuse: measured <span class="snd" data-k="sparedM">\{\{sparedM\}\}<\/span> against raw HTML \(an upper bound\) · modelled <span class="snd" data-k="sparedE">\{\{sparedE\}\}<\/span> from reuse/);
   const app = readFileSync(new URL('../homepage/src/app.js', import.meta.url), 'utf8'); assert.match(app, /if \(el && !still && goal\(\) > 0\)/, 'no counting up with reduced motion');
 });
 await proof('the node fills the counter in the page it sends: every token spared so far, with its measured and modelled parts', async () => {

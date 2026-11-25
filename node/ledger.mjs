@@ -21,8 +21,19 @@ const usd = (cents) => Math.round(Number(cents) || 0) / 100;
 const dayOf = (t) => new Date(t).toISOString().slice(0, 10);
 const short = (tx) => (typeof tx === 'string' && tx.length > 16 ? `${tx.slice(0, 10)}…${tx.slice(-6)}` : tx || undefined);
 
-// the same numbers the database gives (mare_treasury), from a list of sales, newest first
-export function summarize(sales, t = Date.now()) {
+// a fair-share payment (since 3.34, node/fair.mjs): a voluntary contribution, never a sale of the paid move; counted apart
+export const isFair = (s) => s?.kind === 'fair' || /^fair-/.test(String(s?.method || ''));
+const micro = (s) => (Number.isInteger(s.amount_micro) ? s.amount_micro : Math.round((Number(s.amount_cents) || 0) * 1e4));
+const usd6 = (m) => Math.round(m) / 1e6;
+function fairOf(list, today) {
+  const sum = (l, set) => usd6(l.filter((s) => set.has(s.status)).reduce((n, s) => n + micro(s), 0)), now1 = list.filter((s) => dayOf(s.ts) === today);
+  return { today_count: now1.filter((s) => PAID.has(s.status)).length, today_usd: sum(now1, ARRIVED), today_usd_unconfirmed: sum(now1, OPEN),
+    total_count: list.filter((s) => PAID.has(s.status)).length, total_usd: sum(list, ARRIVED), total_usd_unconfirmed: sum(list, OPEN),
+    note: 'voluntary fair-share payments for receipts (/fair), counted apart: they are no sales of the paid move' };
+}
+// the same numbers the database gives (mare_treasury), from a list of sales, newest first; fair-share payments apart
+export function summarize(all, t = Date.now()) {
+  const sales = all.filter((s) => !isFair(s));
   const today = dayOf(t), real = sales.filter((s) => PAID.has(s.status)), now1 = real.filter((s) => dayOf(s.ts) === today);
   const sum = (list, set) => usd(list.filter((s) => set.has(s.status)).reduce((n, s) => n + (Number(s.amount_cents) || 0), 0));
   const by = {}; for (const s of now1) by[s.status] = (by[s.status] || 0) + 1;
@@ -33,6 +44,7 @@ export function summarize(sales, t = Date.now()) {
     tests_today: todayOf('test'),
     total_count: real.length, total_usd: sum(real, ARRIVED), total_usd_unconfirmed: sum(real, OPEN),
     last_5: sales.filter((s) => s.status !== 'free_sample').slice(0, 5).map((s) => ({ id: s.id, ts: s.ts, q: s.q ? String(s.q).slice(0, 80) : null, amount_usd: usd(s.amount_cents), status: s.status, method: s.method || undefined, tx: short(s.tx) })),
+    fair: fairOf(all.filter(isFair), today),
   };
 }
 
@@ -65,6 +77,8 @@ export function pulseOf(hits, sales, t = Date.now()) {
     top_10_domains: count(day1, (h) => h.target_domain).slice(0, 10).map(([domain, n]) => ({ domain, hits: n })),
     top_5_queries: shown(day1).slice(0, 5).map(([q, x]) => ({ q: String(q).slice(0, 80), hits: x.n })),
     paid_today: { count: s.today_paid, usd: s.today_usd, usd_unconfirmed: s.today_usd_unconfirmed },
+    // voluntary fair-share payments (since 3.34), apart from the paid move
+    fair_today_usd: s.fair.today_usd,
   };
 }
 // the pulse in the order a reader takes it in: the eight numbers of the day first, then the rest as it came
@@ -131,7 +145,9 @@ export function createLedger({ url, key, secret, fetch: get = (...a) => fetch(..
     // a sale: written at once (behind the answer), kept in the node's copy as well; returns the line with its id
     sale(row) {
       const r = { id: row.id || `s${now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, ts: new Date(now()).toISOString(), q: row.q ?? null, amount_cents: Math.round(Number(row.amount_cents) || 0), status: String(row.status || 'unverified'),
-        agent_ua_hash: row.agent_ua_hash ?? null, settled_at: row.settled_at ?? null, method: row.method ?? null, tx: row.tx ?? null, payer: row.payer ?? null, network: row.network ?? null };
+        agent_ua_hash: row.agent_ua_hash ?? null, settled_at: row.settled_at ?? null, method: row.method ?? null, tx: row.tx ?? null, payer: row.payer ?? null, network: row.network ?? null,
+        // a fair share (since 3.34, node/fair.mjs): its exact amount in millionths of a dollar and its kind; other sales carry neither
+        ...(Number.isInteger(row.amount_micro) && row.amount_micro >= 0 ? { amount_micro: row.amount_micro } : {}), ...(row.kind === 'fair' ? { kind: 'fair' } : {}) };
       // a receipt handed in before is the same sale: handing it in again delivers again and counts nothing new
       if (r.tx) { const seen = mem.sales.find((x) => x.tx && x.tx.toLowerCase() === r.tx.toLowerCase()); if (seen) return { ...seen, again: true }; }
       mem.sales.unshift(r); if (mem.sales.length > keepSales) mem.sales.length = keepSales;
@@ -161,6 +177,15 @@ export function createLedger({ url, key, secret, fetch: get = (...a) => fetch(..
     async treasury() {
       if (on && !down()) { try { await flush(); return { ...(await rpc('mare_treasury', {}, READ_MS)), source: 'database' }; } catch (e) { failed(e); } }
       return { ...summarize(mem.sales, now()), source: on ? 'this node: the database did not answer, so these are only the sales since the node started' : 'this node (no database): the sales since the node started' };
+    },
+    // what became of some sales, by id: the node's own copy first, then the database (mare_sale_get, supabase/fair-3.34.sql);
+    // a database without that function, or one that does not answer, gives nothing and changes nothing
+    async saleStatuses(ids) {
+      const want = [...new Set((ids || []).filter((x) => typeof x === 'string' && /^[a-z0-9]{6,40}$/.test(x)))].slice(0, 200), out = {};
+      for (const id of want) { const x = mem.sales.find((s) => s.id === id); if (x) out[id] = { status: x.status, tx: x.tx || null, payer: x.payer || null, settled_at: x.settled_at || null }; }
+      const rest = want.filter((id) => !out[id]);
+      if (rest.length && on && !down()) { try { for (const r of (await rpc('mare_sale_get', { ids: rest }, READ_MS)) || []) if (r?.id && rest.includes(r.id)) out[r.id] = { status: String(r.status || ''), tx: r.tx || null, payer: r.payer || null, settled_at: r.settled_at || null }; } catch (e) { if (!refused(e)) failed(e); } }
+      return out;
     },
     async pulse() {
       prune();

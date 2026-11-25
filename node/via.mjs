@@ -55,8 +55,18 @@ export function wrapTarget(raw, base) {
 // the via address for a place; q (the task) and p (from a private memory) ride along for the count, never to the place.
 // c (the minute) marks an address handed out by a door the sea already counted the click at (/d/…, /go/…): the walk
 // that follows within two minutes is carried as always, but not counted a second time
-export function viaUrl(url, { base, q, priv, counted } = {}) {
-  const p = new URLSearchParams(); if (q) p.set('q', String(q).slice(0, 120)); if (priv) p.set('p', '1'); if (counted) p.set('c', String(Math.floor(counted / 60000)));
+// m marks an address the sea handed out as a commission link, said so where it stands (commission: true in JSON, the words
+// beside the link on a page; node/commission.mjs): only such an address may carry a commission when a person opens it. The
+// mark is signed like the token (6 bytes of HMAC-SHA256 with the node's key, over "commission|" and the address), so an
+// address someone made up, or the mark of another address, carries none
+export function commissionMark(url, key = viaKey()) { return createHmac('sha256', key).update(`commission|${String(url)}`).digest().subarray(0, VIA.macBytes).toString('base64url'); }
+export function markHolds(url, m, key = viaKey()) {
+  const s = String(m || ''); if (!/^[A-Za-z0-9_-]{8}$/.test(s)) return false;
+  const a = Buffer.from(s, 'base64url'), b = Buffer.from(commissionMark(url, key), 'base64url');
+  return a.length === b.length && timingSafeEqual(a, b);
+}
+export function viaUrl(url, { base, q, priv, counted, m } = {}) {
+  const p = new URLSearchParams(); if (q) p.set('q', String(q).slice(0, 120)); if (priv) p.set('p', '1'); if (counted) p.set('c', String(Math.floor(counted / 60000))); if (m) p.set('m', commissionMark(url));
   const s = p.toString();
   return `${String(base).replace(/\/+$/, '')}/via/${encodeVia(url)}${s ? `?${s}` : ''}`;
 }
@@ -65,23 +75,29 @@ export const ADDRESS_KEYS = new Set(['url', 'href', 'to', 'go', 'target', 'next'
 // every address under those keys, however deep, becomes a via address; with anyKey every value that is a whole web
 // address does, under any key and inside lists (the map of a site: /site/<domain>). What the sea keeps is never
 // changed: the answer is copied where it changes and only there.
-export function rewriteForAgents(payload, { base, q, priv, keys = ADDRESS_KEYS, anyKey = false } = {}) {
-  let n = 0;
-  const swap = (x) => { const t = wrapTarget(x, base); if (!t) return x; n++; return viaUrl(t, { base, q, priv }); };
+// cm (node/commission.mjs, only where the operator turned commissions on): an object whose address leads to a place that
+// pays the sea a commission when a person buys there says so (commission: true, commission_network), and the answer says
+// the rule once; the address itself stays the via address (the commission is added when a person's browser opens it)
+export function rewriteForAgents(payload, { base, q, priv, keys = ADDRESS_KEYS, anyKey = false, cm, rule } = {}) {
+  let n = 0, marked = 0, net = null;
+  const swap = (x) => { const t = wrapTarget(x, base); if (!t) return x; n++; let c = null; if (cm) { c = cm(t); if (c) { marked++; net = c.network; } } return viaUrl(t, { base, q, priv, m: !!c }); };
   const walk = (v, depth) => {
     if (depth > 14 || v == null || typeof v !== 'object') return v;
     if (Array.isArray(v)) { let out = null; for (let i = 0; i < v.length; i++) { const x = v[i], y = typeof x === 'string' ? (anyKey ? swap(x) : x) : walk(x, depth + 1); if (y !== x) { out ||= v.slice(); out[i] = y; } } return out || v; }
-    let out = null;
+    let out = null, mine = null;
     for (const k of Object.keys(v)) {
       const x = v[k]; let y = x;
-      if (typeof x === 'string') { if (anyKey || keys.has(k)) y = swap(x); }
+      if (typeof x === 'string') { if (anyKey || keys.has(k)) { const m0 = marked; y = swap(x); if (marked > m0 && !mine) mine = net; } }
       else if (x && typeof x === 'object') y = walk(x, depth + 1);
       if (y !== x) { out ||= { ...v }; out[k] = y; }
     }
+    // an object that already names a commission of its own (a catalog's promoted offer) keeps what it says
+    if (mine && out && out.commission === undefined) { out.commission = true; out.commission_network = mine; }
     return out || v;
   };
   const out = walk(payload, 0);
-  return n && out && typeof out === 'object' && !Array.isArray(out) && !('via' in out) ? { ...out, via: `${n} address${n === 1 ? '' : 'es'} in this answer lead through the sea (/via/): walking one is counted and strengthens its path. ${String(base).replace(/\/+$/, '')}/via/howto` } : out;
+  const told = n && out && typeof out === 'object' && !Array.isArray(out) && !('via' in out) ? { ...out, via: `${n} address${n === 1 ? '' : 'es'} in this answer lead through the sea (/via/): walking one is counted and strengthens its path. ${String(base).replace(/\/+$/, '')}/via/howto` } : out;
+  return marked && rule && told && typeof told === 'object' && !Array.isArray(told) ? { ...told, commission_rule: rule } : told;
 }
 
 let KEY = null;
@@ -161,8 +177,15 @@ async function robotsLet(u, get) {
   return !groups || robotsAllows(groups, VIA_TOKEN, u.pathname + u.search).allowed !== false;
 }
 
+// a person: a browser that navigates to the address because someone clicked it (not a prefetch, not a script, not a crawler)
+export function isPerson(headers, kind) {
+  const h = (k) => String(headers?.get?.(k) || '').toLowerCase();
+  return kind === 'browser' && h('sec-fetch-mode') === 'navigate' && h('sec-fetch-dest') === 'document' && h('sec-fetch-user') === '?1' && !/prefetch|prerender/.test(h('sec-purpose') || h('purpose'));
+}
 // → a Response, or null when the path holds no token (the caller then answers as before: invitations and the guide)
-export async function viaProxy({ req, token, base, ip, ua, readOnly = false, onHit, onWalk, get = (...a) => fetch(...a), now = Date.now }) {
+// person and commission (node/commission.mjs): where the operator turned commissions on, a person's browser goes to the
+// place itself (302), with the commission added where one applies; otherwise nothing here changes
+export async function viaProxy({ req, token, base, ip, ua, readOnly = false, onHit, onWalk, get = (...a) => fetch(...a), now = Date.now, person = false, commission = null }) {
   const d = decodeVia(token);
   if (!d) return null;
   const at = new URL(req.url), q = (at.searchParams.get('q') || '').replace(/[\p{Cc}\p{Cf}]/gu, ' ').trim().slice(0, 120) || null, priv = at.searchParams.get('p') === '1';
@@ -181,6 +204,17 @@ export async function viaProxy({ req, token, base, ip, ua, readOnly = false, onH
   const hit = (status, outcome = null) => { if (counted) return; try { onHit?.(priv ? { kind: 'walk', q: null, ua_hash: who, token_host: null, target_domain: null, status, outcome } : { kind: 'walk', q, ua_hash: who, token_host: host, target_domain: familyOf(host), status, outcome }); } catch {} };
   const wait = paced(ip, now());
   if (wait) return answer(429, { error: { code: 'RESOURCE_EXHAUSTED', message: `this address walked ${PROXY.perHour} via addresses this hour; the next hour opens in ${wait} seconds` }, free: `the brain is free and has no such limit: ${brain}`, direct: d.url }, { 'retry-after': String(wait) });
+  // a person who clicked goes to the place itself, where commissions are on: a carried copy cannot be bought from, and
+  // only a person's own browser can carry a shop's commission. The walk is counted as any walk; the sea fetches nothing
+  // (it never opens a commission link itself), and the place's link carries the commission where one applies
+  if (person && typeof commission === 'function') {
+    // a commission only on an address the sea handed out as a commission link, said so where it stood (m): every other
+    // address leads the person to the place as it is
+    let c = null; if (markHolds(d.url, at.searchParams.get('m'))) { try { c = commission(target); } catch {} }
+    hit(302);
+    if (!priv) { try { onWalk?.(d.url, q); } catch {} }
+    return new Response(null, { status: 302, headers: { location: c?.url || target, 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow', 'x-via': 'mare-liberum', 'x-via-target': target, ...(c ? { 'x-via-commission': c.network } : {}), ...VIA_CORS } });
+  }
   if (inFlight >= PROXY.inFlight) return answer(503, { error: { code: 'UNAVAILABLE', message: 'the sea is carrying many requests at this moment; try again in a few seconds' }, direct: d.url, hint: brain }, { 'retry-after': '2' });
   inFlight++;
   try {

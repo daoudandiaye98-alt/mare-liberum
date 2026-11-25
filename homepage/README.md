@@ -14,58 +14,59 @@ The head of the page (title, canonical address, Open Graph, structured data) is 
 
 | | |
 |---|---|
-| `src/page.html` | the document: every section, with `{{…}}` where the build or the node puts a number |
+| `src/page.html` | the document: the seven scenes of the journey, with `{{…}}` where the build or the node puts a number |
 | `src/style.css` | all styles; the first lines state the idea of the page |
-| `src/app.js` | the page's script: the sea, the name cut by the waterline, the school of fish, the globe, the strands, the tools |
-| `src/render.js` | how numbers become rows and sentences; used by the script and by the build |
-| `src/sea.frag` | the sea: one fragment shader, locked to the document |
-| `input/` | what the build is given: the land grid and country centres of the globe, and the snapshot the preview shows |
+| `src/app.js` | the page's script: one scroll value drives the paintings, the field of tokens, the counter, the name cut by the waterline and the dock's ring |
+| `src/render.js` | how numbers become rows and sentences; the build uses it for the preview's numbers |
+| `input/` | what the build is given: the snapshot the preview shows (and the land grid and country centres of the globe of the page before 3.34) |
 | `tools/fonts.py` | cuts the two display faces down to what the page sets in them (writes `site/fonts/`) |
 | `tools/og.mjs` | photographs the page's opening scene for shared links (writes `site/og.png`, `site/og-check.png`) |
 | `tools/centres.mjs` | country centres from Natural Earth (writes `input/centres.txt`) |
 | `qa/` | the tools the page is measured with; `sh qa/all.sh` runs all of them |
 
-## The paintings on this page
+## The journey (3.34, "Die Reise")
 
-The page of the node opens on an oil painting of the same cut through the sea the page is (`site/film/home`: a ship at
-the horizon, the sun, light going down into the water; the first painting all the others were made from). Its box is
-set in CSS so that the painting's water surface (38.5 % of its height) lies on the waterline of the page, wherever that
-is at any width (`--deep`, the water below the waterline, is named once on `.stage` for this); the name is cut where
-the painted sea begins. While it is there (`.stage.painted`) the stated far water and sun step aside. Scrolling down to
-the waterline moves the painting through its short film of 41 stills. Each zone carries the painting of its place at
-its top (`<!--@ART:scene-->` in `page.html`): it comes out of the water when it is reached, and the films move as they
-pass through the screen. The painting itself is `paint` from `src/scenes.js` (the look of the pages below), loaded from
-the node after the page has opened, so every place of the sea is painted the same way. The build writes the paintings
-only into the page of the node (`site/index.html`); the preview, with no node behind it, does without them. Without
-the script, with motion not wanted, or where the reader saves data, the paintings simply stand.
+The page is one scroll story in seven scenes: the surface, the problem (every agent starts from zero), the magic (the
+noise falls into one clean line and the shared brain lights up), the system, the proof (live numbers), the fair share,
+and the way in. Each scene has a short card of words and a painting (`site/film/<scene>/p.webp`: home, sheet, strands,
+city, sonar, pearls, harbour). The build writes the seven plates into the page (`JOURNEY` in `build.mjs`, with the
+colours at each painting's edges that continue it on a wide screen); the first painting is in the page and preloaded,
+the script fetches the others after the page stands, the next scene first.
+
+A fixed stage lies behind the words: the plates and one canvas. One value, `t` (0 at the surface, 6 at the way in, read
+from where each card stands), drives all of it: which painting stands (the next one comes in over the last while the
+field changes), the counter of the problem and the magic, the header's colour, the name cut by the waterline (ink above,
+foam below, one text), and the ring of the dock that closes as the page ends. The canvas holds a few hundred particles,
+the tokens; they never disappear, every scene is made from the one before: sparks on the water, a storm of raw HTML,
+one clean line, a network with its pathway, four constellations (reader, brain, market, doors), sonar rings, five shells
+split 80/20 (the rule of the fair share, not data), one ring. Portrait screens show the painting full; landscape screens
+show it as a panel on the right and set the words on the left.
+
+The words fly in with CSS scroll-driven animations (`animation-timeline: view()`); where a browser has none, an
+IntersectionObserver gives each card its class `in`. With motion not wanted every scene stands still and complete
+(the field shows each scene's figure, the numbers do not count up); without the script every word is there and only
+the field is missing. A machine that cannot keep up gets fewer particles (twice at most).
+
+The numbers of the proof scene are the node's (the `data-k` keys below) and are read again from `/open.json` and
+`/savings.json` when the reader gets there. The bench figures are the ones `/proof` states, with their date.
 
 ## What the node fills in
 
 `homeHtml()` in `node/core.mjs` replaces these exact strings before it sends the page, so a reader without JavaScript
 (most agents) gets the day's numbers. Change them in both places or not at all:
 
-- `data-k="KEY">–<` for every key of `headline()` (each may stand several times)
+- `data-k="KEY">–<` for every key of `headline()` (each may stand several times; the journey uses `ai`, `market`,
+  `paths`, `spared`, `sparedM`, `sparedE`)
 - `<span id="aiy"></span>`, `<span id="kick">Live · the open sea for agents</span>`
 - `<p class="stamp" id="stamp" aria-live="off">Loading live data…</p>`
-- `<ol class="countries" id="countries"><li class="empty">The map fills as requests arrive.</li></ol>`
 - the `description` and `og:description` tags of the head
-
-## How the sea is drawn
-
-The page states the sea twice. In CSS: sky, sun, far water, a waterline, a colour for every zone. That is what stands
-before the first frame, without JavaScript, without WebGL, and on a machine that would draw WebGL with its processor.
-And as a shader on one fixed canvas that lies over those colours and under everything a section says. The CSS
-waterline is the shader's own wave at its first moment (the build writes it from the formula in `app.js`), so the
-hand-over does not move it.
-
-The script decides which one a reader gets: a software renderer is recognised and keeps the CSS sea; frames that stay
-slow make the shader's picture smaller, and after that let it go. `qa/govern.mjs` shows this happening.
-
-The state of the page is a set of classes on the root: `js`, `gl` or `nogl`, `live`, `under` (below the waterline),
-`past`, `down`. No element may carry one of these names: its rules would land on the root. (The lower part of the
-stage was called `.under` once. The root took its height and its pseudo-elements, and Firefox stopped scrolling.)
+- (`<ol class="countries" id="countries">…` was the map of the page before 3.34; the node still looks for it)
 
 ## Measuring
+
+The tools in `qa/` were written for the page before 3.34 (the shader, the globe, the tools); `shots`, `probe` and
+`ovf` still apply to the journey, the others need rework. The journey itself was measured in its build report (scene
+screenshots at 390 and 1440 wide and with reduced motion, contrast against the painted pixels, frame times, LCP).
 
 `qa/all.sh` needs a node that serves the page (`L=http://localhost:8788/`, a local `node serve.mjs`, or the sea itself),
 `npm install` in this folder, a Chrome (`CHROME=/path`), and for the other engines `npx playwright install webkit firefox`.

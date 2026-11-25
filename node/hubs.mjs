@@ -1,14 +1,16 @@
 // Mare Liberum · the hub pages, the first thing a search engine should know of the sea
 // The pages a person or a search engine should find first stand in a sitemap of their own (/sitemaps/hubs.xml, first in
-// /sitemap.xml), each once, with the day it last changed and, where it has one, its page in the other language. A hub
-// whose numbers move all day (live) changed today. A hub of fixed words carries STATIC_DAY: the day of the release that
-// last changed its words or the frame every page wears (the header, the dive plan, the foot); set it when they change.
+// /sitemap.xml), each once, with the day it last changed and, where it has one, its page in the other language. The day
+// a hub last changed is the day the sea saw its words, links or structured data change (node/tidings.mjs; numbers that move
+// by themselves are no change). A live hub names no day before the sea saw it change (lastmod is optional, and a day that
+// is always today teaches the engines to ignore it). A hub of fixed words carries STATIC_DAY, the day of the release that
+// last changed its words or the frame every page wears (the header, the dive plan, the foot), or a later change the sea saw.
 // The same list goes to the search engines that take IndexNow, once a day (node/core.mjs). A hub appears here and in no
 // other sitemap of the sea.
 export const STATIC_DAY = '2026-11-24';
 // [path, how often it changes, live]
 export const HUBS = [
-  ['/', 'hourly', 1], ['/connect', 'daily', 1], ['/open', 'daily', 1], ['/proof', 'daily', 1], ['/attention', 'daily', 1], ['/savings', 'daily', 1],
+  ['/', 'hourly', 1], ['/connect', 'daily', 1], ['/open', 'daily', 1], ['/proof', 'daily', 1], ['/attention', 'daily', 1], ['/savings', 'daily', 1], ['/fair', 'daily', 1],
   ['/pricing', 'weekly', 0], ['/claim', 'weekly', 0],
   ['/brain', 'hourly', 1], ['/brain/areas', 'daily', 1], ['/brain/market', 'daily', 1], ['/brain/thinking', 'weekly', 0],
   ['/mcp-server', 'daily', 1], ['/mcp-servers', 'daily', 1], ['/a2a-agents', 'daily', 1], ['/x402-apis', 'daily', 1], ['/use', 'weekly', 0],
@@ -28,9 +30,12 @@ export const HUB_PATHS = HUBS.map(([p]) => p);
 export const HUB_SET = new Set(HUB_PATHS);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const pairOf = (p) => { if (HUB_ALT[p]) return [p, HUB_ALT[p]]; const en = Object.keys(HUB_ALT).find((k) => HUB_ALT[k] === p); return en ? [en, p] : null; };
-export const lastmodOf = (live, today) => (live ? today : STATIC_DAY);
-export function hubSitemap(base, today = new Date().toISOString().slice(0, 10)) {
-  const url = ([p, f, live]) => { const pr = pairOf(p), alt = pr ? `<xhtml:link rel="alternate" hreflang="en" href="${esc(base + pr[0])}"/><xhtml:link rel="alternate" hreflang="de" href="${esc(base + pr[1])}"/><xhtml:link rel="alternate" hreflang="x-default" href="${esc(base + pr[0])}"/>` : '';
-    return `<url><loc>${esc(base + p)}</loc><lastmod>${lastmodOf(live, today)}</lastmod><changefreq>${f}</changefreq>${alt}</url>`; };
+// seen: the day the sea saw the hub change (node/tidings.mjs), if it did; never a day after today
+export const lastmodOf = (live, today, seen) => { const s = /^\d{4}-\d{2}-\d{2}$/.test(seen || '') && seen <= today ? seen : null; return live ? s : s && s > STATIC_DAY ? s : STATIC_DAY; };
+// the newest day of all hubs (for the index of the sitemaps), or null
+export const hubsDay = (today, mods = {}) => HUBS.map(([p, , live]) => lastmodOf(live, today, mods[p])).filter(Boolean).sort().pop() || null;
+export function hubSitemap(base, today = new Date().toISOString().slice(0, 10), mods = {}) {
+  const url = ([p, f, live]) => { const pr = pairOf(p), alt = pr ? `<xhtml:link rel="alternate" hreflang="en" href="${esc(base + pr[0])}"/><xhtml:link rel="alternate" hreflang="de" href="${esc(base + pr[1])}"/><xhtml:link rel="alternate" hreflang="x-default" href="${esc(base + pr[0])}"/>` : '', lm = lastmodOf(live, today, mods[p]);
+    return `<url><loc>${esc(base + p)}</loc>${lm ? `<lastmod>${lm}</lastmod>` : ''}<changefreq>${f}</changefreq>${alt}</url>`; };
   return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">${HUBS.map(url).join('')}</urlset>`;
 }

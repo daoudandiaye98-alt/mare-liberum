@@ -230,8 +230,9 @@ await proof('the operator rests the till without a release ("till" in rest): 503
   } finally { immune.set({ mode: 'normal', rest: [] }); }
   assert.equal((await call('/route?q=usdc', { method: 'POST' })).status, 402);
 });
-await proof('x402 discovery names the one paid resource and the wallet', async () => {
-  const r = await call('/.well-known/x402'); assert.deepEqual(r.j.resources, [`${BASE}/route`]); assert.equal(r.j.payTo[0].address, payConfig().payTo);
+// (since 3.34 the settlement of the fair share is listed beside the route while fair share is on, its default: node/fair.mjs)
+await proof('x402 discovery names the paid resources (the route, and the fair-share settlement) and the wallet', async () => {
+  const r = await call('/.well-known/x402'); assert.deepEqual(r.j.resources, [`${BASE}/route`, `${BASE}/fair/pay`]); assert.equal(r.j.payTo[0].address, payConfig().payTo);
 });
 
 console.log('the price in plain sight (3.28.0)');
@@ -335,10 +336,13 @@ await proof('/.well-known/opensearch.xml is text/xml and sends the words to /bra
   const x = await res.text(); assert.ok(x.includes(`template="${BASE}/brain?q={searchTerms}&amp;via=opensearch"`)); assert.match(x, /<ShortName>Mare Liberum<\/ShortName>/); assert.match(x, /^<\?xml version="1\.0" encoding="UTF-8"\?>/);
   const { AGENT_LINK } = await import('../node/core.mjs'); assert.match(AGENT_LINK, /<\/\.well-known\/opensearch\.xml>; rel="search"/);
 });
-await proof('the sitemap names the brain, the route, both guides, the agent card, the pulse and the treasury', async () => {
+// (3.34.0: /route and /treasury answer x-robots-tag: noindex, so no sitemap names them any more: Search Console flags a
+// noindex address inside a sitemap. Agents find both in llms.txt, the agent card, /.well-known/x402 and the skill)
+await proof('the sitemap names the brain, both guides, the agent card and the pulse; not the route and the treasury, which answer noindex', async () => {
   const map = async (m) => (await handle(new Request(`${BASE}/sitemaps/${m}.xml`, { headers: { 'user-agent': 'curl/8.5.0' } }), db, { base: BASE, pay: PAY, ledger: createLedger({}), waitUntil: () => {} })).text();
   const x = (await map('site')) + (await map('hubs')); // the hubs (the brain among them) stand in a map of their own (node/hubs.mjs)
-  for (const p of ['/brain', '/route', '/via/howto', '/pay/howto', '/.well-known/agent-card.json', '/pulse', '/treasury']) assert.ok(x.includes(`<loc>${BASE}${p}</loc>`), p);
+  for (const p of ['/brain', '/via/howto', '/pay/howto', '/.well-known/agent-card.json', '/pulse']) assert.ok(x.includes(`<loc>${BASE}${p}</loc>`), p);
+  for (const p of ['/route', '/treasury']) assert.ok(!x.includes(`<loc>${BASE}${p}</loc>`), `${p} answers noindex`);
 });
 await proof('the skill is one file in three places (site, plugin, skills/), version 4.1.0, with the price line, the free sample, /pay/howto, /treasury, /pulse and a /via/ walk', () => {
   const read = (f) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
