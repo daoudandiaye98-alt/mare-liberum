@@ -995,7 +995,7 @@ async function mcpLean(db, base, msg, ip, own = false, house = false, uncounted 
     const t = leanText(out), d = toll && t.saving ? toll.decide(t.saving.saved) : null;
     if (d && !d.lever) return ok({ content: [{ type: 'text', text: JSON.stringify(out) }], structuredContent: out, isError: false, _meta: { [TOLL_META]: toll.line(d) } });
     count('toon', t.saving, subject);
-    if (d?.state === 'open') return ok({ content: [{ type: 'text', text: t.text }], _meta: { [LEAN_FORMAT]: t.form, [TOLL_META]: toll.line(d) }, isError: false });
+    if (d?.state === 'open' || d?.state === 'settling') return ok({ content: [{ type: 'text', text: t.text }], _meta: { [LEAN_FORMAT]: t.form, [TOLL_META]: toll.line(d) }, isError: false });
     return ok({ content: [{ type: 'text', text: t.text }], _meta: { [LEAN_FORMAT]: t.form }, isError: false });
   };
   const fail = (text) => ok({ content: [{ type: 'text', text }], isError: true });
@@ -1656,7 +1656,8 @@ async function tollRestsFor(db, cfg, ip) {
   if (!tollActs(cfg)) return false;
   const T = tollOf(db, cfg), a = await T.account(ip); if (!a) return false;
   await T.resolve(a);
-  return T.rests(a);
+  // (since 3.37.2) above the free quota as well: a HEAD that carried the page's ETag would let a caller compare it itself
+  return T.rests(a) || T.spent(a);
 }
 export async function handle(req, db, cfg = {}) {
   const t = toonAsked(req);
@@ -2114,11 +2115,11 @@ async function handleOne(req, db, cfg = {}) {
         // without a 304 is the plain HEAD, free (no ETag while the levers rest for the network)
         const versions = (db.pressVersions ||= createVersions()), got = [], bare = (res) => { const h = new Headers(res.headers); h.delete('etag'); h.delete('x-sea-delta'); return new Response(res.body, { status: res.status, headers: h }); };
         const shaped = pressRead(head ? { since: null, budget: eng.budget, strip: eng.strip } : eng, { r, md, st, a, target, base, req, hdr, versions, count: (...x) => got.push(x) });
-        if (shaped && head && shaped.status !== 304) return tg.finish(tg.T.rests(tg.a) ? bare(shaped) : shaped);
+        if (shaped && head && shaped.status !== 304) return tg.finish(tg.T.rests(tg.a) || tg.T.spent(tg.a) ? bare(shaped) : shaped);
         if (shaped) {
           const d = tg.decide(got.find(([lever]) => lever === 'delta')?.[1]?.saved || 0);
           // (the 304 of a HEAD is counted as the 304 of a GET: once a day per network and subject, node/areas.mjs)
-          if (d.lever) { const c = counter(sea, head ? { ...ctx, head: false } : ctx); for (const x of got) c(...x); return tg.seal(shaped, d); }
+          if (d.lever) { const c = counter(sea, head ? { ...ctx, head: false } : ctx); for (const x of got) c(...x); return tg.seal(head && tg.T.spent(tg.a) ? bare(shaped) : shaped, d); }
           const normal = pressRead({ since: null, budget: eng.budget, strip: eng.strip }, { r, md, st, a, target, base, req: null, hdr, versions, count: counter(sea, ctx) }) || new Response(md, { status: st, headers: { 'content-type': 'text/markdown; charset=utf-8', ...hdr } });
           return tg.seal(head ? bare(normal) : normal, d);
         }

@@ -1,5 +1,6 @@
 // Mare Liberum · the harbour toll (since 3.37, "Der Hafenzoll"): a share of what the lossless levers save, above a free quota
-// The owner's rule (25.11.2026, "Freikontingent + Zoll"): up to 100,000 saved tokens per network and UTC day stay free. Above
+// The owner's rule (25.11.2026, "Freikontingent + Zoll"; the quota 10,000 since the night of 25./26.11., "fair for customers and
+// fair for us"): up to 10,000 saved tokens per network and UTC day stay free (config/toll.json). Above
 // that an agent pays 20 % of what a lossless lever measurably saved it, at the mid price of the ledger of /savings (USD 2 per
 // million input tokens), automatically over x402. Nobody is blocked: an agent that does not pay gets the normal answer, the
 // lever simply not applied. The numbers live in config/toll.json; the text every page says is made here from them.
@@ -28,7 +29,9 @@
 //                a toll. One verified and still settling holds it (never asked twice); when its settlement does not come back
 //                within the terms' time (and for every one found on its way when a node starts), the chain is asked: USDC's
 //                authorizationState on Base says whether the signed transfer was carried out (settled) or can no longer be
-//                (released, the toll open again). A payment refused, failed or used before clears nothing
+//                (released, the toll open again). Nothing is released without that word (since 3.37.2): while Base cannot be
+//                asked, the payment stays held and Base is asked again, ever later; meanwhile the lever answers go on, what they
+//                save accrues, and nothing is asked. A payment refused, failed or used before clears nothing
 //   the books    the toll's own, in this node's state (toll:books): never in the database's sales, never in fair share, never in
 //                the paid move; shown under toll on /treasury and /open.json, exact to the millionth
 //   switch       on by default. MARE_TOLL=off switches a node off; "toll" in rest of immune:policy pauses it without a release;
@@ -104,9 +107,9 @@ export function tollFacts(base = '', C = TOLL) {
     levers: 'the lossless levers only: TOON instead of JSON (fmt=toon, Accept: text/toon, the text of a tool result on /mcp/lean), a page read again as its change or a 304 (/r/<address>?since=<etag>, If-None-Match; a 304 to a HEAD the same as to a GET), the lossless steps of POST /compress; measured by the one rule of /engine, the same numbers the ledger of /savings is handed (the ledger counts a saving once a day per network and subject; the toll counts every answer that saved)',
     free: `the lossy levers (fields=, budget=, a question or a budget on /compress: they act while the toll is due as well, on the answer or the text as it comes without the lossless lever), tools/list and the short tool list of /mcp/lean, every other door, an answer whose toll would round down to $0.000000, and the first ${n(C.free)} saved tokens of each network a day`,
     example: `Example: an agent reads a page of ${n(TOLL_EXAMPLE.page)} tokens again with since= and gets the one line that says it is unchanged: ${n(TOLL_EXAMPLE.saved)} tokens saved. Above the free quota that answer costs ${C.share} × ${n(TOLL_EXAMPLE.saved)} × $${C.usdPerMillion} / 1,000,000 = $${usd6(ex)} (about $${(ex / 1e6).toFixed(4)}). The toll is settled once the open sum reaches ${money(C.settleAtUsd)}, about ${n(per)} such answers. An agent without a wallet gets the normal answer: the whole page.`,
-    settle: `The toll accrues per answer; up to ${money(C.settleAtUsd)} may accrue before payment (the answer that reaches it is delivered, so the sum asked can be that one answer's toll above it). From ${money(C.settleAtUsd)} it is settled in one x402 payment of the exact open sum, USDC on Base to the till's wallet: send the header x-sea-toll: pay with a lever request (the answer is 402 with the terms; pay it and the lever answer comes), or POST ${base}/fair/pay?r=<toll id> at any time from the network the toll belongs to. ${money(C.settleAtUsd)} is the smallest settlement because one costs the facilitator about $0.001 to $0.0013. A payment header that pays another wallet or another sum is not the toll's and is left alone. Only a payment that settled clears the toll; a payment the facilitator gives no verdict on is not taken (try again); one verified and still on its way holds the toll, is never asked for twice, and the lean answers rest until it lands, or until Base says whether its authorization was used (settled) or can no longer be (released, the toll open again; where Base cannot be asked, it is released after its time).`,
+    settle: `The toll accrues per answer; up to ${money(C.settleAtUsd)} may accrue before payment (the answer that reaches it is delivered, so the sum asked can be that one answer's toll above it). From ${money(C.settleAtUsd)} it is settled in one x402 payment of the exact open sum, USDC on Base to the till's wallet: send the header x-sea-toll: pay with a lever request (the answer is 402 with the terms; pay it and the lever answer comes), or POST ${base}/fair/pay?r=<toll id> at any time from the network the toll belongs to. ${money(C.settleAtUsd)} is the smallest settlement because one costs the facilitator about $0.001 to $0.0013. A payment header that pays another wallet or another sum is not the toll's and is left alone. Only a payment that settled clears the toll; a payment the facilitator gives no verdict on is not taken (try again); one verified and still on its way holds the toll and is never asked for twice; the lever answers go on meanwhile (what they save accrues, asked for once the payment is settled or released). A payment is released only by Base's word: when its authorization can no longer be used and was not (the toll open again); while Base cannot be asked, the payment stays held and Base is asked again, ever later; a new UTC day starts every account fresh.`,
     unpaid: 'Unpaid tolls are not collected: until the open toll is paid, the lean answers pause and the normal answers continue (JSON instead of TOON, the whole page instead of since= or a 304, from /compress the text as sent with only a question or a budget applied, the result in the form of /mcp on /mcp/lean). Nobody is blocked: a lever request that does not pay never gets an error from the toll (one that pays gets a 402 only with the terms, or with why its payment was not taken), and a new UTC day starts with a new free quota and nothing open.',
-    headers: 'x-sea-toll (the line in words), x-sea-toll-state (open, paused, settling, or full when the node keeps no more networks that day and the lossless levers rest for new ones), x-sea-toll-usd and x-sea-toll-tokens (this answer), x-sea-toll-open-usd (the open sum) and x-sea-toll-id (the id to settle); on /mcp/lean the line also stands in the result\'s _meta (mareliberum.dev/toll). Answers under the free quota carry none of them and stay byte for byte what they were. While the lever rests for a network, a HEAD of /r/ carries no ETag and is never answered 304.',
+    headers: 'x-sea-toll (the line in words), x-sea-toll-state (open, paused, settling, or full when the node keeps no more networks that day and the lossless levers rest for new ones), x-sea-toll-usd and x-sea-toll-tokens (this answer), x-sea-toll-open-usd (the open sum) and x-sea-toll-id (the id to settle); on /mcp/lean the line also stands in the result\'s _meta (mareliberum.dev/toll). Answers under the free quota carry none of them and stay byte for byte what they were. Once a network has used its free quota for the day, and while the lever rests for it, a HEAD of /r/ carries no ETag (a 304 to it is tolled as to a GET; while the lever rests it is never answered 304).',
     never: 'Never tolled: the lossy levers, tools/list, a HEAD without a 304 (a 304 answers a HEAD the same as a GET: the same lever, the same count and the same toll), the app door /mcp/app, /via/ (its payments belong to the providers), the till\'s own doors (/route, /settle, /fair, /pay), and every door without a lossless lever. No caller is told apart by its name: the sea\'s own sessions, crawlers and the house agent have the same free quota as everyone.',
     books: 'The toll keeps its own books: never counted with the paid route or with fair share, never written into the database\'s record of the till; /treasury and /open.json show them under toll, exact to the millionth.',
     switch: 'On by default. The operator switches a node off (MARE_TOLL=off) or pauses it without a release ("toll" in rest of immune:policy); it rests too while the till rests or cannot settle a payment, and without a server secret for the keys of its accounts. Off or resting, the toll asks nothing and every lever answer is what it was in 3.36; only the pages that describe it (/engine, /fair, /pricing, /treasury, /open, each also as data, and llms.txt) keep their toll section, and say that it does not act.',
@@ -191,7 +194,7 @@ const BUSY = 'not taken: a payment for this toll is being taken right now; nothi
 const GRACE = 60_000, RETRY = 3600_000, LOOK = 30_000, KEEP_DONE = 3 * 864e5;
 export function createToll({ kv, now = () => new Date().toISOString(), config = TOLL, cap = 50_000, secret = tollSecret(), rpc = TOLL_RPC, get = (...a) => fetch(...a), sweepMs = 60_000, log = () => {} } = {}) {
   const C = config, DAY = 86400;
-  const accts = new Map(), loading = new Map(), locked = new Set(), used = new Map(), perDay = new Map(), dayKeys = new Map(), looked = new Map(), checking = new Set(), inherited = new Set();
+  const accts = new Map(), loading = new Map(), locked = new Set(), used = new Map(), perDay = new Map(), dayKeys = new Map(), nextAt = new Map(), tries = new Map(), checking = new Set(), inherited = new Set();
   const dayOf = () => String(now()).slice(0, 10);
   const mono = () => performance.now();
   // the key of a UTC day (HKDF-SHA256 of the server secret, the day as its info): nothing of it is kept
@@ -256,22 +259,21 @@ export function createToll({ kv, now = () => new Date().toISOString(), config = 
     return true;
   };
   // a payment whose settlement did not come back: once the terms' time is past (at once for one an earlier run left), the chain
-  // says whether its signed transfer was used (settled) or, once it can no longer be (validBefore past), not (released). Where
-  // the chain cannot be asked (no address to ask, no wallet or nonce), it is released after its time; where the chain does not
-  // answer, it is asked again, and released an hour after its time without an answer
+  // says whether its signed transfer was used (settled) or, once it can no longer be (validBefore past), not (released). Nothing
+  // is released without the chain's word (since 3.37.2): where the chain cannot be asked or does not answer, the payment stays
+  // held and is asked about again, ever later (30 s, doubling, at most an hour); a new UTC day starts every account fresh anyway
   const check = async (p, { force = false } = {}) => {
     if (!p || p.status !== 'pending' || checking.has(p.id)) return;
     const t = Date.parse(now()), born = Date.parse(p.at) || t, win = (Number(p.win) || 300) * 1000, before = (Number(p.before) || 0) * 1000;
     if (t < born + win && !inherited.has(p.id)) return;
-    if (!force && (looked.get(p.id) ?? -1e15) > t - LOOK) return;
-    looked.set(p.id, t); checking.add(p.id);
+    if (!force && (nextAt.get(p.id) ?? -1e15) > t) return;
+    checking.add(p.id);
     try {
-      const ends = Math.max(born + win, before) + GRACE, can = !!rpc && HEX40.test(String(p.from || '')) && HEX64.test(String(p.nonce || ''));
-      const word = can ? await authorizationUsed({ rpc, from: p.from, nonce: p.nonce, get }) : null;
+      const can = !!rpc && HEX40.test(String(p.from || '')) && HEX64.test(String(p.nonce || ''));
+      const word = can ? await authorizationUsed({ rpc, from: p.from, nonce: p.nonce, get }) : null, final = (before || born + win) + GRACE;
       if (word === true) await finish(p, 'settled', { why: 'the chain says its signed transfer was carried out (USDC authorizationState on Base)' });
-      else if (word === false) { if (t >= (before || born + win) + GRACE) await finish(p, 'released', { why: 'the chain says its signed transfer was not carried out and can no longer be (USDC authorizationState on Base, past validBefore)' }); }
-      else if (!can) { if (t >= ends) await finish(p, 'released', { why: 'no chain check is possible on this node: released after its time' }); }
-      else if (t >= ends + RETRY) await finish(p, 'released', { why: 'the chain gave no answer for an hour after its time: released' });
+      else if (word === false && t >= final) await finish(p, 'released', { why: 'the chain says its signed transfer was not carried out and can no longer be (USDC authorizationState on Base, past validBefore)' });
+      else { const n = (tries.get(p.id) || 0) + 1; tries.set(p.id, n); nextAt.set(p.id, t + (word === false ? Math.max(LOOK, final - t) : Math.min(RETRY, LOOK * 2 ** (n - 1)))); }
     } finally { checking.delete(p.id); }
   };
 
@@ -303,7 +305,9 @@ export function createToll({ kv, now = () => new Date().toISOString(), config = 
     // due: the open sum has reached the settlement and no payment for it is on its way
     due: (a) => !!a && !a.full && !a.h.length && openMicro(a) >= C.settleMicro,
     // the lossless levers rest for this network: due, a payment on its way, or no room for its account
-    rests: (a) => !!a && (!!a.full || a.h.length > 0 || openMicro(a) >= C.settleMicro),
+    rests: (a) => !!a && (!!a.full || (!a.h.length && openMicro(a) >= C.settleMicro)),
+    // the free quota of the day is used up (a HEAD of /r/ then carries no ETag, since 3.37.2)
+    spent: (a) => !!a && (!!a.full || a.s >= C.free),
     // a payment header is the toll's only when it pays the till's wallet exactly the open sum (a signed USDC transfer)
     claims(headers, a, payTo) {
       if (!a || a.full) return false;
@@ -331,29 +335,30 @@ export function createToll({ kv, now = () => new Date().toISOString(), config = 
     async sweep({ force = false } = {}) { await loadBooks(); for (const p of books.pays.filter((x) => x.status === 'pending')) await check(p, { force }); return books.pays.filter((x) => x.status === 'pending').length; },
     // one answer that saved `tokens` by a lossless lever: decided and, when the lever answer goes out, written at once.
     // state null: nothing saved (the answer as it is) · free: under the quota, or a toll that rounds to 0 · open: tolled and
-    // delivered · paused: due, the normal answer · settling: a payment on its way, the normal answer · full: the normal answer
+    // delivered · paused: due, the normal answer · settling: a payment on its way, and the lever answers go on meanwhile (what they
+    // save accrues; nothing is asked until the payment is settled or released by the chain's word, since 3.37.2) · full: the normal answer
     decide(a, tokens) {
       const s = Math.max(0, Math.floor(Number(tokens) || 0));
       if (!a || !s) return { state: null, lever: true, saved: s, tolled: 0, micro: 0 };
       if (a.full) return { state: 'full', lever: false, saved: s, tolled: 0, micro: 0 };
       const free = Math.max(0, Math.min(s, C.free - a.s)), tolled = s - free, micro = microOf(tolled, C);
-      if (micro > 0 && a.h.length) { a.x++; save(a); return { state: 'settling', lever: false, saved: s, tolled, micro: 0, open: openMicro(a), held: heldMicro(a), id: a.id }; }
-      if (micro > 0 && openMicro(a) >= C.settleMicro) { a.x++; save(a); return { state: 'paused', lever: false, saved: s, tolled, micro: 0, open: openMicro(a), id: a.id }; }
+      const held = a.h.length > 0;
+      if (micro > 0 && !held && openMicro(a) >= C.settleMicro) { a.x++; save(a); return { state: 'paused', lever: false, saved: s, tolled, micro: 0, open: openMicro(a), id: a.id }; }
       a.s += s;
       if (micro > 0) { a.t += tolled; a.m += micro; a.n++; if (!a.id) { a.id = newId(a.day); put(`toll:i:${a.id}`, a.key, 33 * DAY, true); } }
       save(a);
-      return micro > 0 ? { state: 'open', lever: true, saved: s, free, tolled, micro, open: openMicro(a), id: a.id } : { state: 'free', lever: true, saved: s, free, tolled: 0, micro: 0 };
+      return micro > 0 ? { state: held ? 'settling' : 'open', lever: true, saved: s, free, tolled, micro, open: openMicro(a), ...(held ? { held: heldMicro(a) } : {}), id: a.id } : { state: 'free', lever: true, saved: s, free, tolled: 0, micro: 0 };
     },
     // the headers of a tolled, paused, settling or full answer (fixed names, ASCII); none for an answer under the quota
     headers(d, base, a = null) {
       if (!d?.state || d.state === 'free') return {};
       if (d.state === 'full') return { 'x-sea-toll': 'full: this node keeps the toll of no more networks today, so the lossless levers rest for new networks until the next UTC day; this is the normal answer, without the lever, and nothing is owed', 'x-sea-toll-state': 'full' };
-      const open = d.open ?? (a ? openMicro(a) : 0), at = usd6(C.settleMicro), each = d.state === 'open' && d.micro != null;
+      const open = d.open ?? (a ? openMicro(a) : 0), at = usd6(C.settleMicro), each = (d.state === 'open' || d.state === 'settling') && d.micro > 0;
       const pay = d.id ? `x-sea-toll: pay with a lever request, or POST ${base}/fair/pay?r=${d.id}` : 'x-sea-toll: pay with a lever request';
-      const line = each ? `${usd6(d.micro)} USD for this answer: ${pct(C)} of ${d.tolled} tokens saved above the free ${C.free} a day, at USD ${C.usdPerMillion} per million; ${usd6(open)} USD open, settled by x402 from ${at} USD: ${pay}`
-        : d.state === 'open' ? `${usd6(open)} USD open, settled by x402 from ${at} USD: ${pay}`
-          : d.state === 'paused' ? `paused: ${usd6(open)} USD open, settled by x402 from ${at} USD: ${pay}. This is the normal answer, without the lever; unpaid tolls are not collected`
-            : `settling: a payment of ${usd6(d.held || 0)} USD is on its way; until it settles this is the normal answer, without the lever`;
+      const priced = each ? `${usd6(d.micro)} USD for this answer: ${pct(C)} of ${d.tolled} tokens saved above the free ${C.free} a day, at USD ${C.usdPerMillion} per million; ` : '';
+      const line = d.state === 'open' ? `${priced}${usd6(open)} USD open, settled by x402 from ${at} USD: ${pay}`
+        : d.state === 'paused' ? `paused: ${usd6(open)} USD open, settled by x402 from ${at} USD: ${pay}. This is the normal answer, without the lever; unpaid tolls are not collected`
+          : `settling: a payment of ${usd6(d.held || 0)} USD is on its way, and the lever answers go on meanwhile; ${priced}${usd6(open)} USD open besides, asked for once that payment is settled or released by the chain's word`;
       return { 'x-sea-toll': line, 'x-sea-toll-state': d.state, ...(each ? { 'x-sea-toll-usd': usd6(d.micro), 'x-sea-toll-tokens': String(d.tolled) } : {}), 'x-sea-toll-open-usd': usd6(open), ...(d.id ? { 'x-sea-toll-id': d.id } : {}) };
     },
     // the state of an account in the same headers, with no answer of its own (a 402, an answer that paid but saved nothing)
