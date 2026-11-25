@@ -2157,7 +2157,7 @@ async function handleOne(req, db, cfg = {}) {
       if (at === '/brain/market') { const r = await sea.market(a, ctx); return out(r, () => marketPage(base, r), a.q || a.need || a.host ? 0 : 120); }
       const r = await sea.thinking(a, ctx); return out(r, () => thinkingPage(base, r), a.q || a.task ? 0 : 300);
     }
-    // the engine room (node/engine-ui.mjs, since 3.35): five levers that spare agents tokens, their live numbers, the bench
+    // the engine room (node/engine-ui.mjs, since 3.35): six levers that spare agents tokens, their live numbers, the bench
     if (/^\/engine(\.json|\/bench-\d{4}-\d{2}-\d{2}\.json)?$/.test(path) && req.method === 'GET') {
       if (path.startsWith('/engine/')) { const f = engineBenchFile(path.slice(14, 24)); return f ? new Response(f, { headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'public, max-age=3600', 'x-robots-tag': 'noindex', ...CORS } }) : json({ error: { code: 'NOT_FOUND', message: `no such run; see ${base}/engine` } }, 404); }
       const acc = req.headers.get('accept') || '', asJson = path.endsWith('.json') || url.searchParams.get('format') === 'json' || (/application\/json/.test(acc) && !/text\/html/.test(acc));
