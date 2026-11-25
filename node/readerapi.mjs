@@ -98,12 +98,11 @@ export function readerOpenApi(base, version = '') {
         get: { tags: ['compress'], operationId: 'compressHow', summary: 'How to use POST /compress (JSON, or Markdown with Accept: text/markdown)', responses: { 200: { description: 'What it does, the body, the answer, the limits.', content: { 'application/json': { schema: { type: 'object', additionalProperties: true } }, 'text/markdown': { schema: { type: 'string' } } } }, 503: err('The engine room rests: /compress is closed for the moment.') } },
         post: {
           tags: ['compress'], operationId: 'compressText', summary: 'Make text, HTML or JSON you already hold smaller',
-          description: `Lossless steps first: HTML to Markdown, JSON minified (TOON where that spares at least ${gain} more), whitespace, a line said twice said once, tracking parameters cut from links. q (a question) and budget (tokens) leave parts out and say so. For programs between an agent and its model (a hook, a proxy, a pipeline), not for a model to call with text it already holds. Nothing sent is kept or logged; only its size is counted. Send the JSON envelope, or the text itself with its Content-Type (q, budget and type then as query parameters).`,
+          description: `Lossless steps first: HTML to Markdown, JSON minified (TOON where that spares at least ${gain} more), whitespace, a line said twice said once, tracking parameters cut from links. q (a question) and budget (tokens) leave parts out and say so. For programs between an agent and its model (a hook, a proxy, a pipeline), not for a model to call with text it already holds. Nothing sent is kept or logged; only its size is counted. Send the JSON envelope, or the text itself with its Content-Type (q, budget and type then as query parameters). The answer is JSON; with Accept: text/plain or text/markdown, only the text.`,
           parameters: [
             { name: 'q', in: 'query', required: false, description: 'With a raw body: a question; keeps the parts that answer it (lossy).', schema: { type: 'string', maxLength: 500 } },
             { name: 'budget', in: 'query', required: false, description: 'With a raw body: fit the text into this many tokens (lossy).', schema: { type: 'integer', minimum: 1, maximum: 9999999 } },
             { name: 'type', in: 'query', required: false, description: 'With a raw body: what it is, else it is found out.', schema: { type: 'string', enum: ['html', 'json', 'md', 'text'] } },
-            { name: 'Accept', in: 'header', required: false, description: 'text/plain or text/markdown for only the text; JSON otherwise.', schema: { type: 'string' } },
           ],
           requestBody: {
             required: true, description: `At most ${mb} MB; JSON nested at most ${SQUEEZE.jsonDepth} levels.`,
