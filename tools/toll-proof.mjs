@@ -893,7 +893,7 @@ const BREAK = [
   ['D3 taken back: the chain asked on every request (no backoff)', 'node/toll.mjs', 'nextAt.set(p.id, t + (word === false', 'nextAt.set(p.id, t + 0 * (word === false'],
   ['D3 taken back: the lever answers rest while a payment is held', 'node/toll.mjs', "const held = a.h.length > 0;\n", "const held = a.h.length > 0; if (micro > 0 && held) { a.x++; save(a); return { state: 'settling', lever: false, saved: s, tolled, micro: 0, open: openMicro(a), held: heldMicro(a), id: a.id }; }\n"],
   ['F4/M1 taken back: the open sum rounded once over all tolled tokens', 'node/toll.mjs', 'if (micro > 0) { a.t += tolled; a.m += micro; a.n++;', 'if (micro > 0) { a.t += tolled; a.m = microOf(a.t, C); a.n++;'],
-  ['F4/M1 taken back: an answer priced $0.000000 tolled', 'node/toll.mjs', "return micro > 0 ? { state: 'open', lever: true,", "return tolled > 0 ? { state: 'open', lever: true,"],
+  ['F4/M1 taken back: an answer priced $0.000000 tolled', 'node/toll.mjs', "return micro > 0 ? { state: held ? 'settling' : 'open', lever: true,", "return tolled > 0 ? { state: held ? 'settling' : 'open', lever: true,"],
   ['the 402 asks one millionth more than is open', 'node/toll.mjs', 'const t = tollTerms(payCfg, { base, ids, micro });', 'const t = tollTerms(payCfg, { base, ids, micro: micro + 1 });'],
   ['a payment for another sum taken (on /fair/pay)', 'node/toll.mjs', 'const exact = exactOf(p, t); if (exact)', 'const exact = exactOf(p, t); if (false)'],
   ['a replayed payment not refused', 'node/toll.mjs', "if (seen) return { required: t, tokens, error: 'this payment was used before: nothing was cleared' };", ''],
