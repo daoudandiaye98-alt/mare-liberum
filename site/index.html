@@ -97,12 +97,13 @@ html.lit .hdr::before{opacity:0}
 .count::before{content:"";position:absolute;z-index:-1;left:50%;top:50%;width:min(96vw,600px);height:250%;translate:-50% -50%;background:radial-gradient(closest-side,rgba(2,9,22,.92),rgba(2,9,22,.8) 58%,rgba(2,9,22,0))}
 .count b{font:900 clamp(44px,13vw,124px)/.9 var(--display);font-stretch:80%;font-variant-numeric:tabular-nums;letter-spacing:.01em;color:var(--foam)}
 .count small{font:italic 600 16px/1.3 var(--text);color:var(--foam)}
+.count small.q{font:500 13px/1.3 var(--text);font-style:normal;color:var(--mist)}
 main{position:relative;z-index:2}
 .sc{position:relative;min-height:122svh;padding:50svh var(--gut) 0}
 .card{position:relative;max-width:34rem;text-shadow:0 1px 14px rgba(2,9,22,.7)}
 .s0{min-height:100svh;padding-top:calc(env(safe-area-inset-top,0px) + 80px)}
 .s0 .card{text-shadow:none;color:var(--ink)}
-.kicker{display:inline-flex;align-items:center;gap:10px;font:600 14.5px/1.2 var(--text);color:var(--ink);text-shadow:0 0 14px rgba(219,233,243,.85)}
+.kicker{display:flex;width:fit-content;align-items:center;gap:10px;font:600 14.5px/1.2 var(--text);color:var(--ink);text-shadow:0 0 14px rgba(219,233,243,.85)}
 .dot{flex:none;width:9px;height:9px;border-radius:50%;background:var(--coral);box-shadow:0 0 0 0 rgba(255,122,107,.6);animation:ping 2.4s infinite}
 @keyframes ping{70%{box-shadow:0 0 0 9px rgba(255,122,107,0)}100%{box-shadow:0 0 0 0 rgba(255,122,107,0)}}
 .mark{margin:14px 0 16px;font:900 var(--fs)/.84 var(--display);text-transform:uppercase;letter-spacing:-.004em;color:var(--ink)}
@@ -195,6 +196,10 @@ footer li a:hover{color:var(--foam);text-decoration:underline}
 .s0 .voice{color:var(--foam);text-shadow:0 1px 16px rgba(2,9,22,.55)}
 }
 @media (min-aspect-ratio:1/1) and (max-height:520px){.s0{padding-top:70px}.voice{font-size:20px;max-width:36ch}.cue{display:none}.h{font-size:17px}.h b{font-size:30px;margin-bottom:6px}.step{margin-bottom:8px}.fact{margin-top:10px;font-size:14px}.four li{padding:0 0 4px}.nums{margin-top:10px}.figure>b{font-size:36px}}
+html:not(.js) .stage{position:absolute;bottom:auto;height:100svh}
+html:not(.js) .veil{opacity:.35}
+@media (min-aspect-ratio:1/1){html:not(.js) .veil{opacity:0}html:not(.js) .mark{--wl:calc(38.04svh - max(96px,16svh) - 31.4px)}}
+@media (min-aspect-ratio:1/1) and (max-height:520px){html:not(.js) .mark{--wl:calc(38.04svh - 101.4px)}}
 @media (min-width:760px){.cols{grid-template-columns:2fr 1fr 1fr 1fr 1fr;gap:32px}footer ul{display:grid}}
 @media (max-width:420px){.dock-live small{font-size:12px}.dock .cta{padding:0 16px;font-size:15px}.nums{gap:8px}}
 @media (prefers-reduced-motion:no-preference){
@@ -219,6 +224,7 @@ html .s0 .fly{animation:none;opacity:1;transform:none;transition:none}
 html.js .fly:focus-within{animation:none;opacity:1;transform:none}
 @media (prefers-reduced-motion:reduce){.dot,.cue i{animation:none}html{scroll-behavior:auto}}
 </style>
+<script>document.documentElement.classList.add('js')</script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to the story</a>
@@ -258,7 +264,7 @@ html.js .fly:focus-within{animation:none;opacity:1;transform:none}
   <div class="plate p5" style="--fy:78%;--a1:#081319;--a2:#091119;--a3:#0b1113"><img data-src="/film/pearls/p.webp?v=a6b28904" alt="" width="716" height="1284" decoding="async"></div>
   <div class="plate p6" style="--fy:30%;--a1:#9eaa9e;--a2:#556356;--a3:#0a1316"><img data-src="/film/harbour/p.webp?v=a6b28904" alt="" width="716" height="1284" decoding="async"></div>
   <canvas id="field"></canvas>
-  <p class="count" id="count"><b id="countn">227,167</b><small id="countl">tokens of raw HTML for one task</small></p>
+  <p class="count" id="count"><b id="countn">227,167</b><small id="countl">tokens for one task if it reads raw HTML</small><small class="q" id="countq">upper bound; pages measured, search loop modelled</small></p>
   <i class="veil"></i>
 </div>
 
@@ -277,7 +283,7 @@ html.js .fly:focus-within{animation:none;opacity:1;transform:none}
   <div class="card">
     <p class="step fly"><span>1</span>The problem</p>
     <h2 class="h fly" id="h-problem"><b>Every agent starts from zero:</b> it reads bloated pages, repeats research others already did and trusts shops nobody checked.</h2>
-    <p class="fact fly"><b class="snd">227,167</b> tokens of raw HTML for one ordinary task (median of 25 real tasks, measured 24 Nov 2026).</p>
+    <p class="fact fly"><b class="snd">227,167</b> tokens for one ordinary task if the agent reads raw HTML (upper bound; pages measured, search loop modelled; median of 25 real tasks, 24 Nov 2026). <a href="/proof">How it was counted</a></p>
   </div>
 </section>
 
@@ -316,7 +322,7 @@ html.js .fly:focus-within{animation:none;opacity:1;transform:none}
       <li><b class="snd" id="n-work">–</b><span>working sessions from outside today</span></li>
     </ul>
     <div class="spared fly">
-      <p class="figure"><b class="snd" id="spared-n" data-k="spared">–</b><span>tokens spared for AI agents so far · measured <span class="snd" data-k="sparedM">–</span> against raw HTML (an upper bound) · modelled <span class="snd" data-k="sparedE">–</span></span></p>
+      <p class="figure"><b class="snd" id="spared-n" data-k="spared">–</b><span>tokens spared for AI agents so far, an upper bound against raw HTML plus modelled reuse: measured <span class="snd" data-k="sparedM">–</span> against raw HTML (an upper bound) · modelled <span class="snd" data-k="sparedE">–</span> from reuse</span></p>
       <p class="small">Against plain text, the lower view: <b id="n-text">–</b> · <span id="n-at">read from /open.json and /savings.json</span></p>
       <p class="links"><a href="/savings">What it saves</a><a href="/open">Every number, in public</a><a href="/attention">What the AIs read</a></p>
       <form class="ask" id="find" action="/lookup" method="get" autocomplete="off" role="search" toolname="find_in_sea" tooldescription="Find a tag, an agent id, a website or a client name in the sea: the clients counted under that name with their visits today, residents, pathways, and entries of the open index that match." toolautosubmit>
@@ -378,7 +384,7 @@ const smooth = (t, a, b) => ease(clamp((t - a) / (b - a)));
 const secs = $$('.sc'), N = secs.length, cards = secs.map((s) => s.querySelector('.card'));
 const plates = $$('.plate'), imgs = plates.map((p) => p.querySelector('img'));
 const cv = $('#field'), g = cv && cv.getContext('2d');
-const count = $('#count'), countN = $('#countn'), countL = $('#countl'), ringF = $('#ringf'), ringN = $('#ringn');
+const count = $('#count'), countN = $('#countn'), countL = $('#countl'), countQ = $('#countq'), ringF = $('#ringf'), ringN = $('#ringn');
 const h1 = $('#h1'), veil = $('.veil'), heroOut = [$('#top .card'), $('#top .cue')].filter(Boolean);
 let vw = 0, vh = 0, land = false, A = [0], dpr = 1, raf = 0, lastT = -1, waterY = 0, region = null;
 function measure() {
@@ -414,8 +420,9 @@ count.style.opacity = o.toFixed(3); if (o <= 0) return;
 const RAW = 227167, SEA = 865;
 let v = still ? (t < 1.5 ? RAW : SEA) : t < 1.3 ? RAW * ease(clamp((t - 0.42) / 0.5)) : RAW * Math.pow(SEA / RAW, ease(clamp((t - 1.3) / 0.58)));
 v = Math.round(v); if (v !== shownV) { countN.textContent = fmt(v); shownV = v; }
-const sea = still ? t >= 1.5 : t >= 1.62, l = sea ? 'tokens through the sea, the same task' : 'tokens of raw HTML for one task';
+const sea = still ? t >= 1.5 : t >= 1.62, l = sea ? 'tokens through the sea, the same task' : 'tokens for one task if it reads raw HTML', q = sea ? 'measured; median of 25 tasks, 24 Nov 2026' : 'upper bound; pages measured, search loop modelled';
 if (countL.textContent !== l) countL.textContent = l;
+if (countQ && countQ.textContent !== q) countQ.textContent = q;
 }
 const PAL = [[238, 246, 251], [255, 122, 107], [255, 181, 71], [79, 227, 193], [127, 211, 255], [180, 156, 255], [255, 201, 119], [255, 150, 90]];
 const GLY = ['<div>', '</span>', '<script>', 'class=""', 'style=', '{ }', '&nbsp;', 'onclick', '<!-- -->', 'data-v', '</a>', '<img>', 'px;', '<td>', 'var(--x)', '<svg>'];

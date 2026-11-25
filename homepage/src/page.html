@@ -8,6 +8,7 @@
 /*@FONTFACE*/
 /*@CSS*/
 </style>
+<script>document.documentElement.classList.add('js')</script>
 </head>
 <body>
 <a class="skip" href="#main">Skip to the story</a>
@@ -41,7 +42,7 @@
 <div class="stage" id="stage" aria-hidden="true">
 {{plates}}
   <canvas id="field"></canvas>
-  <p class="count" id="count"><b id="countn">227,167</b><small id="countl">tokens of raw HTML for one task</small></p>
+  <p class="count" id="count"><b id="countn">227,167</b><small id="countl">tokens for one task if it reads raw HTML</small><small class="q" id="countq">upper bound; pages measured, search loop modelled</small></p>
   <i class="veil"></i>
 </div>
 
@@ -60,7 +61,7 @@
   <div class="card">
     <p class="step fly"><span>1</span>The problem</p>
     <h2 class="h fly" id="h-problem"><b>Every agent starts from zero:</b> it reads bloated pages, repeats research others already did and trusts shops nobody checked.</h2>
-    <p class="fact fly"><b class="snd">227,167</b> tokens of raw HTML for one ordinary task (median of 25 real tasks, measured 24 Nov 2026).</p>
+    <p class="fact fly"><b class="snd">227,167</b> tokens for one ordinary task if the agent reads raw HTML (upper bound; pages measured, search loop modelled; median of 25 real tasks, 24 Nov 2026). <a href="{{B}}/proof">How it was counted</a></p>
   </div>
 </section>
 
@@ -99,7 +100,7 @@
       <li><b class="snd" id="n-work">–</b><span>working sessions from outside today</span></li>
     </ul>
     <div class="spared fly">
-      <p class="figure"><b class="snd" id="spared-n" data-k="spared">{{spared}}</b><span>tokens spared for AI agents so far · measured <span class="snd" data-k="sparedM">{{sparedM}}</span> against raw HTML (an upper bound) · modelled <span class="snd" data-k="sparedE">{{sparedE}}</span></span></p>
+      <p class="figure"><b class="snd" id="spared-n" data-k="spared">{{spared}}</b><span>tokens spared for AI agents so far, an upper bound against raw HTML plus modelled reuse: measured <span class="snd" data-k="sparedM">{{sparedM}}</span> against raw HTML (an upper bound) · modelled <span class="snd" data-k="sparedE">{{sparedE}}</span> from reuse</span></p>
       <p class="small">Against plain text, the lower view: <b id="n-text">–</b> · <span id="n-at">read from /open.json and /savings.json</span></p>
       <p class="links"><a href="{{B}}/savings">What it saves</a><a href="{{B}}/open">Every number, in public</a><a href="{{B}}/attention">What the AIs read</a></p>
       <form class="ask" id="find" action="{{B}}/lookup" method="get" autocomplete="off" role="search" toolname="find_in_sea" tooldescription="Find a tag, an agent id, a website or a client name in the sea: the clients counted under that name with their visits today, residents, pathways, and entries of the open index that match." toolautosubmit>
