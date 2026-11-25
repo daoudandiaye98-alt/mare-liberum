@@ -149,7 +149,8 @@ await proof('JSON: minified, parses back to the same value; deep nesting refused
   assert.ok(live.length >= 3, 'the sea\'s own JSON answers');
   for (const v of [...live, { a: [{ id: 1, name: 'x' }, { id: 2, name: 'y' }], s: 'a  b', n: null }]) {
     const pretty = JSON.stringify(v, null, 2), r = squeeze(pretty);
-    assert.equal(r.type, 'json'); assert.deepEqual(JSON.parse(r.out), v); assert.ok(r.saving.saved > 0);
+    // since the merge with node/toon.mjs a table goes out as TOON when that spares 20 %: it must decode to the same value
+    assert.equal(r.type, 'json'); assert.deepEqual(r.form === 'toon' ? (await import('../node/toon.mjs')).fromToon(r.out) : JSON.parse(r.out), v); assert.ok(r.saving.saved > 0);
   }
   assert.equal(jsonDepth('['.repeat(65) + ']'.repeat(65)), 65);
   assert.throws(() => squeeze('['.repeat(65) + ']'.repeat(65)), /nested deeper/);

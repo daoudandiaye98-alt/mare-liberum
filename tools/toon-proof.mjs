@@ -7,7 +7,8 @@
 // it acts. Negative controls at the end: each rule is broken in a copy of the code, and this proof must fail there.
 // Runs without the network: node tools/toon-proof.mjs   (exit code 1 when a proof fails or a control is not caught)
 //   --no-controls   only the proofs (the controls run this file that way in each broken copy)
-// The 3.34.1 tree comes from git archive of MARE_REF (default cb5ca52); MARE_REF_DIR names one that is there already.
+// The reference tree comes from git archive of MARE_REF (default HEAD: this release, its engine switched off; cb5ca52 for 3.34.1);
+// MARE_REF_DIR names one that is there already.
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync, existsSync } from 'node:fs';
 import { homedir } from 'node:os';
@@ -17,7 +18,7 @@ import { createRequire } from 'node:module';
 import { toToon, fromToon, TOON, ToonError, TOON_MIN_GAIN } from '../node/toon.mjs';
 import { savingOf, engineHeaders, RATIO } from '../node/engine.mjs';
 import { prefersToon, toonAsked, jsonRequest, toonAnswer, toonTag, jsonTag, toonOrJson, fieldsOf, project } from '../node/toondoor.mjs';
-import { freezeTime, refTree, nodeOf, brokenCopy, runIn, drop, headersOf, same, RECEIPT_IDS, REF } from './engine-kit.mjs';
+import { freezeTime, refTree, nodeOf, brokenCopy, runIn, drop, headersOf, same, RECEIPT_IDS, REF, OFF, AGAINST } from './engine-kit.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CONTROLS = !process.argv.includes('--no-controls');
@@ -98,8 +99,8 @@ await proof(`TOON only where it pays (TOON_MIN_GAIN = ${TOON_MIN_GAIN}): the tab
 const restore = freezeTime();
 const SITE = { '/llms.txt': { body: readFileSync(join(ROOT, 'site/llms.txt'), 'utf8'), type: 'text/plain; charset=utf-8' } };
 const refDir = refTree(ROOT);
-const ours = await nodeOf(ROOT, { site: SITE }), theirs = refDir ? await nodeOf(refDir, { site: SITE }) : null;
-console.log(`fmt=toon and Accept: text/toon on the JSON doors (node/toondoor.mjs), against ${REF} (3.34.1)${theirs ? '' : ': NOT RUN, no tree of the release (git archive failed)'}`);
+const ours = await nodeOf(ROOT, { site: SITE }), theirs = refDir ? await nodeOf(refDir, { site: SITE, cfg: OFF }) : null;
+console.log(`fmt=toon and Accept: text/toon on the JSON doors (node/toondoor.mjs), against ${AGAINST}${theirs ? '' : ': NOT RUN, no tree of the release (git archive failed)'}`);
 const counted = [];
 const wake = async () => { await ours.call('/stats'); ours.db.flow.countEngine = (lever, s, ctx, subject) => { counted.push({ lever, s, ctx, subject }); }; if (theirs) await theirs.call('/stats'); };
 await wake();
@@ -113,15 +114,15 @@ const stripH = (h) => Object.fromEntries(Object.entries(headersOf(h)).map(([k, v
 const sameAnswer = async (path, o = {}, cfgO = {}, cfgT = {}, A = ours, B = theirs) => {
   const a = await A.call(path, { ...o, cfg: cfgO }), b = await B.call(path, { ...o, cfg: cfgT });
   assert.equal(a.status, b.status, `${path}: status ${a.status} against ${b.status}`);
-  assert.equal(strip(a.text), strip(b.text), `${path} (${o.accept || 'application/json'}): the body differs from 3.34.1`);
-  assert.deepEqual(stripH(a.headers), stripH(b.headers), `${path}: the headers differ from 3.34.1`);
+  assert.equal(strip(a.text), strip(b.text), `${path} (${o.accept || 'application/json'}): the body differs from ${AGAINST}`);
+  assert.deepEqual(stripH(a.headers), stripH(b.headers), `${path}: the headers differ from ${AGAINST}`);
   return a;
 };
 if (theirs) {
-  await proof(`every default answer is byte for byte what 3.34.1 sends (${DEFAULTS.length} requests: JSON doors, pages, Markdown, errors, Accepts that prefer JSON)`, async () => {
+  await proof(`every default answer is byte for byte what ${AGAINST} sends (${DEFAULTS.length} requests: JSON doors, pages, Markdown, errors, Accepts that prefer JSON)`, async () => {
     for (const [p, accept] of DEFAULTS) { const a = await sameAnswer(p, accept ? { accept } : {}); assert.ok(!a.headers.get('x-sea-engine') && !/toon/.test(a.headers.get('content-type') || '')); }
   });
-  await proof('the MCP doors\' lists are byte for byte those of 3.34.1: /mcp tools/list, /mcp/app initialize and tools/list', async () => {
+  await proof(`the MCP doors' lists are byte for byte those of ${AGAINST}: /mcp tools/list, /mcp/app initialize and tools/list`, async () => {
     for (const [door, m] of [['/mcp', 'tools/list'], ['/mcp/app', 'initialize'], ['/mcp/app', 'tools/list']]) {
       const params = m === 'initialize' ? { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'toon-proof', version: '1' } } : undefined;
       const a = await ours.rpc(door, m, params), b = await theirs.rpc(door, m, params); assert.equal(a.text, b.text, `${door} ${m}`); assert.deepEqual(headersOf(a.headers), headersOf(b.headers));
@@ -239,9 +240,9 @@ await proof('validators stay the door\'s: a TOON answer carries its tag marked .
   const md = new Response('# page', { headers: { 'content-type': 'text/markdown; charset=utf-8', etag: '"page"' } }), m = await toonAnswer(md); assert.equal(m.headers.get('etag'), '"page"'); assert.equal(await m.text(), '# page');
 });
 if (theirs) {
-  await proof('resting ("engine" in rest of immune:policy) or switched off (MARE_ENGINE=off), nothing of it acts: fmt=toon, Accept: text/toon and fields= answer as 3.34.1 does', async () => {
+  await proof(`resting ("engine" in rest of immune:policy) or switched off (MARE_ENGINE=off), nothing of it acts: fmt=toon, Accept: text/toon and fields= answer as ${AGAINST} does`, async () => {
     // a fresh pair of nodes, called in lockstep: the live counters of /open.json are the same on both
-    const A = await nodeOf(ROOT, { site: SITE }), B = await nodeOf(refDir, { site: SITE }), seen = [];
+    const A = await nodeOf(ROOT, { site: SITE }), B = await nodeOf(refDir, { site: SITE, cfg: OFF }), seen = [];
     await A.call('/stats'); await B.call('/stats'); A.db.flow.countEngine = (...x) => seen.push(x);
     const asks = [['/routes.json?fmt=toon'], ['/search?q=mcp&fmt=toon'], ['/routes.json', 'text/toon'], ['/about', 'text/toon'], ['/open.json?fmt=toon'], ['/nope-404?fmt=toon'], ['/brain?q=x&fmt=toon', 'text/html'], ['/routes.json?fields=topics.id'], ['/routes.json?fields=topics.id&fmt=toon']];
     for (const [p, accept] of asks) await sameAnswer(p, accept ? { accept } : {}, { engine: 'off' }, {}, A, B);
@@ -267,7 +268,7 @@ if (CONTROLS) {
     ['TOON is sent even where it is larger', 'node/toondoor.mjs', 's.saved > 0 && s.saved >= TOON_MIN_GAIN * s.before ?', 'true ?'],
     ['the layer shapes answers nobody asked for', 'node/toondoor.mjs', 'export function toonAsked(req) {', "export function toonAsked(req) { if (!/mcp\\/app/.test(req.url)) return { url: new URL(req.url), path: new URL(req.url).pathname, by: 'accept', toon: true, fields: null };"],
     ['crawlers are counted', 'node/core.mjs', "who.kind !== 'self' && !READERS.includes(who.kind);\n  const res = await handleFair(await jsonRequest(req, t), db, cfg);", "who.kind !== 'self';\n  const res = await handleFair(await jsonRequest(req, t), db, cfg);"],
-    ['the rest switch is not asked', 'node/core.mjs', "const engineActs = (cfg) => engineSwitch(cfg) && !immune.atRest?.('engine');", 'const engineActs = (cfg) => true;'],
+    ['the rest switch is not asked', 'node/core.mjs', 'const engineActs = (cfg) => engineOn(cfg, immune);', 'const engineActs = (cfg) => true;'],
     ['a shaped answer drops the headers of the JSON answer', 'node/toondoor.mjs', "const h = new Headers(res.headers); h.delete('content-length');", "const h = new Headers(); h.delete('content-length');"],
     ['errors are shaped too', 'node/toondoor.mjs', 'if (res.status !== 200 && res.status !== 201) return res;', 'if (false) return res;'],
     ['an answer the engine shaped is shaped again', 'node/toondoor.mjs', "if (res.headers.has('x-sea-engine')) return res;", ''],
@@ -285,5 +286,5 @@ if (CONTROLS) {
   }
 }
 if (refDir && !process.env.MARE_REF_DIR) drop(refDir);
-console.log(`\ntoon proof: ${passed} passed, ${failed} failed${CONTROLS ? `; negative controls caught ${caught} of ${controls}` : ''}${theirs ? '' : '; the comparisons with 3.34.1 did NOT run'}`);
+console.log(`\ntoon proof: ${passed} passed, ${failed} failed${CONTROLS ? `; negative controls caught ${caught} of ${controls}` : ''}${theirs ? '' : '; the comparisons with ${AGAINST} did NOT run'}`);
 process.exit(failed || (CONTROLS && caught !== controls) || !theirs ? 1 : 0);

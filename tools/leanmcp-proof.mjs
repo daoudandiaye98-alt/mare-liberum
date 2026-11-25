@@ -13,7 +13,7 @@ import { fileURLToPath } from 'node:url';
 import { fromToon, TOON_MIN_GAIN } from '../node/toon.mjs';
 import { savingOf } from '../node/engine.mjs';
 import { leanSentence, findTools } from '../node/leanmcp.mjs';
-import { freezeTime, refTree, nodeOf, brokenCopy, runIn, drop, headersOf, same, RECEIPT_IDS, REF } from './engine-kit.mjs';
+import { freezeTime, refTree, nodeOf, brokenCopy, runIn, drop, headersOf, same, RECEIPT_IDS, REF, OFF, AGAINST } from './engine-kit.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 const CONTROLS = !process.argv.includes('--no-controls');
@@ -25,7 +25,7 @@ globalThis.fetch = async (u) => { throw new Error(`the proof does not use the ne
 freezeTime();
 const SITE = { '/llms.txt': { body: readFileSync(join(ROOT, 'site/llms.txt'), 'utf8'), type: 'text/plain; charset=utf-8' } };
 const BASE = 'https://mare.test', refDir = refTree(ROOT);
-const ours = await nodeOf(ROOT, { site: SITE, base: BASE }), theirs = refDir ? await nodeOf(refDir, { site: SITE, base: BASE }) : null;
+const ours = await nodeOf(ROOT, { site: SITE, base: BASE }), theirs = refDir ? await nodeOf(refDir, { site: SITE, base: BASE, cfg: OFF }) : null;
 const counted = [];
 await ours.call('/stats'); if (theirs) await theirs.call('/stats');
 ours.db.flow.countEngine = (lever, s, ctx, subject) => { counted.push({ lever, s, ctx, subject }); };
@@ -39,7 +39,7 @@ const formOf = (r) => r._meta?.[FORM];
 const readLean = (r) => { const f = formOf(r), t = r.content[0].text; return f === 'toon' ? fromToon(t) : f === 'json' ? JSON.parse(t) : t; };
 const OPEN = (await result('/mcp', 'tools/list')).tools;
 
-console.log(`the lean door /mcp/lean, against the open door /mcp and ${REF} (3.34.1)`);
+console.log(`the lean door /mcp/lean, against the open door /mcp and ${AGAINST}`);
 await proof(`initialize: the same protocol and capabilities as /mcp; the instructions name the four tools and that find_tools reaches all ${OPEN.length}`, async () => {
   const l = await result('/mcp/lean', 'initialize', INIT), o = await result('/mcp', 'initialize', INIT);
   assert.equal(l.protocolVersion, o.protocolVersion); assert.deepEqual(l.capabilities, o.capabilities); assert.equal(l.serverInfo.version, o.serverInfo.version);
@@ -61,12 +61,12 @@ await proof(`what the list spares, measured: ${OPEN.length} tools in ${listBytes
   assert.ok(listBytes(LEAN) * 10 < listBytes(OPEN), 'the lean list is under a tenth of the open one');
 });
 if (theirs) {
-  await proof('/mcp tools/list, /mcp/app initialize and /mcp/app tools/list are byte for byte those of 3.34.1', async () => {
+  await proof(`/mcp tools/list, /mcp/app initialize and /mcp/app tools/list are byte for byte those of ${AGAINST}`, async () => {
     for (const [door, m, p] of [['/mcp', 'tools/list'], ['/mcp/app', 'initialize', INIT], ['/mcp/app', 'tools/list']]) {
       const a = await ours.rpc(door, m, p), b = await theirs.rpc(door, m, p); assert.equal(a.text, b.text, `${door} ${m}`); assert.deepEqual(headersOf(a.headers), headersOf(b.headers), `${door} ${m} headers`);
     }
   });
-  await proof('/mcp initialize differs from 3.34.1 by one sentence: where the lean door is and what it spares, its numbers measured from the two lists', async () => {
+  await proof(`/mcp initialize differs from ${AGAINST} by one sentence: where the lean door is and what it spares, its numbers measured from the two lists`, async () => {
     const a = (await result('/mcp', 'initialize', INIT)).instructions, b = JSON.parse((await theirs.rpc('/mcp', 'initialize', INIT)).text).result.instructions, s = leanSentence(BASE, OPEN);
     assert.ok(a.includes(s)); assert.equal(a.replace(s, ''), b, 'everything else is as it was');
     assert.equal((s.match(/[.;]\s/g) || []).length <= 1 && /^ A lean door/.test(s) && s.trim().endsWith('.'), true, 'one sentence');
@@ -160,7 +160,7 @@ await proof('the same door rules as /mcp: batches of up to 16 answered in order,
 });
 if (theirs) {
   const strip = (t) => String(t).replace(RECEIPT_IDS, 'r<id>');
-  await proof('the discovery documents name the lean door in one line each (server card, agent card, /connect), and differ from 3.34.1 by nothing else', async () => {
+  await proof(`the discovery documents name the lean door in one line each (server card, agent card, /connect), and differ from ${AGAINST} by nothing else`, async () => {
     const sc = JSON.parse((await ours.call('/.well-known/mcp/server-card.json')).text), sc0 = (await theirs.call('/.well-known/mcp/server-card.json')).text;
     assert.deepEqual(sc.remotes[1], { type: 'streamable-http', url: `${BASE}/mcp/lean` }); sc.remotes.splice(1, 1); assert.equal(JSON.stringify(sc), sc0);
     const ac = JSON.parse((await ours.call('/.well-known/agent-card.json')).text), ac0 = (await theirs.call('/.well-known/agent-card.json')).text, line = ` (the lean door, 4 tools that reach all: ${BASE}/mcp/lean)`;
@@ -170,13 +170,13 @@ if (theirs) {
     const cp = (await ours.call('/connect', { accept: 'text/html' })).text, cp0 = (await theirs.call('/connect', { accept: 'text/html' })).text, para = /<p id="door-lean">[^\n]*<\/p>\n/;
     assert.match(cp, para); assert.equal(strip(cp.replace(para, '')), strip(cp0));
   });
-  await proof('resting ("engine" in rest of immune:policy) or switched off (MARE_ENGINE=off): /mcp/lean answers as /mcp; /mcp, the app door, the cards and /connect are 3.34.1 byte for byte', async () => {
-    const A = await nodeOf(ROOT, { site: SITE, base: BASE }), B = await nodeOf(refDir, { site: SITE, base: BASE }), seen = [];
+  await proof(`resting ("engine" in rest of immune:policy) or switched off (MARE_ENGINE=off): /mcp/lean answers as /mcp; /mcp, the app door, the cards and /connect are ${AGAINST} byte for byte`, async () => {
+    const A = await nodeOf(ROOT, { site: SITE, base: BASE }), B = await nodeOf(refDir, { site: SITE, base: BASE, cfg: OFF }), seen = [];
     await A.call('/stats'); await B.call('/stats'); A.db.flow.countEngine = (...x) => seen.push(x);
     const check = async (cfg) => {
       for (const m of ['initialize', 'tools/list']) {
         const p = m === 'initialize' ? INIT : undefined, l = await A.rpc('/mcp/lean', m, p, { cfg }), o = await A.rpc('/mcp', m, p, { cfg }), r = await B.rpc('/mcp', m, p);
-        assert.equal(l.text, o.text, `lean ${m} answers as /mcp`); assert.equal(o.text, r.text, `/mcp ${m} is 3.34.1`);
+        assert.equal(l.text, o.text, `lean ${m} answers as /mcp`); assert.equal(o.text, r.text, `/mcp ${m} is ${AGAINST}`);
         assert.equal((await A.rpc('/mcp/app', m, p, { cfg })).text, (await B.rpc('/mcp/app', m, p)).text);
       }
       for (const path of ['/.well-known/mcp/server-card.json', '/.well-known/agent-card.json', '/connect.json']) { const a = await A.call(path, { cfg }), b = await B.call(path); assert.equal(strip(a.text), strip(b.text), path); }

@@ -8,7 +8,12 @@ import { pathToFileURL } from 'node:url';
 import { spawnSync } from 'node:child_process';
 
 // 3.34.1, the release the engine is built on: what every default answer must still be, byte for byte
-export const REF = process.env.MARE_REF || 'cb5ca52';
+// since the integration of 3.35 the reference is this release itself, its engine switched off (OFF): so the proofs hold the
+// engine to rule 15 (nothing changes unless an agent asks) while the other teams' changes of the release stay theirs.
+// MARE_REF=cb5ca52 compares with 3.34.1 instead (the version string and the release's own changes then differ, as they must)
+export const REF = process.env.MARE_REF || 'HEAD';
+export const OFF = Object.freeze({ engine: 'off' });
+export const AGAINST = REF === 'HEAD' ? 'this release with the engine off' : `${REF} (3.34.1)`;
 export const RECEIPT_IDS = /\br\d{8}[a-z0-9]{8}\b/g;
 // one key signs the /via/ addresses of every node of a proof (a test value, no secret): else each node draws its own and
 // the same answer differs by its signatures

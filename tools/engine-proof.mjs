@@ -239,9 +239,11 @@ await proof('the page says so when the engine is off or rests; every default ans
   const off = node({ engine: 'off' }), on = node();
   const jOff = JSON.parse((await call('/engine.json', { accept: 'application/json', n: off })).text); assert.equal(jOff.on, false); assert.match(jOff.state, /nothing of the engine acts/);
   immune.set({ mode: 'normal', rest: ['engine'] }); try { const r = JSON.parse((await call('/engine.json', { accept: 'application/json', n: on })).text); assert.equal(r.on, false); } finally { immune.set({ mode: 'normal', rest: [] }); }
-  const paths = [['/llms.txt', 'text/plain'], ['/savings.json', 'application/json'], ['/brain/areas.json', 'application/json'], ['/search?q=weather+api', 'application/json'], ['/stats', 'application/json'], ['/fair.json', 'application/json'], ['/openapi.json', 'application/json'], ['/connect.json', 'application/json']];
+  const paths = [['/llms.txt', 'text/plain'], ['/savings.json', 'application/json'], ['/brain/areas.json', 'application/json'], ['/search?q=weather+api', 'application/json'], ['/stats', 'application/json'], ['/fair.json', 'application/json'], ['/openapi.json', 'application/json']];
+  // /connect.json and the /mcp initialize text name the lean door while the engine acts (one line, one sentence): proof:leanmcp
+  // holds them to exactly that; everything else is the same on and off
   for (const [p, accept] of paths) { const a = await call(p, { accept, n: on, ip: '198.18.40.1' }), b = await call(p, { accept, n: off, ip: '198.18.40.1' }); assert.equal(a.status, b.status, p); assert.equal(a.text.replace(/"(at|now|time|generated)":"[^"]*"/g, ''), b.text.replace(/"(at|now|time|generated)":"[^"]*"/g, ''), p); }
-  for (const [method, n] of [['initialize', 0], ['tools/list', 1]]) for (const door of ['/mcp', '/mcp/app']) {
+  for (const [method, n] of [['initialize', 0], ['tools/list', 1]]) for (const door of (method === 'initialize' ? ['/mcp/app'] : ['/mcp', '/mcp/app'])) {
     const ask = (x) => call(door, { method: 'POST', accept: 'application/json, text/event-stream', n: x, ip: '198.18.40.2', body: { jsonrpc: '2.0', id: 1 + n, method, params: method === 'initialize' ? { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'proof', version: '1' } } : {} } });
     assert.equal((await ask(on)).text, (await ask(off)).text, `${door} ${method}`);
   }
