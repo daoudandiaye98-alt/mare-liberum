@@ -279,6 +279,9 @@ await proof('time: an HTML body that would take minutes to parse is given up aft
   const pending = call('/compress', { method: 'POST', accept: 'application/json', headers: { 'content-type': 'text/html' }, body: slow, ip: '203.0.113.91' });
   await new Promise((r) => setTimeout(r, 200));
   const t1 = performance.now(), other = await call('/compress', { accept: 'application/json' }), quick = performance.now() - t1;
+  // one helper at most for /compress, and no queue (verify-3.35 N1): a second text meanwhile is told to come back, the reader keeps its helpers
+  const second = await call('/compress', { method: 'POST', accept: 'application/json', headers: { 'content-type': 'text/plain' }, body: 'a short text', ip: '203.0.113.92' });
+  assert.equal(second.status, 503, `a second /compress meanwhile: ${second.status}`); assert.ok(Number(second.h['retry-after']) >= 1);
   const r = await pending, total = performance.now() - t0;
   assert.equal(r.status, 422, `status ${r.status}`); assert.match(r.text, /TOO_SLOW/);
   assert.ok(total < SQUEEZE.timeMs + 2000, `given up after ${Math.round(total)} ms`); assert.equal(other.status, 200); assert.ok(quick < 1000, `another door waited ${Math.round(quick)} ms`);

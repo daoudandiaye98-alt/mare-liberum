@@ -17,6 +17,9 @@ import { savingOf, engineHeaders, tokensOf, bytesOf, RATIO, ENGINE_VERSION, engi
 import { immune } from './immune.mjs';
 import { aside } from './aside.mjs';
 const SQUEEZE_FILE = new URL('./squeeze.mjs', import.meta.url).href;
+// /compress holds at most one of the node's helpers at a time and never waits for one (verify-3.35 N1): the reader, the site
+// check and the atlas share the same four, and a burst of texts written to be slow must not keep them from pages
+const PRESS_AT_ONCE = 1; let pressing = 0;
 import { cleanUrl } from './lean.mjs';
 import { readAnswer } from './compact.mjs';
 
@@ -95,12 +98,14 @@ export async function compressDoor(req, { base, ip, cfg = {}, count = () => fals
     if (budget != null && budget !== '' && !(/^\d{1,7}$/.test(String(budget).trim()) && Number(budget) >= 1)) return fail(400, 'INVALID_ARGUMENT', 'budget is a whole number of tokens');
     // beside the node, with a time limit (rule 19): a text written to be slow stops one helper, never the node
     const opts = { type, q: q || undefined, budget: budget === '' || budget == null ? undefined : Number(budget), url: typeof page === 'string' ? page : undefined };
-    let r; try { r = await aside(SQUEEZE_FILE, 'squeezeAside', [input, opts], { ms: SQUEEZE.timeMs }); }
+    if (pressing >= PRESS_AT_ONCE) return fail(503, 'UNAVAILABLE', '/compress works on one text at a time; try again in a moment', { headers: { 'retry-after': '3' } });
+    pressing++;
+    let r; try { r = await aside(SQUEEZE_FILE, 'squeezeAside', [input, opts], { ms: SQUEEZE.timeMs, wait: 0 }); }
     catch (e) {
       if (e?.code === 'EBUSY') return fail(503, 'UNAVAILABLE', 'the helpers are all busy; try again in a moment', { headers: { 'retry-after': '5' } });
       if (e?.code === 'ESLOW') return fail(422, 'TOO_SLOW', `this text could not be made smaller within ${SQUEEZE.timeMs / 1000} s: send less, or read a page with /r/<address>`);
       return fail(500, 'INTERNAL', 'this text could not be made smaller');
-    }
+    } finally { pressing--; }
     if (r?.error) return fail(r.error.status, 'INVALID_ARGUMENT', r.error.message);
     // counted by size only, lossless and lossy apart (each part once a day per network and input)
     const subject = subjectOf(buf);

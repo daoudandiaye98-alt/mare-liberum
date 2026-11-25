@@ -113,7 +113,7 @@ const V = (t) => String(t).replace(/("version":")3\.3[45]\.\d+"/g, '$1V"');
 const strip = (t) => V(String(t).replace(RECEIPT_IDS, 'r<id>'));
 // against 3.34.1 (MARE_REF=cb5ca52) these answers differ on purpose: the ledger's engine part (E3), the releases and doors of
 // /open, the home page's counter sentence; against this release with the engine off (the default) nothing is left out
-const CHANGED_BY_RELEASE = REF === 'HEAD' ? new Set() : new Set(['/brain/areas.json', '/open.json', '/savings.json', '/savings', '/', '/stats', '/llms.txt']);
+const CHANGED_BY_RELEASE = REF === 'HEAD' ? new Set() : new Set(['/brain/areas.json', '/open.json', '/savings.json', '/savings', '/', '/llms.txt']);
 const stripH = (h) => Object.fromEntries(Object.entries(headersOf(h)).map(([k, v]) => [k, strip(v)]));
 // one request to a node of this branch and the same to a node of 3.34.1 (both in the same state: called in lockstep)
 const sameAnswer = async (path, o = {}, cfgO = {}, cfgT = {}, A = ours, B = theirs) => {
