@@ -1,0 +1,106 @@
+{
+"what":"fair share: the sea asks only for a share of what it measurably saves an agent",
+"rule":"Free to enter. When the sea saves you tokens, it asks for a fair share of the saving — you keep at least 80 %.",
+"version":"fair-1",
+"on":true,
+"issuing":"receipts are issued on every answer the savings ledger counts",
+"bases":[
+{"id":"lower","name":"lower","rate":0.2,"how":"measured","what":"the page as plain text against the Markdown the sea sent, for pages of the sea whose plain text was taken; nowhere else","short":"measured: the page as plain text against the Markdown the sea sent"},
+{"id":"modelled","name":"modelled","rate":0.1,"how":"modelled, calibrated on the bench","what":"a solved part reused (a confirmed pathway, a ready plan, verified offers): the low end of what finding it again costs (/savings), for a pathway at most the cheapest search loop of the bench and never more than a whole task saved there (/proof), minus the answer that handed it over, measured","short":"a solved part reused: what finding it again costs, at the low end, minus the answer itself"},
+{"id":"upper","name":"upper","rate":0,"how":"measured","what":"the page as raw HTML against the Markdown the sea sent: shown on every receipt, a share never asked on it","short":"measured: the page as raw HTML against the Markdown; shown, no share asked"}
+],
+"rates":{
+"lower":0.2,
+"modelled":0.1,
+"upper":0
+},
+"keepAtLeast":0.8,
+"price":{
+"unit":"USD per million input tokens",
+"low":0.1,
+"mid":2,
+"high":8,
+"asOf":"2026-11-24",
+"receiptsValueAt":"mid",
+"page":"https://mareliberum.dev/savings"
+},
+"calibration":{
+"label":"bench /proof, 24.11.2026",
+"loopLow":1593,
+"wholeSaving":1534,
+"jsonBytesPerToken":2.85,
+"tokenizer":"o200k_base",
+"runs":[
+"bench-2026-11-24.json",
+"bench-2026-11-24-lean.json"
+],
+"proof":"https://mareliberum.dev/proof",
+"baselines":{"path":1534,"plan":1000,"market":5000}
+},
+"live":{
+"since":null,
+"receipts":0,
+"receiptsWithShare":0,
+"tokens":{"lower":0,"modelled":0,"upper":0,"conservative":0},
+"valueCreatedUsd":{"low":"0.000000","mid":"0.000000","high":"0.000000","of":"the conservative tokens (lower + modelled)","note":"modelled value for information — not a price, not redeemable, not transferable"},
+"fairShareAccruedUsd":"0.000000",
+"fairShareAccruedNote":"voluntary; modelled value for information — not a price, not redeemable, not transferable",
+"fairShareSettledOnChainUsd":"0.000000",
+"fairShareSettledNote":"USDC actually received on Base, from voluntary payments; the public view shows no address",
+"paidOnItsWayUsd":"0.000000",
+"paidOnItsWayNote":"USDC actually received on Base, from voluntary payments; the public view shows no address",
+"payments":0,
+"drops":{"total":0,"byPaths":0},
+"usdNote":"modelled value for information — not a price, not redeemable, not transferable",
+"micro":{"valueLow":0,"valueMid":0,"valueHigh":0,"accrued":0,"settled":0,"onItsWay":0,"unit":"millionths of a US dollar (USDC base units)"}
+},
+"drop":"A drop is a unit of account: 1,000 input tokens an agent did not have to spend, on the conservative basis (lower + modelled). It is a count kept on the server only: no export, no transfer, no copy on any chain, and no address of the sea moves drops. It is not sold and not paid out, and it promises no value.",
+"method":{
+"version":"fair-1",
+"since":"2026-11-25",
+"bases":"lower: measured, the page as plain text against the Markdown the sea sent (only where the plain text was taken); upper: measured, the page as raw HTML against the same Markdown, shown and never asked for; modelled: a solved part reused, the low end of what finding it again costs (/savings), for a pathway at most the cheapest search loop of the bench and never more than a whole task saved there (/proof), minus the answer that carried it, measured",
+"valuation":"tokens times the rate card of /savings for uncached input tokens (USD 0.10, 2 and 8 per million); receipts value at the middle and show both ends",
+"share":"20 % of the lower value plus 10 % of the modelled value, 0 % of the upper; rounded down to the millionth of a dollar, so the agent keeps at least 80 % of every saving; no saving, no share",
+"conservative":"the low end of every range; the answer itself and the receipt field counted against the saving; no plain text taken, no lower saving; once a day per network and page or task; the sea's own calls, crawlers and the house agent never",
+"registry":"a receipt is made once and counted once; a receipt in a payment that holds is retired and is never asked for again; a settlement that fails sets its receipts free again; receipts are kept 30 days, payments 400",
+"drops":"a server-side count of thousands of tokens saved on the conservative basis; nothing moves drops"
+},
+"voluntary":"Paying is voluntary. Nothing is withheld for not paying, and no payment changes any order, verification, verdict or answer.",
+"calculator":{
+"bench":{"label":"bench /proof, 24.11.2026","date":"2026-11-24","with":865,"withoutText":[2399,7928],"withoutHtml":[227167,232696],"tasks":25,"saves":0.64,"with_is":"the brain's short answer (fmt=compact) and the page as Markdown","without_is":"the search loop (modelled) and the page as plain text; raw HTML for an agent that reads it (an upper bound, no share asked on it)","median":true,"tokenizer":"o200k_base","proof":"https://mareliberum.dev/proof","runs":["https://mareliberum.dev/proof/bench-2026-11-24.json","https://mareliberum.dev/proof/bench-2026-11-24-lean.json"]},
+"rate":0.1,
+"priceMid":2,
+"note":"the bench is a default, not a promise: receipts measure each answer",
+"usdNote":"modelled value for information — not a price, not redeemable, not transferable"
+},
+"pay":{
+"how":"POST https://mareliberum.dev/fair/pay?r=<id>[,<id>…]",
+"minimumUsd":"0.050000",
+"bundleMax":5000,
+"x402":"the answer is 402 with the exact unpaid sum; pay it with PAYMENT-SIGNATURE (v2) or X-PAYMENT (v1)",
+"headers":[
+"x-sea-saved-tokens (conservative basis)",
+"x-sea-fair-share-usd",
+"x-sea-fair-share-note (voluntary; modelled value for information - not a price, not redeemable, not transferable)",
+"x-sea-receipt (the receipt's address)"
+],
+"field":"JSON answers that are an object carry \"receipt\": {id, saved_tokens, fair_share_usd, voluntary, note, url}; MCP and A2A answers carry the headers only",
+"receipts":"https://mareliberum.dev/fair/r/<id>(.json)",
+"keptDays":30
+},
+"recent":[],
+"never":[
+"Paying is voluntary. Nothing is withheld for not paying, and no payment changes any order, verification, verdict or answer.",
+"The sea only receives: no bot of the sea pays, no wallet of the sea pays out, nothing is minted, sold or transferred.",
+"Crawlers and the sea's own calls get no receipt; the house agent (Angel) and the app door (/mcp/app) get none either.",
+"A receipt in a payment is retired: it is never counted or asked for again.",
+"A drop is a unit of account: 1,000 input tokens an agent did not have to spend, on the conservative basis (lower + modelled). It is a count kept on the server only: no export, no transfer, no copy on any chain, and no address of the sea moves drops. It is not sold and not paid out, and it promises no value."
+],
+"links":{
+"savings":"https://mareliberum.dev/savings",
+"proof":"https://mareliberum.dev/proof",
+"pricing":"https://mareliberum.dev/pricing",
+"treasury":"https://mareliberum.dev/treasury",
+"open":"https://mareliberum.dev/open"
+}
+}

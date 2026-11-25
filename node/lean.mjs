@@ -415,7 +415,7 @@ function writer(page, base) {
         const x = one(md(k, { ...st, heading: true })); if (!x || PILCROW.test(x)) continue;
         out += st.link ? ` ${x} ` : `\n\n${'#'.repeat(Number(t[1]))} ${x}\n\n`; continue;
       }
-      if (t === 'pre') { const code = entities(textOfEl(k)).replace(/^\n+|\s+$/g, ''); if (code.trim()) { const lang = /(?:^|\s)(?:language-|lang-|brush:\s*)([\w+#.-]+)/i.exec(`${attrs(k).class || ''} ${k.kids.find((c) => isEl(c) && c.tag === 'code') ? attrs(k.kids.find((c) => isEl(c) && c.tag === 'code')).class || '' : ''}`)?.[1] || ''; out += `\n\n\`\`\`${lang}\n${code}\n\`\`\`\n\n`; } continue; }
+      if (t === 'pre') { const code = entities(textOfEl(k)).replace(/^\n+/, '').trimEnd(); if (code.trim()) { const lang = /(?:^|\s)(?:language-|lang-|brush:\s*)([\w+#.-]+)/i.exec(`${attrs(k).class || ''} ${k.kids.find((c) => isEl(c) && c.tag === 'code') ? attrs(k.kids.find((c) => isEl(c) && c.tag === 'code')).class || '' : ''}`)?.[1] || ''; out += `\n\n\`\`\`${lang}\n${code}\n\`\`\`\n\n`; } continue; }
       if (t === 'code' || t === 'kbd' || t === 'samp') { const x = one(entities(textOfEl(k))); if (x) out += `\`${x.replace(/`/g, "'")}\``; continue; }
       if (t === 'a') {
         const x = one(md(k, { ...st, link: true }));
@@ -479,7 +479,7 @@ function tidy(s) {
   const out = []; let code = false;
   for (const raw of String(s).replace(/\n\s*\n/g, '\n\n').split('\n')) {
     if (/^\s*```/.test(raw)) { code = !code; out.push(raw.trim()); continue; }
-    if (code) { out.push(raw.replace(/\s+$/, '')); continue; }
+    if (code) { out.push(raw.trimEnd()); continue; }
     const ind = /^( *)(?:[-*]|\d+\.) /.exec(raw)?.[1] || '';
     // (a link is written with a space on each side; none before a comma or a full stop, none inside brackets)
     const l = raw.replace(/[ \t\u00a0]+/g, ' ').replace(/ ([.,;:!?)\]])(?=\s|$)/g, '$1').replace(/([(\[]) (?=\[)/g, '$1').trim();
@@ -498,7 +498,7 @@ const NOTICE = /\b(update|upgrade) your browser\b|\b(javascript|js) (is )?(disab
 // what a page says around its text on every site, as a whole line: feedback buttons, copy buttons, tables of contents
 const CHROME_LINES = new Set('was this page helpful|was this helpful|was this article helpful|did this page help you|copy|copied|copy code|copy to clipboard|edit this page|edit on github|print|back to top|table of contents|on this page|in this article|skip to main content|skip to content|loading|loading data|loading...|please wait, we are loading chart data|yes|no|thank you for your feedback'.split('|'));
 const LANGS = new Set('js javascript jsx ts tsx typescript python py bash sh shell zsh console powershell ps1 json jsonc html xml css scss sql yaml yml toml ini http text plain txt c cpp c++ csharp cs java kotlin go golang rust rs ruby rb php swift r dart lua perl diff markdown md dockerfile makefile graphql'.split(' '));
-const keyOf = (l) => l.replace(/^\s*(#+ |[-*] |\d+\. |> )/, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').toLowerCase().replace(/\s+/g, ' ').replace(/^[\s\p{P}]+|[\s\p{P}]+$/gu, '');
+const keyOf = (l) => l.replace(/^\s*(#+ |[-*] |\d+\. |> )/, '').replace(/\[([^\]]*)\]\([^)]*\)/g, '$1').toLowerCase().replace(/\s+/g, ' ').replace(/^[\s\p{P}]+/u, '').replace(/(?<![\s\p{P}])[\s\p{P}]+$/u, '');
 function lastPass(md, { product, seen = new Set(), menus = true } = {}) {
   const lines = md.split('\n'), out = []; let code = false, prev = null;
   for (let i = 0; i < lines.length; i++) {
