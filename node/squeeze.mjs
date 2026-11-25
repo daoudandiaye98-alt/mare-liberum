@@ -107,7 +107,10 @@ export function sayOnce(s, { min = SQUEEZE.repeatMin } = {}) {
 }
 // every web address without its tracking parameters (utm_…, gclid, fbclid …: the reader's own list)
 const URLS = /https?:\/\/[^\s<>"'`)\]]+/g;
-export const cutTracking = (s) => String(s ?? '').replace(URLS, (u) => { const tail = /[.,;:!?]+$/.exec(u)?.[0] || '', bare = tail ? u.slice(0, -tail.length) : u; return cleanUrl(bare) + tail; });
+// (and every path link of Markdown, "](/path?…)")
+const PATH_LINK = /\]\((\/[^)\s]*)\)/g, HERE = 'https://p.invalid';
+export const cutTracking = (s) => String(s ?? '').replace(URLS, (u) => { const tail = /[.,;:!?]+$/.exec(u)?.[0] || '', bare = tail ? u.slice(0, -tail.length) : u; return cleanUrl(bare) + tail; })
+  .replace(PATH_LINK, (m, p) => { if (!p.includes('?')) return m; const c = cleanUrl(HERE + p); return c.startsWith(HERE) ? `](${c.slice(HERE.length)})` : m; });
 
 // ---------------------------------------------------------------- blocks, terms, BM25
 // a Markdown text as blocks: headings, paragraphs, list groups, tables, code; each with the headings it stands under
