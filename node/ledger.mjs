@@ -131,7 +131,9 @@ export function createLedger({ url, key, secret, fetch: get = (...a) => fetch(..
     // a sale: written at once (behind the answer), kept in the node's copy as well; returns the line with its id
     sale(row) {
       const r = { id: row.id || `s${now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, ts: new Date(now()).toISOString(), q: row.q ?? null, amount_cents: Math.round(Number(row.amount_cents) || 0), status: String(row.status || 'unverified'),
-        agent_ua_hash: row.agent_ua_hash ?? null, settled_at: row.settled_at ?? null, method: row.method ?? null, tx: row.tx ?? null, payer: row.payer ?? null, network: row.network ?? null };
+        agent_ua_hash: row.agent_ua_hash ?? null, settled_at: row.settled_at ?? null, method: row.method ?? null, tx: row.tx ?? null, payer: row.payer ?? null, network: row.network ?? null,
+        // a fair share (since 3.34, node/fair.mjs): its exact amount in millionths of a dollar and its kind; other sales carry neither
+        ...(Number.isInteger(row.amount_micro) && row.amount_micro >= 0 ? { amount_micro: row.amount_micro } : {}), ...(row.kind === 'fair' ? { kind: 'fair' } : {}) };
       // a receipt handed in before is the same sale: handing it in again delivers again and counts nothing new
       if (r.tx) { const seen = mem.sales.find((x) => x.tx && x.tx.toLowerCase() === r.tx.toLowerCase()); if (seen) return { ...seen, again: true }; }
       mem.sales.unshift(r); if (mem.sales.length > keepSales) mem.sales.length = keepSales;

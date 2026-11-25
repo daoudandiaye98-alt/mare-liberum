@@ -172,7 +172,9 @@ export async function facilitate(cfg, kind, pay, t, ms, get = (...a) => fetch(..
 
 // take a payment and deliver: verify → the work → settle. work(sale) builds the answer; it must not throw.
 // Returns { status, headers, body } for the caller to send.
-export async function takePayment({ cfg, t, pay, q, ledger, work, callerHash, waitUntil, get, base }) {
+// label and extra (since 3.34, for the fair share, node/fair.mjs): the sale's method is written "<label>-x402-v<n>" and
+// extra fields (amount_micro, kind) go with the sale; without them the sale is written exactly as before
+export async function takePayment({ cfg, t, pay, q, ledger, work, callerHash, waitUntil, get, base, label, extra }) {
   const local = checkPayment(pay, t);
   if (!local.ok) return { refuse: local.reason };
   let verified = false, reason = null, payer = local.payer;
@@ -185,7 +187,7 @@ export async function takePayment({ cfg, t, pay, q, ledger, work, callerHash, wa
     } catch (e) { reason = `the facilitator did not answer (${String(e?.name === 'TimeoutError' ? 'timeout' : e?.message || e).slice(0, 80)})`; }
   } else reason = 'no facilitator is set on this node';
   const network = pay.version === 2 ? 'eip155:8453' : 'base';
-  const sale = ledger.sale({ q, amount_cents: t.cents, status: verified ? 'pending' : 'unverified', agent_ua_hash: callerHash, method: `x402-v${pay.version}`, payer, network });
+  const sale = ledger.sale({ q, amount_cents: t.cents, status: verified ? 'pending' : 'unverified', agent_ua_hash: callerHash, method: `${label ? `${label}-` : ''}x402-v${pay.version}`, payer, network, ...(extra || {}) });
   const answer = await work(sale);
   // settle: the money moves now. A settlement that takes longer than the answer goes on behind it.
   const headers = {};

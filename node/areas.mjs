@@ -20,6 +20,7 @@ import { grab, robotsGroups, robotsAllows, safeHost } from './check.mjs';
 import { page, esc } from './pages.mjs';
 import { TOKEN_RATIO as CALIBRATED } from './proof.mjs';
 import { createOnce, pageSubject, taskSubject } from './once.mjs';
+import { tallyNote } from './tally.mjs';
 
 export const MARKET_TOKEN = 'MareLiberum-Market';
 export const MARKET_UA = `${MARKET_TOKEN}/1.0 (+https://mareliberum.dev/brain/market; reads a store's UCP profile, robots.txt and home page about once a month)`;
@@ -214,6 +215,8 @@ export function createAreas(h) {
     const d = now().slice(0, 10), b = pend[d] || (pend[d] = {});
     if (ctx?.house) { b[`h:${kind}`] = (b[`h:${kind}`] || 0) + n; return; }
     b[kind] = (b[kind] || 0) + n;
+    // a solved part handed over is noted for the receipt of this answer (node/tally.mjs, node/fair.mjs; only when fair share is on)
+    if (SAVE.per[kind]) tallyNote({ k: kind, n, door: doorOf(ctx) });
     const door = doorOf(ctx); if (!door) return;
     let k = `@${door}|${kind}`; if (!(k in b) && Object.keys(b).filter((x) => x[0] === '@').length >= DOORS_A_DAY * 4) k = `@other|${kind}`;
     b[k] = (b[k] || 0) + n;
@@ -367,6 +370,8 @@ export function createAreas(h) {
       const t = textBytes == null ? NaN : Number(textBytes), unit = MEASURED_UNIT[kind] || 'bytes';
       // the lower view, like for like: the same answer against plain text (…TextTok) and against raw HTML (…TextRaw)
       if (Number.isFinite(t) && t >= 0) { count(`${kind}Texted`, 1, ctx); count(`${kind}TextTok`, Math.max(0, tokensOfBytes('text', t, unit) - tokensOfBytes('md', m, unit)), ctx); count(`${kind}TextRaw`, Math.max(0, tokensOfBytes('html', h, unit) - tokensOfBytes('md', m, unit)), ctx); }
+      // the same answer, noted for its receipt (node/tally.mjs, node/fair.mjs): the house agent is counted apart and gets none
+      if (!ctx?.house) tallyNote({ k: kind, html: h, md: m, text: Number.isFinite(t) && t >= 0 ? t : null, door: doorOf(ctx) });
     },
     async flushSave() {
       const p = pend; pend = {};

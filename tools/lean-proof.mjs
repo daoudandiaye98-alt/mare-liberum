@@ -236,8 +236,12 @@ const p4 = await lay('trail running shoes', 'https://fourth.test/p/x', 'Fourth â
 const p5 = await lay('trail running shoes', 'https://fifth.test/p/y', 'Fifth â€” failed more than it worked');
 await rate(p1.id, true, 4); await rate(p2.id, true, 2); await rate(p3.id, true, 1); await rate(p5.id, true, 1); await rate(p5.id, false, 2);
 const short = (await call('/brain?q=trail%20running%20shoes&fmt=compact')).j;
+// since 3.34 an answer the savings ledger counts carries its fair-share receipt as its last member (node/fair.mjs; the house
+// agent gets none): the keys before it are held to their order, the receipt to its own shape
+const RECEIPT_KEYS = ['id', 'saved_tokens', 'fair_share_usd', 'voluntary', 'note', 'url'];
+const keysOf = (o) => { const k = Object.keys(o); if (k[k.length - 1] === 'receipt') { assert.deepEqual(Object.keys(o.receipt), RECEIPT_KEYS, 'the receipt, last'); k.pop(); } return k; };
 await proof('fmt=compact: the confirmed pathways (at most three, strongest first), one line of reason each, the one next step, and where the full answer is', () => {
-  assert.deepEqual(Object.keys(short), ['task', 'paths', 'next', 'full']);
+  assert.deepEqual(keysOf(short), ['task', 'paths', 'next', 'full']);
   assert.equal(short.task, 'trail running shoes'); assert.equal(short.paths.length, COMPACT.paths);
   assert.deepEqual(short.paths.map((p) => p.go), [p1, p2, p3].map((p) => `${BASE}/go/${p.id}`), 'the confirmed ones, strongest first; unconfirmed and mostly failed ones are left out');
   for (const p of short.paths) assert.deepEqual(Object.keys(p), ['go', 'site', 'title', 'why']);
@@ -268,18 +272,18 @@ const PATH_KEYS = ['id', 'to', 'title', 'strength', 'walks', 'worked', 'failed',
 await proof('the full answer stays as it was: without fmt, or with any other value, the same keys in the same order as 3.32.0 gave them', async () => {
   for (const q of ['/brain?q=trail%20running%20shoes', '/brain?q=trail%20running%20shoes&fmt=full', '/think?q=trail%20running%20shoes']) {
     const j = (await call(q)).j;
-    assert.deepEqual(Object.keys(j), FULL_KEYS, q);
+    assert.deepEqual(keysOf(j), FULL_KEYS, q);
     assert.deepEqual(Object.keys(j.paths[0]), PATH_KEYS, `${q}: a path`);
     assert.match(j.paths[0].to, /^https:\/\/mare\.test\/via\//, 'its addresses still lead through the sea');
   }
-  const topic = (await call('/brain/trail-running-shoes?fmt=compact')).j; assert.deepEqual(Object.keys(topic), ['task', 'paths', 'next', 'full'], 'the topic pages answer short too');
+  const topic = (await call('/brain/trail-running-shoes?fmt=compact')).j; assert.deepEqual(keysOf(topic), ['task', 'paths', 'next', 'full'], 'the topic pages answer short too');
   const html = await call('/brain?q=trail%20running%20shoes&fmt=compact', { accept: 'text/html' }); assert.match(html.headers.get('content-type'), /text\/html/, 'a person gets the page, as before');
 });
 await proof('the free sample of the paid route answers short with fmt=compact, and as before without it', async () => {
   const full = (await call('/route?q=trail%20running%20shoes&free=true', { method: 'POST' })).j;
   for (const k of ['task', 'sample', 'paths', 'count', 'of', 'hint', 'full_list', 'ranking', 'notice']) assert.ok(k in full, k);
   const s = (await call('/route?q=trail%20running%20shoes&free=true&fmt=compact', { method: 'POST' })).j;
-  assert.deepEqual(Object.keys(s), ['task', 'sample', 'paths', 'of', 'next', 'full_list']);
+  assert.deepEqual(keysOf(s), ['task', 'sample', 'paths', 'of', 'next', 'full_list']);
   assert.equal(s.paths[0].go, `${BASE}/go/${p1.id}`); assert.equal(s.paths[0].site, 'harbour-sports.dev'); assert.match(s.paths[0].why, /^pathway: worked for 4/);
   assert.match(s.full_list, /^POST https:\/\/mare\.test\/route\?q=trail%20running%20shoes: up to 10 paths for /);
   assert.ok(JSON.stringify(s).length * 2 < JSON.stringify(full).length, 'less than half of the full sample');

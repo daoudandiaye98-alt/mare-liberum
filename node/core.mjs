@@ -46,6 +46,7 @@ import { readAnswer, brainCompact, sampleCompact } from './compact.mjs';
 import { SHORE_MOVES, MCP_ALIASES, SSE_OPEN, SSE_POST, meant, aboutOf, aboutPage, imprintPage, didDoc, agentsJson, discoveryOf, sseOpen, sseOf } from './shore.mjs';
 import { openTools } from './opentools.mjs';
 import { netKey } from './guard.mjs';
+import { createFair, withReceipt, fairSwitch, fairData, fairPage, receiptJson, receiptPage, FAIR, usd6 } from './fair.mjs';
 
 export const VERSION = '3.33.1';
 const UA = 'MareLiberum/1.0 (open agent index; pull-only; +/.well-known/ard.json)';
@@ -1490,7 +1491,16 @@ export const isHouse = (who) => who?.kind === 'resident' && who?.name === 'Angel
 // the same words for a fraction of the tokens. Search engines, training crawlers and browsers get the HTML, which says
 // it varies with Accept and User-Agent. The operator switches the assistants' Markdown off without a release: put
 // "md-agents" into rest of immune:policy
+// Fair share (node/fair.mjs, since 3.34): on by default; while it does not rest ("fair" in rest of immune:policy) and the
+// node is not switched off (MARE_FAIR=off), every answer the ledger of /savings counts carries its receipt. Off, nothing changes.
+const fairOn = (cfg) => fairSwitch(cfg) && !immune.atRest?.('fair');
+const fairOf = (db, cfg) => (db.fairLedger ||= createFair({ kv: cfg.kv || db.kv || memoryKv() }));
 export async function handle(req, db, cfg = {}) {
+  if (!fairOn(cfg)) return handleMd(req, db, cfg);
+  const url = new URL(req.url);
+  return withReceipt(() => handleMd(req, db, cfg), { path: url.pathname, base: String(cfg.base || url.origin).replace(/\/+$/, ''), fair: fairOf(db, cfg) });
+}
+async function handleMd(req, db, cfg = {}) {
   if ((req.method !== 'GET' && req.method !== 'HEAD') || cfg.path) return handleOne(req, db, cfg);
   const url = new URL(req.url), base = String(cfg.base || url.origin).replace(/\/+$/, ''), twin = mdTwin(url.pathname);
   // what Markdown spares counts into the ledger of the Unibrain, in bytes of UTF-8 and with the door it came through;
@@ -1702,7 +1712,7 @@ async function handleOne(req, db, cfg = {}) {
       const hex = [...new Uint8Array(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(md)))].map((x) => x.toString(16).padStart(2, '0')).join('');
       return json({ $schema: 'https://schemas.agentskills.io/discovery/0.2.0/schema.json', skills: [{ name: 'mare-liberum', type: 'skill-md', description: (md.match(/^description:\s*(.+)$/m)?.[1] || SEA_LINE).slice(0, 1024), url: `${base}/.well-known/agent-skills/mare-liberum/SKILL.md`, digest: `sha256:${hex}` }] }, 200, cached);
     }
-    if (path === '/.well-known/x402' || path === '/.well-known/x402.json') { const pc = cfg.pay || payConfig(), price = pricingOf(pc, base); return json({ version: 1, resources: [`${base}/route`], payTo: [{ network: 'eip155:8453', asset: 'USDC', address: pc.payTo }], pricing: [price], how_to_pay: price.how_to_pay, instructions: `${price.line}. Mare Liberum sells one move: POST ${base}/route?q=<task> gives the 10 best agent paths for exactly that task, each a /via/ address, ranked with reasons and the next step, for ${price.amount_usd} USDC (${price.human}) on Base. The first 3 paths are free: POST ${base}/route?q=<task>&free=true. The first call answers 402 with the terms (x402 v2 PAYMENT-REQUIRED header, v1 body); without an x402 client, send the USDC and POST ${base}/settle {"q":"<task>","tx":"<hash>"}. Prices: ${base}/job. Everything else in the sea is free.`, note: 'Mare Liberum takes no cut of anything else. Paid x402 services of others are listed in the open index with their price.', index: `${base}/search`, brain: `${base}/brain?q=paid+api+x402` }, 200, cached); }
+    if (path === '/.well-known/x402' || path === '/.well-known/x402.json') { const pc = cfg.pay || payConfig(), price = pricingOf(pc, base); return json({ version: 1, resources: [`${base}/route`, ...(fairOn(cfg) ? [`${base}/fair/pay`] : [])], payTo: [{ network: 'eip155:8453', asset: 'USDC', address: pc.payTo }], pricing: [price], how_to_pay: price.how_to_pay, instructions: `${price.line}. Mare Liberum sells one move: POST ${base}/route?q=<task> gives the 10 best agent paths for exactly that task, each a /via/ address, ranked with reasons and the next step, for ${price.amount_usd} USDC (${price.human}) on Base. The first 3 paths are free: POST ${base}/route?q=<task>&free=true. The first call answers 402 with the terms (x402 v2 PAYMENT-REQUIRED header, v1 body); without an x402 client, send the USDC and POST ${base}/settle {"q":"<task>","tx":"<hash>"}. Prices: ${base}/job. Everything else in the sea is free.`, note: 'Mare Liberum takes no cut of anything else. Paid x402 services of others are listed in the open index with their price.', index: `${base}/search`, brain: `${base}/brain?q=paid+api+x402`, ...(fairOn(cfg) ? { fair: { pay: `POST ${base}/fair/pay?r=<receipt id>[,<id>…]`, what: 'the voluntary fair share of what the sea saved an agent, for the exact unpaid sum of its receipts; nothing is withheld for not paying', rule: `${base}/fair` } } : {}) }, 200, cached); }
     if ((path === '/v1/message:send' || path === '/a2a/v1/message:send') && req.method === 'POST') {
       seen({ kind: who.kind === 'self' ? 'self' : 'a2a', name: who.name || 'A2A agent' });
       const params = await body(); if (working && a2aTask({ method: 'SendMessage', params })) sea.workSession?.(workKey(ip, req.headers), clientFamily(null, req.headers.get('user-agent')), 'a2a', workNet(ip));
@@ -1826,7 +1836,7 @@ async function handleOne(req, db, cfg = {}) {
     if (path === '/say') return json(await sea.say(await args(), ctx));
     if (path === '/inbox') return json(await sea.inbox(await args()));
     // the ecosystem: the current, watches, the reef, work between agents, seals, the heartbeat
-    if (path === '/tide') { const t = await sea.tide(await args(), ctx); try { if (!t?.calm) { const m = (async () => { await sea.flushSave?.(); await sea.flushOpen?.(); await attentionOf(db, cfg).flush().catch((e) => console.error('mare_attention', e?.message)); if (!immune.atRest?.('market')) await sea.marketSweep?.(); })().catch((e) => console.error('mare_market', e?.message)); cfg.waitUntil?.(m); } } catch {} try { if (!t?.calm && !ctx.readOnly && !immune.atRest?.('proof')) cfg.waitUntil?.(proofTide(cfg.kv || db.kv, cfg.proofRead).catch(() => null)); } catch {} try { const moved = (t?.refreshed || []).filter((x) => x?.slug && x.change && x.change !== 'steady' && needOf(x.slug)).map((x) => `/buy/${x.slug}`); const p = (async () => { if (moved.length && !ctx.readOnly) await tidingsOf(cfg).queue(moved); await indexNowDaily(db, base, sea, cfg).catch(() => {}); if (!ctx.readOnly && !immune.atRest?.('tidings')) await indexNowChanged(db, base, sea, cfg).catch((e) => console.error('mare_tidings', e?.message)); })(); cfg.waitUntil?.(p); } catch {} try { const g = db('mare_stats', {}).then((idx) => sea.gaugeLakes(idx)).catch(() => {}); cfg.waitUntil?.(g); } catch {} return json(t); }
+    if (path === '/tide') { const t = await sea.tide(await args(), ctx); try { if (!t?.calm) { const m = (async () => { await sea.flushSave?.(); await fairOf(db, cfg).flush().catch((e) => console.error('mare_fair', e?.message)); await sea.flushOpen?.(); await attentionOf(db, cfg).flush().catch((e) => console.error('mare_attention', e?.message)); if (!immune.atRest?.('market')) await sea.marketSweep?.(); })().catch((e) => console.error('mare_market', e?.message)); cfg.waitUntil?.(m); } } catch {} try { if (!t?.calm && !ctx.readOnly && !immune.atRest?.('proof')) cfg.waitUntil?.(proofTide(cfg.kv || db.kv, cfg.proofRead).catch(() => null)); } catch {} try { const moved = (t?.refreshed || []).filter((x) => x?.slug && x.change && x.change !== 'steady' && needOf(x.slug)).map((x) => `/buy/${x.slug}`); const p = (async () => { if (moved.length && !ctx.readOnly) await tidingsOf(cfg).queue(moved); await indexNowDaily(db, base, sea, cfg).catch(() => {}); if (!ctx.readOnly && !immune.atRest?.('tidings')) await indexNowChanged(db, base, sea, cfg).catch((e) => console.error('mare_tidings', e?.message)); })(); cfg.waitUntil?.(p); } catch {} try { const g = db('mare_stats', {}).then((idx) => sea.gaugeLakes(idx)).catch(() => {}); cfg.waitUntil?.(g); } catch {} return json(t); }
     if (path === '/indexnow.json') { const d = new Date().toISOString().slice(0, 10), run = (await cfg.kv?.get(`indexnow:${d}`).catch(() => null)) || { today: 'not yet' }, more = (await cfg.kv?.get(`indexnow:changed:${d}`).catch(() => null)) || []; return json(more.length ? { ...run, changed: more } : run, 200, { 'cache-control': 'public, max-age=60' }); }
     if (path === '/tides') return json(await sea.tides(await args()), 200, { 'cache-control': 'public, max-age=60' });
     if (path === '/instinct.json' || path === '/instinct') return json(await sea.instinctState(), 200, { 'cache-control': 'public, max-age=30' });
@@ -2092,6 +2102,31 @@ async function handleOne(req, db, cfg = {}) {
       if (path === '/open/visits.csv') return new Response(visitsCsv(await memoOf(sea, 'census:40', () => sea.censusDays(OPEN.csvDays), fresh)), { headers: file('mare-liberum-visits.csv') });
       const v = await memoOf(sea, 'open', () => openOf({ sea, ledger: ledgerOf(cfg), version: VERSION, base, tools: [...TOOL_NAMES] }), fresh);
       return path === '/open.json' ? ajson(v, 200, { ...hdr, 'x-robots-tag': 'noindex' }) : html(openPage(base, v), 60);
+    }
+    // fair share (node/fair.mjs): the rules and the public ledger, one receipt, and the settlement of unpaid receipts (x402)
+    if (path === '/fair' || path === '/fair.json' || path.startsWith('/fair/')) {
+      const F = fairOf(db, cfg), led = ledgerOf(cfg), hdr = { 'cache-control': 'no-store', 'x-robots-tag': 'noindex', ...CORS };
+      if (path === '/fair/pay') {
+        if (req.method !== 'POST') return json({ what: 'Settle the fair share of receipts in one x402 payment. Voluntary: nothing is withheld for not paying.', post: `${base}/fair/pay?r=<id>[,<id>…]`, minimum_usd: usd6(FAIR.minMicro), why: FAIR.minWhy, rule: `${base}/fair` }, 200, hdr);
+        if (!fairOn(cfg)) return json({ error: { code: 'UNAVAILABLE', message: 'fair share is off on this node, or rests for the moment: nothing is charged, and every answer stays free' }, fair: `${base}/fair` }, 503, { ...hdr, 'retry-after': '600' });
+        // settlement goes through the till: open when the till is, with its wallet and facilitator; receipts work either way
+        if (immune.atRest?.('till')) return json({ error: { code: 'UNAVAILABLE', message: 'the till rests for the moment, so no fair share is settled now; nothing is charged, receipts are still issued and kept 30 days' }, fair: `${base}/fair` }, 503, { ...hdr, 'retry-after': '600' });
+        if (!/^0x[0-9a-fA-F]{40}$/.test(String((cfg.pay || payConfig()).payTo || ''))) return json({ error: { code: 'UNAVAILABLE', message: 'this node has no wallet set for its till, so nothing can be paid here; receipts are still issued and kept 30 days' }, fair: `${base}/fair` }, 503, hdr);
+        const a = await args(), ids = [...String(url.searchParams.get('r') || '').split(','), ...(Array.isArray(a.r) ? a.r : typeof a.r === 'string' && !url.searchParams.get('r') ? a.r.split(',') : [])];
+        const out = await F.pay({ ids, headers: req.headers, body: a, payCfg: cfg.pay || payConfig(), ledger: led, base, callerHash: callerHash(ip, req.headers.get('user-agent')), waitUntil: cfg.waitUntil, cors: CORS });
+        return new Response(JSON.stringify(out.body), { status: out.status, headers: out.headers });
+      }
+      if (req.method !== 'GET') return new Response(null, { status: 405, headers: { allow: 'GET, OPTIONS', ...CORS } });
+      const asJson = path.endsWith('.json') || url.searchParams.get('format') === 'json' || (/application\/json/.test(req.headers.get('accept') || '') && !/text\/html/.test(req.headers.get('accept') || ''));
+      const rm = /^\/fair\/r\/([a-z0-9]{6,40})(\.json)?$/.exec(path);
+      if (rm) {
+        const r = await F.get(rm[1]); if (!r) return json({ error: { code: 'NOT_FOUND', message: 'no such receipt on this node (receipts are kept 30 days)' }, fair: `${base}/fair` }, 404, hdr);
+        const paid = await F.paidIds(led);
+        return asJson || rm[2] ? ajson(receiptJson(base, r, paid), 200, hdr) : html(receiptPage(base, r, paid), 0);
+      }
+      if (path !== '/fair' && path !== '/fair.json') return json({ error: { code: 'NOT_FOUND', message: 'unknown path', fair: `${base}/fair` } }, 404);
+      const v = await fairData(base, F, { on: fairOn(cfg), ledger: led });
+      return asJson ? ajson(v, 200, { 'cache-control': 'public, max-age=60', ...(path.endsWith('.json') ? { 'x-robots-tag': 'noindex' } : {}), ...CORS }) : html(fairPage(base, v), 60);
     }
     // the areas of the Unibrain (node/areas.mjs): the map, the verified market, thinking, and what the shared brain saves
     if (/^\/(brain\/(areas|market|thinking)|savings)(\.json)?$/.test(path) && req.method === 'GET') {
