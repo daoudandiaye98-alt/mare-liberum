@@ -13,12 +13,12 @@
 // the address, as before 3.35), no ETag, nothing kept; /compress answers 503 with a note.
 import { createHash, randomBytes } from 'node:crypto';
 import { squeeze, fitBudget, diffLines, SQUEEZE, SqueezeError, kindOf, jsonDepth } from './squeeze.mjs';
-import { savingOf, engineHeaders, engineSwitch, tokensOf, bytesOf, RATIO, ENGINE_VERSION } from './engine.mjs';
+import { savingOf, engineHeaders, tokensOf, bytesOf, RATIO, ENGINE_VERSION, engineOn as engineOnOf } from './engine.mjs';
 import { immune } from './immune.mjs';
 import { cleanUrl } from './lean.mjs';
 import { readAnswer } from './compact.mjs';
 
-export const engineOn = (cfg) => engineSwitch(cfg) && !immune.atRest?.('engine');
+export const engineOn = (cfg) => engineOnOf(cfg, immune);
 let CORS = { 'access-control-allow-origin': '*' };
 const ENGINE_EXPOSE = 'etag,x-sea-delta,x-sea-engine,x-sea-engine-tokens,x-sea-engine-saved,x-sea-engine-lossy';
 // the sea's CORS headers (node/core.mjs), with the engine's headers readable from a page's script
