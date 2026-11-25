@@ -230,8 +230,9 @@ await proof('the operator rests the till without a release ("till" in rest): 503
   } finally { immune.set({ mode: 'normal', rest: [] }); }
   assert.equal((await call('/route?q=usdc', { method: 'POST' })).status, 402);
 });
-await proof('x402 discovery names the one paid resource and the wallet', async () => {
-  const r = await call('/.well-known/x402'); assert.deepEqual(r.j.resources, [`${BASE}/route`]); assert.equal(r.j.payTo[0].address, payConfig().payTo);
+// (since 3.34 the settlement of the fair share is listed beside the route while fair share is on, its default: node/fair.mjs)
+await proof('x402 discovery names the paid resources (the route, and the fair-share settlement) and the wallet', async () => {
+  const r = await call('/.well-known/x402'); assert.deepEqual(r.j.resources, [`${BASE}/route`, `${BASE}/fair/pay`]); assert.equal(r.j.payTo[0].address, payConfig().payTo);
 });
 
 console.log('the price in plain sight (3.28.0)');

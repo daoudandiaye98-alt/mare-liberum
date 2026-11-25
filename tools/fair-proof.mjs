@@ -22,6 +22,7 @@ import { HUB_PATHS } from '../node/hubs.mjs';
 import { FAIR, METHOD, BENCH, calibrate, baselineOf, answerTokensOf, shareOf, receiptOf, sealFair, withField, fairSwitch, usd6 } from '../node/fair.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
+delete process.env.MARE_FAIR; // the proof holds the default: on
 const CONTROLS = !process.argv.includes('--no-controls');
 let passed = 0, failed = 0;
 const proof = async (name, fn) => { try { await fn(); passed++; console.log(`  ok   ${name}`); } catch (e) { failed++; console.log(`  FAIL ${name}\n       ${String(e?.stack || e).split('\n').slice(0, 4).join('\n       ')}`); } };
@@ -41,8 +42,8 @@ writeFileSync(file, ''); writeFileSync(join(dir, 'build.json'), JSON.stringify({
 const db = createMem({ file, base: BASE }), kv = memoryKv(), ledger = createLedger({});
 const SITE = { '/llms.txt': { body: readFileSync(join(ROOT, 'site/llms.txt'), 'utf8'), type: 'text/plain; charset=utf-8' } };
 const PAY = { ...payConfig({}), facilitator: FAC, settleWaitMs: 200, verifyMs: 500, settleMs: 2000 };
-const ON = { base: BASE, pay: PAY, ledger, kv, site: SITE, fair: 'on', waitUntil: () => {} };
-const OFF = { base: BASE, pay: PAY, ledger, kv, site: SITE, waitUntil: () => {} };
+const ON = { base: BASE, pay: PAY, ledger, kv, site: SITE, waitUntil: () => {} }; // nothing set: fair share is on
+const OFF = { base: BASE, pay: PAY, ledger, kv, site: SITE, fair: 'off', waitUntil: () => {} }; // a node switched off (MARE_FAIR=off)
 let ipN = 1;
 const MD = 'text/markdown, text/html, */*', JSONA = 'application/json';
 const call = async (path, { cfg = ON, accept = JSONA, ua = 'proof-agent/1.0', method = 'GET', body, headers = {}, ip } = {}) => {
@@ -189,9 +190,10 @@ await proof('the app door /mcp/app answers byte for byte the same with fair shar
   }
 });
 
-console.log('off by default');
-await proof('nothing set, nothing changes: no headers, no field, the same answer object; /fair/pay rests; /.well-known/x402 lists only /route', async () => {
-  assert.equal(fairSwitch({}, {}), false); assert.equal(fairSwitch({}, { MARE_FAIR: 'on' }), true); assert.equal(fairSwitch({ fair: 'off' }, { MARE_FAIR: 'on' }), false);
+console.log('on by default, off when asked');
+await proof('on with nothing set; a node switched off answers as before 3.34: no headers, no field, the same answer object; /fair/pay rests; /.well-known/x402 lists only /route', async () => {
+  assert.equal(fairSwitch({}, {}), true, 'on by default'); assert.equal(fairSwitch({}, { MARE_FAIR: 'off' }), false); assert.equal(fairSwitch({ fair: 'off' }, {}), false); assert.equal(fairSwitch({}, { MARE_FAIR: 'on' }), true);
+  assert.ok((await call('/about', { accept: MD })).h.get('x-sea-receipt'), 'nothing set: the answer names its receipt');
   noReceipt(await call('/about', { accept: MD, cfg: OFF }), 'off: Markdown'); noReceipt(await call('/brain/thinking.json?q=fact%20check%20a%20claim%20about%20zinc', { cfg: OFF }), 'off: JSON');
   const res = new Response('{"a":1}', { headers: { 'content-type': 'application/json' } });
   assert.equal(await sealFair(res, [], { path: '/x', base: BASE, fair: fairL() }), res, 'nothing counted: the very same answer object');
@@ -207,6 +209,16 @@ await proof('the rest switch "fair" pauses receipts and settlement without a rel
     assert.equal((await call('/fair/pay?r=r20261125aaaaaaaa', { method: 'POST' })).status, 503);
   } finally { immune.set({ mode: 'normal', rest: [] }); }
   assert.ok((await call('/about', { accept: MD })).h.get('x-sea-receipt'), 'awake again');
+});
+
+await proof('/fair/pay goes with the till: while the till rests, or with no wallet set, it says so plainly and charges nothing; receipts are issued all the same', async () => {
+  immune.set({ mode: 'normal', rest: ['till'] });
+  try {
+    const p = await call('/fair/pay?r=r20261125aaaaaaaa', { method: 'POST' }); assert.equal(p.status, 503); assert.match(p.j.error.message, /till rests.*nothing is charged.*receipts are still issued/);
+    assert.ok((await call('/about', { accept: MD })).h.get('x-sea-receipt'), 'receipts while the till rests');
+  } finally { immune.set({ mode: 'normal', rest: [] }); }
+  const nw = await call('/fair/pay?r=r20261125aaaaaaaa', { method: 'POST', cfg: { ...ON, pay: { ...PAY, payTo: '' } } }); assert.equal(nw.status, 503); assert.match(nw.j.error.message, /no wallet set.*receipts are still issued/);
+  assert.ok((await call('/about', { accept: MD, cfg: { ...ON, pay: { ...PAY, payTo: '' } } })).h.get('x-sea-receipt'), 'receipts without a wallet');
 });
 
 console.log('settlement: x402 for the exact unpaid sum');
@@ -366,7 +378,8 @@ const BREAK = [
   ['a receipt on the app door', 'node/fair.mjs', "res.status !== 200 || APP_DOOR.test(path)) return res;", 'res.status !== 200) return res;'],
   ['the 402 asks for one millionth more than is due', 'node/fair.mjs', 'const t = fairTerms(payCfg, { base, ids: due.map((r) => r.id), micro })', 'const t = fairTerms(payCfg, { base, ids: due.map((r) => r.id), micro: micro + 1 })'],
   ['a paid receipt billed again', 'node/fair.mjs', 'const due = found.filter((r) => r.shareMicro.mid > 0 && !paid.has(r.id));', 'const due = found.filter((r) => r.shareMicro.mid > 0);'],
-  ['on by default', 'node/core.mjs', "const fairOn = (cfg) => fairSwitch(cfg) && !immune.atRest?.('fair');", "const fairOn = (cfg) => !immune.atRest?.('fair');"],
+  ['a node switched off still issuing receipts', 'node/core.mjs', "const fairOn = (cfg) => fairSwitch(cfg) && !immune.atRest?.('fair');", "const fairOn = (cfg) => !immune.atRest?.('fair');"],
+  ['fair share settled while the till rests', 'node/core.mjs', "if (immune.atRest?.('till')) return json({ error: { code: 'UNAVAILABLE', message: 'the till rests for the moment, so no fair share is settled now;", "if (false) return json({ error: { code: 'UNAVAILABLE', message: 'the till rests for the moment, so no fair share is settled now;"],
   ['the answer not counted against the saving', 'node/fair.mjs', 'const modelled = baseline > 0 ? Math.max(0, baseline - answer) : 0;', 'const modelled = baseline > 0 ? baseline : 0;'],
   ['the sea\'s earlier full answer taken as the bench\'s "with"', 'node/fair.mjs', 'withSea = pj.lean?.after?.wholeCompact;', 'withSea = wt.sea;'],
   ['the 402 of /fair/pay without the bazaar extension (catalogs could not read it)', 'node/fair.mjs', 'accepts: [t.v2], extensions: { bazaar: fairBazaar() } };', 'accepts: [t.v2] };'],

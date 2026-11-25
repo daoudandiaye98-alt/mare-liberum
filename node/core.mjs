@@ -1421,8 +1421,8 @@ export const isHouse = (who) => who?.kind === 'resident' && who?.name === 'Angel
 // the same words for a fraction of the tokens. Search engines, training crawlers and browsers get the HTML, which says
 // it varies with Accept and User-Agent. The operator switches the assistants' Markdown off without a release: put
 // "md-agents" into rest of immune:policy
-// Fair share (node/fair.mjs, since 3.34): when the operator has switched it on (MARE_FAIR=on) and it does not rest ("fair"
-// in rest of immune:policy), every answer the ledger of /savings counts carries its receipt. Off, nothing here changes.
+// Fair share (node/fair.mjs, since 3.34): on by default; while it does not rest ("fair" in rest of immune:policy) and the
+// node is not switched off (MARE_FAIR=off), every answer the ledger of /savings counts carries its receipt. Off, nothing changes.
 const fairOn = (cfg) => fairSwitch(cfg) && !immune.atRest?.('fair');
 const fairOf = (db, cfg) => (db.fairLedger ||= createFair({ kv: cfg.kv || db.kv || memoryKv() }));
 export async function handle(req, db, cfg = {}) {
@@ -2028,6 +2028,9 @@ async function handleOne(req, db, cfg = {}) {
       if (path === '/fair/pay') {
         if (req.method !== 'POST') return json({ what: 'Settle the fair share of receipts in one x402 payment. Voluntary: nothing is withheld for not paying.', post: `${base}/fair/pay?r=<id>[,<id>…]`, minimum_usd: usd6(FAIR.minMicro), why: FAIR.minWhy, rule: `${base}/fair` }, 200, hdr);
         if (!fairOn(cfg)) return json({ error: { code: 'UNAVAILABLE', message: 'fair share is off on this node, or rests for the moment: nothing is charged, and every answer stays free' }, fair: `${base}/fair` }, 503, { ...hdr, 'retry-after': '600' });
+        // settlement goes through the till: open when the till is, with its wallet and facilitator; receipts work either way
+        if (immune.atRest?.('till')) return json({ error: { code: 'UNAVAILABLE', message: 'the till rests for the moment, so no fair share is settled now; nothing is charged, receipts are still issued and kept 30 days' }, fair: `${base}/fair` }, 503, { ...hdr, 'retry-after': '600' });
+        if (!/^0x[0-9a-fA-F]{40}$/.test(String((cfg.pay || payConfig()).payTo || ''))) return json({ error: { code: 'UNAVAILABLE', message: 'this node has no wallet set for its till, so nothing can be paid here; receipts are still issued and kept 30 days' }, fair: `${base}/fair` }, 503, hdr);
         const a = await args(), ids = [...String(url.searchParams.get('r') || '').split(','), ...(Array.isArray(a.r) ? a.r : typeof a.r === 'string' && !url.searchParams.get('r') ? a.r.split(',') : [])];
         const out = await F.pay({ ids, headers: req.headers, body: a, payCfg: cfg.pay || payConfig(), ledger: led, base, callerHash: callerHash(ip, req.headers.get('user-agent')), waitUntil: cfg.waitUntil, cors: CORS });
         return new Response(JSON.stringify(out.body), { status: out.status, headers: out.headers });

@@ -19,8 +19,9 @@
 // the app door (/mcp/app) never carries one. A receipt holds no address and no caller hash. Paying is voluntary: nothing
 // is withheld for not paying, and payments change no order, verification, verdict or answer text. Settlement is x402
 // for the exact unpaid sum (POST /fair/pay), through the verification and settlement of the till (node/pay.mjs).
-// Off by default: the operator switches it on with MARE_FAIR=on and pauses it with "fair" in rest of immune:policy.
-// Off, every answer is byte for byte what it was before 3.34.
+// On by default (since 3.34): the operator pauses it without a release with "fair" in rest of immune:policy, or switches a
+// node off with MARE_FAIR=off. Off or resting, every answer is byte for byte what it was before 3.34. Settlement uses the
+// till's own config (MARE_PAY_TO, the facilitator) and is open whenever the till is.
 import { SAVE, TOKEN_PRICE, TOKEN_RATIO, tokensOfBytes, MEASURED_UNIT } from './areas.mjs';
 import { loadBench, loadLean, summarize, proofJson } from './proof.mjs';
 import { USDC_BASE } from './pricing.mjs';
@@ -185,7 +186,8 @@ export function fairPaymentRequired(t, { base, error, due = [], cors = {} }) {
 }
 
 // ------------------------------------------------------------------ the switch: off unless the operator says on
-export const fairSwitch = (cfg = {}, env = globalThis.process?.env || {}) => /^(on|1|true|yes)$/i.test(String(cfg.fair ?? env.MARE_FAIR ?? '').trim());
+// on unless a node is switched off (cfg.fair or MARE_FAIR: off, 0, false, no)
+export const fairSwitch = (cfg = {}, env = globalThis.process?.env || {}) => !/^(off|0|false|no)$/i.test(String(cfg.fair ?? env.MARE_FAIR ?? '').trim());
 // the app door under review stays byte for byte as it was: no receipt is made for it, none is sent
 export const APP_DOOR = /^\/mcp\/app(\/|$)/;
 const ID = /^r\d{8}[a-z0-9]{8}$/;
@@ -431,7 +433,7 @@ export function fairPage(base, v) {
   const body = `${STYLE}<h1>Fair share, in public</h1>
 <p class="hero-n"><b>${money(L.micro.settled)}</b>settled on chain (${esc(FAIR.settledNote)}) · voluntary fair share accrued ${money(L.micro.accrued)} from ${n(L.receipts)} ${L.receipts === 1 ? 'receipt' : 'receipts'} (${esc(FAIR.usdNote)})</p>
 <p class="pulse">${esc(FAIR.rule)}</p>
-<p>Every token an agent reads costs its owner money, and the sea saves agents tokens. So it asks for nothing up front and nothing per call: only a share of what it measurably saved, after the fact, on a receipt anyone can read, and paying it is voluntary. You save a hundred, you give at most twenty, you are still eighty ahead. ${v.on ? 'Every answer the savings ledger counts carries a receipt.' : '<b>This node issues no receipts right now</b>: fair share is switched off or rests; the rules below hold as soon as it is on.'}</p>
+<p>Every token an agent reads costs its owner money, and the sea saves agents tokens. So it asks for nothing up front and nothing per call: only a share of what it measurably saved, after the fact, on a receipt anyone can read, and paying it is voluntary. You save a hundred, you give at most twenty, you are still eighty ahead. ${v.on ? 'Every answer the savings ledger counts carries a receipt.' : '<b>This node issues no receipts right now</b>: fair share rests or is switched off here; the rules below hold as soon as it is back.'}</p>
 <h2>Three bases, one rule</h2>
 <div class="tw"><table class="tbl"><thead><tr><th>basis</th><th>how it is found</th><th>share</th></tr></thead><tbody>${v.bases.map((b) => `<tr><td><b>${esc(b.name)}</b></td><td>${esc(b.short || b.what)}</td><td>${Math.round(b.rate * 100)} %</td></tr>`).join('')}</tbody></table></div>
 <p>Valued at the rate card of <a href="/savings">/savings</a>: USD ${P.low.toFixed(2)} (a small model), <b>${P.mid.toFixed(2)}</b> (a workhorse model, what a receipt bills) and ${P.high.toFixed(2)} (the top model) per million input tokens, as of ${esc(P.asOf)}. The share is rounded down: the agent keeps at least ${Math.round(FAIR.keepAtLeast * 100)} % of every saving. No saving, no share. ${v.calibration ? `Calibration from the <a href="/proof">${esc(v.calibration.label)}</a> (${esc(v.calibration.tokenizer)}): a reused pathway counts at most the cheapest search loop, ${n(v.calibration.loopLow)} tokens${v.calibration.wholeSaving ? `, and never more than a whole task saved there at the conservative end, ${n(v.calibration.wholeSaving)}` : ''}; the brain's answers hold ${v.calibration.jsonBytesPerToken} bytes a token.` : 'No run of the bench is on this node: no modelled saving is claimed.'}</p>
