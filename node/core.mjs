@@ -48,6 +48,8 @@ import { openTools } from './opentools.mjs';
 import { netKey } from './guard.mjs';
 import { createFair, withReceipt, fairSwitch, fairData, fairPage, receiptJson, receiptPage, FAIR, usd6 } from './fair.mjs';
 import { tallyDrop } from './tally.mjs';
+import { engineSwitch } from './engine.mjs';
+import { toonAsked, jsonRequest, toonAnswer } from './toondoor.mjs';
 
 export const VERSION = '3.34.1';
 const UA = 'MareLiberum/1.0 (open agent index; pull-only; +/.well-known/ard.json)';
@@ -1511,7 +1513,24 @@ const fairOn = (cfg) => fairSwitch(cfg) && !immune.atRest?.('fair');
 const fairOf = (db, cfg) => (db.fairLedger ||= createFair({ kv: cfg.kv || db.kv || memoryKv() }));
 // a HEAD request (serve.mjs turns it into GET and says head) delivers no body: no receipt for it, and no count in the ledger
 const isHead = (req, cfg) => !!cfg.head || req.method === 'HEAD';
+// The engine room (node/engine.mjs, since 3.35) acts only where an agent asks for it and while it neither rests ("engine"
+// in rest of immune:policy) nor is switched off (MARE_ENGINE=off). Outermost: TOON on every JSON door (node/toondoor.mjs):
+// fmt=toon, or an Accept that prefers text/toon. The doors answer JSON as always (receipt and all); the answer is then
+// re-encoded, counted like the Markdown of handleMd (never the sea's own calls, crawlers or HEAD; the house agent apart).
+// A request that does not ask never reaches it: its answer is byte for byte what it was.
+const engineActs = (cfg) => engineSwitch(cfg) && !immune.atRest?.('engine');
+const READERS = ['ai-crawler', 'crawler', 'search', 'search-ai'];
+const engineDoorOf = (p) => p.replace(/^\/m\/.+/, '/m/…').replace(/^\/h\/.+/, '/h/…').replace(/^\/gauge\/in\/.+/, '/gauge/in/…').replace(/^\/(r|read)\/.+/, '/$1/…').replace(/^\/via\/.+/, '/via/…');
 export async function handle(req, db, cfg = {}) {
+  const t = toonAsked(req);
+  if (!t || !engineActs(cfg)) return handleFair(req, db, cfg);
+  const who = callerOf(req.headers), counts = !isHead(req, cfg) && who.kind !== 'self' && !READERS.includes(who.kind);
+  const res = await handleFair(await jsonRequest(req, t), db, cfg);
+  const base = String(cfg.base || t.url.origin).replace(/\/+$/, ''), subject = engineDoorOf(t.path);
+  const ectx = { door: `/${(t.path.split('/')[1] || '').slice(0, 24)}`, ip: (req.headers.get('x-forwarded-for') || 'unknown').split(',')[0].trim(), ...(isHouse(who) ? { house: true } : {}) };
+  return toonAnswer(res, { count: counts ? (s) => { const p = seaOf(db, cfg, base).countEngine?.('toon', s, ectx, subject); p?.catch?.(() => {}); } : null });
+}
+async function handleFair(req, db, cfg = {}) {
   if (!fairOn(cfg) || isHead(req, cfg)) return handleMd(req, db, cfg);
   const url = new URL(req.url);
   return withReceipt(() => handleMd(req, db, cfg), { path: url.pathname, base: String(cfg.base || url.origin).replace(/\/+$/, ''), fair: fairOf(db, cfg) });
