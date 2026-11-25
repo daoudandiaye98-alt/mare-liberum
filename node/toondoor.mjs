@@ -12,6 +12,9 @@
 //     lean MCP door /mcp/lean puts TOON inside its tool results instead) and for errors (every status but 200 and 201);
 //   - an answer that is no JSON (a page, Markdown) is sent as the JSON-asking request got it, with the note.
 // The app door (/mcp/app) is never touched (rule 4).
+// Validators: this layer hashes nothing. A door's ETag is the door's (for /r/ the reader's, keyed on the page itself); a
+// TOON answer carries the same tag marked as its own representation ("<tag>.toon", weak stays weak), an If-None-Match with
+// such a tag is asked of the door as the JSON tag it came from, and a 304 passes through unchanged but for that mark.
 import { toToon, TOON } from './toon.mjs';
 import { savingOf, engineHeaders } from './engine.mjs';
 
@@ -20,6 +23,8 @@ const JSON_TYPE = /^application\/(json|[a-z.+-]*\+json)\s*(;|$)/i;
 const FMT = /^fmt=toon$/i;
 export const ENGINE_EXPOSE = 'x-sea-engine,x-sea-engine-tokens,x-sea-engine-saved,x-sea-engine-lossy,x-sea-engine-note';
 const NOTE = 'x-sea-engine-note';
+export const toonTag = (t) => String(t).trim().replace(/^(W\/)?"(.*)"$/, (m, w, x) => (x.endsWith('.toon') ? m : `${w || ''}"${x}.toon"`));
+export const jsonTag = (t) => String(t).trim().replace(/^(W\/)?"(.*)\.toon"$/, (m, w, x) => `${w || ''}"${x}"`);
 
 // q of each media range in an Accept header, in the order given
 function ranges(accept) {
@@ -52,6 +57,7 @@ export async function jsonRequest(req, t) {
   const u = new URL(t.url);
   if (t.by === 'fmt=toon') { const rest = u.search.slice(1).split('&').filter((p) => !FMT.test(p)).join('&'); u.search = rest ? `?${rest}` : ''; }
   const h = new Headers(req.headers); h.set('accept', 'application/json');
+  const inm = h.get('if-none-match'); if (inm) { t.heldToon = /\.toon"/.test(inm); h.set('if-none-match', inm.split(',').map(jsonTag).join(', ')); }
   const body = req.method === 'GET' || req.method === 'HEAD' ? undefined : await req.arrayBuffer();
   return new Request(u, { method: req.method, headers: h, ...(body && body.byteLength ? { body } : {}) });
 }
@@ -63,8 +69,10 @@ function kept(res, body, why) {
   return new Response(body ?? res.body, { status: res.status, statusText: res.statusText, headers: h });
 }
 // the JSON answer → TOON where it is smaller; count is called with the saving when the request may count
-export async function toonAnswer(res, { count } = {}) {
+export async function toonAnswer(res, { count, heldToon = false } = {}) {
   const type = res.headers.get('content-type') || '';
+  // not modified: the client holds what it named; a TOON tag it sent comes back as the TOON tag
+  if (res.status === 304) { if (!heldToon || !res.headers.get('etag')) return res; const h = new Headers(res.headers); h.set('etag', toonTag(h.get('etag'))); return new Response(null, { status: 304, statusText: res.statusText, headers: h }); }
   if (res.status !== 200 && res.status !== 201) return kept(res, null, `json kept: TOON is for answers with data (status ${res.status})`);
   if (!JSON_TYPE.test(type) || !res.body) return kept(res, null, 'not a JSON answer: sent as it is');
   const text = await res.text();
@@ -77,6 +85,7 @@ export async function toonAnswer(res, { count } = {}) {
   const h = new Headers(res.headers);
   h.set('content-type', TOON.type); h.delete('content-length'); addTo(h, 'vary', 'accept'); expose(h);
   for (const [k, x] of Object.entries(engineHeaders(s))) h.set(k, x);
+  const etag = h.get('etag'); if (etag) h.set('etag', toonTag(etag));
   try { count?.(s); } catch {}
   return new Response(toon, { status: res.status, statusText: res.statusText, headers: h });
 }
