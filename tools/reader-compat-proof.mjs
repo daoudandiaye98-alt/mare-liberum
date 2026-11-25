@@ -116,16 +116,19 @@ const refDir = (() => {
   return r.status === 0 && existsSync(join(dir, 'node/core.mjs')) ? dir : null;
 })();
 // a receipt of fair share carries a random id: the one part of an answer that differs between two runs of the same code
-const steady = (s) => String(s).replace(/\br\d{8}[a-z0-9]{8}\b/g, 'r<id>');
+// the version is the only thing a release changes on these answers: it is masked (a release bumps it, a builder branch does not)
+const VERSIONS = new Set();
+const steady = (s) => { let t = String(s).replace(/\br\d{8}[a-z0-9]{8}\b/g, 'r<id>'); for (const v of VERSIONS) t = t.split(v).join('<version>'); return t; };
 const same = (a, b, what) => { assert.equal(a.status, b.status, `${what}: status`); assert.equal(steady(a.text), steady(b.text), `${what}: body`); assert.deepEqual(Object.fromEntries(Object.entries(a.h).map(([k, v]) => [k, steady(v)])), Object.fromEntries(Object.entries(b.h).map(([k, v]) => [k, steady(v)])), `${what}: headers`); };
 const savingsOf = async (n) => { const v = await n.sea().savings(); return { reads: v?.today?.counts?.reads || 0, readBytes: v?.today?.counts?.readBytes || 0 }; };
 
 const node = await nodeOf(ROOT);
 const ref = refDir ? await nodeOf(refDir) : null;
+if (ref) for (const v of [node.core.VERSION, ref.core.VERSION]) VERSIONS.add(v);
 let net = 0; const fresh = () => `198.51.100.${++net}`;
 
 console.log('without the new headers: /r/ and /mcp/app byte for byte as on origin/main');
-await proof(`the reference tree is there (${REF.slice(0, 7)})`, () => { assert.ok(ref, 'git archive of the reference failed: set MARE_READER_REF_DIR'); assert.equal(ref.core.VERSION, node.core.VERSION, 'no version bump in a builder branch'); });
+await proof(`the reference tree is there (${REF.slice(0, 7)})`, () => { assert.ok(ref, 'git archive of the reference failed: set MARE_READER_REF_DIR'); assert.ok(/^\d+\.\d+\.\d+$/.test(node.core.VERSION) && /^\d+\.\d+\.\d+$/.test(ref.core.VERSION), 'both trees name a version'); });
 await proof('every /r/ answer without Jina\'s headers equals origin/main (Markdown, full, JSON, since=, budget=, If-None-Match, HEAD, errors, robots, egress, Authorization alone)', async () => {
   const ip = fresh(), url = `/r/${P}/handbook`;
   const cases = [
