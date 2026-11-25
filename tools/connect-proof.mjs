@@ -214,20 +214,23 @@ await proof('the app door is byte for byte the door of main (tools/list, and ini
 
 console.log('the hubs for the search engines');
 const NEW = ['/open', '/savings', '/proof', '/attention', '/claim', '/connect', '/brain/areas', '/brain/market', '/brain/thinking', '/pricing'];
-await proof('/sitemaps/hubs.xml: every hub once (the 3.33.0 pages too), live hubs dated today, the rest STATIC_DAY, English and German pages naming each other', async () => {
+// (3.34.0, M3: a live hub is dated by the day the sea saw its words, links or structured data change, node/tidings.mjs; this
+// small sea saw none yet, so a live hub names no day instead of today on every request; tools/tidings-proof.mjs dates them)
+await proof('/sitemaps/hubs.xml: every hub once (the 3.33.0 pages too), live hubs undated until a change is seen, the rest STATIC_DAY, English and German pages naming each other', async () => {
   const r = await call('/sitemaps/hubs.xml'), x = r.text; assert.equal(r.status, 200); assert.match(r.headers.get('content-type'), /xml/);
   const locs = [...x.matchAll(/<url><loc>([^<]+)<\/loc>/g)].map((m) => m[1].slice(BASE.length) || '/');
   assert.equal(locs.length, HUBS.length); assert.equal(new Set(locs).size, locs.length, 'each hub once'); assert.deepEqual(locs, HUB_PATHS);
   for (const p of NEW) assert.ok(locs.includes(p), p);
-  for (const [p, , live] of HUBS) assert.ok(x.includes(`<loc>${BASE}${p}</loc><lastmod>${live ? TODAY : STATIC_DAY}</lastmod>`), p);
+  for (const [p, , live] of HUBS) assert.ok(x.includes(live ? `<loc>${BASE}${p}</loc><changefreq>` : `<loc>${BASE}${p}</loc><lastmod>${STATIC_DAY}</lastmod>`), p);
+  assert.ok(!x.includes(`<lastmod>${TODAY}</lastmod>`) || TODAY === STATIC_DAY, 'no hub is dated today without a change');
   for (const [en, de] of Object.entries(HUB_ALT)) for (const p of [en, de]) {
     const u = new RegExp(`<loc>${BASE}${p.replace(/\//g, '\\/')}</loc>.*?</url>`).exec(x)[0];
     assert.ok(u.includes(`hreflang="en" href="${BASE}${en}"`) && u.includes(`hreflang="de" href="${BASE}${de}"`) && u.includes(`hreflang="x-default" href="${BASE}${en}"`), p);
   }
   assert.match(x, /xmlns:xhtml="http:\/\/www\.w3\.org\/1999\/xhtml"/); assert.equal(hubSitemap(BASE, TODAY), x);
 });
-await proof('/sitemap.xml names the hubs first, dated today; /sitemaps/site.xml holds no hub and keeps the addresses for agents', async () => {
-  const idx = (await call('/sitemap.xml')).text; assert.match(idx, new RegExp(`^<\\?xml[^>]*\\?><sitemapindex[^>]*><sitemap><loc>${BASE}/sitemaps/hubs\\.xml</loc><lastmod>${TODAY}</lastmod></sitemap>`));
+await proof('/sitemap.xml names the hubs first, dated by the newest hub; /sitemaps/site.xml holds no hub and keeps the addresses for agents', async () => {
+  const idx = (await call('/sitemap.xml')).text; assert.match(idx, new RegExp(`^<\\?xml[^>]*\\?><sitemapindex[^>]*><sitemap><loc>${BASE}/sitemaps/hubs\\.xml</loc><lastmod>${STATIC_DAY}</lastmod></sitemap>`));
   const site = (await call('/sitemaps/site.xml')).text, locs = [...site.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1].slice(BASE.length) || '/');
   for (const p of HUB_PATHS) assert.ok(!locs.includes(p), `hub ${p} stands in site.xml`);
   for (const p of ['/route', '/pulse', '/treasury', '/.well-known/agent-card.json', '/via/howto', '/pay/howto']) assert.ok(locs.includes(p), `${p} stays for agents (the till release lists it)`);

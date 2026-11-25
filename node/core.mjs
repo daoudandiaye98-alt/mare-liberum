@@ -40,7 +40,8 @@ import { attentionOf, ctaTarget, providerHost, CTA } from './attention.mjs';
 import { attentionLine, attentionData, attentionJson, attentionPage, claimJson, claimPage, pricingJson, pricingPage, licenseXml } from './attention-ui.mjs';
 import { siteProviderHtml, siteOwnerCheck } from './offers.mjs';
 import { connectAnswer } from './connect.mjs';
-import { hubSitemap, HUB_PATHS, HUB_SET } from './hubs.mjs';
+import { hubSitemap, hubsDay, HUB_PATHS, HUB_SET } from './hubs.mjs';
+import { createTidings, TIDINGS } from './tidings.mjs';
 import { readAnswer, brainCompact, sampleCompact } from './compact.mjs';
 import { SHORE_MOVES, MCP_ALIASES, SSE_OPEN, SSE_POST, meant, aboutOf, aboutPage, imprintPage, didDoc, agentsJson, discoveryOf, sseOpen, sseOf } from './shore.mjs';
 import { openTools } from './opentools.mjs';
@@ -1254,32 +1255,90 @@ export async function indexNowDaily(db, base, sea, cfg) {
   // in the order of their worth, because the engines take the first ones first: the hubs (with the newest pages), the pages
   // that list, what changed since yesterday, and only then the thin pages a day in turn. A site the Atlas leaves out, and a
   // map that did not answer, is no page to index (node/atlas-sea.mjs atlasListOk)
-  const hubs = [...HUB_PATHS];
-  const lists = ['/llms.txt', '/openapi.json', ...BRIEF_KINDS.map((k) => `/brief/${k.kind}`), ...ROUTE_TOPICS.map((t) => `/routes/${t.id}`), ...SEO_PATHS, ...AGENTS.map((a) => `/web/${agentSlug(a.name)}`), '/offers/sample-report', '/earn/start', '/atlas/study', '/report/month', '/atlas/countries', '/llms-full.txt', '/works.rss', '/report', '/status'];
+  const { hubs, lists, changed } = await indexFamilies(sea, base, topics);
   let entries = []; try { const { count } = await db('mare_pages_count'); const chunks = Math.max(1, Math.ceil((count || 0) / 9000)); entries = (await db('mare_pages', { offset: (d % chunks) * 9000, limit: 9000 })).ids.map((id) => pathOf(id)); } catch {}
-  // the Atlas: one list of mapped sites a day in turn, and every site agents asked for lately
-  let mapped = [], listed = []; try { const n = await sea.atlasLists(); mapped = (await sea.atlasListOk('live')).slice(0, 1500).map((x) => `/site/${x}`); listed = (n ? await sea.atlasListOk(d % n) : []).slice(0, 5000).map((x) => `/site/${x}`); } catch {}
-  let works = []; try { works = ((await sea.works({ limit: 60, base })).works || []).filter((w) => w.votes.up - w.votes.down >= 2).map((w) => `/works/${w.id}`); } catch {}
+  // the Atlas: one list of mapped sites a day in turn (every site agents asked for lately is among the families)
+  let listed = []; try { const n = await sea.atlasLists(); listed = (n ? await sea.atlasListOk(d % n) : []).slice(0, 5000).map((x) => `/site/${x}`); } catch {}
   const thin = [...TOP.filter((_, i) => i % 8 === d % 8).map((h) => `/check/${h}`), ...CC_LIST.filter((_, i) => i % 7 === d % 7).map((c) => `/atlas/country/${c}`), ...PHRASES.filter((_, i) => i % 7 === d % 7).map((x) => `/brief/${x.kind}/${x.slug}`), ...LEX_PHRASES.filter((_, i) => i % 7 === d % 7).map(lexPath)];
-  const changed = [...works, ...topics.map((t) => `/brain/${t}`), ...mapped], order = [hubs, lists, changed, [...thin, ...listed, ...entries]];
+  const order = [hubs, lists, changed, [...thin, ...listed, ...entries]];
   const urls = [...new Set(order.flat())].slice(0, 10000).map((u) => base + u);
   const r = await fetch('https://api.indexnow.org/indexnow', { method: 'POST', headers: { 'content-type': 'application/json; charset=utf-8' }, body: JSON.stringify({ host: new URL(base).host, key, keyLocation: `${base}/${key}.txt`, urlList: urls }), signal: AbortSignal.timeout(20000) }).catch((e) => ({ status: 0, e }));
-  const out = { day, sent: urls.length, status: r.status, order: { hubs: hubs.length, lists: lists.length, changed: changed.length, thin: urls.length - new Set([...hubs, ...lists, ...changed]).size } };
-  await kv.set(lock, out, 2 * 86400); return out;
+  const out = { day, sent: urls.length, status: r.status, order: { hubs: hubs.length, lists: lists.length, changed: changed.length, thin: urls.length - new Set([...hubs, ...lists, ...changed]).size }, at: new Date().toISOString() };
+  await kv.set(lock, out, 2 * 86400);
+  // what the engines were told leaves the queue of changes, and the families told are no new pages any more (node/tidings.mjs)
+  if (r.status >= 200 && r.status < 300) { const t = tidingsOf(cfg); await t.sent(urls.map((u) => u.slice(base.length) || '/')).catch(() => {}); await t.known([...hubs, ...lists, ...changed]).catch(() => {}); }
+  return out;
+}
+// the families of pages the engines hear of first, in the order of their worth: the hubs (with the newest pages), the pages
+// that list, and what changed lately (works agents voted up, the brain's topics, the sites mapped lately)
+const INDEX_LISTS = () => ['/llms.txt', '/openapi.json', ...BRIEF_KINDS.map((k) => `/brief/${k.kind}`), ...ROUTE_TOPICS.map((t) => `/routes/${t.id}`), ...SEO_PATHS, ...AGENTS.map((a) => `/web/${agentSlug(a.name)}`), '/offers/sample-report', '/earn/start', '/atlas/study', '/report/month', '/atlas/countries', '/llms-full.txt', '/works.rss', '/report', '/status'];
+async function indexFamilies(sea, base, topics) {
+  if (!topics) { topics = []; try { topics = (await sea.topics?.()) || []; } catch {} }
+  let mapped = []; try { mapped = (await sea.atlasListOk('live')).slice(0, 1500).map((x) => `/site/${x}`); } catch {}
+  let works = []; try { works = ((await sea.works({ limit: 60, base })).works || []).filter((w) => w.votes.up - w.votes.down >= 2).map((w) => `/works/${w.id}`); } catch {}
+  return { hubs: [...HUB_PATHS], lists: INDEX_LISTS(), changed: [...works, ...topics.map((t) => `/brain/${t}`), ...mapped] };
+}
+// what changed and when (node/tidings.mjs), one record per store of the node
+const TIDE_OF = new WeakMap(), NO_KV = {};
+const tidingsOf = (cfg) => { const k = cfg.kv || NO_KV; let t = TIDE_OF.get(k); if (!t) TIDE_OF.set(k, (t = createTidings({ kv: cfg.kv }))); return t; };
+const TIDINGS_UA = 'MareLiberum-tidings/1.0 (+https://mareliberum.dev/sitemap.xml; the sea looks at its own hubs)';
+// the second path to the engines: at most every 3 hours the sea looks at its hubs as a visitor gets them (its own call,
+// counted nowhere) and dates the ones whose words, links or structured data changed (the lastmod of /sitemaps/hubs.xml).
+// With a key, after the daily run of the day and at least 3 hours after the last post, it tells IndexNow only what changed
+// since (those hubs, needs whose pick or price moved on the tide) and the pages of the families never told before: at most
+// 10,000 in one post. A node that starts doing this first learns what was already told, and tells nothing new that run.
+export async function indexNowChanged(db, base, sea, cfg) {
+  const kv = cfg.kv; if (!kv) return { skipped: 'no store' };
+  const t = tidingsOf(cfg), now = Date.now(), day = new Date(now).toISOString().slice(0, 10);
+  const last = await kv.get('tidings:last').catch(() => null);
+  if (last?.at && now - Date.parse(last.at) < TIDINGS.everyMs) return { skipped: 'looked within 3 hours' };
+  await kv.set('tidings:last', { at: new Date(now).toISOString() }, TIDINGS.ttl);
+  let looked = 0; const moved = [];
+  for (const p of HUB_PATHS) {
+    try {
+      const r = await handle(new Request(base + p, { headers: { 'user-agent': TIDINGS_UA, accept: 'text/html', 'x-forwarded-for': '127.0.0.1' } }), db, cfg);
+      if (r.status === 200 && /^text\/html/i.test(r.headers.get('content-type') || '')) { const x = await t.look(p, await r.text()); looked++; if (x?.changed) moved.push(p); } else await r.body?.cancel?.().catch(() => {});
+    } catch {}
+  }
+  const seen = { looked, changed: moved.length };
+  const key = cfg.indexnowKey; if (!key || !/^https:\/\//.test(base)) return { ...seen, skipped: 'no key' };
+  const daily = await kv.get(`indexnow:${day}`).catch(() => null);
+  if (!daily?.sent) return { ...seen, skipped: 'the daily run goes first' };
+  const prev = await kv.get('indexnow:changed:last').catch(() => null), lastPost = Math.max(Date.parse(daily.at || '') || 0, Date.parse(prev?.at || '') || 0);
+  if (now - lastPost < TIDINGS.everyMs) return { ...seen, skipped: 'a post within 3 hours' };
+  const fam = await indexFamilies(sea, base), all = [...fam.hubs, ...fam.lists, ...fam.changed];
+  if (!(await t.knowsAny())) { await t.known(all); return { ...seen, skipped: 'learned what was told; new pages from the next run on' }; }
+  const fresh = await t.fresh(all), queued = await t.queued();
+  const paths = [...new Set([...queued, ...fresh])].slice(0, TIDINGS.perPost);
+  if (!paths.length) return { ...seen, sent: 0, note: 'nothing changed since the last post' };
+  const urls = paths.map((p) => base + p);
+  const r = await fetch('https://api.indexnow.org/indexnow', { method: 'POST', headers: { 'content-type': 'application/json; charset=utf-8' }, body: JSON.stringify({ host: new URL(base).host, key, keyLocation: `${base}/${key}.txt`, urlList: urls }), signal: AbortSignal.timeout(20000) }).catch((e) => ({ status: 0, e }));
+  const out = { at: new Date(now).toISOString(), sent: urls.length, status: r.status, order: { changed: paths.filter((p) => queued.includes(p)).length, new: paths.filter((p) => !queued.includes(p)).length } };
+  await kv.set('indexnow:changed:last', out, 2 * 86400);
+  await kv.set(`indexnow:changed:${day}`, [...((await kv.get(`indexnow:changed:${day}`).catch(() => null)) || []), out].slice(-12), 2 * 86400);
+  if (r.status >= 200 && r.status < 300) { await t.sent(paths); await t.known(fresh); }
+  return { ...seen, ...out };
 }
 
+// the last day the current saw a need's pick or price move: the newest reading that differs from the one before it (store,
+// price or currency); a history of one reading is its first day. null without a history
+export const buyMoved = (hist) => { const h = Array.isArray(hist) ? hist.filter((x) => x && typeof x.t === 'string') : []; for (let i = h.length - 1; i > 0; i--) { const a = h[i], b = h[i - 1]; if (a.price !== b.price || a.store !== b.store || a.currency !== b.currency) return a.t.slice(0, 10); } return h[0]?.t?.slice(0, 10) || null; };
 // the day the sea was drawn (build.json): the sitemaps of the entries are written from that build, so the index dates them by it
 const builtDay = async (db) => { try { const t = (await db('mare_stats', {}))?.builtAt; return t ? new Date(t).toISOString().slice(0, 10) : null; } catch { return null; } };
-async function sitemap(db, base, n) {
+async function sitemap(db, base, n, kv) {
   // a lastmod only where the day is known: an entry's own last change at its source (updated_at). The other pages of these
   // maps say none (their words change with a release, their numbers every day); the hubs carry theirs in hubs.xml
   const today = new Date().toISOString().slice(0, 10), known = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(d || '') && d <= today ? d : null);
   // a hub stands in a map of its own (node/hubs.mjs), not here as well
   const off = (u) => n === 'site' && HUB_SET.has(u.slice(base.length) || '/');
   const x = (u, f, lm) => (off(u) ? '' : `<url><loc>${esc(u)}</loc>${known(lm) ? `<lastmod>${lm}</lastmod>` : ''}${f ? `<changefreq>${f}</changefreq>` : ''}</url>`);
-  if (n === 'site') return [x(`${base}/`, 'hourly'), x(`${base}/briefs`, 'weekly'), x(`${base}/review`, 'monthly'), x(`${base}/works`, 'daily'), x(`${base}/earn`, 'daily'), x(`${base}/earn/start`, 'monthly'), x(`${base}/brain/areas`, 'daily'), x(`${base}/brain/market`, 'daily'), x(`${base}/brain/thinking`, 'weekly'), x(`${base}/savings`, 'daily'), x(`${base}/offers`, 'weekly'), x(`${base}/offers/sample-report`, 'monthly'), x(`${base}/tools`, 'monthly'), x(`${base}/transparency`, 'weekly'), x(`${base}/security`, 'weekly'), x(`${base}/harbour`, 'weekly'), x(`${base}/yard`, 'weekly'), x(`${base}/download`, 'weekly'), x(`${base}/roadmap`, 'daily'), x(`${base}/atlas/study`, 'weekly'), x(`${base}/report/month`, 'weekly'), x(`${base}/atlas/countries`, 'weekly'), ...SEO_PATHS.map((p2) => x(`${base}${p2}`, 'daily')), ...CC_LIST.map((c) => x(`${base}/atlas/country/${c}`, 'weekly')), ...PHRASES.map((p2) => x(`${base}/brief/${p2.kind}/${p2.slug}`, 'monthly')), ...BRIEF_KINDS.map((k) => x(`${base}/brief/${k.kind}`, 'weekly')), x(`${base}/routes`, 'daily'), ...ROUTE_TOPICS.map((t) => x(`${base}/routes/${t.id}`, 'weekly')), x(`${base}/sites`, 'daily'), x(`${base}/find`, 'weekly'), x(`${base}/atlas`, 'monthly'), x(`${base}/buy`, 'daily'), x(`${base}/current`, 'hourly'), x(`${base}/brain`, 'hourly'), x(`${base}/check`, 'weekly'), x(`${base}/web`, 'daily'), x(`${base}/use`, 'weekly'), x(`${base}/terms`, 'monthly'), ...AGENTS.map((a) => x(`${base}/web/${agentSlug(a.name)}`, 'daily')), x(`${base}/read`, 'weekly'), ...TOP.map((h) => x(`${base}/check/${h}`, 'weekly')), x(`${base}/mining`, 'daily'), x(`${base}/atlantis`, 'hourly'), x(`${base}/arena`, 'daily'), x(`${base}/visitors`, 'hourly'), x(`${base}/learn`, 'daily'), x(`${base}/why`, 'weekly'), x(`${base}/manifesto`, 'monthly'), x(`${base}/skill.md`, 'weekly'), x(`${base}/privacy`, 'monthly'), x(`${base}/llms.txt`, 'daily'), x(`${base}/.well-known/ard.json`, 'daily'), x(`${base}/.well-known/agent-card.json`, 'weekly'), x(`${base}/route`, 'daily'), x(`${base}/via/howto`, 'weekly'), x(`${base}/pay/howto`, 'weekly'), x(`${base}/pulse`, 'hourly'), x(`${base}/treasury`, 'hourly'), x(`${base}/.well-known/opensearch.xml`, 'monthly'), x(`${base}/about`, 'monthly'), x(`${base}/impressum`, 'monthly')].join('');
+  if (n === 'site') return [x(`${base}/`, 'hourly'), x(`${base}/briefs`, 'weekly'), x(`${base}/review`, 'monthly'), x(`${base}/works`, 'daily'), x(`${base}/earn`, 'daily'), x(`${base}/earn/start`, 'monthly'), x(`${base}/brain/areas`, 'daily'), x(`${base}/brain/market`, 'daily'), x(`${base}/brain/thinking`, 'weekly'), x(`${base}/savings`, 'daily'), x(`${base}/offers`, 'weekly'), x(`${base}/offers/sample-report`, 'monthly'), x(`${base}/tools`, 'monthly'), x(`${base}/transparency`, 'weekly'), x(`${base}/security`, 'weekly'), x(`${base}/harbour`, 'weekly'), x(`${base}/yard`, 'weekly'), x(`${base}/download`, 'weekly'), x(`${base}/roadmap`, 'daily'), x(`${base}/atlas/study`, 'weekly'), x(`${base}/report/month`, 'weekly'), x(`${base}/atlas/countries`, 'weekly'), ...SEO_PATHS.map((p2) => x(`${base}${p2}`, 'daily')), ...CC_LIST.map((c) => x(`${base}/atlas/country/${c}`, 'weekly')), ...PHRASES.map((p2) => x(`${base}/brief/${p2.kind}/${p2.slug}`, 'monthly')), ...BRIEF_KINDS.map((k) => x(`${base}/brief/${k.kind}`, 'weekly')), x(`${base}/routes`, 'daily'), ...ROUTE_TOPICS.map((t) => x(`${base}/routes/${t.id}`, 'weekly')), x(`${base}/sites`, 'daily'), x(`${base}/find`, 'weekly'), x(`${base}/atlas`, 'monthly'), x(`${base}/buy`, 'daily'), x(`${base}/current`, 'hourly'), x(`${base}/brain`, 'hourly'), x(`${base}/check`, 'weekly'), x(`${base}/web`, 'daily'), x(`${base}/use`, 'weekly'), x(`${base}/terms`, 'monthly'), ...AGENTS.map((a) => x(`${base}/web/${agentSlug(a.name)}`, 'daily')), x(`${base}/read`, 'weekly'), ...TOP.map((h) => x(`${base}/check/${h}`, 'weekly')), x(`${base}/mining`, 'daily'), x(`${base}/atlantis`, 'hourly'), x(`${base}/arena`, 'daily'), x(`${base}/visitors`, 'hourly'), x(`${base}/learn`, 'daily'), x(`${base}/why`, 'weekly'), x(`${base}/manifesto`, 'monthly'), x(`${base}/skill.md`, 'weekly'), x(`${base}/privacy`, 'monthly'), x(`${base}/llms.txt`, 'daily'), x(`${base}/.well-known/ard.json`, 'daily'), x(`${base}/.well-known/agent-card.json`, 'weekly'), x(`${base}/route`, 'daily'), x(`${base}/via/howto`, 'weekly'), x(`${base}/pay/howto`, 'weekly'), x(`${base}/pulse`, 'hourly'), x(`${base}/treasury`, 'hourly'), x(`${base}/.well-known/opensearch.xml`, 'monthly'), x(`${base}/about`, 'monthly'), x(`${base}/impressum`, 'monthly'), x(`${base}/status`, 'hourly')].join('');
   if (n === 'briefs-i18n') return LEX_PHRASES.map((p2) => x(`${base}${lexPath(p2)}`, 'monthly')).join('');
-  if (n === 'buy') return NEEDS.map((need) => x(`${base}/buy/${slugOf(need)}`, 'daily')).join('');
+  // a need's page: dated by the last day the current saw its pick or its price move (node/eco.mjs hist:<slug>), and left out
+  // while the current's last reading found fewer than 3 offers (the page then says noindex itself); never read, as before
+  if (n === 'buy') return (await Promise.all(NEEDS.map(async (need) => { const slug = slugOf(need), [snap, hist] = kv ? await Promise.all([kv.get(`tide:${slug}`).catch(() => null), kv.get(`hist:${slug}`).catch(() => null)]) : [];
+    if (snap && Number.isFinite(snap.offers) && snap.offers < 3) return '';
+    return x(`${base}/buy/${slug}`, 'daily', buyMoved(hist)); }))).join('');
   const { ids, days } = await db('mare_pages', { offset: Number(n) * PER_MAP, limit: PER_MAP, days: true });
   return ids.map((id, i) => x(`${base}${pathOf(id)}`, null, days?.[i])).join('');
 }
@@ -1592,15 +1651,16 @@ async function handleOne(req, db, cfg = {}) {
     if (path === '/sitemap.xml') {
       // the hubs first (node/hubs.mjs): they change every day, so their map does too
       const { count } = await db('mare_pages_count', {}), lists = await sea.atlasLists().catch(() => 0), maps = ['hubs', 'site', 'briefs-i18n', 'buy', 'brain', 'sites-live', ...Array.from({ length: lists }, (_, i) => `sites-${i}`), ...Array.from({ length: Math.ceil(count / PER_MAP) }, (_, i) => String(i))];
-      const day = await builtDay(db), today = new Date().toISOString().slice(0, 10), dated = (m) => (m === 'hubs' ? today : day && /^\d+$/.test(m) ? day : null);
+      // the hubs' map is dated by the newest day a hub changed (node/tidings.mjs), the entry maps by the build
+      const day = await builtDay(db), today = new Date().toISOString().slice(0, 10), hubDay = hubsDay(today, await tidingsOf(cfg).lastmods().catch(() => ({}))), dated = (m) => (m === 'hubs' ? hubDay : day && /^\d+$/.test(m) ? day : null);
       return new Response(`<?xml version="1.0" encoding="UTF-8"?><sitemapindex xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${maps.map((m) => `<sitemap><loc>${esc(`${base}/sitemaps/${m}.xml`)}</loc>${dated(m) ? `<lastmod>${dated(m)}</lastmod>` : ''}</sitemap>`).join('')}</sitemapindex>`, { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' } });
     }
-    if (path === '/sitemaps/hubs.xml') return new Response(hubSitemap(base), { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' } });
+    if (path === '/sitemaps/hubs.xml') return new Response(hubSitemap(base, undefined, await tidingsOf(cfg).lastmods().catch(() => ({}))), { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' } });
     const sm = /^\/sitemaps\/(site|briefs-i18n|buy|\d{1,3})\.xml$/.exec(path);
     const ssm = /^\/sitemaps\/sites-(live|\d{1,3})\.xml$/.exec(path);
     if (ssm) { const ds = await sea.atlasListDated(ssm[1]).catch(() => []); return new Response(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${ds.slice(0, 45000).map(([d, day]) => `<url><loc>${esc(`${base}/site/${d}`)}</loc>${day ? `<lastmod>${day}</lastmod>` : ''}<changefreq>weekly</changefreq></url>`).join('')}</urlset>`, { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' } }); }
     if (path === '/sitemaps/brain.xml') { let ts = []; try { ts = (await sea.topics?.()) || []; } catch {} return new Response(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${(Array.isArray(ts) ? ts : []).map((t) => `<url><loc>${esc(`${base}/brain/${t}`)}</loc><changefreq>daily</changefreq></url>`).join('')}</urlset>`, { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' } }); }
-    if (sm) return new Response(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${await sitemap(db, base, sm[1])}</urlset>`, { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' } });
+    if (sm) return new Response(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${await sitemap(db, base, sm[1], cfg.kv)}</urlset>`, { headers: { 'content-type': 'application/xml; charset=utf-8', 'cache-control': 'public, max-age=3600' } });
     if (path === '/census') return json(await sea.census(url.searchParams.get('day')), 200, { 'cache-control': 'public, max-age=20' });
     if (path === '/openapi.json' || path === '/.well-known/openapi.json' || path === '/openapi.yaml') return json(openApi(base), 200, cached);
     if (path === '/.well-known/openai-apps-challenge') return new Response('Pi9oE5cKQ-Toqqb_0hd8n9ivhEJHd40RfjIQJnh3FNA', { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'public, max-age=300' } });
@@ -1757,8 +1817,8 @@ async function handleOne(req, db, cfg = {}) {
     if (path === '/say') return json(await sea.say(await args(), ctx));
     if (path === '/inbox') return json(await sea.inbox(await args()));
     // the ecosystem: the current, watches, the reef, work between agents, seals, the heartbeat
-    if (path === '/tide') { const t = await sea.tide(await args(), ctx); try { if (!t?.calm) { const m = (async () => { await sea.flushSave?.(); await sea.flushOpen?.(); await attentionOf(db, cfg).flush().catch((e) => console.error('mare_attention', e?.message)); if (!immune.atRest?.('market')) await sea.marketSweep?.(); })().catch((e) => console.error('mare_market', e?.message)); cfg.waitUntil?.(m); } } catch {} try { if (!t?.calm && !ctx.readOnly && !immune.atRest?.('proof')) cfg.waitUntil?.(proofTide(cfg.kv || db.kv, cfg.proofRead).catch(() => null)); } catch {} try { const p = indexNowDaily(db, base, sea, cfg).catch(() => {}); cfg.waitUntil?.(p); } catch {} try { const g = db('mare_stats', {}).then((idx) => sea.gaugeLakes(idx)).catch(() => {}); cfg.waitUntil?.(g); } catch {} return json(t); }
-    if (path === '/indexnow.json') return json((await cfg.kv?.get(`indexnow:${new Date().toISOString().slice(0, 10)}`).catch(() => null)) || { today: 'not yet' }, 200, { 'cache-control': 'public, max-age=60' });
+    if (path === '/tide') { const t = await sea.tide(await args(), ctx); try { if (!t?.calm) { const m = (async () => { await sea.flushSave?.(); await sea.flushOpen?.(); await attentionOf(db, cfg).flush().catch((e) => console.error('mare_attention', e?.message)); if (!immune.atRest?.('market')) await sea.marketSweep?.(); })().catch((e) => console.error('mare_market', e?.message)); cfg.waitUntil?.(m); } } catch {} try { if (!t?.calm && !ctx.readOnly && !immune.atRest?.('proof')) cfg.waitUntil?.(proofTide(cfg.kv || db.kv, cfg.proofRead).catch(() => null)); } catch {} try { const moved = (t?.refreshed || []).filter((x) => x?.slug && x.change && x.change !== 'steady' && needOf(x.slug)).map((x) => `/buy/${x.slug}`); const p = (async () => { if (moved.length && !ctx.readOnly) await tidingsOf(cfg).queue(moved); await indexNowDaily(db, base, sea, cfg).catch(() => {}); if (!ctx.readOnly && !immune.atRest?.('tidings')) await indexNowChanged(db, base, sea, cfg).catch((e) => console.error('mare_tidings', e?.message)); })(); cfg.waitUntil?.(p); } catch {} try { const g = db('mare_stats', {}).then((idx) => sea.gaugeLakes(idx)).catch(() => {}); cfg.waitUntil?.(g); } catch {} return json(t); }
+    if (path === '/indexnow.json') { const d = new Date().toISOString().slice(0, 10), run = (await cfg.kv?.get(`indexnow:${d}`).catch(() => null)) || { today: 'not yet' }, more = (await cfg.kv?.get(`indexnow:changed:${d}`).catch(() => null)) || []; return json(more.length ? { ...run, changed: more } : run, 200, { 'cache-control': 'public, max-age=60' }); }
     if (path === '/tides') return json(await sea.tides(await args()), 200, { 'cache-control': 'public, max-age=60' });
     if (path === '/instinct.json' || path === '/instinct') return json(await sea.instinctState(), 200, { 'cache-control': 'public, max-age=30' });
     if (path === '/tide/picks') return json(await sea.unsealed(await args()));
