@@ -35,7 +35,8 @@
     "proof:reach": "node tools/reach-proof.mjs",
     "proof:offers": "node tools/offers-proof.mjs",
     "proof:lean": "node tools/lean-proof.mjs",
-    "proof:fixes": "node tools/fixes-proof.mjs"
+    "proof:fixes": "node tools/fixes-proof.mjs",
+    "proof:commission": "node tools/commission-proof.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.9.0",
