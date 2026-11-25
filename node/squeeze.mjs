@@ -8,8 +8,9 @@
 // Lossy steps only when the agent names them, and then said so:
 //   q        a question: the text in blocks (paragraphs, list groups, tables, code), each scored with BM25 against the
 //            question (stop words English and German left out), the best blocks kept in their order, under their headings
-//   budget   tokens: blocks kept greedily until the budget; each gap marked "[… n tokens left out]". Without q: every
-//            heading, the first block of each section, then the densest blocks
+//   budget   tokens: blocks kept greedily until the budget (a block too long for what is left: its best sentences); each gap
+//            marked "[… n tokens left out]". Without q: the first paragraph, every heading, the first block of each
+//            section, then the densest blocks
 // Also here: fitBudget (the same for the reader, /r/?budget=) and diffLines (a line diff, capped: past the cap it says
 // "changed too much" and the whole is sent). No dependencies; nothing here keeps or writes anything.
 import { leanMarkdown, cleanUrl } from './lean.mjs';
