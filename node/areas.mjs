@@ -211,7 +211,7 @@ export function createAreas(h) {
   const doorOf = (ctx) => { const d = String(ctx?.door || ''); return /^\/[a-z0-9._-]{0,24}$/i.test(d) ? d.toLowerCase() : null; };
   // the house agent (Angel, a resident of the sea, ctx.house) is counted apart ("h:<kind>"): never in the headline
   const count = (kind, n = 1, ctx) => {
-    if (ctx?.own || ctx?.readOnly || ctx?.uncounted || !(n > 0)) return;
+    if (ctx?.own || ctx?.readOnly || ctx?.uncounted || ctx?.head || !(n > 0)) return;
     const d = now().slice(0, 10), b = pend[d] || (pend[d] = {});
     if (ctx?.house) { b[`h:${kind}`] = (b[`h:${kind}`] || 0) + n; return; }
     b[kind] = (b[kind] || 0) + n;
@@ -224,7 +224,7 @@ export function createAreas(h) {
   // a count one address could repeat in a loop counts once a day per network, kind and subject (the page, the task), and a
   // network adds at most SAVE.cap of each group a day (node/once.mjs; in memory only)
   const once = createOnce({ now });
-  const firstToday = (ctx, kind, subject, group) => !ctx?.own && !ctx?.readOnly && !ctx?.uncounted && once.first(ctx?.ip, `${ctx?.house ? 'h:' : ''}${kind}`, subject, { cap: SAVE.cap[group], group });
+  const firstToday = (ctx, kind, subject, group) => !ctx?.own && !ctx?.readOnly && !ctx?.uncounted && !ctx?.head && once.first(ctx?.ip, `${ctx?.house ? 'h:' : ''}${kind}`, subject, { cap: SAVE.cap[group], group });
   const add = (a, b) => { const o = { ...(a || {}) }; for (const [k, v] of Object.entries(b || {})) o[k] = (o[k] || 0) + v; return o; };
   // the counts of one door, out of a bucket: { '/brain': { path: 2, … }, … }
   const byDoorOf = (n) => { const o = {}; for (const [k, v] of Object.entries(n || {})) { if (k[0] !== '@') continue; const i = k.indexOf('|'); (o[k.slice(1, i)] ||= {})[k.slice(i + 1)] = v; } return o; };

@@ -23,3 +23,5 @@ export function tallyNote(note) {
   if (t && t.open && t.notes.length < TALLY_MAX) t.notes.push(note);
 }
 export const tallyClose = (t) => { if (t) t.open = false; return t?.notes || []; };
+// the answer being made gets no receipt at all (an answer the till sold: it has its price already)
+export function tallyDrop() { const t = als.getStore(); if (t) { t.open = false; t.notes.length = 0; } }

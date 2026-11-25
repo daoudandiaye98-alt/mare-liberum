@@ -102,7 +102,8 @@ const server = createServer(async (req, res) => {
     headers.set('x-forwarded-for', proxied && local(peer) && said ? said : peer.replace(/^::ffff:/, ''));
     // HEAD is answered like GET, without the body
     const request = new Request(base + req.url, { method: req.method === 'HEAD' ? 'GET' : req.method, headers, body: chunks.length ? Buffer.concat(chunks) : undefined });
-    const out = await handle(request, db, { kv, seed, site, waitUntil, geoIndex, indexnowKey, shelf, download, ledger, ...(geoOf ? { geoOf } : {}) });
+    // (a HEAD sends no body: it is counted in no ledger of savings and carries no receipt; head tells the node)
+    const out = await handle(request, db, { kv, seed, site, waitUntil, geoIndex, indexnowKey, shelf, download, ledger, ...(geoOf ? { geoOf } : {}), ...(req.method === 'HEAD' ? { head: true } : {}) });
     if (!out.headers.has('link')) out.headers.set('link', AGENT_LINK);
     out.headers.set('x-agent-hint', AGENT_HINT);
     if (stopping) out.headers.set('connection', 'close');
