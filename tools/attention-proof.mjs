@@ -177,13 +177,17 @@ await proof('what the tide wrote is read back after a restart and added to what 
 console.log('the counted door to the paid services');
 await proof('every service leads to its own payment page or to a page of the sea; nothing in the request can send anyone elsewhere', async () => {
   const S = sea(), go = (p) => S.call(p, person);
-  assert.equal((await go('/c/owner?from=site&ref=ropes.dev')).loc, `${OFFERS.verified.link}?client_reference_id=verified-ropes_dev`);
-  assert.equal((await go('/c/report?from=check&ref=ropes.dev')).loc, `${OFFERS.report.link}?client_reference_id=report-ropes_dev`);
-  for (const id of ['teams', 'agency', 'law']) { const r = await go(`/c/${id}?from=pricing`); assert.deepEqual([r.status, r.loc], [302, OFFER[id]], id); }
+  // (since the legal texts of 25.11.2026 a sale in euro first answers the order page for business customers (node/legal.mjs
+  // gatePage); its ticked box (b2b=1) leads on to the payment link, with the reference as before)
+  assert.equal((await go('/c/owner?from=site&ref=ropes.dev&b2b=1')).loc, `${OFFERS.verified.link}?client_reference_id=verified-ropes_dev`);
+  assert.equal((await go('/c/report?from=check&ref=ropes.dev&b2b=1')).loc, `${OFFERS.report.link}?client_reference_id=report-ropes_dev`);
+  for (const id of ['teams', 'agency', 'law']) { const r = await go(`/c/${id}?from=pricing&b2b=1`); assert.deepEqual([r.status, r.loc], [302, OFFER[id]], id); }
+  for (const id of ['owner', 'report', 'teams', 'agency', 'law']) { const r = await go(`/c/${id}?from=pricing`); assert.deepEqual([r.status, r.loc], [200, null], id); assert.ok(r.txt.includes(`action="/c/${id}"`) && r.txt.includes('name="b2b" value="1" required'), `${id}: the order page`); assert.doesNotMatch(r.txt, /buy\.stripe\.com/, `${id}: no payment link before the box`); }
   assert.equal((await go('/c/route')).loc, `${BASE}/pay/howto`); assert.equal((await go('/c/talk')).loc, `${BASE}/about#contact`);
-  for (const p of ['/c/owner?from=site&ref=https://evil.example/x&to=https://evil.example&url=//evil.example&next=/%5Cevil.example', '/c/report?ref=%0d%0aLocation:%20https://evil.example']) {
+  for (const p of ['/c/owner?from=site&ref=https://evil.example/x&to=https://evil.example&url=//evil.example&next=/%5Cevil.example&b2b=1', '/c/report?ref=%0d%0aLocation:%20https://evil.example&b2b=1']) {
     const r = await go(p); assert.equal(r.status, 302); assert.match(r.loc, /^https:\/\/buy\.stripe\.com\/[A-Za-z0-9_]+\?client_reference_id=[A-Za-z0-9_-]+$/, r.loc);
   }
+  { const r = await go('/c/owner?from=%22%3E%3Cscript%3Ex%3C/script%3E&ref=%22%3E%3Cb%3E'); assert.equal(r.status, 200); assert.doesNotMatch(r.txt, /<script>x/, 'what the request carries stays text on the order page'); assert.ok(r.txt.includes('name="ref" value="&quot;&gt;&lt;b&gt;"'), 'the reference is carried as text'); }
   for (const p of ['/c/evil', '/c/VERIFIED', '/c/owner/x', '/c/%2F%2Fevil.example', '/c/constructor', '/c/__proto__', '/c/verified']) assert.equal((await go(p)).status, 404, p);
   for (const u of ['https://buy.stripe.com.evil.example/abcdefgh', 'https://evil.example/buy.stripe.com/abcdefgh', '//evil.example', '/\\evil.example', '//buy.stripe.com/abcdefgh', 'javascript:alert(1)', 'http://buy.stripe.com/abcdefgh', 'https://buy.stripe.com/abcdefgh?client_reference_id=a&next=https://evil.example', 'https://buy.stripe.com/abcdefgh#x', '/pricing?x=https://evil.example', ''])
     assert.equal(safeTarget(u), false, u);
@@ -198,7 +202,7 @@ await proof('every service leads to its own payment page or to a page of the sea
   const c = (await S.call('/attention.json')).j.clicks.last30days;
   assert.equal(c.report.from.site, undefined, 'a door to nowhere is not counted'); assert.equal(c.teams.from.site, undefined);
 });
-await proof('every button to a paid service, on every page that offers one, passes an open door (302, never a 404), and no payment link is left outside the door', async () => {
+await proof('every button to a paid service, on every page that offers one, passes an open door (the order page for business customers, then 302; never a 404), and no payment link is left outside the door', async () => {
   const S = sea(); await S.map('ropes.dev');
   const pages = ['/offers', EP, '/site/ropes.dev', '/business', '/de/unternehmen', '/de/agenturen', '/teams', '/de/kanzleien', '/attention', '/claim', '/pricing', '/offers/sample-report'], doors = new Set();
   for (const p of pages) {
@@ -206,15 +210,21 @@ await proof('every button to a paid service, on every page that offers one, pass
     const found = [...r.txt.matchAll(/href="(\/c\/[^"]+)"/g)].map((m) => m[1].replace(/&amp;/g, '&')); assert.ok(found.length, `${p} has a button`); found.forEach((d) => doors.add(d));
     assert.doesNotMatch(r.txt, /href="https:\/\/buy\.stripe\.com/, `${p}: a payment link outside the door`);
   }
-  for (const d of doors) { const r = await S.call(d, person); assert.equal(r.status, 302, d); assert.ok(safeTarget(r.loc) || r.loc.startsWith(`${BASE}/`), `${d} → ${r.loc}`); }
+  for (const d of doors) {
+    let r = await S.call(d, person);
+    if (r.status === 200) { assert.ok(r.txt.includes('name="b2b" value="1" required'), `${d}: the order page asks for the box`); r = await S.call(`${d}${d.includes('?') ? '&' : '?'}b2b=1`, person); assert.match(r.loc || '', /^https:\/\/buy\.stripe\.com\//, d); }
+    assert.equal(r.status, 302, d); assert.ok(safeTarget(r.loc) || r.loc.startsWith(`${BASE}/`), `${d} → ${r.loc}`);
+  }
   assert.ok(doors.size >= 15, `${doors.size} buttons`);
 });
 await proof('clicks count per day, service and page kind for a person who navigates; assistants, programs, crawlers and the sea itself not; at most 3 per caller network and service', async () => {
   const S = sea();
   for (let i = 0; i < 5; i++) await S.call('/c/owner?from=site&ref=ropes.dev', { ...person, from: '203.0.113.77' });
   await S.call('/c/report?from=attention', { ua: UA.chatgpt }); await S.call('/c/teams?from=pricing', { ua: 'curl/8.4' });
-  assert.equal((await S.call('/c/owner?from=site', { ua: UA.claude })).status, 302, 'a crawler is sent on, and not counted');
+  assert.equal((await S.call('/c/owner?from=site', { ua: UA.claude })).status, 200, 'a crawler gets the order page, and is not counted');
   await S.call('/c/owner?from=site', { ua: UA.own }); await S.call('/c/law?from=//evil.example', person);
+  // a click is counted where the order page is shown, once: the ticked box that leads on is no second click
+  await S.call('/c/report?from=site&b2b=1&go=1', person); await S.call('/c/report?from=site&go=1', person);
   const c = (await S.call('/attention.json')).j.clicks;
   assert.deepEqual(c.last30days.owner, { total: 3, from: { site: 3 }, who: { person: 3 } });
   // (3.33.0, verifier I3: only a person in a browser who navigates counts, by the rule of the buttons of /connect; an assistant
@@ -226,7 +236,7 @@ await proof('clicks count per day, service and page kind for a person who naviga
 await proof('the operator can let attention rest without a release (immune:policy rest "attention"): nothing is counted, the doors still lead on', async () => {
   const S = sea(); await S.map('ropes.dev');
   immune.set({ rest: ['attention'] });
-  try { assert.equal((await S.call('/site/ropes.dev', { ua: UA.claude })).status, 200); assert.equal((await S.call('/c/owner?from=site', person)).status, 302); } finally { immune.set({}); }
+  try { assert.equal((await S.call('/site/ropes.dev', { ua: UA.claude })).status, 200); assert.equal((await S.call('/c/owner?from=site', person)).status, 200); assert.equal((await S.call('/c/owner?from=site&b2b=1', person)).status, 302); } finally { immune.set({}); }
   const j = (await S.call('/attention.json')).j; assert.deepEqual([j.week.ai, j.clicks.total], [0, 0]);
 });
 await proof('a count is shown, never used: only the pages and the door read the counter, nothing else in the sea imports it', () => {
