@@ -74,6 +74,10 @@ export function verifiedOf(e, today = new Date().toISOString().slice(0, 10)) { r
 export function ownerSiteOf(site, today = new Date().toISOString().slice(0, 10)) { return Object.hasOwn(OWNER_SITES, String(site || '')) ? markOf(OWNER_SITES[site], today) : null; }
 // every button to a paid service goes through the sea's counted door (node/attention.mjs): /c/<service>?from=<page kind>&ref=<listing>.
 // The door knows the payment link itself; the address only says which service, from which kind of page, for which listing.
+// The services in euro are for business customers only (Unternehmer, § 14 BGB): the door first shows the order page that
+// asks for it (node/legal.mjs gatePage), and only then the payment link. So the data name the door as the way to pay
+// (pay, go), never the payment link itself.
+export const CUSTOMERS = 'business customers only (Unternehmer within the meaning of § 14 BGB); the order page at pay asks for this before the payment page';
 export const go = (id, from, ref) => `/c/${id}?from=${from}${ref ? `&ref=${encodeURIComponent(String(ref).slice(0, 200))}` : ''}`;
 // the door of a service by its id here: the owner check keeps its old id ('verified') in this file and in Stripe's references
 export const doorOf = (id) => (id === 'verified' ? 'owner' : id);
@@ -99,7 +103,7 @@ export function entryListing(e, base) {
   return {
     question: 'Is this yours?',
     claim: { free: true, how: `POST ${base}/enter {"name":"<your name>","offers":"<what you offer, in one line>","entry":"${e.identifier}"}`, effect: 'You become a resident of the sea, bound to this entry. Calls that match what you offer are carried to your inbox (GET /inbox?by=mare:...&pass=...), and you can answer them. Entering is free and needs no account; it does not prove that the entry is yours.', guide: `${base}/llms.txt` },
-    ...(v ? { ownerCheck: { name: v.name, priceEur: v.priceEur, currency: 'EUR', period: v.period, pay: payUrl('verified', refOfEntry(e)), go: `${base}${go('owner', 'entry', refOfEntry(e))}`, delivers: v.delivers, within: v.within, not: v.not, by: `${SELLER.name}, ${SELLER.business}`, tax: SELLER.vat, details: `${base}/claim` } } : {}),
+    ...(v ? { ownerCheck: { name: v.name, priceEur: v.priceEur, currency: 'EUR', period: v.period, pay: `${base}${go('owner', 'entry', refOfEntry(e))}`, go: `${base}${go('owner', 'entry', refOfEntry(e))}`, customers: CUSTOMERS, delivers: v.delivers, within: v.within, not: v.not, by: `${SELLER.name}, ${SELLER.business}`, tax: SELLER.vat, details: `${base}/claim` } } : {}),
     ...(verifiedOf(e) ? { mark: verifiedOf(e) } : {}),
   };
 }
@@ -117,7 +121,7 @@ ${v ? `<p style="margin:.8em 0 .4em"><b>${esc(v.name)}, ${esc(priceOf(v))}.</b> 
 export function siteReport(site, base) {
   if (!isOpen('report')) return null;
   const o = OFFERS.report;
-  return { name: o.name, priceEur: o.priceEur, currency: 'EUR', period: o.period, pay: payUrl('report', site), go: `${base}${go('report', 'site', site)}`, delivers: o.delivers, within: o.within, not: o.not, by: `${SELLER.name}, ${SELLER.business}`, tax: SELLER.vat, details: `${base}/offers#report`, free: `${base}/check/${site}` };
+  return { name: o.name, priceEur: o.priceEur, currency: 'EUR', period: o.period, pay: `${base}${go('report', 'site', site)}`, go: `${base}${go('report', 'site', site)}`, customers: CUSTOMERS, delivers: o.delivers, within: o.within, not: o.not, by: `${SELLER.name}, ${SELLER.business}`, tax: SELLER.vat, details: `${base}/offers#report`, free: `${base}/check/${site}` };
 }
 // the result of the free check (/check/<domain>) carries the report while it is open
 export function siteReportHtml(site, base) {
@@ -174,7 +178,7 @@ export function siteReportMd(site, base) {
 // ---- /offers ----------------------------------------------------------------------------------------------------------
 export function offersJson(base) {
   return {
-    paid: openOffers().map((o) => ({ id: o.id, name: o.name, priceEur: o.priceEur, currency: 'EUR', period: o.period, for: o.for, delivers: o.delivers, within: o.within, asks: o.asks, not: o.not, ...(o.id === 'report' ? { sample: `${base}/offers/sample-report` } : {}), pay: o.link, go: `${base}${go(doorOf(o.id), 'offers')}`, details: `${base}/offers#${o.id}` })),
+    paid: openOffers().map((o) => ({ id: o.id, name: o.name, priceEur: o.priceEur, currency: 'EUR', period: o.period, for: o.for, delivers: o.delivers, within: o.within, asks: o.asks, not: o.not, ...(o.id === 'report' ? { sample: `${base}/offers/sample-report` } : {}), pay: `${base}${go(doorOf(o.id), 'offers')}`, go: `${base}${go(doorOf(o.id), 'offers')}`, customers: CUSTOMERS, details: `${base}/offers#${o.id}` })),
     seller: { name: SELLER.name, business: SELLER.business, place: SELLER.place, ...(SELLER.address ? { address: SELLER.address } : {}), contact: SELLER.email },
     tax: SELLER.vat,
     delivery: 'One payment each, for companies only. Delivery is done by hand at the moment, within the time named with each service. No service promises a ranking, traffic or revenue.',
