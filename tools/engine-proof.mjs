@@ -193,7 +193,7 @@ await proof('/savings and /savings.json name the new kinds; /open and /open.json
 });
 
 console.log('the engine room: /engine, /engine.json, /engine.md');
-await proof('/engine answers 200 in the sea\'s skin: a multi-word H1, the scene, five levers each with its curl line and whether it is lossless, the rules, the links', async () => {
+await proof('/engine answers 200 in the sea\'s skin: a multi-word H1, the scene, six levers each with its curl line and whether it is lossless, the rules, the links', async () => {
   const r = await call('/engine'); assert.equal(r.status, 200); assert.match(r.headers.get('content-type'), /^text\/html/); const h = r.text;
   assert.match(h, /<h1>The engine room of the sea<\/h1>/); assert.match(h, /data-zone="2"/); assert.match(h, /class="beats"/); assert.match(h, /depth\.js/);
   for (const id of Object.keys(LEVERS)) assert.match(h, new RegExp(`<div class="box lever" id="${id}">[\\s\\S]*?<pre><code>curl `), id);
