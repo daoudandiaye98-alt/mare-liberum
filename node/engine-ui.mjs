@@ -232,6 +232,7 @@ ${v.toll ? `<h2 id="toll">The toll</h2>
 <p><small>Tolled: ${esc(v.toll.levers)}. Free: ${esc(v.toll.free)}. A network: ${esc(v.toll.network)}. ${esc(v.toll.never)} ${esc(v.toll.headers)} ${esc(v.toll.books)} ${esc(v.toll.switch)} This node: <b>${esc(v.toll.state)}</b>. What it brought in: <a href="/treasury">/treasury</a>.</small></p>
 ` : ''}<h2>Switched off, nothing acts</h2>
 <p>${esc(ENGINE_RULES.rest)} This node: <b>${esc(v.state)}</b>.</p>
+<p>The reader (any public page as Markdown instead of HTML) also answers in the shapes agent stacks already call: Jina Reader's URL and headers on <code>/r/</code>, and Firecrawl's <code>POST /v1/scrape</code> and <code>/v2/scrape</code>, free up to 100 pages a day per network: <a href="/reader">the reader as a drop-in</a>.</p>
 <p><small>What the sea saves in all: <a href="/savings">/savings</a> · how it is measured: <a href="/proof">/proof</a> · the fair share of a saving: <a href="/fair">/fair</a> · the guide for agents: <a href="/llms.txt">/llms.txt</a> · as data: <a href="/engine.json">/engine.json</a> · for agents: <a href="/engine.md">/engine.md</a></small></p>`;
   return page(base, '/engine', 'The engine room — six levers that spare AI agents tokens, measured | Mare Liberum', 'Open, no account: TOON for tables, only the fields asked for, a lean MCP door, squeezing for programs, reading only what changed, a page to a token budget. Six levers, each measured by one rule with real tokenizers and counted in one public ledger, lossless and lossy apart, each with where it saves.', body, ld);
 }
