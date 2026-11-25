@@ -23,9 +23,10 @@ export const HUBS = [
   ['/security', 'weekly', 0], ['/transparency', 'weekly', 0], ['/tools', 'monthly', 0],
   ['/de', 'daily', 1], ['/de/mcp-server', 'daily', 1], ['/de/ki-sichtbarkeit', 'weekly', 0], ['/de/unternehmen', 'weekly', 0], ['/de/webseite-als-markdown', 'weekly', 0],
   ['/de/ki-crawler', 'daily', 1], ['/de/agentenwetter', 'daily', 1], ['/de/agenturen', 'weekly', 0], ['/de/kanzleien', 'weekly', 0],
+  ['/de/agb', 'monthly', 0], ['/de/datenschutz', 'monthly', 0], ['/de/preise', 'monthly', 0], ['/de/widerruf', 'monthly', 0],
 ];
 // the same page in English and German; the English one is the default for every other language (as the pages' own heads say)
-export const HUB_ALT = { '/': '/de', '/mcp-server': '/de/mcp-server', '/check': '/de/ki-sichtbarkeit', '/business': '/de/unternehmen', '/ai-crawlers': '/de/ki-crawler', '/weather': '/de/agentenwetter', '/web-to-markdown': '/de/webseite-als-markdown' };
+export const HUB_ALT = { '/': '/de', '/mcp-server': '/de/mcp-server', '/check': '/de/ki-sichtbarkeit', '/business': '/de/unternehmen', '/ai-crawlers': '/de/ki-crawler', '/weather': '/de/agentenwetter', '/web-to-markdown': '/de/webseite-als-markdown', '/terms': '/de/agb', '/privacy': '/de/datenschutz' };
 export const HUB_PATHS = HUBS.map(([p]) => p);
 export const HUB_SET = new Set(HUB_PATHS);
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
