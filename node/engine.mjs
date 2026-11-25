@@ -31,7 +31,7 @@ export const LEVERS = Object.freeze({
 });
 
 // <bench:engine> written by tools/engine-bench.mjs --ratio from the newest run (UTF-8 bytes per token, tokenizer o200k_base)
-export const ENGINE_RATIOS = null;
+export const ENGINE_RATIOS = Object.freeze({ tokenizer: 'o200k_base', date: '2026-11-25', source: '/engine/bench-2026-11-25.json', answers: 19, unit: 'UTF-8 bytes per token', json: 3.55, toon: 3.44 });
 // </bench:engine>
 // until the bench has measured JSON and TOON, both count with the ratio the proof measured for the sea's Markdown: an
 // assumption, and said so wherever a number rests on it
