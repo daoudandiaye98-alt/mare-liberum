@@ -41,7 +41,7 @@ export function aboutOf(base, price, seller = SELLER) {
     operator: { business: seller.business, owner: seller.name, address: seller.address, email: seller.email, vat: seller.vatEn },
     contact: { email: seller.email, languages: ['en', 'de'], report: `${base}/report`, security: `${base}/security` },
     price: price.line, pricing: `${base}/pricing`, how_to_pay: price.how_to_pay, free_sample: price.free_sample,
-    legal: { imprint: `${base}/impressum`, terms: `${base}/terms`, privacy: `${base}/privacy`, agb: `${base}/de/agb`, datenschutz: `${base}/de/datenschutz`, preise: `${base}/de/preise`, widerruf: `${base}/de/widerruf` },
+    legal: { imprint: `${base}/impressum`, terms: `${base}/terms`, privacy: `${base}/privacy`, agb: `${base}/de/agb`, datenschutz: `${base}/de/datenschutz`, preise: `${base}/de/preise`, widerruf: `${base}/de/widerruf`, withdraw: `${base}/de/vertrag-widerrufen`, cancel: `${base}/de/vertraege-kuendigen` },
     open: { source: 'https://github.com/daoudandiaye98-alt/mare-liberum', license: 'MIT', status: `${base}/status.json`, treasury: `${base}/treasury`, pulse: `${base}/pulse` },
     hosting: 'a server in Helsinki (Hetzner) and a database in Ireland, both in the EU',
     start: { brain: `${base}/brain?q=<your task>`, card: `${base}/.well-known/agent-card.json`, mcp: `${base}/mcp`, guide: `${base}/llms.txt` },

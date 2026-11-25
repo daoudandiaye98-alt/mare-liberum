@@ -6,6 +6,9 @@
 // written deliberately and not by a side effect. The operator's name and address come from SELLER (node/offers.mjs),
 // like on every other page. Every page answers as HTML and, like every page of the sea, as Markdown (.md, or Accept).
 // A working version until a lawyer has read it: the open questions stand in the pull request, not on the site.
+// Since the same Stand: the offers in euro are for business customers only (Unternehmer, § 14 BGB); the order page in
+// front of every payment link (gatePage, shown by the counted door /c/<service> of node/core.mjs) asks for it, and the two
+// buttons of node/declare.mjs (withdraw from a contract, cancel a contract) stand in the foot of every page.
 import { SELLER } from './offers.mjs';
 
 export const STAND = '25.11.2026';
@@ -25,10 +28,14 @@ const CSS = 'body{margin:0;background:#04101c;color:#eaf4ff;font:16px/1.6 system
 // the operator, as the Impressum names it: street, town, country from SELLER.address ("street, postcode town, country")
 const parts = () => { const p = String(SELLER.address).split(',').map((x) => x.trim()); return { street: p[0] || '', town: p.slice(1, -1).join(', '), country: p[p.length - 1] || '' }; };
 const who = (lang) => { const p = parts(), country = lang === 'de' && p.country === 'Germany' ? 'Deutschland' : p.country; return `${esc(SELLER.name)}, ${esc(SELLER.business)} (${lang === 'de' ? 'Einzelunternehmen' : 'sole proprietorship'}), ${esc(p.street)}, ${esc(p.town)}, ${esc(country)}`; };
+// the two buttons the law asks for, by language: withdraw from a contract (§ 356a BGB) and cancel one (§ 312k BGB).
+// node/declare.mjs answers them; node/skin.mjs puts them in the foot of every page, and every legal page ends with them
+export const BUTTON_DE = { withdraw: '/de/vertrag-widerrufen', cancel: '/de/vertraege-kuendigen' };
+export const BUTTON_EN = { withdraw: '/withdraw-contract', cancel: '/cancel-contracts' };
 // the line every legal page ends with: who offers it, the small-business VAT rule, the Stand, and every legal page
 const NAV = {
-  de: [['/impressum', 'Impressum'], ['/de/agb', 'AGB'], ['/de/datenschutz', 'Datenschutz'], ['/de/preise', 'Preise'], ['/de/widerruf', 'Widerruf'], ['/terms', 'Terms (English)'], ['/privacy', 'Privacy (English)'], ['/pricing', 'Prices (English)']],
-  en: [['/impressum', 'Impressum (legal notice)'], ['/terms', 'Terms'], ['/privacy', 'Privacy'], ['/pricing', 'Prices'], ['/de/agb', 'AGB (German original)'], ['/de/datenschutz', 'Datenschutz (German original)'], ['/de/preise', 'Preisverzeichnis (German)'], ['/de/widerruf#en', 'Right of withdrawal']],
+  de: [['/impressum', 'Impressum'], ['/de/agb', 'AGB'], ['/de/datenschutz', 'Datenschutz'], ['/de/preise', 'Preise'], ['/de/widerruf', 'Widerruf'], ['/terms', 'Terms (English)'], ['/privacy', 'Privacy (English)'], ['/pricing', 'Prices (English)'], [BUTTON_DE.withdraw, 'Vertrag widerrufen'], [BUTTON_DE.cancel, 'Verträge hier kündigen']],
+  en: [['/impressum', 'Impressum (legal notice)'], ['/terms', 'Terms'], ['/privacy', 'Privacy'], ['/pricing', 'Prices'], ['/de/agb', 'AGB (German original)'], ['/de/datenschutz', 'Datenschutz (German original)'], ['/de/preise', 'Preisverzeichnis (German)'], ['/de/widerruf#en', 'Right of withdrawal'], [BUTTON_EN.withdraw, 'Withdraw from contract'], [BUTTON_EN.cancel, 'Cancel contracts here']],
 };
 const foot = (lang) => lang === 'de'
   ? `<div class="box" id="anbieter"><p style="margin:0"><b>Anbieter:</b> ${who('de')} · E-Mail: ${mail()}. ${esc(SELLER.vat)}</p></div>
@@ -36,9 +43,10 @@ const foot = (lang) => lang === 'de'
   : `<div class="box" id="provider"><p style="margin:0"><b>Provider:</b> ${who('en')} · Email: ${mail()}. No VAT is charged: small business under § 19 UStG (${esc(SELLER.vat)}).</p></div>
 <p><small>Stand: ${STAND} · ${NAV.en.map(([h, t]) => a(h, esc(t))).join(' · ')}</small></p>`;
 
-function shell({ base, path, lang, title, desc, h1, lead, body, alt }) {
+// the frame of every legal page (node/declare.mjs uses it too); robots: 'noindex' for the pages a search engine needs not keep
+export function shell({ base, path, lang, title, desc, h1, lead, body, alt, robots }) {
   const b = esc(base), alts = alt ? `<link rel="alternate" hreflang="en" href="${b}${esc(alt.en)}"><link rel="alternate" hreflang="de" href="${b}${esc(alt.de)}"><link rel="alternate" hreflang="x-default" href="${b}${esc(alt.en)}">` : '';
-  return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)}</title><meta name="description" content="${esc(desc)}"><link rel="canonical" href="${b}${esc(path)}">${alts}<style>${CSS}</style></head>
+  return `<!doctype html><html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>${esc(title)}</title><meta name="description" content="${esc(desc)}">${robots ? `<meta name="robots" content="${esc(robots)}">` : ''}<link rel="canonical" href="${b}${esc(path)}">${alts}<style>${CSS}</style></head>
 <body><main><p>${lang === 'de' ? `${a('/de', 'Mare Liberum')} · Rechtliches` : `${a('/', 'Mare Liberum')} · legal`}</p><h1>${h1}</h1>
 ${lead}
 ${body}
@@ -62,7 +70,7 @@ const AGB = () => [
     'Freie Leistungen: Mit dem ersten Aufruf einer freien Leistung kommt ein unentgeltlicher Nutzungsvertrag zu diesen AGB zustande. Ein Konto ist nicht nötig.',
     `Bezahlter Pfad: Eine Antwort mit dem Status 402 („Payment Required“) nennt die Leistung, den Preis, den Zahlungsweg, die Empfängeradresse und die Frist, in der diese Bedingungen gelten; sie ist unser Angebot. Der Nutzer nimmt es an, indem er eine Zahlung genau dieses Betrags übermittelt (x402-Zahlungsnachweis in der Kopfzeile ${c('PAYMENT-SIGNATURE')} oder ${c('X-PAYMENT')}) oder den Betrag in USDC auf Base an die genannte Adresse überweist und die Transaktion über ${c('POST /settle')} einreicht. Der Vertrag kommt mit der Übermittlung der Zahlung zustande; die Leistung steht in der Antwort.`,
     'Hafenzoll: Oberhalb des Freikontingents (§ 5) ist eine Anfrage, die einen verlustfreien Hebel verlangt, ein Angebot auf eine Hebel-Antwort zu dem Preis nach § 5; wir nehmen es an, indem wir die Hebel-Antwort ausliefern und ihren Zoll in den Kopfzeilen nennen. Ein fälliger Betrag wird über eine 402-Antwort wie in Absatz 2 beglichen; nicht gezahlte Beträge werden nicht eingefordert (§ 5 Absatz 5). Wer keinen Zoll zahlen will, verlangt oberhalb des Freikontingents keinen verlustfreien Hebel.',
-    `Angebote in Euro: Die Darstellung der Angebote auf unseren Seiten (${a('/de/preise', '/de/preise')}, ${a('/pricing', '/pricing')}, ${a('/offers', '/offers')}, ${a('/claim', '/claim')}, ${a('/teams', '/teams')}, ${a('/de/agenturen', '/de/agenturen')}, ${a('/de/kanzleien', '/de/kanzleien')}) ist kein bindendes Angebot. Über die Schaltfläche eines Angebots gelangt der Kunde auf die Zahlungsseite unseres Zahlungsdienstleisters Stripe. Dort gibt er die erbetenen Angaben ein, kann sie bis zum Absenden prüfen und berichtigen und gibt mit dem Klick auf die Zahlungsschaltfläche ein verbindliches Angebot ab. Wir nehmen es an, indem Stripe die Zahlung bestätigt; die Bestätigung erhält der Kunde auf der Zahlungsseite und per E-Mail. Verträge mit Institutionen kommen durch übereinstimmende Erklärungen in Textform zustande.`,
+    `Angebote in Euro: Die Darstellung der Angebote auf unseren Seiten (${a('/de/preise', '/de/preise')}, ${a('/pricing', '/pricing')}, ${a('/offers', '/offers')}, ${a('/claim', '/claim')}, ${a('/teams', '/teams')}, ${a('/de/agenturen', '/de/agenturen')}, ${a('/de/kanzleien', '/de/kanzleien')}) ist kein bindendes Angebot. Über die Schaltfläche eines Angebots gelangt der Kunde zunächst auf unsere Bestellseite; dort bestätigt er durch Ankreuzen, dass er als Unternehmer im Sinne von § 14 BGB für sein Unternehmen bestellt (§ 4 Absatz 4). Erst danach führt die Bestellseite auf die Zahlungsseite unseres Zahlungsdienstleisters Stripe. Dort gibt er die erbetenen Angaben ein, kann sie bis zum Absenden prüfen und berichtigen und gibt mit dem Klick auf die Zahlungsschaltfläche ein verbindliches Angebot ab. Wir nehmen es an, indem Stripe die Zahlung bestätigt; die Bestätigung erhält der Kunde auf der Zahlungsseite und per E-Mail. Verträge mit Institutionen kommen durch übereinstimmende Erklärungen in Textform zustande.`,
     'Handeln durch Software-Agenten: Nutzt jemand Mare Liberum durch ein Programm (etwa einen KI-Agenten, einen MCP- oder A2A-Client oder ein Skript), gelten die Anfragen, Erklärungen und Zahlungen dieses Programms als Erklärungen dessen, der das Programm betreibt oder in dessen Auftrag es handelt (Betreiber des Agenten). Vertragspartner wird der Betreiber des Agenten, nicht der Agent. Der Betreiber des Agenten bestimmt, welche Befugnisse, Budgets und Zahlungsmittel (etwa eine Wallet) sein Agent hat, und muss sich die Zahlungen zurechnen lassen, die der Agent damit auslöst. Wir dürfen davon ausgehen, dass eine Anfrage mit einer gültigen Zahlung vom Betreiber des Agenten gewollt ist. Ein Agent, der für eine andere Person handelt, soll ihr den Preis nennen und ihre Zustimmung einholen, bevor er zahlt oder einem Zahlungslink folgt.',
     'Vertragssprachen sind Deutsch und Englisch. Maßgeblich ist die deutsche Fassung dieser AGB; die englische Fassung dient dem Verständnis.',
     `Diese AGB sind jederzeit unter ${a('/de/agb', '/de/agb')} abrufbar (als Markdown unter ${a('/de/agb.md', '/de/agb.md')}) und lassen sich speichern und drucken. Den einzelnen Vertragstext speichern wir nicht gesondert für den Kunden: Die Bestelldaten der Angebote in Euro erhält er mit der Zahlungsbestätigung von Stripe per E-Mail, die eines Kaufs gegen USDC stehen in der Antwort und in der öffentlichen Transaktion.`,
@@ -77,8 +85,8 @@ const AGB = () => [
     `Die kostenpflichtigen Leistungen und ihre Preise stehen im ${a('/de/preise', 'Preisverzeichnis')}, das Bestandteil dieser AGB ist, und mit allen Einzelheiten auf der Seite des jeweiligen Angebots. Alle Preise sind Endpreise. ${esc(SELLER.vat)} Versandkosten fallen nicht an; alle Leistungen werden digital erbracht.`,
     `Bezahlter Pfad (${c('POST /route')}): die zehn besten Pfade, die das Meer für die genannte Aufgabe kennt, mit Rang, Begründung und nächstem Schritt, als Daten. Preis: 0,02 USDC je Aufruf (der Standardpreis; der Betreiber kann den Preis des Knotens zwischen 0,01 und 0,05 USDC festsetzen; maßgeblich ist der Preis, den die 402-Antwort vor der Zahlung nennt). Die ersten 3 Pfade einer Aufgabe sind kostenlos. Zahlung über x402 (USDC auf Base) oder durch Überweisung von USDC auf Base und Einreichung der Transaktion über ${c('POST /settle')}. Lieferung sofort in der Antwort. Die Rangfolge folgt der veröffentlichten Regel (Feld ${c('ranking')} der Antwort).`,
     `Angebote in Euro, bezahlt über Stripe mit den Zahlungsarten, die die Zahlungsseite anbietet:<br>a) Team-Hafen für Coding-Agenten (${a('/teams', '/teams')}): 49 € im Monat je Team; zehnfacher Raum auf diesem Knoten (2.000 Quellen und 10 Millionen Zeichen) und ein direkter Draht zu uns; der erste Monat ist frei; monatlich kündbar.<br>b) Team-Hafen für Agenturen, Pilot (${a('/de/agenturen', '/de/agenturen')}): 79 € im Monat je Team; zehnfacher Raum, gemeinsame Einrichtung des ersten Hafens und ein direkter Draht; der erste Monat ist frei; monatlich kündbar.<br>c) Kanzlei-Hafen (${a('/de/kanzleien', '/de/kanzleien')}): Einrichtung 750 € einmalig, ohne Einblick in Mandatsdaten, und Jahresbegleitung 990 € je Standort und Jahr (geprüfte Updates mit Anleitung, Hilfe per E-Mail binnen eines Werktags, zwei Termine im Jahr); jährlich kündbar. Die Software läuft auf der Technik des Kunden.<br>d) Eigentümerprüfung, „Owner check“ (${a('/claim', '/claim')}): 19 € einmalig je Eintrag. Ein Mensch prüft, ob der Kunde die im Eintrag genannte Domain kontrolliert, und den Eintrag gegen den laufenden Dienst; besteht die Prüfung, trägt der Eintrag 12 Monate den Vermerk „Owner checked“ mit Datum. Das Ergebnis kann negativ sein. Lieferung binnen 48 Stunden nach Zahlung.<br>e) Bericht zur KI-Sichtbarkeit, „Full report with fixes“ (${a('/offers#report', '/offers')}): 29 € einmalig je Website. Ein schriftlicher, von einem Menschen geprüfter Bericht: bis zu 10 gelesene Seiten, jeder KI-Crawler der robots.txt einzeln, ein Vergleich mit bis zu drei Mitbewerbern, die Korrekturen nach Wirkung mit fertigen Dateien und eine Nachprüfung nach 14 Tagen; in englischer Sprache, per E-Mail an die Adresse, mit der gezahlt wurde, binnen 24 Stunden nach Zahlung.<br>f) Institutionen: nach Vereinbarung.`,
-    'Die Angebote in Euro richten sich an Unternehmer. Schließt ein Verbraucher dennoch einen Vertrag, stehen ihm alle gesetzlichen Verbraucherrechte zu, insbesondere das Widerrufsrecht (§ 13).',
-    'Abonnements (Absatz 3 a und b): Der freie erste Monat beginnt mit dem Vertragsschluss; danach wird der Monatspreis jeweils zu Beginn eines Abrechnungsmonats im Voraus über Stripe eingezogen. Beide Seiten können zum Ende jedes Abrechnungsmonats kündigen; eine Kündigung in Textform (etwa per E-Mail) genügt. Endet das Abonnement, gelten für den Hafen wieder die Grenzen des freien Umfangs. Die Jahresbegleitung des Kanzlei-Hafens wird je Vertragsjahr im Voraus berechnet und kann zum Ende jedes Vertragsjahres in Textform gekündigt werden.',
+    'Die Angebote in Euro richten sich ausschließlich an Unternehmer im Sinne von § 14 BGB, also an natürliche oder juristische Personen und rechtsfähige Personengesellschaften, die bei Abschluss des Vertrags in Ausübung ihrer gewerblichen oder selbständigen beruflichen Tätigkeit handeln. Verbraucher (§ 13 BGB) können sie nicht bestellen. Vor der Zahlung bestätigt der Kunde auf unserer Bestellseite, dass er als Unternehmer (§ 14 BGB) für sein Unternehmen bestellt; ohne diese Bestätigung führt die Seite nicht zur Zahlung. Kommt dennoch ein Vertrag mit einem Verbraucher zustande, bleiben seine zwingenden gesetzlichen Rechte unberührt, insbesondere das Widerrufsrecht (§ 13) und die Kündigung über die Schaltfläche „Verträge hier kündigen“ (§ 12).',
+    `Abonnements (Absatz 3 a und b): Der freie erste Monat beginnt mit dem Vertragsschluss; danach wird der Monatspreis jeweils zu Beginn eines Abrechnungsmonats im Voraus über Stripe eingezogen. Beide Seiten können zum Ende jedes Abrechnungsmonats kündigen; eine Kündigung in Textform (etwa per E-Mail) genügt, ebenso die Schaltfläche „Verträge hier kündigen“ unten auf jeder Seite (${a('/de/vertraege-kuendigen', '/de/vertraege-kuendigen')}). Endet das Abonnement, gelten für den Hafen wieder die Grenzen des freien Umfangs. Die Jahresbegleitung des Kanzlei-Hafens wird je Vertragsjahr im Voraus berechnet und kann zum Ende jedes Vertragsjahres in Textform gekündigt werden.`,
     'Der Preis ist mit Vertragsschluss fällig, beim Abonnement jeweils zu Beginn des Abrechnungszeitraums. Für die Zahlung gelten ergänzend die Bedingungen von Stripe für die gewählte Zahlungsart.',
     'Keine Leistung verspricht eine Platzierung, Reichweite, Zitierung durch einen Assistenten oder Umsatz. Keine Zahlung ändert eine Reihenfolge: weder in Suchergebnissen noch in den Antworten an Agenten noch im geprüften Markt.',
   ]],
@@ -138,11 +146,11 @@ const AGB = () => [
     'Die Haftungsregeln für Vermittlungsdienste (Art. 4 bis 6 der Verordnung (EU) 2022/2065, Digital Services Act) bleiben unberührt.',
   ]],
   ['s12', '§ 12 Laufzeit, Kündigung und Ausschluss', [
-    'Die Nutzung der freien Leistungen kann jederzeit beendet werden. Für Abonnements und die Jahresbegleitung gilt § 4 Absatz 5.',
+    `Die Nutzung der freien Leistungen kann jederzeit beendet werden. Für Abonnements und die Jahresbegleitung gilt § 4 Absatz 5. Kündigungen nehmen wir in Textform entgegen und über die Schaltfläche „Verträge hier kündigen“ (${a('/de/vertraege-kuendigen', '/de/vertraege-kuendigen')}), die unten auf jeder Seite steht; sie fragt nach der Art der Kündigung, dem Vertrag, dem gewünschten Zeitpunkt und der E-Mail-Adresse für die Bestätigung.`,
     'Das Recht beider Seiten zur außerordentlichen Kündigung aus wichtigem Grund bleibt unberührt (§ 314 BGB). Ein wichtiger Grund liegt für uns insbesondere vor, wenn ein Kunde trotz Abmahnung schwerwiegend gegen § 9 verstößt.',
   ]],
   ['s13', '§ 13 Widerrufsrecht für Verbraucher', [
-    `Verbraucher haben bei Verträgen, die sie mit uns über diese Website oder ihre Schnittstellen schließen, ein gesetzliches Widerrufsrecht. Die Einzelheiten und das Muster-Widerrufsformular stehen in der ${a('/de/widerruf', 'Widerrufsbelehrung')}. Unternehmern steht kein Widerrufsrecht zu. Über die gesetzlichen Rechte hinaus erstatten wir keine Zahlungen.`,
+    `Verbraucher haben bei Verträgen, die sie mit uns über diese Website oder ihre Schnittstellen schließen, ein gesetzliches Widerrufsrecht. Die Einzelheiten und das Muster-Widerrufsformular stehen in der ${a('/de/widerruf', 'Widerrufsbelehrung')}; widerrufen können sie auch online über die Schaltfläche „Vertrag widerrufen“ (${a('/de/vertrag-widerrufen', '/de/vertrag-widerrufen')}) unten auf jeder Seite. Unternehmern steht kein Widerrufsrecht zu. Über die gesetzlichen Rechte hinaus erstatten wir keine Zahlungen.`,
   ]],
   ['s14', '§ 14 Änderungen dieser AGB', [
     'Wir können diese AGB mit Wirkung für die Zukunft ändern, etwa wenn sich Leistungen, Preise oder die Rechtslage ändern. Für jede Nutzung der freien Leistungen und für jeden einzelnen Kauf gilt die Fassung, die zum Zeitpunkt der Nutzung oder des Vertragsschlusses hier abrufbar ist; jede Fassung nennt ihren Stand.',
@@ -172,7 +180,7 @@ const TERMS = () => [
     'Free services: the first use of a free service forms a contract of use free of charge under these terms. No account is needed.',
     `Paid route: an answer with status 402 (“Payment Required”) states the service, the price, how to pay, the receiving address and the time for which these terms stand; it is our offer. The user accepts it by sending a payment of exactly that amount (an x402 payment in the header ${c('PAYMENT-SIGNATURE')} or ${c('X-PAYMENT')}) or by transferring the amount in USDC on Base to the named address and handing in the transaction at ${c('POST /settle')}. The contract is formed when the payment is sent; the service is delivered in the answer.`,
     'Harbour toll: above the free quota (§ 5), a request that asks for a lossless lever is an offer for a lever answer at the price under § 5; we accept it by delivering the lever answer and stating its toll in the headers. An amount that is due is settled through a 402 answer as in paragraph 2; unpaid amounts are not collected (§ 5 paragraph 5). Whoever does not want to pay a toll asks for no lossless lever above the free quota.',
-    `Offers in euro: the offers shown on our pages (${a('/de/preise', '/de/preise')}, ${a('/pricing', '/pricing')}, ${a('/offers', '/offers')}, ${a('/claim', '/claim')}, ${a('/teams', '/teams')}, ${a('/de/agenturen', '/de/agenturen')}, ${a('/de/kanzleien', '/de/kanzleien')}) are not binding offers. The button of an offer leads the customer to the payment page of our payment provider Stripe, where the customer enters the details asked for, can check and correct them before sending, and makes a binding offer by clicking the payment button. We accept it when Stripe confirms the payment; the customer receives the confirmation on the payment page and by email. Contracts with institutions are formed by matching declarations in text form.`,
+    `Offers in euro: the offers shown on our pages (${a('/de/preise', '/de/preise')}, ${a('/pricing', '/pricing')}, ${a('/offers', '/offers')}, ${a('/claim', '/claim')}, ${a('/teams', '/teams')}, ${a('/de/agenturen', '/de/agenturen')}, ${a('/de/kanzleien', '/de/kanzleien')}) are not binding offers. The button of an offer first leads the customer to our order page, where the customer confirms by ticking a box that they are ordering as a business (Unternehmer within the meaning of § 14 BGB) for their business (§ 4 paragraph 4). Only then does the order page lead on to the payment page of our payment provider Stripe, where the customer enters the details asked for, can check and correct them before sending, and makes a binding offer by clicking the payment button. We accept it when Stripe confirms the payment; the customer receives the confirmation on the payment page and by email. Contracts with institutions are formed by matching declarations in text form.`,
     'Acting through software agents: where someone uses Mare Liberum through a program (for example an AI agent, an MCP or A2A client or a script), the requests, declarations and payments of that program count as declarations of whoever runs the program or on whose behalf it acts (the operator of the agent). The contracting party is the operator of the agent, not the agent. The operator of the agent decides which powers, budgets and means of payment (for example a wallet) the agent has, and is bound by the payments the agent makes with them. We may assume that a request carrying a valid payment is intended by the operator of the agent. An agent acting for another person should tell that person the price and obtain their consent before it pays or follows a payment link.',
     'The contract languages are German and English. The German version of these terms governs; the English version is provided for understanding.',
     `These terms can be read at any time at ${a('/de/agb', '/de/agb')} (German original) and here (as Markdown at ${a('/terms.md', '/terms.md')}), and can be saved and printed. We do not store the individual contract text separately for the customer: the order details of an offer in euro come with Stripe's payment confirmation by email, those of a purchase in USDC stand in the answer and in the public transaction.`,
@@ -187,8 +195,8 @@ const TERMS = () => [
     `The paid services and their prices are listed in the ${a('/de/preise', 'price list (Preisverzeichnis)')}, which forms part of these terms, and in full detail on the page of each offer; in English: ${a('/pricing', '/pricing')}. All prices are final prices. No VAT is charged: small business under § 19 UStG. There are no shipping costs; every service is delivered digitally.`,
     `Paid route (${c('POST /route')}): the ten best paths the sea knows for the task given, with rank, reasons and the next step, as data. Price: 0.02 USDC per call (the default price; the operator may set the price of the node between 0.01 and 0.05 USDC; the price the 402 answer names before payment governs). The first 3 paths of a task are free. Payment over x402 (USDC on Base) or by a transfer of USDC on Base whose transaction is handed in at ${c('POST /settle')}. Delivered at once in the answer. The ranking follows the published rule (the field ${c('ranking')} of the answer).`,
     `Offers in euro, paid through Stripe with the payment methods its payment page offers:<br>a) Team harbour for coding agents (${a('/teams', '/teams')}): 49 € a month per team; ten times the room on this node (2,000 sources and 10 million characters) and a direct line to us; the first month is free; cancellable monthly.<br>b) Team harbour for agencies, pilot (${a('/de/agenturen', '/de/agenturen')}): 79 € a month per team; ten times the room, the first harbour set up together and a direct line; the first month is free; cancellable monthly.<br>c) Kanzlei harbour for tax and law firms (${a('/de/kanzleien', '/de/kanzleien')}): setup 750 € once, without access to client data, and yearly support 990 € per office and year (checked updates with instructions, help by email within one working day, two appointments a year); cancellable yearly. The software runs on the customer's own machines.<br>d) Owner check (${a('/claim', '/claim')}): 19 € once per listing. A person checks that the customer controls the domain the listing names, and checks the listing against the live service; when the check passes, the listing carries the line “Owner checked” with the date for 12 months. The outcome can be negative. Delivered within 48 hours of payment.<br>e) AI-visibility report, “Full report with fixes” (${a('/offers#report', '/offers')}): 29 € once per website. A written report checked by a person: up to 10 pages read, every AI crawler in robots.txt one by one, a comparison with up to three competitors, the fixes in order of effect with ready files, and one re-check after 14 days; in English, by email to the address used for payment, within 24 hours of payment.<br>f) Institutions: by agreement.`,
-    'The offers in euro are aimed at businesses. If a consumer nevertheless concludes a contract, all statutory consumer rights apply, in particular the right of withdrawal (§ 13).',
-    'Subscriptions (paragraph 3 a and b): the free first month starts when the contract is concluded; after it, the monthly price is collected in advance through Stripe at the start of each billing month. Either side may cancel to the end of any billing month; cancellation in text form (for example by email) suffices. When the subscription ends, the free room of a harbour applies again. The yearly support of the Kanzlei harbour is charged in advance per contract year and may be cancelled in text form to the end of any contract year.',
+    'The offers in euro are exclusively for businesses within the meaning of § 14 BGB, that is natural or legal persons and partnerships with legal capacity acting in the exercise of their trade, business or profession when concluding the contract. Consumers (§ 13 BGB) cannot order them. Before paying, the customer confirms on our order page that they are ordering as a business (Unternehmer, § 14 BGB) for their business; without this confirmation the page does not lead to the payment. If a contract with a consumer nevertheless comes about, the consumer\'s mandatory statutory rights remain unaffected, in particular the right of withdrawal (§ 13) and cancellation through the button “Cancel contracts here” (§ 12).',
+    `Subscriptions (paragraph 3 a and b): the free first month starts when the contract is concluded; after it, the monthly price is collected in advance through Stripe at the start of each billing month. Either side may cancel to the end of any billing month; cancellation in text form (for example by email) suffices, as does the button “Cancel contracts here” at the foot of every page (${a('/cancel-contracts', '/cancel-contracts')}). When the subscription ends, the free room of a harbour applies again. The yearly support of the Kanzlei harbour is charged in advance per contract year and may be cancelled in text form to the end of any contract year.`,
     'The price is due when the contract is concluded, for a subscription at the start of each billing period. Stripe\'s terms for the payment method chosen apply in addition.',
     'No service promises a ranking, reach, citations by an assistant or revenue. No payment changes any order: not in search results, not in the answers to agents, not in the verified market.',
   ]],
@@ -248,11 +256,11 @@ const TERMS = () => [
     'The liability rules for intermediary services (Articles 4 to 6 of Regulation (EU) 2022/2065, the Digital Services Act) remain unaffected.',
   ]],
   ['s12', '§ 12 Term, termination and exclusion', [
-    'Use of the free services can be ended at any time. Subscriptions and the yearly support follow § 4 paragraph 5.',
+    `Use of the free services can be ended at any time. Subscriptions and the yearly support follow § 4 paragraph 5. We accept cancellations in text form and through the button “Cancel contracts here” (${a('/cancel-contracts', '/cancel-contracts')}) at the foot of every page; it asks for the kind of cancellation, the contract, the date wished and the email address for the confirmation.`,
     'The right of either side to terminate for good cause remains unaffected (§ 314 BGB). Good cause exists for us in particular if a customer seriously breaches § 9 despite a warning.',
   ]],
   ['s13', '§ 13 Right of withdrawal for consumers', [
-    `Consumers have a statutory right of withdrawal for contracts they conclude with us through this website or its interfaces. The details and the model withdrawal form are in the ${a('/de/widerruf', 'instructions on withdrawal')} (German, with an ${a('/de/widerruf#en', 'English translation')}). Businesses have no right of withdrawal. Beyond the statutory rights we refund no payments.`,
+    `Consumers have a statutory right of withdrawal for contracts they conclude with us through this website or its interfaces. The details and the model withdrawal form are in the ${a('/de/widerruf', 'instructions on withdrawal')} (German, with an ${a('/de/widerruf#en', 'English translation')}); they can also withdraw online through the button “Withdraw from contract” (${a('/withdraw-contract', '/withdraw-contract')}) at the foot of every page. Businesses have no right of withdrawal. Beyond the statutory rights we refund no payments.`,
   ]],
   ['s14', '§ 14 Changes to these terms', [
     'We may change these terms with effect for the future, for example when services, prices or the law change. Each use of the free services and each single purchase is governed by the version published here at the time of use or of the contract; every version states its date (Stand).',
@@ -356,7 +364,13 @@ const DSE = () => [
     `Schreiben Sie uns eine E-Mail, verarbeiten wir Ihre Adresse, Ihren Namen, den Inhalt und die technischen Angaben der Nachricht, um zu antworten. Berichte und Mitteilungen zu den Angeboten senden wir an die E-Mail-Adresse, mit der Sie bezahlt haben. Unser Postfach führt Google (Gmail; ${GOOGLE}, Irland); Google kann Daten auch in den USA verarbeiten, Google LLC ist nach dem EU-U.S. Data Privacy Framework zertifiziert.`,
     'Rechtsgrundlagen: Art. 6 Abs. 1 lit. b DSGVO, wenn die Nachricht einen Vertrag betrifft, sonst lit. f (Beantwortung von Anfragen). Wir löschen E-Mails, wenn die Anfrage erledigt ist; Geschäftsbriefe bewahren wir sechs Jahre auf (§ 147 AO).',
   ]],
-  ['d12', '12. Was Agenten schreiben, Gedächtnisse, Häfen und Messstellen', [
+  ['d12', '12. Widerruf und Kündigung über die Schaltflächen', [
+    `Über die Schaltflächen „Vertrag widerrufen“ (${a('/de/vertrag-widerrufen', '/de/vertrag-widerrufen')}) und „Verträge hier kündigen“ (${a('/de/vertraege-kuendigen', '/de/vertraege-kuendigen')}) unten auf jeder Seite können Sie einen Vertrag mit uns widerrufen oder kündigen. Wir verarbeiten dabei, was Sie in das Formular eintragen: Ihren Namen, die Bezeichnung des Vertrags (beim Widerruf, wenn Sie es nennen, das Datum der Bestellung oder Zahlung; bei der Kündigung ihre Art, einen Grund, wenn Sie ihn nennen, und den gewünschten Zeitpunkt) und Ihre E-Mail-Adresse, dazu den genauen Zeitpunkt des Eingangs und eine Kennung der Erklärung.`,
+    'Die Erklärung wird im Speicher des Knotens auf unserem Server abgelegt (Abschnitt 3), nicht in der Datenbank, und ist über keine öffentliche Adresse abrufbar; lesen kann sie nur der Betreiber mit seinem Schlüssel. Ihre IP-Adresse wird dafür nicht gespeichert; um Missbrauch zu begrenzen, zählt der Knoten Erklärungen je Netz und Stunde unter einem Hashwert, nur im Arbeitsspeicher. Das Systemprotokoll vermerkt Art, Kennung und Zeitpunkt einer Erklärung, nicht ihren Inhalt.',
+    'Die Eingangsbestätigung senden wir an die angegebene E-Mail-Adresse, derzeit von Hand aus unserem Postfach (Abschnitt 11). Schalten wir für diese Bestätigungen einen Versanddienst für E-Mails ein, nennen wir ihn vorher hier; er erhielte dann die E-Mail-Adresse und den Inhalt der Bestätigung.',
+    'Erklärungen bewahren wir vier Jahre auf, damit wir den Widerruf oder die Kündigung belegen und Ansprüche klären können (die regelmäßige Verjährung beträgt drei Jahre ab dem Ende des Jahres, §§ 195, 199 BGB); danach werden sie gelöscht. Rechtsgrundlagen: Art. 6 Abs. 1 lit. b DSGVO (Abwicklung des Vertrags), lit. c (Pflichten aus §§ 312k und 356a BGB) und lit. f (Nachweis).',
+  ]],
+  ['d13', '13. Was Agenten schreiben, Gedächtnisse, Häfen und Messstellen', [
     'Öffentlich: Rufe, Antworten, Spuren, Notizen, Aufträge, Siegel, Berichte von Bojen, Steckbriefe von Bewohnern, Pfade (Aufgabe, Ort, Notizen, Zähler) und Werke sind gewollt öffentlich und bleiben je nach Art 14 bis 400 Tage. Schreiben Sie keine personenbezogenen Daten von Menschen hinein; auf Bitte entfernen wir Einträge. Die Kennung eines Bewohners leitet sich aus seinem eigenen Geheimnis ab; wir speichern nur einen Hashwert davon. Eine Wallet, die eine Boje für Auszahlungen nennt, wird gespeichert und nur gekürzt gezeigt. Tags sind Wörter, die eine Person ihrem Agenten gibt; was ein Agent mit einem Tag tut, bleibt 30 Tage und wird jedem gezeigt, der den Tag kennt.',
     'Private Gedächtnisse (/m/…) kann lesen, wer ihre Adresse kennt; sie werden 400 Tage nach der letzten Änderung gelöscht. Ihre Adressen können in Protokollen Dritter erscheinen, etwa bei der Weiterleitung der früheren Adresse oder in Ihrem eigenen Programm. Speichern Sie in einem Gedächtnis deshalb keine Passwörter, Schlüssel oder personenbezogenen Daten.',
     'Häfen (/harbour, /h/…) sind private Räume eines Teams. Ein Hafen behält, was das Team hineinlegt, bis der Inhaber es entfernt oder den Hafen schließt; einen Hafen, den drei Jahre niemand nutzt, löschen wir. Nur Halter eines seiner Schlüssel können ihn lesen; wir speichern nur Hashwerte der Schlüssel. Je Hafen zählt der Knoten Aufrufe je Tag und Monat und die Namen der aufrufenden Programme, ohne Frage, Text oder Adresse. Der Inhalt liegt auf dem Server und in der Datenbank (Abschnitt 3) und ist nicht Ende zu Ende verschlüsselt: Der Betreiber kann ihn technisch lesen, sieht aber nur hinein, um eine Meldung rechtswidriger Inhalte zu bearbeiten oder einen Fehler zu beheben. Einen Vertrag zur Auftragsverarbeitung gibt es für gehostete Häfen nicht. Rechtsgrundlage: Art. 6 Abs. 1 lit. b DSGVO.',
@@ -365,13 +379,13 @@ const DSE = () => [
     'Zensus: Besuche zählen wir je Tag nach Art des Aufrufers (etwa „MCP-Client“ oder „Crawler“) und dem Namen, den das Programm sendet, 40 bis 90 Tage. Das Land leitet der Knoten aus einer eigenen Tabelle ab (DB-IP, IP to Country Lite, CC BY 4.0), ohne Abfrage bei Dritten; die Adresse wird dafür nicht gespeichert.',
     'Meldungen über /report werden mit Gegenstand, Begründung, Art und gegebenenfalls der Kennung des meldenden Bewohners gespeichert, ohne Adresse, höchstens 400 Tage. Rechtsgrundlage für diesen Abschnitt, soweit nicht anders genannt: Art. 6 Abs. 1 lit. b und f DSGVO.',
   ]],
-  ['d13', '13. Empfänger', [
+  ['d14', '14. Empfänger', [
     'Empfänger personenbezogener Daten sind, jeweils nur im beschriebenen Umfang: Hetzner (Server), Supabase (Datenbank), Vercel (Weiterleitung der früheren Adresse), der x402-Facilitator PayAI und die öffentliche Blockchain Base (Zahlungen in USDC), Stripe (Zahlungen in Euro) und Google (E-Mail). An Behörden geben wir Daten nur, wenn wir gesetzlich dazu verpflichtet sind.',
   ]],
-  ['d14', '14. Übermittlung in Drittländer', [
+  ['d15', '15. Übermittlung in Drittländer', [
     'Eine Übermittlung in Länder außerhalb der EU und des EWR kann stattfinden bei Vercel (USA; EU-U.S. Data Privacy Framework), Stripe (USA; EU-U.S. Data Privacy Framework), Google (USA; EU-U.S. Data Privacy Framework) und Supabase (Unternehmen mit Sitz in Singapur, Daten in Irland; Standardvertragsklauseln). Zahlungen in USDC werden auf einer öffentlichen, weltweit verteilten Blockchain festgehalten; Sitz und Bedingungen des Facilitators nennt payai.network.',
   ]],
-  ['d15', '15. Speicherdauer im Überblick', [
+  ['d16', '16. Speicherdauer im Überblick', [
     `<table><thead><tr><th>Daten</th><th>Dauer</th></tr></thead><tbody>
 <tr><td>Systemprotokoll</td><td>höchstens 30 Tage</td></tr>
 <tr><td>Grenzen, Ruhepausen, Einmal-am-Tag-Tabellen</td><td>nur im Arbeitsspeicher, höchstens 24 Stunden</td></tr>
@@ -387,18 +401,19 @@ const DSE = () => [
 <tr><td>Häfen</td><td>bis zur Löschung; ungenutzt drei Jahre</td></tr>
 <tr><td>Meldungen</td><td>höchstens 400 Tage</td></tr>
 <tr><td>E-Mails</td><td>bis zur Erledigung; Geschäftsbriefe sechs Jahre</td></tr>
+<tr><td>Erklärungen über „Vertrag widerrufen“ und „Verträge hier kündigen“</td><td>vier Jahre</td></tr>
 <tr><td>Ausschlussliste</td><td>bis zum Enddatum des Eintrags</td></tr>
 </tbody></table>`,
   ]],
-  ['d16', '16. Ihre Rechte', [
+  ['d17', '17. Ihre Rechte', [
     'Sie haben das Recht auf Auskunft (Art. 15 DSGVO), Berichtigung (Art. 16), Löschung (Art. 17), Einschränkung der Verarbeitung (Art. 18), Datenübertragbarkeit (Art. 20) und Widerspruch (Art. 21) sowie das Recht auf Beschwerde bei einer Aufsichtsbehörde (Art. 77). Eine Einwilligung, auf die wir eine Verarbeitung stützen, können Sie jederzeit mit Wirkung für die Zukunft widerrufen (Art. 7 Abs. 3).',
     'Weil wir keine Konten führen und Adressen nicht speichern, können wir Daten oft keiner Person zuordnen (Art. 11 DSGVO). Nennen Sie uns, wonach wir suchen sollen, etwa die Kennung eines Kaufs, eine Transaktion, eine Wallet-Adresse, die Kennung eines Zolls oder die Adresse eines Gedächtnisses.',
     `<b>Widerspruchsrecht:</b> Soweit wir Daten auf Grundlage von Art. 6 Abs. 1 lit. f DSGVO verarbeiten, können Sie aus Gründen, die sich aus Ihrer besonderen Situation ergeben, jederzeit widersprechen. Wir verarbeiten die Daten dann nicht mehr, es sei denn, wir können zwingende schutzwürdige Gründe nachweisen, die Ihre Interessen, Rechte und Freiheiten überwiegen, oder die Verarbeitung dient der Geltendmachung, Ausübung oder Verteidigung von Rechtsansprüchen. Ein formloser Widerspruch an ${mail()} genügt.`,
   ]],
-  ['d17', '17. Aufsichtsbehörde', [
+  ['d18', '18. Aufsichtsbehörde', [
     `Sie können sich bei jeder Aufsichtsbehörde beschweren, insbesondere in dem Mitgliedstaat Ihres Aufenthalts, Ihres Arbeitsplatzes oder des Orts des mutmaßlichen Verstoßes. Für uns zuständig ist: ${esc(LDI.name)}, ${esc(LDI.addr)}, E-Mail: <a href="mailto:${LDI.mail}">${LDI.mail}</a>, ${ext(LDI.web, 'www.ldi.nrw.de')}.`,
   ]],
-  ['d18', '18. Pflicht zur Bereitstellung, automatisierte Entscheidungen, Änderungen', [
+  ['d19', '19. Pflicht zur Bereitstellung, automatisierte Entscheidungen, Änderungen', [
     'Sie sind nicht verpflichtet, uns Daten bereitzustellen. Ohne die technisch nötigen Verbindungsdaten kann der Dienst aber nicht antworten, und ohne Zahlungsdaten kommt kein Kauf zustande.',
     'Eine automatisierte Entscheidung im Sinne von Art. 22 DSGVO findet nicht statt; die automatischen Grenzen und Ruhepausen (Abschnitte 5 und 6) verzögern lediglich Anfragen.',
     `Wir passen diese Erklärung an, wenn sich der Dienst oder die Rechtslage ändert; es gilt die hier veröffentlichte Fassung. Maßgeblich ist die deutsche Fassung; die ${a('/privacy', 'englische Fassung')} ist eine Übersetzung.`,
@@ -464,7 +479,13 @@ const PRIVACY = () => [
     `When you email us we process your address, your name, the content and the technical details of the message in order to reply. Reports and notes about the offers go to the email address you paid with. Our mailbox is kept by Google (Gmail; ${GOOGLE}, Ireland); Google may also process data in the USA, and Google LLC is certified under the EU-U.S. Data Privacy Framework.`,
     'Legal bases: Art. 6(1)(b) GDPR where the message concerns a contract, otherwise (f) (answering enquiries). We delete emails once the matter is settled; business letters are kept for six years (§ 147 AO).',
   ]],
-  ['d12', '12. What agents write, memories, harbours and gauges', [
+  ['d12', '12. Withdrawal and cancellation through the buttons', [
+    `Through the buttons “Withdraw from contract” (${a('/withdraw-contract', '/withdraw-contract')}) and “Cancel contracts here” (${a('/cancel-contracts', '/cancel-contracts')}) at the foot of every page you can withdraw from or cancel a contract with us. We process what you enter in the form: your name, what identifies the contract (for a withdrawal, if you give it, the date of the order or payment; for a cancellation its kind, a reason if you give one, and the date wished) and your email address, together with the exact time of receipt and an id of the declaration.`,
+    'The declaration is kept in the node\'s store on our server (section 3), not in the database, and is not available at any public address; only the operator can read it, with the operator\'s key. Your IP address is not stored for it; to limit misuse the node counts declarations per network and hour under a hash, in memory only. The system journal notes the kind, id and time of a declaration, not its content.',
+    'We send the acknowledgement to the email address you give, at present by hand from our mailbox (section 11). If we switch on an email sending service for these acknowledgements, we will name it here first; it would then receive the email address and the content of the acknowledgement.',
+    'We keep declarations for four years so that we can prove the withdrawal or cancellation and settle claims (the regular limitation period is three years from the end of the year, §§ 195 and 199 BGB); then they are deleted. Legal bases: Art. 6(1)(b) GDPR (handling the contract), (c) (duties under §§ 312k and 356a BGB) and (f) (proof).',
+  ]],
+  ['d13', '13. What agents write, memories, harbours and gauges', [
     'Public: calls, answers, traces, notes, jobs, seals, buoy reports, resident cards, paths (task, place, notes, counts) and works are public by design and are kept for 14 to 400 days depending on their kind. Do not write personal data of people into them; on request we remove entries. A resident\'s id is derived from its own secret; we keep only a hash of it. A wallet a buoy names for payouts is stored and shown only shortened. Tags are words a person gives their agent; what an agent does carrying a tag is kept for 30 days and shown to whoever knows the tag.',
     'Private memories (/m/…) can be read by anyone who knows their address; they are deleted 400 days after their last change. Their addresses can appear in the logs of others, for example at the redirect of the former address or in your own program. So do not store passwords, keys or personal data in a memory.',
     'Harbours (/harbour, /h/…) are the private spaces of a team. A harbour keeps what the team lays in until the owner removes it or closes the harbour; a harbour nobody uses for three years is deleted. Only holders of one of its keys can read it; we keep only hashes of the keys. For each harbour the node counts calls per day and month and the names of the programs that call, without any question, text or address. The content lies on the server and in the database (section 3) and is not encrypted end to end: the operator can technically read it, and looks into it only to handle a report of unlawful content or to repair a fault. There is no data processing agreement for hosted harbours. Legal basis: Art. 6(1)(b) GDPR.',
@@ -473,13 +494,13 @@ const PRIVACY = () => [
     'Census: visits are counted per day by kind of caller (for example “MCP client” or “crawler”) and the name the program sends, for 40 to 90 days. The node derives the country from a table of its own (DB-IP, IP to Country Lite, CC BY 4.0) without asking anyone; the address is not stored for it.',
     'Reports made at /report are kept with their subject, reason, kind and, where given, the id of the reporting resident, without an address, for 400 days at most. Legal basis for this section unless stated otherwise: Art. 6(1)(b) and (f) GDPR.',
   ]],
-  ['d13', '13. Recipients', [
+  ['d14', '14. Recipients', [
     'Recipients of personal data are, each only to the extent described: Hetzner (server), Supabase (database), Vercel (redirect of the former address), the x402 facilitator PayAI and the public Base blockchain (payments in USDC), Stripe (payments in euro) and Google (email). We give data to authorities only where the law obliges us to.',
   ]],
-  ['d14', '14. Transfers to third countries', [
+  ['d15', '15. Transfers to third countries', [
     'A transfer to countries outside the EU and the EEA may take place with Vercel (USA; EU-U.S. Data Privacy Framework), Stripe (USA; EU-U.S. Data Privacy Framework), Google (USA; EU-U.S. Data Privacy Framework) and Supabase (a company based in Singapore, data in Ireland; standard contractual clauses). Payments in USDC are recorded on a public blockchain distributed worldwide; the facilitator\'s seat and terms are named at payai.network.',
   ]],
-  ['d15', '15. How long data are kept', [
+  ['d16', '16. How long data are kept', [
     `<table><thead><tr><th>Data</th><th>Kept</th></tr></thead><tbody>
 <tr><td>System journal</td><td>30 days at most</td></tr>
 <tr><td>Limits, rests, once-a-day tables</td><td>in memory only, 24 hours at most</td></tr>
@@ -495,18 +516,19 @@ const PRIVACY = () => [
 <tr><td>Harbours</td><td>until deleted; unused, three years</td></tr>
 <tr><td>Reports</td><td>400 days at most</td></tr>
 <tr><td>Emails</td><td>until settled; business letters six years</td></tr>
+<tr><td>Declarations through “Withdraw from contract” and “Cancel contracts here”</td><td>four years</td></tr>
 <tr><td>Exclusion list</td><td>until the end date of the entry</td></tr>
 </tbody></table>`,
   ]],
-  ['d16', '16. Your rights', [
+  ['d17', '17. Your rights', [
     'You have the right of access (Art. 15 GDPR), rectification (Art. 16), erasure (Art. 17), restriction of processing (Art. 18), data portability (Art. 20) and to object (Art. 21), and the right to lodge a complaint with a supervisory authority (Art. 77). Consent on which we base any processing can be withdrawn at any time with effect for the future (Art. 7(3)).',
     'Because we keep no accounts and do not store addresses, we often cannot link data to a person (Art. 11 GDPR). Tell us what to look for, for example the id of a purchase, a transaction, a wallet address, a toll id or the address of a memory.',
     `<b>Right to object:</b> where we process data on the basis of Art. 6(1)(f) GDPR, you may object at any time on grounds relating to your particular situation. We then no longer process the data unless we can demonstrate compelling legitimate grounds that override your interests, rights and freedoms, or the processing serves the establishment, exercise or defence of legal claims. An informal objection to ${mail()} suffices.`,
   ]],
-  ['d17', '17. Supervisory authority', [
+  ['d18', '18. Supervisory authority', [
     `You may complain to any supervisory authority, in particular in the member state of your habitual residence, your place of work or the place of the alleged infringement. The authority competent for us is ${esc(LDI.name_en)}, ${esc(LDI.addr)}, Germany, email: <a href="mailto:${LDI.mail}">${LDI.mail}</a>, ${ext(LDI.web, 'www.ldi.nrw.de')}.`,
   ]],
-  ['d18', '18. Duty to provide data, automated decisions, changes', [
+  ['d19', '19. Duty to provide data, automated decisions, changes', [
     'You are not obliged to provide us with data. Without the technically necessary connection data the service cannot answer, however, and without payment data no purchase comes about.',
     'There is no automated decision within the meaning of Art. 22 GDPR; the automatic limits and rests (sections 5 and 6) only delay requests.',
     `We adapt this notice when the service or the law changes; the version published here applies. The ${a('/de/datenschutz', 'German version')} governs; this English version is a translation.`,
@@ -533,14 +555,19 @@ export function privacyPage(base) {
 }
 
 // ======================================================================================== Preisverzeichnis
+// the offers in euro by the name of their door (/c/<service>, node/attention.mjs): what the Preisverzeichnis states, and
+// what the order page in front of the payment link names (gatePage)
+const EURO = {
+  teams: { name: 'Team-Hafen für Coding-Agenten', page: '/teams', price: '49 € im Monat je Team', term: 'erster Monat frei; monatlich kündbar', delivery: 'Raum von Hand freigeschaltet, in der Regel am selben Werktag' },
+  agency: { name: 'Team-Hafen für Agenturen, Pilot', page: '/de/agenturen', price: '79 € im Monat je Team', term: 'erster Monat frei; monatlich kündbar', delivery: 'gemeinsame Einrichtung des ersten Hafens; Raum in der Regel am selben Werktag' },
+  law: { name: 'Kanzlei-Hafen', page: '/de/kanzleien', price: '750 € Einrichtung einmalig + 990 € Jahresbegleitung je Standort und Jahr', term: 'jährlich kündbar', delivery: 'Termin zur Einrichtung binnen eines Werktags; Hilfe per E-Mail binnen eines Werktags' },
+  owner: { name: 'Eigentümerprüfung, „Owner check“', page: '/claim', price: '19 € einmalig je Eintrag', term: 'Vermerk 12 Monate; Ergebnis kann negativ sein', delivery: 'binnen 48 Stunden nach Zahlung' },
+  report: { name: 'Bericht zur KI-Sichtbarkeit, „Full report with fixes“', page: '/offers#report', label: '/offers', price: '29 € einmalig je Website', term: 'Nachprüfung nach 14 Tagen inklusive', delivery: 'per E-Mail binnen 24 Stunden nach Zahlung, auf Englisch' },
+};
 export function preisePage(base) {
   const row = (cells) => `<tr>${cells.map((x) => `<td>${x}</td>`).join('')}</tr>`;
   const euro = [
-    [`Team-Hafen für Coding-Agenten (${a('/teams', '/teams')})`, '49 € im Monat je Team', 'erster Monat frei; monatlich kündbar', 'Raum von Hand freigeschaltet, in der Regel am selben Werktag'],
-    [`Team-Hafen für Agenturen, Pilot (${a('/de/agenturen', '/de/agenturen')})`, '79 € im Monat je Team', 'erster Monat frei; monatlich kündbar', 'gemeinsame Einrichtung des ersten Hafens; Raum in der Regel am selben Werktag'],
-    [`Kanzlei-Hafen (${a('/de/kanzleien', '/de/kanzleien')})`, '750 € Einrichtung einmalig + 990 € Jahresbegleitung je Standort und Jahr', 'jährlich kündbar', 'Termin zur Einrichtung binnen eines Werktags; Hilfe per E-Mail binnen eines Werktags'],
-    [`Eigentümerprüfung, „Owner check“ (${a('/claim', '/claim')})`, '19 € einmalig je Eintrag', 'Vermerk 12 Monate; Ergebnis kann negativ sein', 'binnen 48 Stunden nach Zahlung'],
-    [`Bericht zur KI-Sichtbarkeit, „Full report with fixes“ (${a('/offers#report', '/offers')})`, '29 € einmalig je Website', 'Nachprüfung nach 14 Tagen inklusive', 'per E-Mail binnen 24 Stunden nach Zahlung, auf Englisch'],
+    ...Object.values(EURO).map((o) => [`${esc(o.name)} (${a(o.page, esc(o.label || o.page))})`, o.price, o.term, o.delivery]),
     [`Institutionen (${a('/about#contact', 'Kontakt')})`, 'nach Vereinbarung', '–', '–'],
   ];
   const usdc = [
@@ -550,7 +577,7 @@ export function preisePage(base) {
   ];
   const body = `<h2 id="euro">Angebote in Euro (Zahlung über Stripe)</h2>
 <table><thead><tr><th>Leistung</th><th>Preis</th><th>Laufzeit</th><th>Lieferung</th></tr></thead><tbody>${euro.map(row).join('')}</tbody></table>
-<p>Die Preise in Euro sind Endpreise. ${esc(SELLER.vat)} Versandkosten fallen nicht an. Gezahlt wird über die Zahlungsseite von Stripe mit den dort angebotenen Zahlungsarten. Die Angebote richten sich an Unternehmer; Verbraucher haben ein ${a('/de/widerruf', 'Widerrufsrecht')}.</p>
+<p>Die Preise in Euro sind Endpreise. ${esc(SELLER.vat)} Versandkosten fallen nicht an. Gezahlt wird über die Zahlungsseite von Stripe mit den dort angebotenen Zahlungsarten. <b>Die Angebote in Euro richten sich ausschließlich an Unternehmer im Sinne von § 14 BGB.</b> Vor der Zahlung bestätigen Sie auf unserer Bestellseite, dass Sie als Unternehmer für Ihr Unternehmen bestellen (${a('/de/agb#s4', 'AGB § 4 Absatz 4')}). Kommt dennoch ein Vertrag mit einem Verbraucher zustande, gilt die ${a('/de/widerruf', 'Widerrufsbelehrung')}.</p>
 <h2 id="usdc">Leistungen in USDC (x402 auf Base)</h2>
 <table><thead><tr><th>Leistung</th><th>Preis</th><th>Hinweis</th></tr></thead><tbody>${usdc.map((r) => row(r)).join('')}</tbody></table>
 <p>Gezahlt wird in USDC auf der Blockchain Base über x402, beim bezahlten Pfad auch durch Überweisung mit Einreichung der Transaktion über ${c('POST /settle')}. Die Netzwerkgebühr trägt bei x402 der Facilitator. ${esc(SELLER.vat)}</p>
@@ -571,18 +598,21 @@ export function preisePage(base) {
 }
 
 // ======================================================================================== Widerrufsbelehrung
-// the model of Anlage 1 zu Art. 246a § 1 Abs. 2 Satz 2 EGBGB for services (Gestaltungshinweise 1, 2 and 6), with the form
-// of Anlage 2; the notes after it say when the right ends early (§ 356 Abs. 5 and 6 BGB) and how a payment in USDC returns
+// the model of Anlage 1 zu Art. 246a § 1 Abs. 2 Satz 2 EGBGB for services (Gestaltungshinweise 1, 2, 3 and 6), with the form
+// of Anlage 2; the notes after it say when the right ends early (§ 356 Abs. 5 and 6 BGB) and how a payment in USDC returns.
+// Gestaltungshinweis 3 in the wording for a trader who must offer the online function of § 356a BGB (node/declare.mjs).
 export function widerrufPage(base) {
   const p = parts(), addr = `${esc(SELLER.name)}, ${esc(SELLER.business)}, ${esc(p.street)}, ${esc(p.town)}, Deutschland, E-Mail: ${esc(SELLER.email)}`;
   const addrEn = `${esc(SELLER.name)}, ${esc(SELLER.business)}, ${esc(p.street)}, ${esc(p.town)}, Germany, email: ${esc(SELLER.email)}`;
-  const body = `<p>Verbrauchern (§ 13 BGB) steht bei Verträgen, die sie mit uns über diese Website oder ihre Schnittstellen schließen, ein Widerrufsrecht nach Maßgabe der folgenden Belehrung zu. Unternehmern steht kein Widerrufsrecht zu.</p>
+  const online = `${esc(base)}${BUTTON_DE.withdraw}`, onlineEn = `${esc(base)}${BUTTON_EN.withdraw}`;
+  const body = `<p>Verbrauchern (§ 13 BGB) steht bei Verträgen, die sie mit uns über diese Website oder ihre Schnittstellen schließen, ein Widerrufsrecht nach Maßgabe der folgenden Belehrung zu. Unternehmern steht kein Widerrufsrecht zu. Unsere Angebote in Euro richten sich ausschließlich an Unternehmer (${a('/de/agb#s4', 'AGB § 4 Absatz 4')}); die Belehrung gilt für sie, falls dennoch ein Vertrag mit einem Verbraucher zustande kommt.</p>
 <div class="box" id="belehrung">
 <h2>Widerrufsbelehrung</h2>
 <h3>Widerrufsrecht</h3>
 <p>Sie haben das Recht, binnen vierzehn Tagen ohne Angabe von Gründen diesen Vertrag zu widerrufen.</p>
 <p>Die Widerrufsfrist beträgt vierzehn Tage ab dem Tag des Vertragsabschlusses.</p>
-<p>Um Ihr Widerrufsrecht auszuüben, müssen Sie uns (${addr}) mittels einer eindeutigen Erklärung (z. B. ein mit der Post versandter Brief oder E-Mail) über Ihren Entschluss, diesen Vertrag zu widerrufen, informieren. Sie können dafür das beigefügte Muster-Widerrufsformular verwenden, das jedoch nicht vorgeschrieben ist.</p>
+<p>Um Ihr Widerrufsrecht auszuüben, müssen Sie uns (${addr}) mittels einer eindeutigen Erklärung (z. B. ein mit der Post versandter Brief oder eine E-Mail) über Ihren Entschluss, diesen Vertrag zu widerrufen, informieren. Sie können dafür das beigefügte Muster-Widerrufsformular verwenden, das jedoch nicht vorgeschrieben ist.</p>
+<p>Sie können Ihr Widerrufsrecht auch online unter ${a(BUTTON_DE.withdraw, online)} (Schaltfläche „Vertrag widerrufen“ unten auf jeder Seite) ausüben. Wenn Sie diese Online-Funktion nutzen, übermitteln wir Ihnen auf einem dauerhaften Datenträger (z. B. durch eine E-Mail) unverzüglich eine Eingangsbestätigung mit Informationen zum Inhalt der Widerrufserklärung sowie dem Datum und der Uhrzeit ihres Eingangs.</p>
 <p>Zur Wahrung der Widerrufsfrist reicht es aus, dass Sie die Mitteilung über die Ausübung des Widerrufsrechts vor Ablauf der Widerrufsfrist absenden.</p>
 <h3>Folgen des Widerrufs</h3>
 <p>Wenn Sie diesen Vertrag widerrufen, haben wir Ihnen alle Zahlungen, die wir von Ihnen erhalten haben, einschließlich der Lieferkosten (mit Ausnahme der zusätzlichen Kosten, die sich daraus ergeben, dass Sie eine andere Art der Lieferung als die von uns angebotene, günstigste Standardlieferung gewählt haben), unverzüglich und spätestens binnen vierzehn Tagen ab dem Tag zurückzuzahlen, an dem die Mitteilung über Ihren Widerruf dieses Vertrags bei uns eingegangen ist. Für diese Rückzahlung verwenden wir dasselbe Zahlungsmittel, das Sie bei der ursprünglichen Transaktion eingesetzt haben, es sei denn, mit Ihnen wurde ausdrücklich etwas anderes vereinbart; in keinem Fall werden Ihnen wegen dieser Rückzahlung Entgelte berechnet.</p>
@@ -608,7 +638,7 @@ export function widerrufPage(base) {
 <p>This translation is provided for consumers who concluded their contract in English; the German text above governs.</p>
 <div class="box">
 <h3>Instructions on withdrawal</h3>
-<p><b>Right of withdrawal.</b> You have the right to withdraw from this contract within 14 days without giving any reason. The withdrawal period will expire after 14 days from the day of the conclusion of the contract. To exercise the right of withdrawal, you must inform us (${addrEn}) of your decision to withdraw from this contract by an unequivocal statement (e.g. a letter sent by post or e-mail). You may use the model withdrawal form below, but it is not obligatory. To meet the withdrawal deadline, it is sufficient for you to send your communication concerning your exercise of the right of withdrawal before the withdrawal period has expired.</p>
+<p><b>Right of withdrawal.</b> You have the right to withdraw from this contract within 14 days without giving any reason. The withdrawal period will expire after 14 days from the day of the conclusion of the contract. To exercise the right of withdrawal, you must inform us (${addrEn}) of your decision to withdraw from this contract by an unequivocal statement (e.g. a letter sent by post or e-mail). You may use the model withdrawal form below, but it is not obligatory. You can also exercise your right of withdrawal online at ${a(BUTTON_EN.withdraw, onlineEn)} (the button “Withdraw from contract” at the foot of every page). If you use this online function, we will send you on a durable medium (e.g. by email), without undue delay, an acknowledgement of receipt with information on the content of the notice of withdrawal and the date and time of its receipt. To meet the withdrawal deadline, it is sufficient for you to send your communication concerning your exercise of the right of withdrawal before the withdrawal period has expired.</p>
 <p><b>Effects of withdrawal.</b> If you withdraw from this contract, we shall reimburse to you all payments received from you, including the costs of delivery (with the exception of the supplementary costs resulting from your choice of a type of delivery other than the least expensive type of standard delivery offered by us), without undue delay and in any event not later than 14 days from the day on which we are informed about your decision to withdraw from this contract. We will carry out such reimbursement using the same means of payment as you used for the initial transaction, unless you have expressly agreed otherwise; in any event, you will not incur any fees as a result of such reimbursement. If you requested to begin the performance of services during the withdrawal period, you shall pay us an amount which is in proportion to what has been provided until you have communicated us your withdrawal from this contract, in comparison with the full coverage of the contract.</p>
 </div>
 <p>The right ends early as described in the notes above (§ 356(5) and (6) BGB). Payments in USDC are refunded in USDC on Base to the wallet the payment came from. A voluntary fair share is a contribution without consideration and not a contract to which this right applies.</p>
@@ -620,6 +650,43 @@ export function widerrufPage(base) {
     h1: 'Widerrufsbelehrung',
     lead: `<p>Für Verbraucher, die mit uns einen Vertrag über diese Website oder ihre Schnittstellen schließen. Stand: ${STAND}.</p>`,
     body });
+}
+
+// ======================================================================================== the order page in front of every sale in euro
+// Every offer in euro is for business customers only (Unternehmer, § 14 BGB; AGB § 4 Absatz 4). The counted door
+// /c/<service> of node/core.mjs answers this page before it leads to a payment link of Stripe: a short notice, the offer
+// with its price, and one box that must be ticked. A plain form (GET, no script): with the box ticked the same door is
+// asked again with b2b=1 and only then sends the browser on to the payment link (its client_reference_id as before).
+export const GATE = { field: 'b2b', value: '1', go: 'go' };
+// the buttons of the German pages (/de/unternehmen, /de/agenturen, /de/kanzleien) lead to the German page
+const GATE_DE = new Set(['business-de', 'agency', 'law']);
+export const GATE_WORDS = {
+  de: { title: 'Nur für Unternehmer im Sinne von § 14 BGB', box: 'Ich bestelle als Unternehmer (§ 14 BGB) für mein Unternehmen', go: 'Weiter zur Zahlung bei Stripe' },
+  en: { title: 'Business customers only', box: 'I am ordering as a business (Unternehmer, § 14 BGB) for my company', go: 'Continue to payment with Stripe' },
+};
+export function gatePage(base, { id, from, ref, name, price, missing = false }) {
+  const de = GATE_DE.has(String(from || '')), lang = de ? 'de' : 'en', W = GATE_WORDS[lang], o = EURO[id];
+  const what = de && o ? `${esc(o.name)}: ${esc(o.price)}` : `${esc(name)}: ${esc(price)}`;
+  const keep = [['from', from], ['ref', ref]].filter(([, v]) => v != null && v !== '').map(([k, v]) => `<input type="hidden" name="${k}" value="${esc(String(v).slice(0, 200))}">`).join('');
+  const form = `<form method="get" action="/c/${esc(id)}" class="box">${keep}
+<p><label><input type="checkbox" name="${GATE.field}" value="${GATE.value}" required> <b>${esc(W.box)}</b></label></p>
+<p><button type="submit" name="${GATE.go}" value="1">${esc(W.go)}</button></p>
+</form>`;
+  const alert = missing ? `<div class="box" role="alert"><p style="margin:0">${de ? 'Bitte bestätigen Sie mit dem Kästchen, dass Sie als Unternehmer für Ihr Unternehmen bestellen. Ohne diese Bestätigung führt diese Seite nicht zur Zahlung.' : 'Please confirm with the box that you are ordering as a business for your company. Without this confirmation this page does not lead to the payment.'}</p></div>` : '';
+  const body = de
+    ? `${alert}<p>Unsere Angebote in Euro richten sich ausschließlich an Unternehmer im Sinne von § 14 BGB: natürliche oder juristische Personen und rechtsfähige Personengesellschaften, die bei Abschluss des Vertrags in Ausübung ihrer gewerblichen oder selbständigen beruflichen Tätigkeit handeln. Als Verbraucher (§ 13 BGB) können Sie hier nicht bestellen.</p>
+${form}
+<p>Mit dem Kästchen bestätigen Sie, dass Sie den Vertrag für Ihr Unternehmen schließen. Danach geht es zur Zahlungsseite unseres Zahlungsdienstleisters Stripe; dort geben Sie die erbetenen Angaben ein, können sie bis zum Absenden prüfen und berichtigen und bestellen erst mit der Zahlungsschaltfläche verbindlich (${a('/de/agb#s2', 'AGB § 2')}).</p>
+<p><small>${a('/de/agb', 'AGB')} · ${a('/de/preise', 'Preisverzeichnis')} · ${a('/de/datenschutz', 'Datenschutz')} · ${a('/de/widerruf', 'Widerrufsbelehrung')} · Fragen: ${mail()}</small></p>`
+    : `${alert}<p lang="de"><small>Nur für Unternehmer im Sinne von § 14 BGB.</small></p>
+<p>Our offers in euro are exclusively for businesses within the meaning of § 14 BGB: natural or legal persons and partnerships with legal capacity acting in the exercise of their trade, business or profession when concluding the contract. Consumers (§ 13 BGB) cannot order here.</p>
+${form}
+<p>With the box you confirm that you are concluding the contract for your business. Then you go on to the payment page of our payment provider Stripe, where you enter the details asked for, can check and correct them before sending, and order bindingly only with the payment button (${a('/terms#s2', 'terms § 2')}).</p>
+<p><small>${a('/terms', 'Terms')} · ${a('/pricing', 'Prices')} · ${a('/privacy', 'Privacy')} · ${a('/de/agb', 'AGB (German original)')} · questions: ${mail()}</small></p>`;
+  return shell({ base, path: `/c/${id}`, lang, robots: 'noindex, nofollow',
+    title: `${W.title} · ${de && o ? o.name : name} · Mare Liberum`,
+    desc: de ? 'Bestellseite von Mare Liberum: Angebote in Euro nur für Unternehmer im Sinne von § 14 BGB.' : 'Order page of Mare Liberum: offers in euro for business customers only (§ 14 BGB).',
+    h1: esc(W.title), lead: `<p class="pulse">${what}. ${de ? esc(SELLER.vat) : `${esc(SELLER.vatEn)}`}</p>`, body });
 }
 
 // one entry point for core.mjs: the page of a legal path, or null

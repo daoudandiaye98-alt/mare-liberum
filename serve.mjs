@@ -54,6 +54,10 @@ const waitUntil = (p) => { const x = Promise.resolve(p).catch(() => {}).finally(
 const store = createMemStore({ url: process.env.MARE_DB_URL, key: process.env.MARE_DB_KEY, secret: process.env.MARE_DB_SECRET });
 const disk = process.env.MARE_STATE ? diskKv(join(process.env.MARE_STATE, 'sea.ndjson'), { skip: store ? (k) => KEPT.test(k) : undefined, log }) : null;
 if (disk) await disk.ready;
+// a declaration sent through the buttons of node/declare.mjs is written to the copy on disk at once, not with the next minute
+// (one write at a time: a write already running is followed by one more)
+let saving = null, again = false;
+const saveSoon = () => { if (saving) { again = true; return saving; } saving = disk.save().finally(() => { saving = null; if (again) { again = false; saveSoon(); } }); return saving; };
 const kv = durableKv(disk || memoryKv(), store, { waitUntil, log });
 // what the sea counted on the node before this one (the days' census, everyone ever seen, the sightings of assistants)
 // travels with the build and is added once to what this node counts itself
@@ -103,7 +107,7 @@ const server = createServer(async (req, res) => {
     // HEAD is answered like GET, without the body
     const request = new Request(base + req.url, { method: req.method === 'HEAD' ? 'GET' : req.method, headers, body: chunks.length ? Buffer.concat(chunks) : undefined });
     // (a HEAD sends no body: it is counted in no ledger of savings and carries no receipt; head tells the node)
-    const out = await handle(request, db, { kv, seed, site, waitUntil, geoIndex, indexnowKey, shelf, download, ledger, ...(geoOf ? { geoOf } : {}), ...(req.method === 'HEAD' ? { head: true } : {}) });
+    const out = await handle(request, db, { kv, seed, site, waitUntil, geoIndex, indexnowKey, shelf, download, ledger, ...(geoOf ? { geoOf } : {}), ...(disk ? { stateSave: saveSoon } : {}), ...(req.method === 'HEAD' ? { head: true } : {}) });
     if (!out.headers.has('link')) out.headers.set('link', AGENT_LINK);
     out.headers.set('x-agent-hint', AGENT_HINT);
     if (stopping) out.headers.set('connection', 'close');

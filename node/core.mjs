@@ -44,7 +44,8 @@ import { hubSitemap, hubsDay, HUB_PATHS, HUB_SET } from './hubs.mjs';
 import { createTidings, TIDINGS } from './tidings.mjs';
 import { readAnswer, brainCompact, sampleCompact } from './compact.mjs';
 import { SHORE_MOVES, MCP_ALIASES, SSE_OPEN, SSE_POST, meant, aboutOf, aboutPage, imprintPage, didDoc, agentsJson, discoveryOf, sseOpen, sseOf } from './shore.mjs';
-import { legalPage, LEGAL_PATHS } from './legal.mjs';
+import { legalPage, LEGAL_PATHS, gatePage, GATE } from './legal.mjs';
+import { declareAnswer, operatorAnswer, mailConfig, DECLARE, OPERATOR_PATH } from './declare.mjs';
 import { openTools } from './opentools.mjs';
 import { netKey } from './guard.mjs';
 import { createFair, withReceipt, fairSwitch, fairData, fairPage, receiptJson, receiptPage, FAIR, usd6 } from './fair.mjs';
@@ -1559,6 +1560,8 @@ export const isHouse = (who) => who?.kind === 'resident' && who?.name === 'Angel
 // node is not switched off (MARE_FAIR=off), every answer the ledger of /savings counts carries its receipt. Off, nothing changes.
 const fairOn = (cfg) => fairSwitch(cfg) && !immune.atRest?.('fair');
 const fairOf = (db, cfg) => (db.fairLedger ||= createFair({ kv: cfg.kv || db.kv || memoryKv() }));
+// the declarations of node/declare.mjs: the node's own state (its copy on disk when it has one), the same memory for the life of a node without
+const declKv = (db, cfg) => cfg.kv || (db.declKv ||= db.kv || memoryKv());
 // a HEAD request (serve.mjs turns it into GET and says head) delivers no body: no receipt for it, and no count in the ledger
 const isHead = (req, cfg) => !!cfg.head || req.method === 'HEAD';
 // The engine room (node/engine.mjs, since 3.35) acts only where an agent asks for it and while it neither rests ("engine"
@@ -2261,8 +2264,12 @@ async function handleOne(req, db, cfg = {}) {
     { const cm = /^\/c\/([a-z]{2,12})$/.exec(path); if (cm && req.method === 'GET' && Object.hasOwn(CTA, cm[1])) {
       const to = ctaTarget(cm[1], url.searchParams.get('ref')), hdr = { 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow', 'referrer-policy': 'strict-origin-when-cross-origin', ...CORS };
       if (!to) return new Response(null, { status: 302, headers: { location: `${base}/pricing`, ...hdr } });
-      const hh = (k) => req.headers.get(k) || '';
-      attentionOf(db, cfg).click(cm[1], url.searchParams.get('from'), who, ip, { own: ctx.own, readOnly: ctx.readOnly, driven: DRIVEN.test(hh('user-agent')), mode: hh('sec-fetch-mode'), site: hh('sec-fetch-site'), dest: hh('sec-fetch-dest'), purpose: `${hh('sec-purpose')} ${hh('purpose')} ${hh('x-moz')}` });
+      const hh = (k) => req.headers.get(k) || '', sp = url.searchParams;
+      // a sale in euro (a payment link of Stripe) is for business customers only: the door first answers the order page that asks
+      // for it (node/legal.mjs gatePage), and leads to the payment link once its box is ticked (b2b=1); a click is counted once, there
+      const sale = to.startsWith('https://buy.stripe.com/'), agreed = sp.get(GATE.field) === GATE.value;
+      if (!sale || (!agreed && !sp.has(GATE.go))) attentionOf(db, cfg).click(cm[1], sp.get('from'), who, ip, { own: ctx.own, readOnly: ctx.readOnly, driven: DRIVEN.test(hh('user-agent')), mode: hh('sec-fetch-mode'), site: hh('sec-fetch-site'), dest: hh('sec-fetch-dest'), purpose: `${hh('sec-purpose')} ${hh('purpose')} ${hh('x-moz')}` });
+      if (sale && !agreed) return new Response(gatePage(base, { id: cm[1], from: sp.get('from'), ref: sp.get('ref'), name: CTA[cm[1]].name, price: CTA[cm[1]].price, missing: sp.has(GATE.go) }), { headers: { 'content-type': 'text/html; charset=utf-8', ...hdr } });
       return new Response(null, { status: 302, headers: { location: to.startsWith('/') ? `${base}${to}` : to, ...hdr } });
     } }
     // one click from this site into every agent client (node/connect.mjs): the page, its data, the counted buttons
@@ -2327,6 +2334,10 @@ async function handleOne(req, db, cfg = {}) {
     if (path === '/use' && req.method === 'GET') return new Response(usePage(base), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=3600', ...CORS } });
     // the legal texts (node/legal.mjs): terms and privacy in English, AGB, Datenschutz, Preise and Widerruf in German (they govern)
     if (LEGAL_PATHS.includes(path) && req.method === 'GET') return new Response(legalPage(base, path), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=3600', ...CORS } });
+    // the buttons the law asks for (node/declare.mjs): withdraw from a contract (§ 356a BGB) and cancel one (§ 312k BGB); what is
+    // sent stays in the node's own state, and only the operator reads it, with the moderation key
+    if (Object.hasOwn(DECLARE, path)) return declareAnswer({ req, path, base, kv: declKv(db, cfg), ip, mail: cfg.mail ?? mailConfig(), get: cfg.mailFetch, save: cfg.stateSave, waitUntil: cfg.waitUntil, ...(cfg.declLog ? { log: cfg.declLog } : {}) });
+    if (path === OPERATOR_PATH && req.method === 'GET') return operatorAnswer({ req, url, base, kv: declKv(db, cfg), ...(cfg.modKeySha ? { keySha: cfg.modKeySha } : {}) });
     // a via address: the sea carries the request to the place it names (node/via.mjs); the walk is counted and
     // strengthens the path, behind the answer
     if (path.startsWith('/via/') && (req.method === 'GET' || req.method === 'POST')) {
