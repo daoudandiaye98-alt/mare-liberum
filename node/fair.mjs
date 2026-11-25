@@ -22,12 +22,13 @@
 // Off by default: the operator switches it on with MARE_FAIR=on and pauses it with "fair" in rest of immune:policy.
 // Off, every answer is byte for byte what it was before 3.34.
 import { SAVE, TOKEN_PRICE, TOKEN_RATIO, tokensOfBytes, MEASURED_UNIT } from './areas.mjs';
-import { loadBench, loadLean, summarize } from './proof.mjs';
+import { loadBench, loadLean, summarize, proofJson } from './proof.mjs';
 import { USDC_BASE } from './pricing.mjs';
 import { paymentOf, takePayment } from './pay.mjs';
 import { page, esc } from './pages.mjs';
 import { tallyRun, tallyClose } from './tally.mjs';
 import { Buffer } from 'node:buffer';
+import { createHash } from 'node:crypto';
 
 export const FAIR_VERSION = 'fair-1';
 export const FAIR = {
@@ -35,19 +36,35 @@ export const FAIR = {
   rule: 'Free to enter. When the sea saves you tokens, it asks for a fair share of the saving — you keep at least 80 %.',
   rate: { lower: 0.2, modelled: 0.1, upper: 0 },
   keepAtLeast: 0.8,
-  // the smallest sum one payment settles: 1 US cent, the lowest price the till takes (node/pricing.mjs); less is bundled
-  minMicro: 10_000,
-  bundleMax: 100,
+  // the smallest sum one payment settles: 0.05 USDC. One settlement costs the facilitator about $0.001 to $0.0013 (PayAI:
+  // gas plus 30 % in credits of $0.001), so below 5 US cents the fee would eat a large part of the share; less is bundled
+  minMicro: 50_000,
+  minWhy: 'one settlement costs the facilitator about $0.001 to $0.0013 (gas plus 30 %), so below 0.05 USDC the fee would eat a large part of the share',
+  minSource: 'https://docs.payai.network/x402/facilitators/pricing.md',
+  bundleMax: 500,
   keepDays: 30,
   drop: 1000,
   // what the receipt field adds to a JSON answer, in bytes, counted against the saving of that answer (it is about 140)
   fieldBytes: 240,
   voluntary: 'Paying is voluntary. Nothing is withheld for not paying, and no payment changes any order, verification, verdict or answer.',
-  drops: 'A drop is a unit of account: 1,000 input tokens an agent did not have to spend, on the conservative basis (lower + modelled). It is not sold, not transferred and not paid out, and it promises no value.',
+  drops: 'A drop is a unit of account: 1,000 input tokens an agent did not have to spend, on the conservative basis (lower + modelled). It is a count kept on the server only: no export, no transfer, no copy on any chain, and no address of the sea moves drops. It is not sold and not paid out, and it promises no value.',
+  // beside every dollar figure that is worked out from tokens (not beside money actually received)
+  usdNote: 'modelled value for information — not a price, not redeemable, not transferable',
+  settledNote: 'USDC actually received on Base, from voluntary payments; the public view shows no address',
+};
+// the method of the three bases, published with its version (a receipt names the version it was made under)
+export const METHOD = {
+  version: FAIR_VERSION, since: FAIR.since,
+  bases: 'lower: measured, the page as plain text against the Markdown the sea sent (only where the plain text was taken); upper: measured, the page as raw HTML against the same Markdown, shown and never billed; modelled: a solved part reused, the low end of what finding it again costs (/savings), for a pathway at most the cheapest search loop of the bench and never more than a whole task saved there (/proof), minus the answer that carried it, measured',
+  valuation: 'tokens times the rate card of /savings for uncached input tokens (USD 0.10, 2 and 8 per million); receipts value at the middle and show both ends',
+  share: '20 % of the lower value plus 10 % of the modelled value, 0 % of the upper; rounded down to the millionth of a dollar, so the agent keeps at least 80 % of every saving; no saving, no share',
+  conservative: 'the low end of every range; the answer itself and the receipt field counted against the saving; no plain text taken, no lower saving; once a day per network and page or task; the sea\'s own calls, crawlers and the house agent never',
+  registry: 'a receipt is made once and counted once; a receipt in a payment that holds is retired and is never billed again; a settlement that fails sets its receipts free again; receipts are kept 30 days, payments 400',
+  drops: 'a server-side count of thousands of tokens saved on the conservative basis; nothing moves drops',
 };
 export const BASES = [
   { id: 'lower', name: 'lower', rate: FAIR.rate.lower, how: 'measured', what: 'the page as plain text against the Markdown the sea sent, for pages of the sea whose plain text was taken; nowhere else', short: 'measured: the page as plain text against the Markdown the sea sent' },
-  { id: 'modelled', name: 'modelled', rate: FAIR.rate.modelled, how: 'modelled, calibrated on the bench', what: 'a solved part reused (a confirmed pathway, a ready plan, verified offers): the low end of what finding it again costs (/savings), for a pathway at most the cheapest search loop of the bench (/proof), minus the answer that handed it over, measured', short: 'a solved part reused: what finding it again costs, at the low end, minus the answer itself' },
+  { id: 'modelled', name: 'modelled', rate: FAIR.rate.modelled, how: 'modelled, calibrated on the bench', what: 'a solved part reused (a confirmed pathway, a ready plan, verified offers): the low end of what finding it again costs (/savings), for a pathway at most the cheapest search loop of the bench and never more than a whole task saved there (/proof), minus the answer that handed it over, measured', short: 'a solved part reused: what finding it again costs, at the low end, minus the answer itself' },
   { id: 'upper', name: 'upper', rate: FAIR.rate.upper, how: 'measured', what: 'the page as raw HTML against the Markdown the sea sent: shown on every receipt, never billed', short: 'measured: the page as raw HTML against the Markdown; shown, never billed' },
 ];
 const REUSE = new Set(Object.keys(SAVE.per));
@@ -61,28 +78,38 @@ const n = (x) => (x == null || !Number.isFinite(Number(x)) ? '–' : Number(x).t
 const r2 = (x) => Math.round(x * 100) / 100;
 
 // ------------------------------------------------------------------ the calibration, read from the runs of the bench (/proof)
-// loopLow: the cheapest search loop an agent runs without the sea (modelled, its steps sized by the run); jsonBytesPerToken:
-// UTF-8 bytes per token of the brain's answers as measured (the smaller of the runs: an answer counts as large, the saving
-// as small); whole: a whole task with the sea against the cheapest loop and the page as plain text, for the calculator.
-// Without a run on the node there is no calibration and no modelled saving.
-export function calibrate(runs = [loadBench(), loadLean()]) {
-  const ok = runs.filter((d) => d?.tasks?.length).map((d) => (d.summary ? d : { ...d, summary: summarize(d) }));
-  if (!ok.length) return null;
+// Every figure is read from the data behind /proof (node/proof.mjs: the live run and the run beside it), never copied:
+//   whole       a whole task (finding the page and reading it), medians, as /proof shows it: WITH the sea the brain's
+//               short answer and the page as Markdown (the run beside the live one, "after"); WITHOUT it the search loop
+//               (modelled) and the page as plain text, the low end being the conservative one; for an agent that reads raw
+//               HTML the same as HTML (an upper bound, shown, never billed). The sea's own earlier full answer is no
+//               "without" and is used nowhere here
+//   loopLow     the cheapest search loop an agent runs without the sea (the finding part of the conservative "without")
+//   jsonBytesPerToken   UTF-8 bytes per token of the brain's answers as measured (the smaller of the runs: an answer counts
+//               as large, the saving as small)
+// Without a run on the node, or without the measured short answer, there is no calibration and no modelled saving.
+const dmy = (d) => (/^\d{4}-\d{2}-\d{2}$/.test(String(d)) ? `${d.slice(8, 10)}.${d.slice(5, 7)}.${d.slice(0, 4)}` : String(d || ''));
+export function calibrate(live = loadBench(), lean = loadLean()) {
+  const ok = [live, lean].filter((d) => d?.tasks?.length).map((d) => (d.summary ? d : { ...d, summary: summarize(d) }));
+  if (!ok.length || !live?.tasks?.length) return null;
+  const L = ok[0], A = lean?.tasks?.length ? ok[ok.length - 1] : null;
   const loops = ok.map((d) => d.summary.finding?.[TOK]?.low).filter((x) => x > 0);
   const ratios = ok.map((d) => { let b = 0, t = 0; for (const x of d.tasks) for (const a of [x.brain, x.brainCompact]) if (a?.bytes > 0 && a?.tokens?.[TOK] > 0) { b += a.bytes; t += a.tokens[TOK]; } return t ? b / t : null; }).filter(Boolean);
   if (!loops.length || !ratios.length) return null;
-  // the newest run that measured the brain's short answer, else the newest: a whole task with the sea and without it
-  const newest = [...ok].sort((a, b) => String(b.endedAt || b.date).localeCompare(String(a.endedAt || a.date)))[0];
-  const w = newest.summary.whole?.[TOK] || {}, short = w.seaCompact?.median != null;
-  const sea = short ? w.seaCompact.median : w.sea?.median, lo = short ? w.lowCompact?.median : w.low?.median, hi = short ? w.highCompact?.median : w.high?.median;
-  return { tokenizer: TOK, loopLow: Math.min(...loops), jsonBytesPerToken: r2(Math.min(...ratios)), runs: ok.map((d) => d.file || `bench-${d.date}.json`), date: newest.date,
-    whole: sea > 0 && lo > 0 ? { tasks: short ? w.compactN : w.n, sea, withoutLow: lo, withoutHigh: hi, answer: short ? 'the brain\'s short answer (fmt=compact) and the page as Markdown' : 'the brain\'s answer and the page as Markdown', run: newest.file || `bench-${newest.date}.json`, saves: r2(1 - sea / lo) } : null };
+  // the same numbers /proof shows (proofJson: headline.wholeTask and lean.after.wholeCompact)
+  const pj = proofJson('', L, null, A), wt = pj.headline?.wholeTask || {}, withSea = pj.lean?.after?.wholeCompact;
+  const text = wt.withoutText || [], html = wt.withoutHtml || [];
+  const whole = withSea > 0 && text[0] > 0 && withSea < text[0] ? { with: withSea, withoutText: text, withoutHtml: html, tasks: wt.tasks, saving: text[0] - withSea, saves: r2(1 - withSea / text[0]),
+    with_is: 'the brain\'s short answer (fmt=compact) and the page as Markdown', without_is: 'the search loop (modelled) and the page as plain text; raw HTML for an agent that reads it (an upper bound, never billed)',
+    date: L.date, label: `bench /proof, ${dmy(L.date)}`, runs: ok.map((d) => d.file || `bench-${d.date}.json`) } : null;
+  return { tokenizer: TOK, loopLow: Math.min(...loops), jsonBytesPerToken: r2(Math.min(...ratios)), runs: ok.map((d) => d.file || `bench-${d.date}.json`), date: L.date, label: `bench /proof, ${dmy(L.date)}`, whole };
 }
 export const BENCH = calibrate();
 
 // what finding a solved part again would cost, the conservative end: the low end of its sourced range (/savings); for a
-// confirmed pathway never more than the cheapest search loop of the bench
-export const baselineOf = (kind, cal = BENCH) => { const low = SAVE.per[kind]?.tokens?.[0] || 0; return !cal ? 0 : kind === 'path' ? Math.min(low, cal.loopLow) : low; };
+// confirmed pathway never more than the cheapest search loop of the bench, and never more than what the bench measured a
+// whole task to save at its conservative end (without the sea, plain text, minus with it; both as /proof shows them)
+export const baselineOf = (kind, cal = BENCH) => { const low = SAVE.per[kind]?.tokens?.[0] || 0; return !cal ? 0 : kind === 'path' ? Math.min(low, cal.loopLow, cal.whole ? cal.whole.saving : Infinity) : low; };
 // the tokens of the answer itself, from its bytes: Markdown and HTML by the measured ratios of the reader, everything else
 // (JSON) by the bytes per token of the brain's answers on the bench; rounded up
 export function answerTokensOf(bytes, type = '', cal = BENCH) {
@@ -120,18 +147,32 @@ export function receiptOf(notes = [], { answerBytes = 0, answerType = '', field 
 }
 
 // ------------------------------------------------------------------ x402 for the exact unpaid sum (the till verifies and settles)
+// How the door is called and what it answers, for x402 catalogs (the bazaar extension, as the till's 402 carries it; the
+// declared input validates against schema.properties.input)
+const RID_EXAMPLE = 'r20261125abcd1234';
+export function fairBazaar() {
+  const input = { type: 'http', method: 'POST', queryParams: { r: `${RID_EXAMPLE},r20261125efgh5678` }, bodyType: 'json', body: { r: [RID_EXAMPLE] } };
+  const output = { type: 'json', example: { paid: { status: 'settled', amount_usd: '0.050000', receipts: [RID_EXAMPLE] } } };
+  const schema = { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object', required: ['input'], properties: {
+    input: { type: 'object', required: ['type', 'method'], properties: { type: { const: 'http' }, method: { const: 'POST' }, queryParams: { type: 'object', properties: { r: { type: 'string', description: 'the receipt ids, comma separated (the x-sea-receipt header of an answer ends with its id)' } } }, bodyType: { const: 'json' }, body: { type: 'object', properties: { r: { type: 'array', items: { type: 'string', pattern: '^r[0-9]{8}[a-z0-9]{8}$' }, maxItems: FAIR.bundleMax } } } } },
+    output: { type: 'object', required: ['type'], properties: { type: { const: 'json' }, example: { type: 'object' } } } } };
+  return { info: { input, output }, schema };
+}
 export function fairTerms(cfg, { base, ids, micro }) {
-  const resource = `${base}/fair/pay?r=${ids.join(',')}`, atomic = String(micro);
-  const description = `Mare Liberum: the fair share of ${ids.length} receipt${ids.length === 1 ? '' : 's'} (${usd6(micro)} USD), voluntary; you keep at least 80 % of every saving`;
+  const list = ids.join(','), digest = ids.length ? createHash('sha256').update(list).digest('hex').slice(0, 16) : '';
+  const resource = !ids.length ? `${base}/fair/pay` : list.length <= 600 ? `${base}/fair/pay?r=${list}` : `${base}/fair/pay?bundle=${digest}&receipts=${ids.length}`, atomic = String(micro);
+  const description = ids.length ? `Mare Liberum: the voluntary fair share of ${ids.length} receipt${ids.length === 1 ? '' : 's'}, the exact unpaid sum (${usd6(micro)} USD); you keep at least 80 % of every saving`
+    : `Mare Liberum: settles the voluntary fair share of the receipts you name in ?r=, the exact unpaid sum, from ${usd6(FAIR.minMicro)} USD; without receipts nothing is due and nothing is taken`;
   const extra = { name: 'USD Coin', version: '2' };
-  const v1 = { scheme: 'exact', network: 'base', maxAmountRequired: atomic, resource, description, mimeType: 'application/json', payTo: cfg.payTo, maxTimeoutSeconds: cfg.window, asset: USDC_BASE, extra };
+  const outputSchema = { input: { type: 'http', method: 'POST', discoverable: true, bodyType: 'json', bodyFields: { r: { type: 'array', required: true, description: 'the receipt ids to settle (also ?r=<id>,<id> in the address)' } } }, output: { type: 'object', properties: { paid: { type: 'object', description: 'status, amount_usd, sale and the receipts settled' } } } };
+  const v1 = { scheme: 'exact', network: 'base', maxAmountRequired: atomic, resource, description, mimeType: 'application/json', outputSchema, payTo: cfg.payTo, maxTimeoutSeconds: cfg.window, asset: USDC_BASE, extra };
   const v2 = { scheme: 'exact', network: 'eip155:8453', amount: atomic, asset: USDC_BASE, payTo: cfg.payTo, maxTimeoutSeconds: cfg.window, extra };
   return { cents: Math.round(micro / 1e4), usd: micro / 1e6, atomic, micro, resource, description, v1, v2, payTo: cfg.payTo, window: cfg.window };
 }
 const b64 = (s) => Buffer.from(s, 'utf8').toString('base64');
 const PAY_HDR = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex' };
 export function fairPaymentRequired(t, { base, error, due = [], cors = {} }) {
-  const v2 = { x402Version: 2, error: error || 'PAYMENT-SIGNATURE header is required', resource: { url: t.resource, description: t.description, mimeType: 'application/json' }, accepts: [t.v2] };
+  const v2 = { x402Version: 2, error: error || 'PAYMENT-SIGNATURE header is required', resource: { url: t.resource, description: t.description, mimeType: 'application/json' }, accepts: [t.v2], extensions: { bazaar: fairBazaar() } };
   const body = { x402Version: 1, error: error || 'X-PAYMENT header is required', accepts: [t.v1],
     amount_usd: usd6(t.micro), unit: 'USDC on Base, 6 decimals (maxAmountRequired is in millionths of a dollar)', what: t.description,
     receipts: due.map((r) => ({ id: r.id, share_usd: usd6(r.shareMicro.mid), url: `${base}/fair/r/${r.id}` })),
@@ -150,6 +191,8 @@ const ID = /^r\d{8}[a-z0-9]{8}$/;
 const dayOfId = (id) => `${id.slice(1, 5)}-${id.slice(5, 7)}-${id.slice(7, 9)}`;
 const newId = (at) => `r${at.slice(0, 10).replace(/-/g, '')}${Array.from(crypto.getRandomValues(new Uint8Array(8)), (b) => 'abcdefghijklmnopqrstuvwxyz0123456789'[b % 36]).join('')}`;
 const OPEN = new Set(['pending', 'unverified']), HOLDS = new Set(['settled', 'pending', 'unverified']);
+// the books of the operator: every settled payment with its time, amount, rate source and transaction (never shown by a route)
+const RATE_SOURCE = 'USDC booked at 1 USD; for the books in euro the ECB euro foreign exchange reference rate (USD) of the settlement day';
 const add = (a, b) => { const o = { ...(a || {}) }; for (const [k, v] of Object.entries(b || {})) o[k] = typeof v === 'number' ? (o[k] || 0) + v : v; return o; };
 
 // ------------------------------------------------------------------ the ledger of receipts: in memory, written by the tide
@@ -188,12 +231,23 @@ export function createFair({ kv, now = () => new Date().toISOString(), base: bas
       const list = (await kv.get('fair:pay')) || [];
       // what became of payments still on their way: the till's own copy of the sale knows (node/ledger.mjs)
       let changed = false;
-      for (const p of list) if (OPEN.has(p.status)) { const s = ledger?.mem?.sales?.find((x) => x.id === p.sale); if (s && s.status !== p.status) { p.status = s.status; if (s.tx) p.tx = s.tx; changed = true; } }
+      const landed = [];
+      for (const p of list) if (OPEN.has(p.status)) { const s = ledger?.mem?.sales?.find((x) => x.id === p.sale); if (s && s.status !== p.status) { p.status = s.status; if (s.tx) p.tx = s.tx; changed = true; if (s.status === 'settled') landed.push([p, s]); } }
       if (changed) await serial(() => kv.set('fair:pay', list, 400 * DAY));
+      for (const [p, s] of landed) await fair.book(p, s);
       return list;
     },
     async paidIds(ledger) { const s = new Map(); for (const p of await fair.payments(ledger)) if (HOLDS.has(p.status)) for (const id of p.ids) if (!s.has(id)) s.set(id, p); return s; },
-    async record(pay) { return serial(async () => { const list = (await kv.get('fair:pay')) || []; const i = list.findIndex((x) => x.sale === pay.sale); if (i >= 0) list[i] = { ...list[i], ...pay }; else list.unshift(pay); await kv.set('fair:pay', list.slice(0, 2000), 400 * DAY); }); },
+    // payments are kept 400 days (receipts 30): a receipt in a payment that holds can never be billed again while it exists
+    async record(pay) { return serial(async () => { const list = (await kv.get('fair:pay')) || []; const i = list.findIndex((x) => x.sale === pay.sale); if (i >= 0) list[i] = { ...list[i], ...pay }; else list.unshift(pay); const cut = Date.parse(now()) - 400 * DAY * 1000; await kv.set('fair:pay', list.filter((x) => !x.at || Date.parse(x.at) >= cut || OPEN.has(x.status)).slice(0, 100_000), 400 * DAY); }); },
+    // into the books, once per sale, when its money is seen to arrive: time, amount, rate source, transaction, paying wallet
+    async book(p, sale = {}) {
+      if (p?.status !== 'settled') return false;
+      return serial(async () => { const list = (await kv.get('fair:book')) || []; if (list.some((x) => x.sale === p.sale)) return false;
+        list.unshift({ booked: now(), settled_at: sale.settled_at || now(), sale: p.sale, receipts: p.ids, amount_micro: p.micro, amount: usd6(p.micro), asset: 'USDC', network: 'eip155:8453', tx: sale.tx || p.tx || null, payer: sale.payer || null, rate: { source: RATE_SOURCE, day: String(sale.settled_at || now()).slice(0, 10) } });
+        await kv.set('fair:book', list, 4000 * DAY); return true; });
+    },
+    books: async () => (await kv.get('fair:book')) || [],
     // the public ledger: receipts, tokens per basis, value, share accrued and settled, drops
     async totals(ledger) {
       const [t, since, pays] = await Promise.all([kv.get('fair:total'), kv.get('fair:since'), fair.payments(ledger)]);
@@ -214,7 +268,12 @@ export function createFair({ kv, now = () => new Date().toISOString(), base: bas
     // settlement: x402 for the exact unpaid sum of the receipts named; below the minimum it says so and asks to bundle
     async pay({ ids, headers, body, payCfg, ledger, base = base0, callerHash, waitUntil, get, cors = {} }) {
       const want = [...new Set((ids || []).map((x) => String(x).trim().toLowerCase()).filter(Boolean))];
-      if (!want.length) return { status: 400, body: { error: { code: 'INVALID_ARGUMENT', message: `name the receipts: POST ${base}/fair/pay?r=<id>[,<id>…] (the x-sea-receipt header of an answer ends with its id)` }, fair: `${base}/fair` }, headers: { ...PAY_HDR, ...cors } };
+      if (!want.length) {
+        // a payment that names no receipt settles nothing: it is refused before anyone is asked, and nothing is charged
+        if (paymentOf(headers, body || {})) return { status: 400, body: { error: { code: 'INVALID_ARGUMENT', message: `a payment settles the receipts it names: POST ${base}/fair/pay?r=<id>[,<id>…]. Nothing was charged.` }, fair: `${base}/fair` }, headers: { ...PAY_HDR, ...cors } };
+        // a call that names none (a catalog checking the door) gets the terms of the door, in both shapes of x402
+        return fairPaymentRequired(fairTerms(payCfg, { base, ids: [], micro: FAIR.minMicro }), { base, cors, error: `name the receipts to settle: POST ${base}/fair/pay?r=<id>,<id> answers with their exact unpaid sum; without receipts nothing is due` });
+      }
       if (want.length > FAIR.bundleMax) return { status: 400, body: { error: { code: 'INVALID_ARGUMENT', message: `at most ${FAIR.bundleMax} receipts in one payment` } }, headers: { ...PAY_HDR, ...cors } };
       const found = (await Promise.all(want.map((id) => fair.get(id)))).filter(Boolean), unknown = want.filter((id) => !found.some((r) => r.id === id));
       if (!found.length) return { status: 404, body: { error: { code: 'NOT_FOUND', message: `no such receipt on this node (receipts are kept ${FAIR.keepDays} days)` }, unknown }, headers: { ...PAY_HDR, ...cors } };
@@ -224,8 +283,9 @@ export function createFair({ kv, now = () => new Date().toISOString(), base: bas
       const due = found.filter((r) => r.shareMicro.mid > 0 && !paid.has(r.id));
       const micro = due.reduce((s, r) => s + r.shareMicro.mid, 0), tell = { already_paid: already.length ? already : undefined, nothing_due: zero.length ? zero : undefined, unknown: unknown.length ? unknown : undefined };
       if (!due.length) return { status: 200, body: { payable: false, reason: 'nothing is due on these receipts: each one is paid or saved nothing on the billed bases', ...tell, fair: `${base}/fair` }, headers: { ...PAY_HDR, ...cors } };
-      if (micro < FAIR.minMicro) return { status: 200, body: { payable: false, reason: 'below the minimum', due_usd: usd6(micro), minimum_usd: usd6(FAIR.minMicro), receipts: due.map((r) => r.id), ...tell,
-        bundle: `One payment settles at least ${usd6(FAIR.minMicro)} USD (1 US cent, the smallest price the till takes). Keep the receipt ids of your answers and pay them together: POST ${base}/fair/pay?r=<id>,<id>,… (up to ${FAIR.bundleMax}).`, voluntary: FAIR.voluntary }, headers: { ...PAY_HDR, ...cors } };
+      if (micro < FAIR.minMicro) { const missing = Math.ceil((FAIR.minMicro - micro) / (micro / due.length));
+        return { status: 200, body: { payable: false, reason: 'below the minimum', open_usd: usd6(micro), minimum_usd: usd6(FAIR.minMicro), receipts: due.map((r) => r.id), receipts_missing: missing, missing_is: 'about this many more receipts like these, at their average share', ...tell,
+          bundle: `One payment settles at least ${usd6(FAIR.minMicro)} USD: ${FAIR.minWhy} (${FAIR.minSource}). Keep the receipt ids of your answers and pay them together: POST ${base}/fair/pay?r=<id>,<id>,… or {"r":[…]} in the body (up to ${FAIR.bundleMax}).`, voluntary: FAIR.voluntary }, headers: { ...PAY_HDR, ...cors } }; }
       const t = fairTerms(payCfg, { base, ids: due.map((r) => r.id), micro }), pay = paymentOf(headers, body || {});
       if (!pay) return fairPaymentRequired(t, { base, due, cors });
       if (pay.bad) return fairPaymentRequired(t, { base, error: pay.bad, due, cors });
@@ -238,6 +298,7 @@ export function createFair({ kv, now = () => new Date().toISOString(), base: bas
           work: async (sale) => { await fair.record({ sale: sale.id, ids: ids2, micro, status: sale.status, at }); return { receipts: ids2 }; } });
         if (r.refuse) return fairPaymentRequired(t, { base, error: r.refuse, due, cors });
         await fair.record({ sale: r.sale.id, status: r.sale.status, ...(r.sale.tx ? { tx: r.sale.tx } : {}) });
+        if (r.sale.status === 'settled') await fair.book({ sale: r.sale.id, ids: ids2, micro, status: 'settled', tx: r.sale.tx }, ledger?.mem?.sales?.find((x) => x.id === r.sale.id) || r.sale);
         const said = { settled: 'paid and settled on Base. Thank you.', pending: 'the payment holds; its settlement is on its way', unverified: 'taken before the payment could be checked; written down as unverified', unsettled: 'the payment was checked but did not settle: the receipts stay unpaid' }[r.sale.status];
         return { status: 200, body: { paid: { status: r.sale.status, amount_usd: usd6(micro), sale: r.sale.id, tx: r.sale.tx || undefined, receipts: ids2, note: said, why: r.reason || undefined }, ...tell, fair: `${base}/fair`, treasury: `${base}/treasury`, thanks: 'The sea only receives. What it takes in is public at /fair and /treasury.' }, headers: { ...PAY_HDR, ...(r.headers || {}), ...cors } };
       } finally { for (const r of due) locked.delete(r.id); }
@@ -249,7 +310,7 @@ export function createFair({ kv, now = () => new Date().toISOString(), base: bas
 
 // ------------------------------------------------------------------ the receipt on the answer: headers, and a field in JSON objects
 const EXPOSE = 'x-sea-saved-tokens,x-sea-fair-share-usd,x-sea-receipt';
-const compactOf = (r, base) => ({ id: r.id, saved_tokens: r.tokens.conservative, fair_share_usd: usd6(r.shareMicro.mid), url: `${base}/fair/r/${r.id}` });
+const compactOf = (r, base) => ({ id: r.id, saved_tokens: r.tokens.conservative, fair_share_usd: usd6(r.shareMicro.mid), voluntary: true, url: `${base}/fair/r/${r.id}` });
 // the field goes in as the last member of the object, in the object's own layout; what does not read back as the same
 // object with the field is sent as it was
 export function withField(text, key, value) {
@@ -287,16 +348,16 @@ export async function withReceipt(fn, { path, base, fair }) {
 }
 
 // ------------------------------------------------------------------ the public receipt, the page, the data
-const statusOf = (r, paid) => { const p = paid?.get?.(r.id); if (p) return p.status === 'settled' ? 'paid, settled on chain' : `paid (${p.status})`; return r.shareMicro.mid > 0 ? 'due (voluntary)' : 'nothing due: no saving on the billed bases'; };
+const statusOf = (r, paid) => { const p = paid?.get?.(r.id); if (p) return p.status === 'settled' ? 'retired: paid and settled on chain, never billed again' : `retired: paid (${p.status}), never billed again`; return r.shareMicro.mid > 0 ? 'due (voluntary)' : 'nothing due: no saving on the billed bases'; };
 export function receiptJson(base, r, paid) {
   const p = paid?.get?.(r.id);
   return { id: r.id, at: r.at, door: r.door, rule: { version: r.rule, sentence: FAIR.rule, page: `${base}/fair` },
     tokens: { lower: r.tokens.lower, modelled: r.tokens.modelled, upper: r.tokens.upper, conservative: r.tokens.conservative, unit: 'input tokens the agent did not have to read' },
     bases: Object.fromEntries(BASES.map((b) => [b.id, { rate: b.rate, how: b.how, what: b.what }])),
     counted: r.counted, modelled: r.modelled ? { baseline: r.modelled.baseline, answer: r.modelled.answer, read: 'what finding the solved parts again would have cost, minus the tokens of the answer that handed them over' } : undefined,
-    value_usd: { low: usd6(r.valueMicro.low), mid: usd6(r.valueMicro.mid), high: usd6(r.valueMicro.high), of: 'the conservative tokens (lower + modelled) at the rate card of /savings: USD 0.10, 2 and 8 per million input tokens' },
-    fair_share_usd: { mid: usd6(r.shareMicro.mid), low: usd6(r.shareMicro.low), high: usd6(r.shareMicro.high), rate: FAIR.rate, billed: 'mid' },
-    you_keep: { usd: usd6(r.keepMicro), share_of_saving: r.keepShare }, drops: r2(r.tokens.conservative / FAIR.drop),
+    value_usd: { low: usd6(r.valueMicro.low), mid: usd6(r.valueMicro.mid), high: usd6(r.valueMicro.high), of: 'the conservative tokens (lower + modelled) at the rate card of /savings: USD 0.10, 2 and 8 per million input tokens', note: FAIR.usdNote },
+    fair_share_usd: { mid: usd6(r.shareMicro.mid), low: usd6(r.shareMicro.low), high: usd6(r.shareMicro.high), rate: FAIR.rate, billed: 'mid', voluntary: true, note: FAIR.usdNote },
+    you_keep: { usd: usd6(r.keepMicro), share_of_saving: r.keepShare, note: FAIR.usdNote }, drops: r2(r.tokens.conservative / FAIR.drop), drop: FAIR.drops, method: { version: r.rule, page: `${base}/fair#method` },
     status: statusOf(r, paid), paid: p ? { status: p.status, sale: p.sale, at: p.at } : undefined,
     pay: r.shareMicro.mid > 0 && !p ? { post: `${base}/fair/pay?r=${r.id}`, minimum_usd: usd6(FAIR.minMicro), bundle: `below the minimum alone: pay several together, POST ${base}/fair/pay?r=${r.id},<id>,…` } : undefined,
     voluntary: FAIR.voluntary, holds: 'no address and no caller hash' };
@@ -305,10 +366,10 @@ export function receiptPage(base, r, paid) {
   const j = receiptJson(base, r, paid);
   const rows = [['lower: measured against plain text', j.tokens.lower, '20 %'], ['modelled: a solved part reused, calibrated on the bench', j.tokens.modelled, '10 %'], ['upper: measured against raw HTML (shown, never billed)', j.tokens.upper, '0 %']];
   return page(base, `/fair/r/${r.id}`, `Receipt ${r.id} — what the sea saved one answer | Mare Liberum`, `One receipt of the open sea: ${n(j.tokens.conservative)} tokens saved on the conservative basis, a fair share of ${j.fair_share_usd.mid} USD, voluntary.`,
-    `<h1>Receipt of one answer</h1><p class="pulse"><b>${n(j.tokens.conservative)}</b> tokens saved on the conservative basis · fair share <b>${money(r.shareMicro.mid)}</b> · ${esc(j.status)}</p>
+    `<h1>Receipt of one answer</h1><p class="pulse"><b>${n(j.tokens.conservative)}</b> tokens saved on the conservative basis · fair share <b>${money(r.shareMicro.mid)}</b>, voluntary · ${esc(j.status)}</p><p><small>Every dollar figure here: ${esc(FAIR.usdNote)}.</small></p>
 <div class="tw"><table class="tbl"><thead><tr><th>basis</th><th>tokens</th><th>share</th></tr></thead><tbody>${rows.map(([a, b, c]) => `<tr><td>${esc(a)}</td><td>${n(b)}</td><td>${c}</td></tr>`).join('')}</tbody></table></div>
 ${j.modelled ? `<p>Modelled: finding the solved parts again would have cost about ${n(j.modelled.baseline)} tokens; the answer that handed them over cost ${n(j.modelled.answer)} (measured). ${j.tokens.modelled ? `The difference, ${n(j.tokens.modelled)}, is the saving.` : 'The answer cost as much or more: no saving, no share.'}</p>` : ''}
-<p>Value of the saving at the rate card of <a href="/savings">/savings</a>: ${money(r.valueMicro.mid)} (${money(r.valueMicro.low)} at a small model, ${money(r.valueMicro.high)} at the top model). You keep ${money(r.keepMicro)} of it, ${Math.round(j.you_keep.share_of_saving * 100)} %. Drops: ${j.drops}.</p>
+<p>Value of the saving at the rate card of <a href="/savings">/savings</a>: ${money(r.valueMicro.mid)} (${money(r.valueMicro.low)} at a small model, ${money(r.valueMicro.high)} at the top model). You keep ${money(r.keepMicro)} of it, ${Math.round(j.you_keep.share_of_saving * 100)} % (${esc(FAIR.usdNote)}). Drops: ${j.drops}, a count on the server only.</p>
 <p><small>Issued ${esc(r.at.slice(0, 16).replace('T', ' '))} UTC at <code>${esc(r.door)}</code> · rule ${esc(r.rule)} · ${esc(FAIR.voluntary)} This receipt holds no address and no caller hash.</small></p>
 ${j.pay ? `<h2>Pay it</h2><pre>curl -si -X POST '${esc(j.pay.post)}'</pre><p><small>The answer is 402 with the exact sum; an x402 client pays it. One payment settles at least ${money(FAIR.minMicro)}: ${esc(j.pay.bundle)}.</small></p>` : ''}
 <p><small><a href="/fair">The rules and the public ledger</a> · as data: <a href="/fair/r/${esc(r.id)}.json">/fair/r/${esc(r.id)}.json</a></small></p>`, undefined, '/og.png', { robots: 'noindex, follow' });
@@ -321,16 +382,16 @@ export async function fairData(base, fair, { on, ledger } = {}) {
     issuing: on ? 'receipts are issued on every answer the savings ledger counts' : 'this node issues no receipts now: fair share is switched off (or rests)',
     bases: BASES, rates: FAIR.rate, keepAtLeast: FAIR.keepAtLeast,
     price: { unit: P.unit, low: P.low, mid: P.mid, high: P.high, asOf: P.asOf, receiptsValueAt: 'mid', page: `${base}/savings` },
-    calibration: BENCH ? { loopLow: BENCH.loopLow, jsonBytesPerToken: BENCH.jsonBytesPerToken, tokenizer: BENCH.tokenizer, runs: BENCH.runs, proof: `${base}/proof`, baselines: Object.fromEntries(Object.keys(SAVE.per).map((k) => [k, baselineOf(k)])) } : null,
+    calibration: BENCH ? { label: BENCH.label, loopLow: BENCH.loopLow, wholeSaving: BENCH.whole?.saving ?? null, jsonBytesPerToken: BENCH.jsonBytesPerToken, tokenizer: BENCH.tokenizer, runs: BENCH.runs, proof: `${base}/proof`, baselines: Object.fromEntries(Object.keys(SAVE.per).map((k) => [k, baselineOf(k)])) } : null,
     live: { since: t.since, receipts: t.receipts, receiptsWithShare: t.due, tokens: t.tokens,
-      valueCreatedUsd: { low: usd6(t.valueMicro.low), mid: usd6(t.valueMicro.mid), high: usd6(t.valueMicro.high), of: 'the conservative tokens (lower + modelled)' },
-      fairShareAccruedUsd: usd6(t.shareMicro), fairShareSettledOnChainUsd: usd6(t.settledMicro), paidOnItsWayUsd: usd6(t.onItsWayMicro), payments: t.payments, drops: t.drops,
+      valueCreatedUsd: { low: usd6(t.valueMicro.low), mid: usd6(t.valueMicro.mid), high: usd6(t.valueMicro.high), of: 'the conservative tokens (lower + modelled)', note: FAIR.usdNote },
+      fairShareAccruedUsd: usd6(t.shareMicro), fairShareAccruedNote: `voluntary; ${FAIR.usdNote}`, fairShareSettledOnChainUsd: usd6(t.settledMicro), fairShareSettledNote: FAIR.settledNote, paidOnItsWayUsd: usd6(t.onItsWayMicro), paidOnItsWayNote: FAIR.settledNote, payments: t.payments, drops: t.drops, usdNote: FAIR.usdNote,
       micro: { valueLow: t.valueMicro.low, valueMid: t.valueMicro.mid, valueHigh: t.valueMicro.high, accrued: t.shareMicro, settled: t.settledMicro, onItsWay: t.onItsWayMicro, unit: 'millionths of a US dollar (USDC base units)' } },
-    drop: FAIR.drops,
-    calculator: w ? { bench: { saves: w.saves, sea: w.sea, without: w.withoutLow, withoutHigh: w.withoutHigh, tasks: w.tasks, what: `a whole task on the bench (${w.answer}) against the cheapest search loop and the page as plain text, medians, ${BENCH.tokenizer}`, run: `${base}/proof/${w.run}`, label: 'bench' }, rate: FAIR.rate.modelled, priceMid: P.mid } : null,
-    pay: { how: `POST ${base}/fair/pay?r=<id>[,<id>…]`, minimumUsd: usd6(FAIR.minMicro), bundleMax: FAIR.bundleMax, x402: 'the answer is 402 with the exact unpaid sum; pay it with PAYMENT-SIGNATURE (v2) or X-PAYMENT (v1)', headers: ['x-sea-saved-tokens (conservative basis)', 'x-sea-fair-share-usd', 'x-sea-receipt (the receipt\'s address)'], field: 'JSON answers that are an object carry "receipt": {id, saved_tokens, fair_share_usd, url}; MCP and A2A answers carry the headers only', receipts: `${base}/fair/r/<id>(.json)`, keptDays: FAIR.keepDays },
-    recent: recent.map((r) => ({ id: r.id, at: r.at, door: r.door, conservative: r.tokens.conservative, upper: r.tokens.upper, shareUsd: usd6(r.shareMicro.mid), shareMicro: r.shareMicro.mid, status: statusOf(r, paid), url: `${base}/fair/r/${r.id}` })),
-    never: [FAIR.voluntary, 'The sea only receives: no bot of the sea pays, no wallet of the sea pays out, nothing is minted, sold or transferred.', 'Crawlers and the sea\'s own calls get no receipt; the house agent (Angel) and the app door (/mcp/app) get none either.', FAIR.drops],
+    drop: FAIR.drops, method: METHOD, voluntary: FAIR.voluntary,
+    calculator: w ? { bench: { label: w.label, date: w.date, with: w.with, withoutText: w.withoutText, withoutHtml: w.withoutHtml, tasks: w.tasks, saves: w.saves, with_is: w.with_is, without_is: w.without_is, median: true, tokenizer: BENCH.tokenizer, proof: `${base}/proof`, runs: w.runs.map((f) => `${base}/proof/${f}`) }, rate: FAIR.rate.modelled, priceMid: P.mid, note: 'the bench is a default, not a promise: receipts measure each answer', usdNote: FAIR.usdNote } : null,
+    pay: { how: `POST ${base}/fair/pay?r=<id>[,<id>…]`, minimumUsd: usd6(FAIR.minMicro), bundleMax: FAIR.bundleMax, x402: 'the answer is 402 with the exact unpaid sum; pay it with PAYMENT-SIGNATURE (v2) or X-PAYMENT (v1)', headers: ['x-sea-saved-tokens (conservative basis)', 'x-sea-fair-share-usd', 'x-sea-receipt (the receipt\'s address)'], field: 'JSON answers that are an object carry "receipt": {id, saved_tokens, fair_share_usd, voluntary, url}; MCP and A2A answers carry the headers only', receipts: `${base}/fair/r/<id>(.json)`, keptDays: FAIR.keepDays },
+    recent: recent.map((r) => ({ id: r.id, at: r.at, door: r.door, conservative: r.tokens.conservative, upper: r.tokens.upper, shareUsd: usd6(r.shareMicro.mid), shareNote: FAIR.usdNote, shareMicro: r.shareMicro.mid, status: statusOf(r, paid), url: `${base}/fair/r/${r.id}` })),
+    never: [FAIR.voluntary, 'The sea only receives: no bot of the sea pays, no wallet of the sea pays out, nothing is minted, sold or transferred.', 'Crawlers and the sea\'s own calls get no receipt; the house agent (Angel) and the app door (/mcp/app) get none either.', 'A receipt in a payment is retired: it is never counted or billed again.', FAIR.drops],
     links: { savings: `${base}/savings`, proof: `${base}/proof`, pricing: `${base}/pricing`, treasury: `${base}/treasury`, open: `${base}/open` } };
 }
 
@@ -358,30 +419,31 @@ export function fairPage(base, v) {
   const L = v.live, c = v.calculator, P = v.price;
   const ld = { '@context': 'https://schema.org', '@type': 'WebPage', name: 'Fair share: the sea asks only for a share of what it saves', url: `${base}/fair`, isPartOf: { '@type': 'WebSite', name: 'Mare Liberum', url: `${base}/` } };
   const nums = (list) => `<ul class="fnums">${list.map(([x, label]) => `<li><b>${x}</b><span>${esc(label)}</span></li>`).join('')}</ul>`;
-  const bench = c ? `a whole task cost ${n(c.bench.sea)} tokens with the sea against ${n(c.bench.without)} without (the cheapest search loop; up to ${n(c.bench.withoutHigh)}), medians of ${n(c.bench.tasks)} tasks` : '';
+  const bench = c ? `a whole task cost ${n(c.bench.with)} tokens with the sea (${c.bench.with_is}) against ${n(c.bench.withoutText[0])}–${n(c.bench.withoutText[1])} without it for an agent whose tool hands it plain text${c.bench.withoutHtml?.[0] ? ` (${n(c.bench.withoutHtml[0])}–${n(c.bench.withoutHtml[1])} for one that reads raw HTML: an upper bound, never billed)` : ''}; medians of ${n(c.bench.tasks)} tasks, ${c.bench.tokenizer}` : '';
   const body = `${STYLE}<h1>Fair share, in public</h1>
-<p class="hero-n"><b>${money(L.micro.settled)}</b>settled on chain · fair share accrued ${money(L.micro.accrued)} from ${n(L.receipts)} ${L.receipts === 1 ? 'receipt' : 'receipts'}</p>
+<p class="hero-n"><b>${money(L.micro.settled)}</b>settled on chain (${esc(FAIR.settledNote)}) · voluntary fair share accrued ${money(L.micro.accrued)} from ${n(L.receipts)} ${L.receipts === 1 ? 'receipt' : 'receipts'} (${esc(FAIR.usdNote)})</p>
 <p class="pulse">${esc(FAIR.rule)}</p>
-<p>The sea saves agents tokens, and tokens are money. So it asks for nothing up front and nothing per call: only a share of what it measurably saved, after the fact, on a receipt anyone can read. You save a hundred, you give at most twenty, you are still eighty ahead. ${v.on ? 'Every answer the savings ledger counts carries a receipt.' : '<b>This node issues no receipts right now</b>: fair share is switched off or rests; the rules below hold as soon as it is on.'}</p>
+<p>Every token an agent reads costs its owner money, and the sea saves agents tokens. So it asks for nothing up front and nothing per call: only a share of what it measurably saved, after the fact, on a receipt anyone can read, and paying it is voluntary. You save a hundred, you give at most twenty, you are still eighty ahead. ${v.on ? 'Every answer the savings ledger counts carries a receipt.' : '<b>This node issues no receipts right now</b>: fair share is switched off or rests; the rules below hold as soon as it is on.'}</p>
 <h2>Three bases, one rule</h2>
 <div class="tw"><table class="tbl"><thead><tr><th>basis</th><th>how it is found</th><th>share</th></tr></thead><tbody>${v.bases.map((b) => `<tr><td><b>${esc(b.name)}</b></td><td>${esc(b.short || b.what)}</td><td>${Math.round(b.rate * 100)} %</td></tr>`).join('')}</tbody></table></div>
-<p>Valued at the rate card of <a href="/savings">/savings</a>: USD ${P.low.toFixed(2)} (a small model), <b>${P.mid.toFixed(2)}</b> (a workhorse model, what a receipt bills) and ${P.high.toFixed(2)} (the top model) per million input tokens, as of ${esc(P.asOf)}. The share is rounded down: the agent keeps at least ${Math.round(FAIR.keepAtLeast * 100)} % of every saving. No saving, no share. ${v.calibration ? `Calibration from the <a href="/proof">bench</a> (${esc(v.calibration.tokenizer)}): the cheapest search loop ${n(v.calibration.loopLow)} tokens; the brain's answers ${v.calibration.jsonBytesPerToken} bytes a token.` : 'No run of the bench is on this node: no modelled saving is claimed.'}</p>
+<p>Valued at the rate card of <a href="/savings">/savings</a>: USD ${P.low.toFixed(2)} (a small model), <b>${P.mid.toFixed(2)}</b> (a workhorse model, what a receipt bills) and ${P.high.toFixed(2)} (the top model) per million input tokens, as of ${esc(P.asOf)}. The share is rounded down: the agent keeps at least ${Math.round(FAIR.keepAtLeast * 100)} % of every saving. No saving, no share. ${v.calibration ? `Calibration from the <a href="/proof">${esc(v.calibration.label)}</a> (${esc(v.calibration.tokenizer)}): a reused pathway counts at most the cheapest search loop, ${n(v.calibration.loopLow)} tokens${v.calibration.wholeSaving ? `, and never more than a whole task saved there at the conservative end, ${n(v.calibration.wholeSaving)}` : ''}; the brain's answers hold ${v.calibration.jsonBytesPerToken} bytes a token.` : 'No run of the bench is on this node: no modelled saving is claimed.'}</p>
 <h2>The ledger, live</h2>
 ${nums([[n(L.receipts), 'receipts issued'], [n(L.tokens.lower), 'tokens saved, lower basis (measured, against plain text)'], [n(L.tokens.modelled), 'tokens saved, modelled basis (calibrated on the bench)'], [n(L.tokens.upper), 'tokens saved against raw HTML (upper, never billed)'], [money(L.micro.valueMid), `value created for agents on the conservative basis (${money(L.micro.valueLow)} to ${money(L.micro.valueHigh)})`], [money(L.micro.accrued), 'fair share accrued'], [money(L.micro.settled), 'fair share settled on chain'], [n(L.drops.total), 'drops: thousands of tokens saved, conservative'], [n(L.drops.byPaths), 'drops saved for others by pathways agents laid']])}
-<p><small>${L.since ? `Counting since ${esc(L.since)}.` : 'Nothing counted yet.'} ${L.payments ? `${n(L.payments)} ${L.payments === 1 ? 'payment' : 'payments'}; ${money(L.micro.onItsWay)} paid and still on its way to the chain.` : 'No payment yet: zero stays zero.'} ${esc(FAIR.drops)}</small></p>
+<p><small>Dollar figures above: ${esc(FAIR.usdNote)}; the sum settled on chain is ${esc(FAIR.settledNote)}. ${L.since ? `Counting since ${esc(L.since)}.` : 'Nothing counted yet.'} ${L.payments ? `${n(L.payments)} ${L.payments === 1 ? 'payment' : 'payments'}; ${money(L.micro.onItsWay)} paid and still on its way to the chain.` : 'No payment yet: zero stays zero.'} ${esc(FAIR.drops)}</small></p>
 <h2>What would you keep?</h2>
-${c ? `<form id="fcalc" class="calc" data-mid="${P.mid}" onsubmit="return false"><label>Pages or tasks a month<input name="pages" type="number" min="0" step="100" value="10000" inputmode="numeric"></label><label>Tokens each costs you today<input name="per" type="number" min="0" step="1" value="${c.bench.without}" inputmode="numeric"></label><label>Saved by the sea, %<input name="save" type="number" min="0" max="100" step="1" value="${Math.round(c.bench.saves * 100)}" inputmode="numeric"></label><label>Basis<select name="basis"><option value="${FAIR.rate.modelled}">modelled: a solved part reused (10 %)</option><option value="${FAIR.rate.lower}">lower: measured against plain text (20 %)</option></select></label></form>
+${c ? `<form id="fcalc" class="calc" data-mid="${P.mid}" onsubmit="return false"><label>Pages or tasks a month<input name="pages" type="number" min="0" step="100" value="10000" inputmode="numeric"></label><label>Tokens each costs you today<input name="per" type="number" min="0" step="1" value="${c.bench.withoutText[0]}" inputmode="numeric"></label><label>Saved by the sea, %<input name="save" type="number" min="0" max="100" step="1" value="${Math.round(c.bench.saves * 100)}" inputmode="numeric"></label><label>Basis<select name="basis"><option value="${FAIR.rate.modelled}">modelled: a solved part reused (10 %)</option><option value="${FAIR.rate.lower}">lower: measured against plain text (20 %)</option></select></label></form>
 <div class="split" aria-hidden="true"><i style="width:90%"></i><i class="s" style="width:10%"></i></div>
-<p class="pulse">Saved <b><output data-o="saved">–</output></b> tokens a month, worth <b>$<output data-o="value">–</output></b> at $${P.mid.toFixed(2)} a million · fair share <b>$<output data-o="share">–</output></b> · you keep <b>$<output data-o="net">–</output></b> (<output data-o="keep">–</output> %)</p>
-<p><small>The default saving comes from the ${esc(c.bench.label)}: ${esc(bench)} (<a href="${esc(c.bench.run)}">the run</a>). Your pages are not the bench: change it. Receipts measure each answer for real.</small></p>${CALC}` : '<p class="muted">No run of the bench on this node: the calculator needs one.</p>'}
+<p class="pulse">Saved <b><output data-o="saved">–</output></b> tokens a month, worth <b>$<output data-o="value">–</output></b> at $${P.mid.toFixed(2)} a million · fair share <b>$<output data-o="share">–</output></b> · you keep <b>$<output data-o="net">–</output></b> (<output data-o="keep">–</output> %)</p><p><small>${esc(FAIR.usdNote)}; the share stays voluntary.</small></p>
+<p><small>Defaults from the <a href="/proof">${esc(c.bench.label)}</a>: ${esc(bench)}. The low end of “without” is taken. Your pages are not the bench: change them. Receipts measure each answer for real.</small></p>${CALC}` : '<p class="muted">No run of the bench on this node: the calculator needs one.</p>'}
 <h2>How an agent pays</h2>
 <p>Every counted answer names its receipt in three headers: <code>x-sea-saved-tokens</code> (conservative basis), <code>x-sea-fair-share-usd</code> and <code>x-sea-receipt</code>; a JSON answer that is an object also carries <code>"receipt"</code>. Collect the ids and settle them in one x402 payment, no account:</p>
 <pre>curl -si -X POST '${esc(base)}/fair/pay?r=&lt;id&gt;,&lt;id&gt;'
 # 402 Payment Required: the exact unpaid sum in the PAYMENT-REQUIRED header (x402 v2) and in "accepts" (v1)
 # an x402 client signs it and calls again with PAYMENT-SIGNATURE: the receipts are marked paid, never billed twice</pre>
-<p><small>One payment settles at least ${money(FAIR.minMicro)} (1 US cent, the smallest price the till takes); below that the answer says so and asks to bundle receipts, up to ${n(v.pay.bundleMax)} at once. The USDC goes from the agent's wallet straight to the sea's address on Base; the sea never holds anyone's money. Receipts are kept ${n(FAIR.keepDays)} days.</small></p>
+<p><small>Voluntary, and never a condition for an answer. One payment settles at least ${money(FAIR.minMicro)}: ${esc(FAIR.minWhy)} (<a href="${esc(FAIR.minSource)}" rel="noopener">PayAI pricing</a>). Below that the answer gives the open sum and about how many receipts are still missing, without asking for payment; bundle up to ${n(v.pay.bundleMax)} receipts at once. The USDC goes from the agent's wallet straight to the sea's address on Base; the sea never holds anyone's money. Receipts are kept ${n(FAIR.keepDays)} days.</small></p>
 <h2>The newest receipts</h2>
-${v.recent.length ? `<div class="tw"><table class="tbl"><thead><tr><th>receipt</th><th>door</th><th>saved, conservative</th><th>upper</th><th>share</th><th>status</th></tr></thead><tbody>${v.recent.slice(0, 6).map((r) => `<tr><td><a href="/fair/r/${esc(r.id)}">${esc(r.at.slice(5, 16).replace('T', ' '))}</a></td><td><code>${esc(r.door)}</code></td><td>${n(r.conservative)}</td><td>${n(r.upper)}</td><td>${money(r.shareMicro)}</td><td>${esc(r.status)}</td></tr>`).join('')}</tbody></table></div><p><small>Every receipt of the last ${n(FAIR.keepDays)} days answers at its own address; the newest ${n(v.recent.length)} are in <a href="/fair.json">/fair.json</a>.</small></p>` : '<p class="muted">No receipt yet.</p>'}
+${v.recent.length ? `<div class="tw"><table class="tbl"><thead><tr><th>receipt</th><th>door</th><th>saved, conservative</th><th>upper</th><th>share</th><th>status</th></tr></thead><tbody>${v.recent.slice(0, 6).map((r) => `<tr><td><a href="/fair/r/${esc(r.id)}">${esc(r.at.slice(5, 16).replace('T', ' '))}</a></td><td><code>${esc(r.door)}</code></td><td>${n(r.conservative)}</td><td>${n(r.upper)}</td><td>${money(r.shareMicro)}</td><td>${esc(r.status)}</td></tr>`).join('')}</tbody></table></div><p><small>Shares: ${esc(FAIR.usdNote)}. Every receipt of the last ${n(FAIR.keepDays)} days answers at its own address; the newest ${n(v.recent.length)} are in <a href="/fair.json">/fair.json</a>.</small></p>` : '<p class="muted">No receipt yet.</p>'}
+<h2 id="method">The method, rule ${esc(v.method.version)}</h2><ol><li><b>Bases.</b> ${esc(v.method.bases)}.</li><li><b>Value.</b> ${esc(v.method.valuation)}.</li><li><b>Share.</b> ${esc(v.method.share)}.</li><li><b>Conservative.</b> ${esc(v.method.conservative)}.</li><li><b>Registry.</b> ${esc(v.method.registry)}.</li><li><b>Drops.</b> ${esc(v.method.drops)}.</li></ol><p><small>Every receipt names the rule it was made under; a new rule gets a new version, and old receipts keep theirs.</small></p>
 <h2>What it never does</h2><ul>${v.never.map((x) => `<li>${esc(x)}</li>`).join('')}</ul>
 <p><small>What the brain saves: <a href="/savings">/savings</a> · how it is measured: <a href="/proof">/proof</a> · every price: <a href="/pricing">/pricing</a> · what the till took in: <a href="/treasury">/treasury</a> · as data: <a href="/fair.json">/fair.json</a> · for agents: <a href="/fair.md">/fair.md</a></small></p>`;
   return page(base, '/fair', 'Fair share — the sea asks only for a share of what it saves you | Mare Liberum', `Free to enter. When the sea saves an agent tokens, it asks for a fair share of the saving: the agent keeps at least 80 %. Receipts, bases and every total in public; paying is voluntary.`, body, ld);

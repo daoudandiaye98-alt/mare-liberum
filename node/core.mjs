@@ -44,7 +44,7 @@ import { readAnswer, brainCompact, sampleCompact } from './compact.mjs';
 import { SHORE_MOVES, MCP_ALIASES, SSE_OPEN, SSE_POST, meant, aboutOf, aboutPage, imprintPage, didDoc, agentsJson, discoveryOf, sseOpen, sseOf } from './shore.mjs';
 import { openTools } from './opentools.mjs';
 import { netKey } from './guard.mjs';
-import { createFair, withReceipt, fairSwitch, fairData, fairPage, receiptJson, receiptPage } from './fair.mjs';
+import { createFair, withReceipt, fairSwitch, fairData, fairPage, receiptJson, receiptPage, FAIR, usd6 } from './fair.mjs';
 
 export const VERSION = '3.33.1';
 const UA = 'MareLiberum/1.0 (open agent index; pull-only; +/.well-known/ard.json)';
@@ -2026,7 +2026,7 @@ async function handleOne(req, db, cfg = {}) {
     if (path === '/fair' || path === '/fair.json' || path.startsWith('/fair/')) {
       const F = fairOf(db, cfg), led = ledgerOf(cfg), hdr = { 'cache-control': 'no-store', 'x-robots-tag': 'noindex', ...CORS };
       if (path === '/fair/pay') {
-        if (req.method !== 'POST') return json({ what: 'Settle the fair share of receipts in one x402 payment. Voluntary: nothing is withheld for not paying.', post: `${base}/fair/pay?r=<id>[,<id>…]`, minimum_usd: '0.010000', rule: `${base}/fair` }, 200, hdr);
+        if (req.method !== 'POST') return json({ what: 'Settle the fair share of receipts in one x402 payment. Voluntary: nothing is withheld for not paying.', post: `${base}/fair/pay?r=<id>[,<id>…]`, minimum_usd: usd6(FAIR.minMicro), why: FAIR.minWhy, rule: `${base}/fair` }, 200, hdr);
         if (!fairOn(cfg)) return json({ error: { code: 'UNAVAILABLE', message: 'fair share is off on this node, or rests for the moment: nothing is charged, and every answer stays free' }, fair: `${base}/fair` }, 503, { ...hdr, 'retry-after': '600' });
         const a = await args(), ids = [...String(url.searchParams.get('r') || '').split(','), ...(Array.isArray(a.r) ? a.r : typeof a.r === 'string' && !url.searchParams.get('r') ? a.r.split(',') : [])];
         const out = await F.pay({ ids, headers: req.headers, body: a, payCfg: cfg.pay || payConfig(), ledger: led, base, callerHash: callerHash(ip, req.headers.get('user-agent')), waitUntil: cfg.waitUntil, cors: CORS });
