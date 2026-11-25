@@ -184,7 +184,7 @@ function draw(t, time) {
   const ws = W('sys');
   if (ws > 0.02) { const ro = R * (land ? 0.6 : 0.72), tilt = 0.32, sx0 = land ? -R * 0.16 : 0; ['Reader', 'Brain', 'Market', 'Doors'].forEach((name, k) => { const a = time * 0.14 + (t - 3) * 1.1 + k * Math.PI / 2 + Math.PI / 4, ox = Math.cos(a) * ro, oz = Math.sin(a) * ro, z = oz * Math.cos(tilt), kk = fl / (fl + z); label(name, cx + (ox + sx0) * kk, cy + (oz * Math.sin(tilt) * 0.9 - R * 0.05 + R * 0.3) * kk, ws * clamp(0.4 + kk * 0.6), PAL[[3, 2, 5, 4][k]].join(',')); }); }
   const wsp = W('split');
-  if (wsp > 0.02) { label('you keep at least 80 %', cx + SPL[0], cy + SPL[2] + 24, wsp, '238,246,251'); label('fair share, at most 20 %', cx + SPL[1], cy + SPL[2] + 24, wsp, '255,201,119'); }
+  if (wsp > 0.02) { const ly = cy + SPL[2] + 24, lh = land ? 18 : 16; label('you keep', cx + SPL[0], ly, wsp, '238,246,251'); label('at least 80 %', cx + SPL[0], ly + lh, wsp, '238,246,251'); label('voluntary share', cx + SPL[1], ly, wsp, '255,201,119'); label('at most 20 %', cx + SPL[1], ly + lh, wsp, '255,201,119'); }
   g.globalAlpha = 1;
 }
 
@@ -245,6 +245,9 @@ function live(then) {
     const at = $('#n-at'), when = (o && o.at) || (s && s.at); if (at && (o || s)) at.textContent = `read live from /open.json and /savings.json at ${new Date(when || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   });
 }
+
+// ---- the journey's menu closes when a place in it is chosen
+const plan = $('#plan'); if (plan) plan.addEventListener('click', (e) => { if (e.target.closest && e.target.closest('a[href^="#"]') && plan.hidePopover) { try { plan.hidePopover(); } catch {} } });
 
 // ---- copy the address
 D.addEventListener('click', (e) => { const b = e.target.closest && e.target.closest('[data-copy]'); if (!b) return; const el = D.getElementById(b.dataset.copy); if (!el || !navigator.clipboard) return; navigator.clipboard.writeText(el.textContent.trim()).then(() => { const was = b.textContent; b.textContent = 'Copied'; setTimeout(() => { b.textContent = was; }, 1600); }).catch(() => {}); });
