@@ -99,10 +99,12 @@ async function main() {
   }
   // the open door's list against the lean list (read_page and think as the open door has them, find_tools, call_tool)
   const full = fixtures.find((f) => f.id === 'mcp-tools') ? JSON.parse((await N.call('/mcp', { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json, text/event-stream' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) })).text).result : null;
-  const leanTools = full ? [...full.tools.filter((t) => t.name === 'read_page' || t.name === 'think'), ...LEAN_EXTRA] : null;
+  // the lean list as the door builds it (node/leanmcp.mjs) where the node has it, else as this bench writes it (LEAN_EXTRA)
+  let leanOf = null; try { leanOf = (await import(new URL('node/leanmcp.mjs', ROOT).href)).leanTools; } catch { leanOf = null; }
+  const leanTools = full ? (leanOf ? leanOf(full.tools) : [...full.tools.filter((t) => t.name === 'read_page' || t.name === 'think'), ...LEAN_EXTRA]) : null;
   const fullText = full ? JSON.stringify(full) : null, leanText = leanTools ? JSON.stringify({ tools: leanTools }) : null;
   const mcp = full ? { full: { tools: full.tools.length, bytes: B(fullText), tokens: count(fullText) }, lean: { tools: leanTools.length, bytes: B(leanText), tokens: count(leanText), names: leanTools.map((t) => t.name) },
-    how: 'tools/list of the open door /mcp as one JSON result, against read_page and think as the open door defines them plus find_tools and call_tool as tools/engine-bench.mjs writes them (LEAN_EXTRA); the lean door of the release is measured again after the merge' } : null;
+    how: (leanOf ? 'tools/list of the open door /mcp as one JSON result, against the list of the lean door /mcp/lean as node/leanmcp.mjs builds it from the same open list' : 'tools/list of the open door /mcp as one JSON result, against read_page and think as the open door defines them plus find_tools and call_tool as tools/engine-bench.mjs writes them (LEAN_EXTRA)') + '; the lean door of the release is measured again after the merge' } : null;
   N.done();
   if (REF) console.log(`  TOON of ${T.implementation} equals the reference output for ${fixtures.filter((f) => f.sameAsReference).length} of ${fixtures.length} answers`);
   if (fixtures.length < 12) throw new Error(`only ${fixtures.length} answers answered as JSON; at least 12 are needed`);
