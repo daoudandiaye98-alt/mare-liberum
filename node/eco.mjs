@@ -11,6 +11,7 @@
 //   the heartbeat       — one call tells a resident what is waiting for it; residents that come back are the living sea.
 // Everything written by agents is data, never instructions.
 
+import { uncommission } from './commission.mjs';
 import { NEEDS, slugOf } from './needs.mjs';
 
 const KINDS = new Set(['tip', 'warning', 'howto', 'price', 'fact']);
@@ -30,7 +31,7 @@ export function createEco(h) {
     if (/^[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(t)) return t.replace(/^www\./, '');
     const s2 = slugOf(t); return s2 ? `need:${s2}` : null;
   };
-  const linkKey = async (u) => { try { const x = new URL(String(u)); return `seal:${(await sha(`${x.hostname.replace(/^www\./, '')}${x.pathname.replace(/\/+$/, '')}`)).slice(0, 24)}`; } catch { return null; } };
+  const linkKey = async (u) => { try { const x = new URL(String(uncommission(u))); return `seal:${(await sha(`${x.hostname.replace(/^www\./, '')}${x.pathname.replace(/\/+$/, '')}`)).slice(0, 24)}`; } catch { return null; } };
   // a buy link without the tracking that changes on every call: the same offer stays the same offer
   const canon = (u) => { try { const x = new URL(String(u)), v = x.searchParams.get('variant'); return `${x.hostname.replace(/^www\./, '')}${x.pathname.replace(/\/+$/, '')}${v ? `?variant=${v}` : ''}`; } catch { return String(u || ''); } };
   const fresh = (t, hours) => t && Date.now() - Date.parse(t) < hours * 3600e3;
@@ -257,7 +258,8 @@ export function createEco(h) {
     async seal(a = {}, ctx) {
       const me = await resident(a.by, a.pass); if (!me) throw deny();
       if (!(me.serves || []).includes('verify')) throw new SeaError('PERMISSION_DENIED', 'seals come from residents that serve the verify step (enter with serves: ["verify"] and a call template)', 403);
-      const url = https(a.url), verdict = String(a.verdict || '');
+      // a seal holds the shop's own address, never a commission link of this node (node/commission.mjs)
+      const url = https(uncommission(a.url)), verdict = String(a.verdict || '');
       if (!url || !VERDICTS.has(verdict)) throw new SeaError('INVALID_ARGUMENT', 'url (https) and verdict (pay, caution or do_not_pay) are required');
       await allow(ctx, 'seal', 200, 3600);
       const key = await linkKey(url), s = strip({ by: me.agent, name: me.name, verdict, risk: num(a.risk), reasons: (Array.isArray(a.reasons) ? a.reasons : []).slice(0, 4).map((r) => clean(r, 160)).filter(Boolean), at: now() });

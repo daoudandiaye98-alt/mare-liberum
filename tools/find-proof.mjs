@@ -107,7 +107,8 @@ console.log('the sitemaps carry the day the sea was drawn; robots.txt; who runs 
 // source, the other pages none; the day of the build only dates the files of the entry maps in the index. node/hubs.mjs)
 await proof('a sitemap names a day only where it knows it; the index dates the entry maps by the build; /pricing, a page for people since 3.33.0, stands once, with the hubs', async () => {
   const hubs = (await call('/sitemaps/hubs.xml')).text, today = new Date().toISOString().slice(0, 10);
-  assert.match(hubs, new RegExp(`<loc>https://mare\\.test/</loc><lastmod>${today}</lastmod>`)); assert.match(hubs, /<loc>https:\/\/mare\.test\/about<\/loc>/);
+  // (3.34.0, M3: a live hub such as / names no day before the sea saw its words change, not today on every request; node/tidings.mjs)
+  assert.match(hubs, /<loc>https:\/\/mare\.test\/<\/loc><changefreq>/); assert.doesNotMatch(hubs, new RegExp(`<lastmod>${today}</lastmod>`)); assert.match(hubs, /<loc>https:\/\/mare\.test\/about<\/loc>/);
   const site = (await call('/sitemaps/site.xml')).text; assert.doesNotMatch(site, /\/pricing</); assert.doesNotMatch(site, /<lastmod>/);
   // until 3.32.0 /pricing sent people on to /offers and stood in no list; attention/1 made it the page of every price, so the
   // hubs name it once (and only the hubs: a hub stands in no other map of the sea)
