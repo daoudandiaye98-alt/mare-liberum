@@ -166,7 +166,8 @@ const GAP_MAX = bytesOf(gapLine(1e9)) + SEP;     // what one gap mark can cost a
 // the kept blocks in their order, each gap between them marked with how much it left out
 function render(blocks, keep) {
   const parts = []; let gap = 0;
-  blocks.forEach((b, i) => { if (keep.has(i)) { if (gap) parts.push(gapLine(gap)); gap = 0; parts.push(b.text); } else gap += bytesOf(b.text) + SEP; });
+  // (a block that went in cut carries what it left out at its end into the next gap: one mark, not two)
+  blocks.forEach((b, i) => { if (keep.has(i)) { if (gap) parts.push(gapLine(gap)); gap = b.tail || 0; parts.push(b.text); } else gap += bytesOf(b.text) + SEP; });
   if (gap) parts.push(gapLine(gap));
   return parts.join('\n\n');
 }
@@ -201,14 +202,17 @@ function cutTo(b, room, qs) {
   if (units.length < 2 || room < 100) return null;
   const join = b.kind === 'para' ? '' : '\n', order = units.map((u, i) => i);
   if (qs?.size) { const hits = units.map((u) => termsOf(u).filter((w) => qs.has(w)).length); order.sort((x, y) => hits[y] - hits[x] || x - y); }
-  const pick = new Set(); let size = 0;
-  for (const i of order) { const c = bytesOf(units[i]) + 1; if (size + c + GAP_MAX > room) continue; pick.add(i); size += c; }
-  if (!pick.size || size < 60) return null;
-  const parts = []; let gap = 0;
-  units.forEach((u, i) => { if (pick.has(i)) { if (gap) parts.push(b.kind === 'para' ? `${gapLine(gap)} ` : gapLine(gap)); gap = 0; parts.push(b.kind === 'para' ? u : u); } else gap += bytesOf(u); });
-  if (gap) parts.push(b.kind === 'para' ? ` ${gapLine(gap)}` : gapLine(gap));
-  const text = (b.kind === 'para' ? parts.join('') : parts.join(join)).replace(/ +/g, ' ').trim();
-  return bytesOf(text) <= room ? text : null;
+  const picked = []; let size = 0;
+  for (const i of order) { const c = bytesOf(units[i]) + 1; if (size + c + GAP_MAX > room) continue; picked.push(i); size += c; }
+  // (what it leaves out at its end goes into the gap after it; a list keeps its indents)
+  const build = (pick) => {
+    const parts = []; let gap = 0;
+    units.forEach((u, i) => { if (pick.has(i)) { if (gap) parts.push(b.kind === 'para' ? `${gapLine(gap)} ` : gapLine(gap)); gap = 0; parts.push(u); } else gap += bytesOf(u); });
+    return { text: b.kind === 'para' ? parts.join('').replace(/ +/g, ' ').trim() : parts.join(join), tail: gap };
+  };
+  // each mark inside the block costs room too: the least wanted sentence goes until the whole fits
+  for (; picked.length; picked.pop()) { const r = build(new Set(picked)); if (bytesOf(r.text) < 60) return null; if (bytesOf(r.text) + (r.tail ? GAP_MAX : 0) <= room) return r; }
+  return null;
 }
 // fit a Markdown text into a budget of tokens (counted the sea's one way: UTF-8 bytes over the bench ratio for Markdown)
 // → { out, lossy, kept, of, left (tokens left out), budget, tokens, matched }
@@ -228,8 +232,8 @@ export function fitBudget(markdown, { q = '', budget } = {}) {
     if (used + cost + g * GAP_MAX > cap) {
       if (cuts >= MAX_CUTS || !['para', 'list', 'table'].includes(blocks[i].kind)) continue;
       const heads = cost - bytesOf(blocks[i].text) - SEP, t = cutTo(blocks[i], cap - used - heads - SEP - g * GAP_MAX, qs); if (!t) continue;
-      blocks[i] = { ...blocks[i], text: t, cut: true }; cuts++;
-      for (const j of add) keep.add(j); used += heads + bytesOf(t) + SEP; gaps = g; continue;
+      blocks[i] = { ...blocks[i], text: t.text, tail: t.tail, cut: true }; cuts++;
+      for (const j of add) keep.add(j); used += heads + bytesOf(t.text) + SEP + (t.tail ? GAP_MAX : 0); gaps = g; continue;
     }
     for (const j of add) keep.add(j); used += cost; gaps = g;
   }
