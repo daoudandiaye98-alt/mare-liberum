@@ -8,7 +8,7 @@ import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, cpSync, existsSync, mkdirSync, readdirSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, dirname } from 'node:path';
-import { spawnSync } from 'node:child_process';
+import { spawn } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import { handle, callerOf, isHouse, seaOf } from '../node/core.mjs';
 import { memoryKv } from '../node/flow.mjs';
@@ -56,13 +56,13 @@ await proof('savingOf: before and after in UTF-8 bytes, made tokens with the rat
 await proof('engineHeaders: the fixed names, x-sea-engine-lossy only when the saving lost something; nothing for no saving object', () => {
   assert.deepEqual(engineHeaders(S.toon), { 'x-sea-engine': 'toon', 'x-sea-engine-tokens': `${S.toon.before}->${S.toon.after}`, 'x-sea-engine-saved': String(S.toon.saved) });
   assert.equal(engineHeaders(savingOf('budget', { before: 'a'.repeat(900), after: 'a' }))['x-sea-engine-lossy'], '1'); assert.deepEqual(engineHeaders(null), {});
-  assert.deepEqual(Object.keys(LEVERS), ['toon', 'lean', 'squeeze', 'delta', 'budget']); assert.equal(ENGINE_VERSION, 'engine-1');
+  assert.deepEqual(Object.keys(LEVERS), ['toon', 'lean', 'squeeze', 'delta', 'budget', 'fields']); assert.equal(LEVERS.fields.lossless, false); assert.equal(ENGINE_VERSION, 'engine-1');
 });
 await proof('the ratios: JSON and TOON as the newest bench measured them (o200k_base); HTML, Markdown and plain text always the proof\'s', () => {
   assert.equal(RATIO.html, TOKEN_RATIO.bytes.html); assert.equal(RATIO.md, TOKEN_RATIO.bytes.markdown); assert.equal(RATIO.text, TOKEN_RATIO.bytes.text);
   const d = loadEngineBench({ fresh: true }); assert.ok(d, 'a run of the engine bench is in proof/ (node tools/engine-bench.mjs)');
   assert.ok(ENGINE_RATIOS, 'the <bench:engine> block is written (node tools/engine-bench.mjs --ratio)'); assert.equal(RATIO.assumption, false);
-  const r = d.summary.ratios.o200k_base; assert.equal(ENGINE_RATIOS.json, r.sent, 'json: bytes per token of the JSON the doors send'); assert.equal(ENGINE_RATIOS.toon, r.toon); assert.equal(ENGINE_RATIOS.date, d.date); assert.equal(ENGINE_RATIOS.tokenizer, 'o200k_base');
+  const r = d.summary.ratios.o200k_base; assert.equal(d.toonRule.minSaving, 0.2, 'the bench applies the rule of the lever'); assert.equal(ENGINE_RATIOS.json, r.sent, 'json: bytes per token of the JSON the doors send'); assert.equal(ENGINE_RATIOS.toon, r.toon); assert.equal(ENGINE_RATIOS.date, d.date); assert.equal(ENGINE_RATIOS.tokenizer, 'o200k_base');
   assert.equal(RATIO.json, ENGINE_RATIOS.json); assert.equal(RATIO.toon, ENGINE_RATIOS.toon);
 });
 
@@ -106,11 +106,12 @@ await proof('once a day per network and subject: a page by its site and path (qu
   assert.equal(A.countEngine('delta', d, agent('2001:db8:1:2::5'), 'https://example.com/z'), true); assert.equal(A.countEngine('delta', d, agent('2001:db8:1:2::77'), 'https://example.com/z'), false, 'the same /64');
   assert.equal((await A.savings()).today.engine.levers.delta.lossless.answers, 4);
 });
-await proof(`a network adds at most ${SAVE.cap.engine} answers of the engine a day, every lever together; another network still counts`, async () => {
-  const { A } = ledgerOf(); let n = 0;
-  for (let i = 0; i < SAVE.cap.engine + 5; i++) if (A.countEngine(i % 2 ? 'toon' : 'lean', i % 2 ? S.toon : savingOf('lean', { before: 'x'.repeat(40000), beforeForm: 'json', after: 'x'.repeat(3000), afterForm: 'json' }), agent('198.18.21.1'), `tool-${i}`)) n++;
-  assert.equal(n, SAVE.cap.engine); assert.equal(A.countEngine('toon', S.toon, agent('198.18.21.2'), 'tool-0'), true);
-  const e = (await A.savings()).today.engine; assert.equal(e.lossless.answers, SAVE.cap.engine + 1);
+const CAP = 500; // the cap the brief fixes; the loop below never trusts a changed figure
+await proof(`a network adds at most ${CAP} answers of the engine a day, every lever together; another network still counts`, async () => {
+  assert.equal(SAVE.cap.engine, CAP); const { A } = ledgerOf(); let n = 0;
+  for (let i = 0; i < CAP + 5; i++) if (A.countEngine(i % 2 ? 'toon' : 'lean', i % 2 ? S.toon : savingOf('lean', { before: 'x'.repeat(40000), beforeForm: 'json', after: 'x'.repeat(3000), afterForm: 'json' }), agent('198.18.21.1'), `tool-${i}`)) n++;
+  assert.equal(n, CAP); assert.equal(A.countEngine('toon', S.toon, agent('198.18.21.2'), 'tool-0'), true);
+  const e = (await A.savings()).today.engine; assert.equal(e.lossless.answers, CAP + 1);
 });
 await proof('nothing counts for the sea itself, crawlers, HEAD, an uncounted call, or a saving that breaks the rule', async () => {
   const { A } = ledgerOf(), d = S.toon;
@@ -196,14 +197,17 @@ await proof('/engine answers 200 in the sea\'s skin: a multi-word H1, the scene,
   const r = await call('/engine'); assert.equal(r.status, 200); assert.match(r.headers.get('content-type'), /^text\/html/); const h = r.text;
   assert.match(h, /<h1>The engine room of the sea<\/h1>/); assert.match(h, /data-zone="2"/); assert.match(h, /class="beats"/); assert.match(h, /depth\.js/);
   for (const id of Object.keys(LEVERS)) assert.match(h, new RegExp(`<div class="box lever" id="${id}">[\\s\\S]*?<pre><code>curl `), id);
-  assert.equal((h.match(/class="loss( y)?"/g) || []).length, 5); assert.match(h, /id="budget">[\s\S]*?class="loss y">lossy</);
+  assert.equal((h.match(/class="loss( y)?"/g) || []).length, 6); for (const id of ['budget', 'fields']) assert.match(h, new RegExp(`id="${id}">[\\s\\S]*?class="loss y">lossy<`), id);
+  assert.equal((h.match(/<p class="where"><b>Where it saves:<\/b>/g) || []).length, 6); assert.match(h, /Claude Code, Copilot CLI and OpenAI&#39;s Agents API already defer tools/); assert.match(h, /at least 20 % smaller than compact JSON/);
+  assert.match(h, /<h2>Where this comes from<\/h2>/); for (const u of ['github.com/toon-format/spec', 'modelcontextprotocol.io/specification/2026-07-28/server/tools', 'atlassian.com/blog/developer/mcp-compression']) assert.ok(h.includes(u), u);
+  assert.match(h, /prompt cache/, 'the caching caveat beside a dollar value'); assert.doesNotMatch(h, /most advanced|most complete|\bbest\b|world.?s/i, 'no superlatives');
   for (const l of ['/savings', '/proof', '/fair', '/llms.txt', '/engine.json', '/engine.md']) assert.ok(h.includes(`href="${l}"`), l);
   for (const k of ['measuring', 'privacy', 'optIn']) assert.ok(h.includes(ENGINE_RULES[k].replace(/'/g, '&#39;').replace(/"/g, '&quot;').slice(0, 60)), k);
-  assert.match(h, /<h2>The bench<\/h2>/); assert.match(h, /TOON only where it is smaller/); assert.match(h, /a lean list of 4 tools/);
+  assert.match(h, /<h2>The bench<\/h2>/); assert.match(h, /with the rule of the lever, TOON only where it is at least 20 % smaller/); assert.match(h, /a lean list of 4 tools/);
 });
 await proof('/engine.json and Accept: application/json give the data; its live numbers are the ledger\'s', async () => {
   const j = JSON.parse((await call('/engine.json', { accept: 'application/json' })).text), s = await ledgerNow();
-  assert.equal(j.levers.length, 5); assert.equal(j.on, true); assert.equal(j.engine, 'engine-1'); assert.deepEqual(j.live.lossless, s.all.engine.lossless);
+  assert.equal(j.levers.length, 6); assert.ok(j.levers.every((l) => l.where && l.call)); assert.ok(j.sources.length >= 3 && j.sources.length <= 5); assert.equal(j.on, true); assert.equal(j.engine, 'engine-1'); assert.deepEqual(j.live.lossless, s.all.engine.lossless);
   assert.deepEqual(j.levers.find((l) => l.id === 'toon').live.all.lossless, s.all.engine.levers.toon.lossless); assert.ok(j.bench && j.bench.fixtures >= 12, 'the bench'); assert.ok(j.rules.privacy);
   const a = await call('/engine', { accept: 'application/json' }); assert.match(a.headers.get('content-type'), /^application\/json/);
 });
@@ -212,9 +216,10 @@ await proof('/engine.md and Accept: text/markdown give the Markdown twin; the be
   const d = loadEngineBench(), b = await call(`/engine/bench-${d.date}.json`, { accept: 'application/json' }); assert.equal(b.status, 200); assert.equal(JSON.parse(b.text).date, d.date);
   assert.equal((await call('/engine/bench-2000-01-01.json', { accept: 'application/json' })).status, 404);
 });
-await proof('llms.txt has "Spare tokens: five levers" (one line each); the hub sitemap and the doors of /open list /engine', async () => {
-  const l = SITE['/llms.txt'].body, sec = /## Spare tokens: five levers\n\n([\s\S]*?)\n## /.exec(l)?.[1]; assert.ok(sec, 'the section');
-  assert.equal(sec.split('\n').filter((x) => x.startsWith('- ')).length, 5); for (const x of ['fmt=toon', '/mcp/lean', '/compress', 'since=<etag>', 'budget=<tokens>']) assert.ok(sec.includes(x), x);
+await proof('llms.txt has "Spare tokens: six levers" (one line each, with where it saves); the hub sitemap and the doors of /open list /engine', async () => {
+  const l = SITE['/llms.txt'].body, sec = /## Spare tokens: six levers\n\n([\s\S]*?)\n## /.exec(l)?.[1]; assert.ok(sec, 'the section');
+  assert.equal(sec.split('\n').filter((x) => x.startsWith('- ')).length, 6); for (const x of ['fmt=toon', 'fields=<a,b.c>', '/mcp/lean', '/compress', 'since=<etag>', 'budget=<tokens>', 'at least 20 % smaller', 'defer tools']) assert.ok(sec.includes(x), x);
+  assert.doesNotMatch(sec, /most advanced|most complete|\bbest\b/i);
   assert.ok(HUB_PATHS.includes('/engine')); assert.ok((await call('/sitemaps/hubs.xml')).text.includes(`${BASE}/engine<`));
   assert.ok(ENDPOINTS.some(([, list]) => list.some(([p]) => p === '/engine.json')));
 });
@@ -262,21 +267,26 @@ const BREAK = [
   ['the page loses its links', 'node/engine-ui.mjs', '<a href="/fair">/fair</a>', '/fair'],
 ];
 let caught = 0;
+const control = ([what, f, from, to]) => new Promise((done) => {
+  const tmp = mkdtempSync(join(tmpdir(), 'mare-engine-ctl-')), end = (line, ok) => { rmSync(tmp, { recursive: true, force: true }); if (ok) caught++; done(line); };
+  try {
+    for (const d of ['node', 'site', 'proof', 'tools/fixtures/engine']) if (existsSync(join(ROOT, d))) { mkdirSync(dirname(join(tmp, d)), { recursive: true }); cpSync(join(ROOT, d), join(tmp, d), { recursive: true }); }
+    cpSync(join(ROOT, 'tools/engine-proof.mjs'), join(tmp, 'tools/engine-proof.mjs')); cpSync(join(ROOT, 'package.json'), join(tmp, 'package.json'));
+    const src = readFileSync(join(tmp, f), 'utf8'); if (!src.includes(from)) return end(`  FAIL control "${what}": the line to break is gone from ${f}; the control needs updating`, false);
+    writeFileSync(join(tmp, f), src.replace(from, to));
+  } catch (e) { return end(`  FAIL control "${what}": ${e?.message}`, false); }
+  const child = spawn(process.execPath, ['tools/engine-proof.mjs', '--no-controls'], { cwd: tmp }); let out = '';
+  const timer = setTimeout(() => child.kill('SIGKILL'), 120_000);
+  child.stdout.on('data', (b) => { out += b; }); child.stderr.on('data', () => {});
+  child.on('close', (code) => { clearTimeout(timer); const held = /(\d+) proofs held, (\d+) failed/.exec(out);
+    if (code !== 0 && held && Number(held[2]) > 0) end(`  ok   caught: ${what} (${held[2]} ${held[2] === '1' ? 'proof' : 'proofs'} failed)`, true);
+    else end(`  FAIL not caught: ${what} (exit ${code}${held ? `, ${held[0]}` : ', no result: hung or crashed'})`, false); });
+});
 if (CONTROLS) {
-  console.log('\nnegative controls: each rule broken in a copy, the proof must fail there');
-  for (const [what, f, from, to] of BREAK) {
-    const tmp = mkdtempSync(join(tmpdir(), 'mare-engine-ctl-'));
-    try {
-      for (const d of ['node', 'site', 'proof', 'tools/fixtures/engine']) if (existsSync(join(ROOT, d))) { mkdirSync(dirname(join(tmp, d)), { recursive: true }); cpSync(join(ROOT, d), join(tmp, d), { recursive: true }); }
-      cpSync(join(ROOT, 'tools/engine-proof.mjs'), join(tmp, 'tools/engine-proof.mjs')); cpSync(join(ROOT, 'package.json'), join(tmp, 'package.json'));
-      const src = readFileSync(join(tmp, f), 'utf8'); if (!src.includes(from)) { console.log(`  FAIL control "${what}": the line to break is gone from ${f}; the control needs updating`); continue; }
-      writeFileSync(join(tmp, f), src.replace(from, to));
-      const run = spawnSync(process.execPath, ['tools/engine-proof.mjs', '--no-controls'], { cwd: tmp, encoding: 'utf8', timeout: 240_000 });
-      const held = /(\d+) proofs held, (\d+) failed/.exec(run.stdout || '');
-      if (run.status !== 0 && held && Number(held[2]) > 0) { caught++; console.log(`  ok   caught: ${what} (${held[2]} ${held[2] === '1' ? 'proof' : 'proofs'} failed)`); }
-      else console.log(`  FAIL not caught: ${what} (exit ${run.status}${held ? `, ${held[0]}` : ''}${run.stderr ? `; ${String(run.stderr).split('\n')[0].slice(0, 160)}` : ''})`);
-    } finally { rmSync(tmp, { recursive: true, force: true }); }
-  }
+  console.log('\nnegative controls: each rule broken in a copy, the proof must fail there (six at a time)');
+  const lines = new Array(BREAK.length); let next = 0;
+  await Promise.all(Array.from({ length: 6 }, async () => { while (next < BREAK.length) { const i = next++; lines[i] = await control(BREAK[i]); } }));
+  for (const l of lines) console.log(l);
   console.log(`${caught} of ${BREAK.length} controls caught`);
 }
 process.exit(failed || (CONTROLS && caught !== BREAK.length) ? 1 : 0);

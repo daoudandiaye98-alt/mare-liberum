@@ -20,6 +20,8 @@ import { isDeepStrictEqual } from 'node:util';
 const ROOT = new URL('..', import.meta.url);
 const arg = (k, d) => { const i = process.argv.indexOf(`--${k}`); return i < 0 ? d : process.argv[i + 1] && !process.argv[i + 1].startsWith('--') ? process.argv[i + 1] : true; };
 const BASE = 'https://mareliberum.dev', UA = 'MareLiberum-session/1.0 (engine bench)';
+// the toon lever sends TOON only when it is at least this much smaller than compact JSON (in tokens here, o200k_base and the others)
+export const RULE = 0.2;
 // the answers counted: [id, door, how to ask]. At least twelve of them must answer, or the run stops
 export const FIXTURES = [
   ['search', '/search?q=weather+api'], ['search-mcp', '/search?q=github+mcp+server'], ['brain', '/brain?q=compare+prices+for+headphones'], ['brain-home', '/brain?format=json'],
@@ -106,18 +108,20 @@ async function main() {
   if (fixtures.length < 12) throw new Error(`only ${fixtures.length} answers answered as JSON; at least 12 are needed`);
   const sum = (t, k) => fixtures.reduce((s, f) => s + f.tokens[t][k], 0), bsum = (k) => fixtures.reduce((s, f) => s + f.bytes[k], 0);
   // best: TOON only where it is smaller than what the door sends, the rule of the lever (brief 3.35, E1)
+  // rule: what the lever does (integrator, 25.11.2026): TOON only when it is at least RULE smaller than compact JSON, else what the door sends
   const best = (t) => fixtures.reduce((s, f) => s + Math.min(f.tokens[t].sent, f.tokens[t].toon), 0), smaller = (t) => fixtures.filter((f) => f.tokens[t].toon < f.tokens[t].sent).map((f) => f.id);
-  const totals = Object.fromEntries(tk.map((t) => [t.id, { json: sum(t.id, 'json'), sent: sum(t.id, 'sent'), min: sum(t.id, 'min'), toon: sum(t.id, 'toon'), best: best(t.id), toonSmallerIn: smaller(t.id) }]));
+  const passes = (t, f) => f.tokens[t].toon <= (1 - RULE) * f.tokens[t].min, rule = (t) => fixtures.reduce((s, f) => s + (passes(t, f) ? f.tokens[t].toon : f.tokens[t].sent), 0);
+  const totals = Object.fromEntries(tk.map((t) => [t.id, { json: sum(t.id, 'json'), sent: sum(t.id, 'sent'), min: sum(t.id, 'min'), toon: sum(t.id, 'toon'), best: best(t.id), toonSmallerIn: smaller(t.id), rule: rule(t.id), ruleIn: fixtures.filter((f) => passes(t.id, f)).map((f) => f.id) }]));
   const ratios = Object.fromEntries(tk.map((t) => [t.id, { json: r2(bsum('json') / sum(t.id, 'json')), sent: r2(bsum('sent') / sum(t.id, 'sent')), min: r2(bsum('min') / sum(t.id, 'min')), toon: r2(bsum('toon') / sum(t.id, 'toon')) }]));
   const medianSaving = Object.fromEntries(tk.map((t) => [t.id, r2(100 * median(fixtures.map((f) => 1 - f.tokens[t.id].toon / f.tokens[t.id].sent)))]));
   const o = totals.o200k_base, day = arg('day', new Date().toISOString().slice(0, 10));
   const pc = (a, b) => { const x = 100 * (1 - a / b); return `${Math.abs(x).toFixed(1)} % ${x >= 0 ? 'fewer' : 'more'}`; }, L = (x) => x.toLocaleString('en-US');
-  const says = `On ${fixtures.length} real answers of a local node (o200k_base), TOON took ${L(o.toon)} tokens where the JSON the doors already send took ${L(o.sent)}: ${pc(o.toon, o.sent)}. TOON was smaller for ${o.toonSmallerIn.length} of the ${fixtures.length} answers (${o.toonSmallerIn.join(', ')}), the ones that hold tables; taken only where it is smaller, the answers take ${L(o.best)} tokens instead of ${L(o.sent)} (${pc(o.best, o.sent)}). Against indented JSON (${L(o.json)}) TOON is ${pc(o.toon, o.json)}, but the sea does not send indented JSON.${mcp ? ` The open MCP door's tools/list (${mcp.full.tools} tools) took ${mcp.full.tokens.o200k_base.toLocaleString('en-US')} tokens, a lean list of ${mcp.lean.tools} took ${mcp.lean.tokens.o200k_base.toLocaleString('en-US')}.` : ''}`;
+  const says = `On ${fixtures.length} real answers of a local node (o200k_base), TOON took ${L(o.toon)} tokens where the JSON the doors already send took ${L(o.sent)}: ${pc(o.toon, o.sent)}. TOON was smaller for ${o.toonSmallerIn.length} of the ${fixtures.length} answers (${o.toonSmallerIn.join(', ')}), and at least ${100 * RULE} % smaller than compact JSON, the rule of the lever, for ${o.ruleIn.length} (${o.ruleIn.join(', ') || 'none'}), the ones that hold tables; with that rule the answers take ${L(o.rule)} tokens instead of ${L(o.sent)} (${pc(o.rule, o.sent)}). Against indented JSON (${L(o.json)}) TOON is ${pc(o.toon, o.json)}, but the sea does not send indented JSON.${mcp ? ` The open MCP door's tools/list (${mcp.full.tools} tools) took ${mcp.full.tokens.o200k_base.toLocaleString('en-US')} tokens, a lean list of ${mcp.lean.tools} took ${mcp.lean.tokens.o200k_base.toLocaleString('en-US')}.` : ''}`;
   const reference = REF ? { implementation: REF.implementation, sameOutput: fixtures.filter((f) => f.sameAsReference).length, of: fixtures.length } : undefined;
   const d = { what: 'the engine bench: real JSON answers of a local node as indented JSON, as sent, minified and as TOON, counted with real tokenizers; the MCP list in full and lean', date: day, engine: 'engine-1',
     node: `a local node of Mare Liberum ${VERSION} (in process, ${N.entries} index entries from the first rows of the lakes)`, toon: { implementation: T.implementation, spec: T.spec, ...(reference ? { reference } : {}) },
     tokenizers: tk.map(({ id, package: p }) => ({ id, package: p })), method: 'Each answer is read from the local node as an agent would (Accept: application/json; the MCP list by POST /mcp). Forms: json = JSON.stringify(v, null, 2); sent = the body the door sent; min = JSON.stringify(v); toon = the TOON encoder named above. Bytes are UTF-8. A form\'s ratio is all its bytes over all its tokens. roundTrip: the TOON decoded again equals the JSON.',
-    summary: { totals, ratios, medianSavingVsSent: medianSaving }, mcp, says, fixtures };
+    toonRule: { minSaving: RULE, against: 'compact JSON (min), per answer, in tokens of each tokenizer; otherwise what the door sends' }, summary: { totals, ratios, medianSavingVsSent: medianSaving }, mcp, says, fixtures };
   if (arg('dry')) { console.log(says); return; }
   const out = new URL(`proof/engine-${day}.json`, ROOT); writeFileSync(out, compact(d)); console.log(`${says}\nwritten: proof/engine-${day}.json`);
 }

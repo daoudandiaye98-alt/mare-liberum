@@ -1,4 +1,4 @@
-// Mare Liberum · the engine room: the levers that spare agents tokens, all measured one way (since 3.35)
+// Mare Liberum · the engine room: the six levers that spare agents tokens, all measured one way (since 3.35)
 // An agent pays for every token it reads. The sea already reads pages lean (node/lean.mjs), answers short on request
 // (node/compact.mjs) and hands over what others solved (node/brain.mjs). The engine room adds the levers for what agents
 // read most besides pages, and counts every one of them the same way:
@@ -12,6 +12,8 @@
 //             If-None-Match with the ETag of the answer before)
 //   budget    a page fitted to the token budget the agent names (/r/<address>?budget=<tokens>), the parts that answer its
 //             question first; lossy, and said so
+//   fields    a JSON answer cut to the fields the agent names (fields=<a,b.c> on every JSON door); what it leaves out is
+//             gone, so it counts as lossy
 // One rule for every lever: what the agent would have read (before) and what it read (after), each in UTF-8 bytes, each
 // made tokens with the ratio the bench measured for its form (tools/engine-bench.mjs, tokenizer o200k_base). No saving,
 // no count. Lossless and lossy savings are counted and shown apart; only lossless ones enter the headline of /savings.
@@ -21,17 +23,18 @@
 import { TOKEN_RATIO as BENCH } from './proof.mjs';
 
 export const ENGINE_VERSION = 'engine-1';
-// the five levers; lossless: what the agent reads says everything the long form said
+// the six levers; lossless: what the agent reads says everything the long form said
 export const LEVERS = Object.freeze({
   toon: Object.freeze({ lossless: true, door: 'fmt=toon or Accept: text/toon on every JSON door; the text the model reads on /mcp/lean', what: 'structured answers as TOON instead of JSON: the same data, the keys of a table said once' }),
   lean: Object.freeze({ lossless: true, door: '/mcp/lean', what: 'the lean MCP door: a handful of tools instead of every tool of the open door; the rest are found and called when needed' }),
   squeeze: Object.freeze({ lossless: null, door: 'POST /compress', what: 'text, HTML or JSON the agent already holds, made smaller: lossless steps first; a question or a token budget only when the agent names one' }),
   delta: Object.freeze({ lossless: true, door: '/r/<address>?since=<etag> or If-None-Match', what: 'a page read again: unchanged in one line, changed as the lines that changed' }),
   budget: Object.freeze({ lossless: false, door: '/r/<address>?budget=<tokens>', what: 'a page fitted to the token budget the agent names, the parts that answer its question first' }),
+  fields: Object.freeze({ lossless: false, door: 'fields=<a,b.c> on every JSON door', what: 'a JSON answer cut to the fields the agent names' }),
 });
 
 // <bench:engine> written by tools/engine-bench.mjs --ratio from the newest run (UTF-8 bytes per token, tokenizer o200k_base)
-export const ENGINE_RATIOS = Object.freeze({ tokenizer: 'o200k_base', date: '2026-11-25', source: '/engine/bench-2026-11-25.json', answers: 19, unit: 'UTF-8 bytes per token', json: 3.55, toon: 3.44 });
+export const ENGINE_RATIOS = Object.freeze({ tokenizer: 'o200k_base', date: '2026-11-25', source: '/engine/bench-2026-11-25.json', answers: 19, unit: 'UTF-8 bytes per token', json: 3.55, toon: 3.43 });
 // </bench:engine>
 // until the bench has measured JSON and TOON, both count with the ratio the proof measured for the sea's Markdown: an
 // assumption, and said so wherever a number rests on it
