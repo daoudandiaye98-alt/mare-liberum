@@ -19,7 +19,8 @@ import { tokensOfBytes, SAVE } from '../node/areas.mjs';
 import { loadBench, loadLean, proofJson } from '../node/proof.mjs';
 import { immune } from '../node/immune.mjs';
 import { HUB_PATHS } from '../node/hubs.mjs';
-import { FAIR, METHOD, BENCH, calibrate, baselineOf, answerTokensOf, shareOf, receiptOf, sealFair, withField, fairSwitch, usd6 } from '../node/fair.mjs';
+import { FAIR, METHOD, BENCH, calibrate, baselineOf, answerTokensOf, shareOf, receiptOf, sealFair, withField, fairSwitch, usd6, HEADER_NOTE, fairStable } from '../node/fair.mjs';
+import { createHash } from 'node:crypto';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 delete process.env.MARE_FAIR; // the proof holds the default: on
@@ -221,9 +222,76 @@ await proof('/fair/pay goes with the till: while the till rests, or with no wall
   assert.ok((await call('/about', { accept: MD, cfg: { ...ON, pay: { ...PAY, payTo: '' } } })).h.get('x-sea-receipt'), 'receipts without a wallet');
 });
 
-console.log('settlement: x402 for the exact unpaid sum');
 const NOTES3 = [{ k: 'path', n: 1 }, { k: 'plan', n: 1 }, { k: 'market', n: 1 }], PER = receiptOf(NOTES3, { answerBytes: 300, answerType: 'application/json' }).shareMicro.mid, ENOUGH = Math.ceil(FAIR.minMicro / PER) + 1;
 const made = (k = ENOUGH) => Array.from({ length: k }, () => fairL().make(NOTES3, { answerBytes: 300, answerType: 'application/json', door: '/brain' }));
+console.log('review 3.34: I1, I2, I4, M1, M6, M7, M8, M9');
+// the normalization of node/tidings.mjs fingerprint() on release/3.34, word for word (that file is not on this branch)
+const fingerprint = (html) => createHash('sha256').update(String(html || '').replace(/<script\b(?![^>]*application\/ld\+json)[^>]*>[\s\S]*?<\/script>/gi, '').replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '').replace(/\d+/g, '#').replace(/\b(second|minute|hour|day|week|month|year)s?\b/gi, 'time').replace(/\s+/g, ' ').replace(/ ?(<[^>]*>) ?/g, '$1')).digest('hex').slice(0, 20);
+await proof('I1: a HEAD request gets no receipt and counts nowhere in the savings ledger; the GET after it is still the first of the day', async () => {
+  const before = await today(), ip = '198.51.100.141';
+  for (const p of ['/connect', '/brain/thinking.json?q=write%20a%20fact%20check%20about%20iron']) { const hd = await call(p, { accept: p.includes('.json') ? JSONA : MD, ip, cfg: { ...ON, head: true } }); noReceipt(hd, `HEAD ${p}`); }
+  const raw = await handle(new Request(`${BASE}/manifesto`, { method: 'HEAD', headers: { accept: MD, 'user-agent': 'proof-agent/1.0', 'x-forwarded-for': ip } }), db, ON);
+  for (const k of SEA_HDR) assert.equal(raw.headers.get(k), null, `a HEAD by method: no ${k}`);
+  const mid = await today(); for (const k of ['md', 'plan', 'mdHtml']) assert.equal(mid[k] || 0, before[k] || 0, `HEAD counted nothing (${k})`);
+  const get = await call('/connect', { accept: MD, ip }); assert.ok(get.h.get('x-sea-receipt'), 'the GET after the HEAD is the first of the day'); assert.equal(((await today()).md || 0) - (before.md || 0), 1);
+});
+await proof('I2: an answer the till sold stays exactly as it sells it: no receipt, no x-sea header, no field, settled or not', async () => {
+  await sea().layPath({ q: 'find usdc price feeds', to: 'https://feeds.example.org/usdc', title: 'USDC feeds' }, { ip: '198.18.201.1' });
+  const pid = (await sea().findPaths('find usdc price feeds', 1))[0].id; await sea().rate(pid, { worked: 1 }, { ip: '198.18.201.2' });
+  const v2r = b64({ x402Version: 2, accepted: { scheme: 'exact', network: 'eip155:8453', amount: '20000', asset: USDC_BASE, payTo: HOUSE_WALLET, maxTimeoutSeconds: 300, extra: { name: 'USD Coin', version: '2' } }, payload: { signature: '0x' + '11'.repeat(65), authorization: { ...auth(20000), nonce: '0x' + '44'.repeat(32) } } });
+  facilitator = (kind) => answer(kind === 'verify' ? { isValid: true, payer: '0x2222222222222222222222222222222222222222' } : { success: true, transaction: '0x' + 'ef'.repeat(32), network: 'eip155:8453' });
+  const paid = await call('/route?q=find%20usdc%20price%20feeds', { method: 'POST', headers: { 'payment-signature': v2r } }); assert.equal(paid.status, 200); assert.ok(paid.h.get('payment-response'), 'sold and settled'); noReceipt(paid, 'the paid route');
+  facilitator = () => { throw new Error('facilitator down'); };
+  const v2s = v2r.replace(/./, (c) => c); const un = await call('/route?q=find%20usdc%20price%20feeds', { method: 'POST', headers: { 'payment-signature': b64({ ...JSON.parse(Buffer.from(v2s, 'base64').toString()), payload: { signature: '0x' + '11'.repeat(65), authorization: { ...auth(20000), nonce: '0x' + '55'.repeat(32) } } }) } });
+  assert.equal(un.status, 200); assert.equal(un.j.paid.status, 'unverified'); assert.equal(un.h.get('payment-response'), null); noReceipt(un, 'sold, not yet verified');
+  const st = await call('/settle', { method: 'POST', body: { q: 'find usdc price feeds', test: true } }); assert.equal(st.status, 200); noReceipt(st, '/settle');
+});
+await proof('I4: beside the dollar figure in the headers, x-sea-fair-share-note says voluntary and what the figure is; every receipt in a 402 carries the note', async () => {
+  assert.equal(HEADER_NOTE, 'voluntary; modelled value for information - not a price, not redeemable, not transferable'); assert.match(HEADER_NOTE, /^[\x20-\x7e]+$/, 'a header holds ASCII');
+  const r = await call('/why', { accept: MD, ip: '198.51.100.151' }); assert.equal(r.h.get('x-sea-fair-share-note'), HEADER_NOTE); assert.match(r.h.get('access-control-expose-headers'), /x-sea-fair-share-note/);
+  const m = await call('/mcp', { method: 'POST', accept: 'application/json, text/event-stream', ip: '198.51.100.152', body: { jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'think', arguments: { q: 'write a fact check of a claim about zinc' } } } });
+  assert.equal(m.h.get('x-sea-fair-share-note'), HEADER_NOTE, 'MCP answers carry the note too');
+  const rs = made(), p = await call(`/fair/pay?r=${rs.map((x) => x.id).join(',')}`, { method: 'POST' }); assert.equal(p.status, 402); assert.ok(p.j.receipts.every((x) => x.note === `voluntary; ${FAIR.usdNote}`));
+});
+await proof('M1: /fair keeps its fingerprint while the sea only counts: new receipts change nothing once fairStable takes out the live receipts', async () => {
+  const a = (await call('/fair', { accept: 'text/html', ua: 'MareLiberum-tidings/1.0' })).text;
+  await call('/savings', { accept: MD, ip: '198.51.100.161' }); fairL().make([{ k: 'path', n: 1 }], { answerBytes: 400, answerType: 'application/json', door: '/zz-new-door' });
+  const b = (await call('/fair', { accept: 'text/html', ua: 'MareLiberum-tidings/1.0' })).text;
+  assert.notEqual(fingerprint(a), fingerprint(b), 'the raw page moved with the receipts (the test has teeth)');
+  assert.equal(fingerprint(fairStable(a)), fingerprint(fairStable(b)), 'stable without the live receipts');
+  assert.doesNotMatch(fairStable(b), /r\d{8}[a-z0-9]{8}/); assert.match(fairStable(b), /The method, rule fair-1/, 'the words of the page stay in');
+});
+await proof('M6: no selling or billing words for the voluntary share; a payment is a payment; /treasury and /pulse count fair share apart from the paid move', async () => {
+  const pages = [(await call('/fair', { accept: 'text/html' })).text, (await call('/fair.json')).text, (await call('/fair.md')).text];
+  const rs = made(), ids = rs.map((x) => x.id).join(','), sum = rs.reduce((s2, x) => s2 + x.shareMicro.mid, 0);
+  pages.push((await call(`/fair/r/${rs[0].id}.json`)).text, (await call(`/fair/pay?r=${ids}`, { method: 'POST' })).text);
+  // ("not sold" stays: it says what a drop never is)
+  for (const t of pages) { assert.doesNotMatch(t, /\b(bill(s|ed|ing)?|invoic\w*|sales?)\b/i); assert.doesNotMatch(t, /"sale"\s*:/); }
+  const fl = createLedger({}), t0 = (await call('/treasury', { cfg: { ...ON, ledger: fl } })).j;
+  facilitator = (kind) => answer(kind === 'verify' ? { isValid: true, payer: '0x2222222222222222222222222222222222222222' } : { success: true, transaction: '0x' + 'ab'.repeat(32), network: 'eip155:8453' });
+  const pd = await call(`/fair/pay?r=${ids}`, { method: 'POST', headers: { 'payment-signature': v2(sum) }, cfg: { ...ON, ledger: fl } }); assert.equal(pd.j.paid.status, 'settled');
+  assert.ok(pd.j.paid.payment && !('sale' in pd.j.paid), 'a payment, not a sale'); assert.ok((await call(`/fair/r/${rs[0].id}.json`, { cfg: { ...ON, ledger: fl } })).j.paid.payment);
+  const t1 = (await call('/treasury', { cfg: { ...ON, ledger: fl } })).j; assert.equal(t1.total_usd, t0.total_usd, 'the paid move is not changed by fair share'); assert.equal(t1.total_count, t0.total_count); assert.equal(t1.fair.total_usd, sum / 1e6); assert.equal(t1.fair.total_count, 1);
+  const pl = (await call('/pulse', { cfg: { ...ON, ledger: fl } })).j; assert.equal(pl.paid_today_usd, 0); assert.equal(pl.fair_today_usd, sum / 1e6);
+});
+await proof('M7: an answer with a receipt is private to its caller; a node switched off keeps the public cache line', async () => {
+  const on = await call('/open.md', { ip: '198.51.100.171' }), off = await call('/open.md', { ip: '198.51.100.172', cfg: OFF });
+  assert.ok(on.h.get('x-sea-receipt')); assert.match(on.h.get('cache-control'), /^private\b/); assert.doesNotMatch(on.h.get('cache-control'), /public|s-maxage/);
+  assert.doesNotMatch(off.h.get('cache-control') || 'public', /private/);
+});
+await proof('M8: the hero says "$0 settled on chain", with its space', async () => {
+  assert.match((await call('/fair', { accept: 'text/html' })).text, /<\/b> settled on chain/); assert.match((await call('/fair.md')).text, /\$[0-9.]+\**\s+settled on chain/);
+});
+await proof('M9: a payment still on its way after a restart is resolved from the database (mare_sale_get), settled and booked once', async () => {
+  const rs = made(2), seen = [];
+  await fairL().record({ sale: 'sdbrestart01', ids: rs.map((x) => x.id), micro: 77, status: 'pending', at: new Date().toISOString() });
+  const dbFetch = async (u, o) => { const fn = String(u).split('/rpc/')[1], b = JSON.parse(o.body); seen.push(fn); if (fn === 'mare_sale_get') return new Response(JSON.stringify(b.ids.includes('sdbrestart01') ? [{ id: 'sdbrestart01', status: 'settled', tx: '0x' + 'cd'.repeat(32), settled_at: new Date().toISOString() }] : []), { status: 200, headers: { 'content-type': 'application/json' } }); return new Response('[]', { status: 200 }); };
+  const fresh = createLedger({ url: 'https://db.proof.invalid', key: 'k', secret: 's', fetch: dbFetch });
+  const pays = await fairL().payments(fresh); assert.equal(pays.find((p) => p.sale === 'sdbrestart01').status, 'settled'); assert.deepEqual(seen, ['mare_sale_get']);
+  assert.equal((await fairL().books()).filter((b) => b.sale === 'sdbrestart01').length, 1, 'booked once'); assert.match((await call(`/fair/r/${rs[0].id}.json`)).j.status, /^retired: paid and settled on chain/);
+});
+
+console.log('settlement: x402 for the exact unpaid sum');
 await proof('the 402 asks for exactly the unpaid sum, in both shapes of x402, to the till\'s wallet on Base', async () => {
   const rs = made(), sum = rs.reduce((s, r) => s + r.shareMicro.mid, 0); assert.ok(sum >= FAIR.minMicro, `${sum}`);
   const r = await call(`/fair/pay?r=${rs.map((x) => x.id).join(',')}`, { method: 'POST' }); assert.equal(r.status, 402);
@@ -266,7 +334,7 @@ await proof('paid through the till: verified and settled on Base; the sale is in
   assert.equal(r.status, 200, r.text); assert.equal(r.j.paid.status, 'settled'); assert.equal(r.j.paid.amount_usd, usd6(sum)); assert.equal(r.j.paid.tx, TX); assert.ok(r.h.get('payment-response'));
   assert.deepEqual(asked.map((a) => a.kind), ['verify', 'settle']); assert.equal(asked[0].body.paymentRequirements.amount, String(sum));
   const sale = ledger.mem.sales[0]; assert.equal(sale.method, 'fair-x402-v2'); assert.equal(sale.amount_micro, sum); assert.equal(sale.kind, 'fair'); assert.equal(sale.amount_cents, Math.round(sum / 1e4)); assert.equal(sale.status, 'settled');
-  const after = (await call('/fair.json')).j.live; assert.equal(Number(after.fairShareSettledOnChainUsd) - Number(before.fairShareSettledOnChainUsd), Number(usd6(sum)));
+  const after = (await call('/fair.json')).j.live; assert.equal(after.micro.settled - before.micro.settled, sum, 'settled on chain grows by the sum, to the millionth');
   assert.match((await call(`/fair/r/${rs[0].id}.json`)).j.status, /^retired: paid and settled on chain/); assert.equal((await call(`/fair/r/${rs[0].id}.json`)).j.pay, undefined);
   paidSet = rs; paidSum = sum;
 });
@@ -297,7 +365,7 @@ await proof('the till\'s own checks come first: a payment smaller than the sum, 
   const rs = made(), sum = rs.reduce((s, r) => s + r.shareMicro.mid, 0), ids = rs.map((x) => x.id).join(','); asked.length = 0;
   const small = await call(`/fair/pay?r=${ids}`, { method: 'POST', headers: { 'payment-signature': v2(sum - 1) } }); assert.equal(small.status, 402); assert.match(small.j.error, /smaller than/);
   const other = await call(`/fair/pay?r=${ids}`, { method: 'POST', headers: { 'payment-signature': v2(sum, '0x' + '99'.repeat(20)) } }); assert.equal(other.status, 402); assert.match(other.j.error, /another wallet/);
-  assert.equal(asked.length, 0); assert.equal((await call(`/fair/r/${rs[0].id}.json`)).j.status, 'due (voluntary)');
+  assert.equal(asked.length, 0); assert.equal((await call(`/fair/r/${rs[0].id}.json`)).j.status, 'asked (voluntary)');
 });
 await proof('a payment the facilitator refuses changes nothing: 402 again with its reason, the receipts stay unpaid', async () => {
   const rs = made(), sum = rs.reduce((s, r) => s + r.shareMicro.mid, 0), n0 = ledger.mem.sales.length;
@@ -371,10 +439,10 @@ console.log(`\n${passed} proofs held, ${failed} failed`);
 const BREAK = [
   ['the agent keeps 80 %: the lower share raised to 30 %', 'node/fair.mjs', 'rate: { lower: 0.2, modelled: 0.1, upper: 0 }', 'rate: { lower: 0.3, modelled: 0.1, upper: 0 }'],
   ['the upper basis billed', 'node/fair.mjs', 'const s = shareOf({ lower, modelled });', 'const s = shareOf({ lower: lower + Math.floor(upper / 4), modelled });'],
-  ['own calls and crawlers counted for Markdown', 'node/core.mjs', "const who0 = callerOf(req.headers), counts = who0.kind !== 'self' && !['ai-crawler', 'crawler', 'search', 'search-ai'].includes(who0.kind);", 'const who0 = callerOf(req.headers), counts = true;'],
+  ['own calls and crawlers counted for Markdown', 'node/core.mjs', "const who0 = callerOf(req.headers), counts = !isHead(req, cfg) && who0.kind !== 'self' && !['ai-crawler', 'crawler', 'search', 'search-ai'].includes(who0.kind);", 'const who0 = callerOf(req.headers), counts = !isHead(req, cfg);'],
   // the ledger guards crawlers twice (once a day, and the count itself): both are taken out
   ['crawlers counted for plans (readOnly let through)', 'node/areas.mjs', 'const firstToday = (ctx, kind, subject, group) => !ctx?.own && !ctx?.readOnly && !ctx?.uncounted &&', 'const firstToday = (ctx, kind, subject, group) => !ctx?.own && !ctx?.uncounted &&',
-    'if (ctx?.own || ctx?.readOnly || ctx?.uncounted || !(n > 0)) return;', 'if (ctx?.own || ctx?.uncounted || !(n > 0)) return;'],
+    'if (ctx?.own || ctx?.readOnly || ctx?.uncounted || ctx?.head || !(n > 0)) return;', 'if (ctx?.own || ctx?.uncounted || ctx?.head || !(n > 0)) return;'],
   ['a receipt on the app door', 'node/fair.mjs', "res.status !== 200 || APP_DOOR.test(path)) return res;", 'res.status !== 200) return res;'],
   ['the 402 asks for one millionth more than is due', 'node/fair.mjs', 'const t = fairTerms(payCfg, { base, ids: due.map((r) => r.id), micro })', 'const t = fairTerms(payCfg, { base, ids: due.map((r) => r.id), micro: micro + 1 })'],
   ['a paid receipt billed again', 'node/fair.mjs', 'const due = found.filter((r) => r.shareMicro.mid > 0 && !paid.has(r.id));', 'const due = found.filter((r) => r.shareMicro.mid > 0);'],
@@ -386,19 +454,32 @@ const BREAK = [
   ['a receipt named twice in one bundle counted twice', 'node/fair.mjs', 'const want = [...new Set((ids || []).map((x) => String(x).trim().toLowerCase()).filter(Boolean))];', 'const want = (ids || []).map((x) => String(x).trim().toLowerCase()).filter(Boolean);'],
   ['a settled payment booked without its transaction', 'node/fair.mjs', "tx: sale.tx || p.tx || null, payer:", 'tx: null, payer:'],
   ['a receipt\'s value without the note that it is no price', 'node/fair.mjs', "USD 0.10, 2 and 8 per million input tokens', note: FAIR.usdNote },", "USD 0.10, 2 and 8 per million input tokens' },"],
+  ['I1 taken back: HEAD answered and counted like GET', 'node/core.mjs', 'if (!fairOn(cfg) || isHead(req, cfg)) return handleMd(req, db, cfg);', 'if (!fairOn(cfg)) return handleMd(req, db, cfg);', 'counts = !isHead(req, cfg) && who0.kind', 'counts = who0.kind', 'ctx = { ip, ...(isHead(req, cfg) ? { head: true } : {}) };', 'ctx = { ip };'],
+  ['I2 taken back: a receipt on what the till sold', { 'node/core.mjs': ['const delivered = (t, r) => (tallyDrop(), ajson(', 'const delivered = (t, r) => (ajson('], 'node/fair.mjs': ["if (res.headers.has('payment-response') || res.headers.has('x-payment-response')) return res;", ''] }],
+  ['I4 taken back: no note beside the dollar figure in the headers', 'node/fair.mjs', "  headers.set('x-sea-fair-share-note', HEADER_NOTE);\n", ''],
+  ['M1 taken back: the live receipts left in the fingerprint', 'node/fair.mjs', "export const fairStable = (html) => String(html ?? '').replace(", "export const fairStable = (html) => String(html ?? '') || ''.replace("],
+  ['M6 taken back: fair-share payments counted as sales of the paid move', 'node/ledger.mjs', 'const sales = all.filter((s) => !isFair(s));', 'const sales = all;'],
+  ['M7 taken back: a receipt in a shared cache', 'node/fair.mjs', "if (!/\\b(private|no-store)\\b/i.test(cc)) headers.set(", "if (false) headers.set("],
+  ['M8 taken back: "$0settled"', 'node/fair.mjs', '</b> settled on chain (', '</b>settled on chain ('],
+  ['M9 taken back: pending payments known only to the node\'s memory', 'node/fair.mjs', 'ledger?.saleStatuses ? await ledger.saleStatuses(ask.length ? ask : []).catch(() => ({})) : {}', '{}'],
 ];
 let caught = 0;
 if (CONTROLS) {
   console.log('\nnegative controls: each rule broken in a copy, the proof must fail there');
-  for (const [what, f, ...pairs] of BREAK) {
+  for (const [what, f0, ...pairs0] of BREAK) {
+    // one file and its pairs, or { file: [from, to, …], … } for a fix that lives in several files
+    const edits = typeof f0 === 'string' ? { [f0]: pairs0 } : f0;
     const tmp = mkdtempSync(join(tmpdir(), 'mare-fair-ctl-'));
     try {
       for (const d of ['node', 'site', 'proof', 'public/film']) if (existsSync(join(ROOT, d))) { mkdirSync(dirname(join(tmp, d)), { recursive: true }); cpSync(join(ROOT, d), join(tmp, d), { recursive: true }); }
       mkdirSync(join(tmp, 'tools'), { recursive: true }); cpSync(join(ROOT, 'tools/fair-proof.mjs'), join(tmp, 'tools/fair-proof.mjs')); cpSync(join(ROOT, 'package.json'), join(tmp, 'package.json'));
-      let src = readFileSync(join(tmp, f), 'utf8'), gone = false;
-      for (let i = 0; i < pairs.length; i += 2) { if (!src.includes(pairs[i])) gone = true; src = src.replace(pairs[i], pairs[i + 1]); }
-      if (gone) { console.log(`  FAIL control "${what}": the line to break is gone from ${f}; the control needs updating`); continue; }
-      writeFileSync(join(tmp, f), src);
+      let gone = null;
+      for (const [f, pairs] of Object.entries(edits)) {
+        let src = readFileSync(join(tmp, f), 'utf8');
+        for (let i = 0; i < pairs.length; i += 2) { if (!src.includes(pairs[i])) gone = f; src = src.replace(pairs[i], pairs[i + 1]); }
+        writeFileSync(join(tmp, f), src);
+      }
+      if (gone) { console.log(`  FAIL control "${what}": the line to break is gone from ${gone}; the control needs updating`); continue; }
       const run = spawnSync(process.execPath, ['tools/fair-proof.mjs', '--no-controls'], { cwd: tmp, encoding: 'utf8', timeout: 240_000 });
       const held = /(\d+) proofs held, (\d+) failed/.exec(run.stdout || '');
       if (run.status !== 0 && held && Number(held[2]) > 0) { caught++; console.log(`  ok   caught: ${what} (${held[2]} ${held[2] === '1' ? 'proof' : 'proofs'} failed)`); }
