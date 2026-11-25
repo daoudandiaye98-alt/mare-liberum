@@ -1,0 +1,175 @@
+{
+"what":"what the shared brain saves: reuses of parts someone already solved, and Markdown instead of HTML",
+"since":"2026-11-24",
+"hero":{
+"tokens":252591,
+"measured":187591,
+"measuredVsText":0,
+"lowerView":{"answers":5,"againstRawHtml":149400,"againstPlainText":0},
+"modelled":{"low":13000,"mid":65000,"high":195000},
+"usd":{"low":0.02,"mid":0.51,"high":3.06,"measuredLow":0.02,"measuredMid":0.38,"measuredHigh":1.5},
+"wh":{"low":3.9,"mid":19.5,"high":50.7},
+"note":"tokens = measured + the middle of the modelled range. measured is versus raw HTML, an upper bound. lowerView: the answers measured against a page's plain text as well (pages of the sea, since 3.33.0), what they spared against raw HTML and against plain text, like for like; measuredVsText is its plain-text figure"
+},
+"house":{
+"today":{"reuses":8,"markdown":0,"measured":0,"modelled":{"low":20000,"mid":70000,"high":195000},"note":"Angel, the house agent of the sea: counted apart, never in the headline"},
+"last30days":{"reuses":8,"markdown":0,"measured":0,"modelled":{"low":20000,"mid":70000,"high":195000},"note":"Angel, the house agent of the sea: counted apart, never in the headline"},
+"all":{"reuses":8,"markdown":0,"measured":0,"modelled":{"low":20000,"mid":70000,"high":195000},"note":"Angel, the house agent of the sea: counted apart, never in the headline"}
+},
+"today":{
+"counts":{"plan":10,"md":4,"mdBytes":325339,"mdHtml":348987,"mdOut":23648},
+"reuses":10,
+"markdown":4,
+"tokens":{"measured":101459,"low":111459,"mid":151459,"high":251459},
+"modelled":{"low":10000,"mid":50000,"high":150000},
+"vsText":{"tokens":0,"raw":101459,"answers":4},
+"usd":{"low":0.01,"mid":0.3,"high":2.01,"measuredLow":0.01,"measuredMid":0.2,"measuredHigh":0.81},
+"wh":{"low":3,"mid":15,"high":39}
+},
+"last30days":{
+"counts":{"plan":13,"md":6,"mdAgent":1,"mdBytes":462061,"mdAgentBytes":153900,"mdHtml":348987,"mdOut":23648,"mdAgentHtml":163356,"mdAgentOut":9456},
+"reuses":13,
+"markdown":7,
+"tokens":{"measured":187591,"low":200591,"mid":252591,"high":382591},
+"modelled":{"low":13000,"mid":65000,"high":195000},
+"vsText":{"tokens":0,"raw":149400,"answers":5},
+"usd":{"low":0.02,"mid":0.51,"high":3.06,"measuredLow":0.02,"measuredMid":0.38,"measuredHigh":1.5},
+"wh":{"low":3.9,"mid":19.5,"high":50.7}
+},
+"all":{
+"counts":{"plan":13,"md":6,"mdAgent":1,"mdBytes":462061,"mdAgentBytes":153900,"mdHtml":348987,"mdOut":23648,"mdAgentHtml":163356,"mdAgentOut":9456},
+"reuses":13,
+"markdown":7,
+"tokens":{"measured":187591,"low":200591,"mid":252591,"high":382591},
+"modelled":{"low":13000,"mid":65000,"high":195000},
+"vsText":{"tokens":0,"raw":149400,"answers":5},
+"usd":{"low":0.02,"mid":0.51,"high":3.06,"measuredLow":0.02,"measuredMid":0.38,"measuredHigh":1.5},
+"wh":{"low":3.9,"mid":19.5,"high":50.7}
+},
+"byKind":{
+"all":[
+{"kind":"md","how":"measured","answers":6,"bytesHtml":348987,"bytesMarkdown":23648,"bytesSpared":462061,"tokens":139650},
+{"kind":"md-agent","how":"measured","answers":1,"bytesHtml":163356,"bytesMarkdown":9456,"bytesSpared":153900,"tokens":47941},
+{"kind":"read","how":"measured","answers":0,"bytesSpared":0,"tokens":0},
+{"kind":"path","how":"modelled","reuses":0,"tokens":{"low":0,"mid":0,"high":0}},
+{"kind":"plan","how":"modelled","reuses":13,"tokens":{"low":13000,"mid":65000,"high":195000}},
+{"kind":"market","how":"modelled","reuses":0,"tokens":{"low":0,"mid":0,"high":0}}
+],
+"last30days":[
+{"kind":"md","how":"measured","answers":6,"bytesHtml":348987,"bytesMarkdown":23648,"bytesSpared":462061,"tokens":139650},
+{"kind":"md-agent","how":"measured","answers":1,"bytesHtml":163356,"bytesMarkdown":9456,"bytesSpared":153900,"tokens":47941},
+{"kind":"read","how":"measured","answers":0,"bytesSpared":0,"tokens":0},
+{"kind":"path","how":"modelled","reuses":0,"tokens":{"low":0,"mid":0,"high":0}},
+{"kind":"plan","how":"modelled","reuses":13,"tokens":{"low":13000,"mid":65000,"high":195000}},
+{"kind":"market","how":"modelled","reuses":0,"tokens":{"low":0,"mid":0,"high":0}}
+]
+},
+"byDoor":{
+"all":[
+{"door":"/","answers":3,"reuses":0,"measured":143812,"modelled":{"low":0,"mid":0,"high":0}},
+{"door":"/brain","answers":0,"reuses":10,"measured":0,"modelled":{"low":10000,"mid":50000,"high":150000}},
+{"door":"/mcp-server","answers":1,"reuses":0,"measured":3300,"modelled":{"low":0,"mid":0,"high":0}},
+{"door":"/impressum","answers":1,"reuses":0,"measured":2288,"modelled":{"low":0,"mid":0,"high":0}}
+],
+"last30days":[
+{"door":"/","answers":3,"reuses":0,"measured":143812,"modelled":{"low":0,"mid":0,"high":0}},
+{"door":"/brain","answers":0,"reuses":10,"measured":0,"modelled":{"low":10000,"mid":50000,"high":150000}},
+{"door":"/mcp-server","answers":1,"reuses":0,"measured":3300,"modelled":{"low":0,"mid":0,"high":0}},
+{"door":"/impressum","answers":1,"reuses":0,"measured":2288,"modelled":{"low":0,"mid":0,"high":0}}
+]
+},
+"series":[
+{"day":"2026-10-27","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-10-28","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-10-29","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-10-30","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-10-31","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-01","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-02","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-03","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-04","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-05","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-06","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-07","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-08","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-09","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-10","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-11","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-12","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-13","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-14","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-15","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-16","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-17","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-18","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-19","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-20","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-21","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-22","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-23","recorded":false,"measured":0,"modelled":{"low":0,"mid":0,"high":0},"reuses":0,"markdown":0},
+{"day":"2026-11-24","recorded":true,"measured":86132,"modelled":{"low":3000,"mid":15000,"high":45000},"reuses":3,"markdown":3},
+{"day":"2026-11-25","recorded":true,"measured":101459,"modelled":{"low":10000,"mid":50000,"high":150000},"reuses":10,"markdown":4}
+],
+"perReuse":{
+"path":{"tokens":[5000,15000,40000],"wh":[0.5,1.5,4],"what":"a confirmed place for the task instead of searching the web and judging what comes back","basis":"An agent that searches does about 3 to 7 model turns (search, read, judge). A web task of the simplest level in the GAIA benchmark took about 26,000 input and 4,700 output tokens; the place someone already found spares the searching part of it. Energy: 3 turns at 0.16 Wh up to 7 turns at 0.60 Wh, 5 at the median 0.31 Wh."},
+"plan":{"tokens":[1000,5000,15000],"wh":[0.3,1.5,3.9],"what":"a worked-out method with steps, checks and a quality bar instead of working it out again","basis":"Working out a method is reasoning: a long reasoning query writes about 5,000 output tokens and uses 3.91 Wh at the median. Low: one ordinary query (0.31 Wh). Mid: 40 % of a reasoning query."},
+"market":{"tokens":[5000,20000,50000],"wh":[0.5,2,6],"what":"stores that passed open checks instead of checking unknown shops one by one","basis":"Checking a shop means reading its home and legal pages, its registration and what others say: about 2 to 4 reads of 5,000 to 15,000 tokens for each of 2 or 3 shops, and the judgement. Energy: 3 to 15 ordinary queries."}
+},
+"scenarios":[
+{"perDay":1000,"tokensPerDay":[3800000,13000000,34500000],"kwhPerDay":[0.4,1.6,4.4],"mwhPerYear":[0.2,0.6,1.6]},
+{"perDay":100000,"tokensPerDay":[380000000,1300000000,3450000000],"kwhPerDay":[44,160,437],"mwhPerYear":[16.1,58.4,159.5]},
+{"perDay":10000000,"tokensPerDay":[38000000000,130000000000,345000000000],"kwhPerDay":[4400,16000,43700],"mwhPerYear":[1606,5840,15950.5]},
+{"perDay":1000000000,"tokensPerDay":[3800000000000,13000000000000,34500000000000],"kwhPerDay":[440000,1600000,4370000],"mwhPerYear":[160600,584000,1595050]}
+],
+"mix":{
+"path":0.5,
+"plan":0.3,
+"market":0.2
+},
+"sources":[
+{"what":"Energy of one query to a frontier model: median 0.31 Wh (0.16–0.60); a long reasoning query (test-time scaling, about 5,000 output tokens) 3.91 Wh (2.15–7.05)","by":"Oviedo et al., Joule (2026), doi 10.1016/j.joule.2026.102430","url":"https://arxiv.org/abs/2509.20241"},
+{"what":"Median Gemini text prompt: 0.24 Wh","by":"Google (August 2025)","url":"https://arxiv.org/abs/2508.15734"},
+{"what":"Tokens of one agent task: about 26,000 input and 4,700 output at the easiest GAIA level, 121,000 and 9,800 at the hardest","by":"Memento, arXiv 2508.16153","url":"https://arxiv.org/abs/2508.16153"},
+{"what":"Agents use about 4 times the tokens of a chat, systems of several agents about 15 times","by":"Anthropic engineering (June 2025)","url":"https://www.anthropic.com/engineering/multi-agent-research-system"},
+{"what":"Data centres used about 415 TWh in 2024, about 1.5 % of the world's electricity, heading for about 945 TWh by 2030","by":"IEA, Energy and AI (2025)","url":"https://www.iea.org/reports/energy-and-ai"},
+{"what":"Data centres used about 485 TWh in 2025, heading for about 950 TWh in 2030","by":"IEA, Key questions on energy and AI (2026)","url":"https://iea.org/reports/key-questions-on-energy-and-ai/executive-summary"}
+],
+"notCounted":[
+"the energy of the sea itself (one small server; a lookup is milliseconds of one processor, far below one model query)",
+"Markdown in watt-hours: its tokens are counted as measured, their energy is left out",
+"the time agents and people save, and the fake shops not paid"
+],
+"ratio":{
+"html":3.22,
+"md":3.58,
+"text":4.32,
+"unit":"characters per token (JavaScript string length)",
+"bytes":{"html":3.23,"md":3.59,"text":4.34,"unit":"UTF-8 bytes per token"},
+"assumption":false,
+"tokenizer":"o200k_base",
+"date":"2026-11-24",
+"pages":33,
+"run":"https://mareliberum.dev/proof/bench-2026-11-24.json",
+"proof":"https://mareliberum.dev/proof",
+"basis":"measured, not assumed: on the 33 pages of the proof of function (2026-11-24, tokenizer o200k_base) one token held 3.22 characters of raw HTML (3.23 UTF-8 bytes), 3.58 of the sea's Markdown (3.59) and 4.32 of plain text (4.34). Each count becomes tokens with the ratio of its form and of the unit it was counted in: UTF-8 bytes for pages of the sea, characters for pages read through the reader and for counts from before 3.33.0",
+"source":{"what":"Characters and UTF-8 bytes per token for raw HTML, plain text and the sea's Markdown, counted with the o200k_base tokenizer on the 33 pages of a published task set","by":"Mare Liberum, proof of function","url":"https://mareliberum.dev/proof"},
+"fallback":{"html":4,"md":4,"note":"used only when no measured run is present"}
+},
+"price":{
+"asOf":"2026-11-24",
+"unit":"USD per million input tokens",
+"low":0.1,
+"mid":2,
+"high":8,
+"lowIs":"a small model: Claude Haiku 5.5 (prompts up to 100,000 tokens) and Gemini 2.5 Flash-Lite are $0.10",
+"midIs":"the workhorse model of each of the three: Claude Sonnet 5.5, gpt-6.2-sol and Gemini 3.1 Pro (prompts up to 200k tokens) are $2",
+"highIs":"the top model: Claude Fable 5.2 and gpt-6.2-astra are $8",
+"label":"list price for uncached input tokens, modelled",
+"sources":[
+{"what":"Claude Haiku 5.5 $0.10, Claude Sonnet 5.5 $2 and Claude Fable 5.2 $8 per million base input tokens","by":"Anthropic, Claude API pricing","url":"https://platform.claude.com/docs/en/about-claude/pricing"},
+{"what":"gpt-6.2-sol $2 and gpt-6.2-astra $8 per million input tokens, standard tier","by":"OpenAI API pricing","url":"https://developers.openai.com/api/docs/pricing"},
+{"what":"Gemini 3.1 Pro $2 (prompts up to 200k tokens) and Gemini 2.5 Flash-Lite $0.10 per million input tokens, paid tier","by":"Google, Gemini Developer API pricing","url":"https://ai.google.dev/gemini-api/docs/pricing"}
+]
+},
+"read":"A reuse counts once a day per caller network and task when an answer handed an agent a part someone already solved: a confirmed pathway (path), a ready plan (plan), verified offers (market); what it spares is modelled from the ranges in perReuse (low, mid, high). Markdown is measured: md counts pages of the sea asked for as Markdown, mdAgent pages of the sea sent as Markdown to an assistant reading for a person (md-agent), reads pages of other sites through the reader, each with what it spared against the page as HTML (UTF-8 bytes for pages of the sea, characters for pages through the reader); counts become tokens by one rule (ratio: HTML 3.23 bytes or 3.22 characters a token, Markdown 3.59 bytes or 3.58 characters, measured with o200k_base on the proof of function (https://mareliberum.dev/proof)). usd prices the tokens at list prices for uncached input tokens (price): low, mid (the headline) and high. A Markdown answer counts once a day per network and page; one network adds at most 500 Markdown answers and 500 reuses a day. measured is against raw HTML, an upper bound; vsText is the same answers against plain text (pages of the sea), the lower view. The sea's own calls and crawlers are never counted; the house agent (Angel) is counted apart (house)."
+}

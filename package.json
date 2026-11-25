@@ -38,7 +38,9 @@
     "proof:fixes": "node tools/fixes-proof.mjs",
     "proof:commission": "node tools/commission-proof.mjs",
     "proof:tidings": "node tools/tidings-proof.mjs",
-    "proof:fair": "node tools/fair-proof.mjs"
+    "proof:fair": "node tools/fair-proof.mjs",
+    "proof:toon": "node tools/toon-proof.mjs",
+    "proof:leanmcp": "node tools/leanmcp-proof.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.9.0",
