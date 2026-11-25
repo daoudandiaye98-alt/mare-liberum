@@ -1,0 +1,174 @@
+{
+ "what": "the engine bench: real JSON answers of a local node as indented JSON, as sent, minified and as TOON, counted with real tokenizers; the MCP list in full and lean",
+ "date": "2026-11-25",
+ "engine": "engine-1",
+ "node": "a local node of Mare Liberum 3.34.1 (in process, 1319 index entries from the first rows of the lakes)",
+ "toon": {
+  "implementation": "node/toon.mjs of branch engine/a (982b646, E1), from a scratch copy",
+  "spec": "v4.4 (https://github.com/toon-format/spec/blob/v4.4.0/SPEC.md)",
+  "reference": {
+   "implementation": "@toon-format/toon@4.4.0 (the reference implementation, npm)",
+   "sameOutput": 19,
+   "of": 19
+  }
+ },
+ "tokenizers": [
+  {
+   "id": "o200k_base",
+   "package": "js-tiktoken@1.0.21"
+  },
+  {
+   "id": "cl100k_base",
+   "package": "js-tiktoken@1.0.21"
+  },
+  {
+   "id": "claude-legacy",
+   "package": "@anthropic-ai/tokenizer@0.0.4"
+  }
+ ],
+ "method": "Each answer is read from the local node as an agent would (Accept: application/json; the MCP list by POST /mcp). Forms: json = JSON.stringify(v, null, 2); sent = the body the door sent; min = JSON.stringify(v); toon = the TOON encoder named above. Bytes are UTF-8. A form's ratio is all its bytes over all its tokens. roundTrip: the TOON decoded again equals the JSON.",
+ "toonRule": {
+  "minSaving": 0.2,
+  "against": "compact JSON (min), per answer, in tokens of each tokenizer; otherwise what the door sends"
+ },
+ "summary": {
+  "totals": {
+   "o200k_base": {
+    "json": 80458,
+    "sent": 59239,
+    "min": 58596,
+    "toon": 60636,
+    "best": 57199,
+    "toonSmallerIn": [
+     "brain-home",
+     "market",
+     "thinking",
+     "savings",
+     "routes",
+     "briefs"
+    ],
+    "rule": 58388,
+    "ruleIn": [
+     "thinking",
+     "routes"
+    ]
+   },
+   "cl100k_base": {
+    "json": 80505,
+    "sent": 58891,
+    "min": 58248,
+    "toon": 60760,
+    "best": 57041,
+    "toonSmallerIn": [
+     "brain-home",
+     "market",
+     "thinking",
+     "savings",
+     "routes",
+     "briefs"
+    ],
+    "rule": 58162,
+    "ruleIn": [
+     "thinking",
+     "routes"
+    ]
+   },
+   "claude-legacy": {
+    "json": 81396,
+    "sent": 62567,
+    "min": 61200,
+    "toon": 60919,
+    "best": 59567,
+    "toonSmallerIn": [
+     "brain",
+     "brain-home",
+     "market",
+     "thinking",
+     "savings",
+     "open",
+     "routes",
+     "briefs",
+     "fair"
+    ],
+    "rule": 62194,
+    "ruleIn": [
+     "routes"
+    ]
+   }
+  },
+  "ratios": {
+   "o200k_base": {
+    "json": 3.62,
+    "sent": 3.55,
+    "min": 3.57,
+    "toon": 3.43
+   },
+   "cl100k_base": {
+    "json": 3.61,
+    "sent": 3.57,
+    "min": 3.6,
+    "toon": 3.43
+   },
+   "claude-legacy": {
+    "json": 3.57,
+    "sent": 3.36,
+    "min": 3.42,
+    "toon": 3.42
+   }
+  },
+  "medianSavingVsSent": {
+   "o200k_base": -6.91,
+   "cl100k_base": -7.42,
+   "claude-legacy": -0.91
+  }
+ },
+ "mcp": {
+  "full": {
+   "tools": 55,
+   "bytes": 40289,
+   "tokens": {
+    "o200k_base": 9695,
+    "cl100k_base": 9645,
+    "claude-legacy": 9814
+   }
+  },
+  "lean": {
+   "tools": 4,
+   "bytes": 2076,
+   "tokens": {
+    "o200k_base": 503,
+    "cl100k_base": 497,
+    "claude-legacy": 511
+   },
+   "names": [
+    "read_page",
+    "think",
+    "find_tools",
+    "call_tool"
+   ]
+  },
+  "how": "tools/list of the open door /mcp as one JSON result, against read_page and think as the open door defines them plus find_tools and call_tool as tools/engine-bench.mjs writes them (LEAN_EXTRA); the lean door of the release is measured again after the merge"
+ },
+ "says": "On 19 real answers of a local node (o200k_base), TOON took 60,636 tokens where the JSON the doors already send took 59,239: 2.4 % more. TOON was smaller for 6 of the 19 answers (brain-home, market, thinking, savings, routes, briefs), and at least 20 % smaller than compact JSON, the rule of the lever, for 2 (thinking, routes), the ones that hold tables; with that rule the answers take 58,388 tokens instead of 59,239 (1.4 % fewer). Against indented JSON (80,458) TOON is 24.6 % fewer, but the sea does not send indented JSON. The open MCP door's tools/list (55 tools) took 9,695 tokens, a lean list of 4 took 503.",
+ "fixtures": [
+  {"id":"search","door":"/search?q=weather+api","bytes":{"json":17426,"sent":12583,"min":12583,"toon":13096},"tokens":{"o200k_base":{"json":4990,"sent":3713,"min":3713,"toon":4022},"cl100k_base":{"json":4986,"sent":3669,"min":3669,"toon":4019},"claude-legacy":{"json":5317,"sent":4058,"min":4058,"toon":4274}},"roundTrip":true,"sameAsReference":true},
+  {"id":"search-mcp","door":"/search?q=github+mcp+server","bytes":{"json":14511,"sent":10426,"min":10426,"toon":10930},"tokens":{"o200k_base":{"json":3998,"sent":2938,"min":2938,"toon":3234},"cl100k_base":{"json":3983,"sent":2891,"min":2891,"toon":3212},"claude-legacy":{"json":4278,"sent":3229,"min":3229,"toon":3418}},"roundTrip":true,"sameAsReference":true},
+  {"id":"brain","door":"/brain?q=compare+prices+for+headphones","bytes":{"json":10371,"sent":8829,"min":8752,"toon":8593},"tokens":{"o200k_base":{"json":3446,"sent":2923,"min":2859,"toon":2951},"cl100k_base":{"json":3494,"sent":2966,"min":2895,"toon":2997},"claude-legacy":{"json":3607,"sent":3176,"min":3049,"toon":3074}},"roundTrip":true,"sameAsReference":true},
+  {"id":"brain-home","door":"/brain?format=json","bytes":{"json":217,"sent":190,"min":180,"toon":167},"tokens":{"o200k_base":{"json":86,"sent":68,"min":60,"toon":65},"cl100k_base":{"json":86,"sent":68,"min":60,"toon":65},"claude-legacy":{"json":82,"sent":80,"min":60,"toon":61}},"roundTrip":true,"sameAsReference":true},
+  {"id":"find","door":"/find.json?q=weather","bytes":{"json":6661,"sent":5366,"min":5344,"toon":5569},"tokens":{"o200k_base":{"json":1833,"sent":1422,"min":1401,"toon":1573},"cl100k_base":{"json":1874,"sent":1447,"min":1424,"toon":1617},"claude-legacy":{"json":1968,"sent":1575,"min":1543,"toon":1655}},"roundTrip":true,"sameAsReference":true},
+  {"id":"market","door":"/brain/market.json","bytes":{"json":2283,"sent":2068,"min":2033,"toon":1974},"tokens":{"o200k_base":{"json":606,"sent":519,"min":494,"toon":508},"cl100k_base":{"json":609,"sent":521,"min":494,"toon":511},"claude-legacy":{"json":612,"sent":566,"min":507,"toon":515}},"roundTrip":true,"sameAsReference":true},
+  {"id":"areas","door":"/brain/areas.json","bytes":{"json":3776,"sent":2998,"min":2977,"toon":3186},"tokens":{"o200k_base":{"json":1089,"sent":809,"min":796,"toon":939},"cl100k_base":{"json":1090,"sent":810,"min":796,"toon":939},"claude-legacy":{"json":1074,"sent":863,"min":828,"toon":891}},"roundTrip":true,"sameAsReference":true},
+  {"id":"thinking","door":"/brain/thinking.json","bytes":{"json":10677,"sent":8644,"min":8575,"toon":6776},"tokens":{"o200k_base":{"json":2666,"sent":1986,"min":1920,"toon":1472},"cl100k_base":{"json":2610,"sent":1866,"min":1859,"toon":1473},"claude-legacy":{"json":2653,"sent":2043,"min":1906,"toon":1540}},"roundTrip":true,"sameAsReference":true},
+  {"id":"stats","door":"/stats","bytes":{"json":1493,"sent":1057,"min":1057,"toon":1131},"tokens":{"o200k_base":{"json":575,"sent":372,"min":372,"toon":462},"cl100k_base":{"json":578,"sent":373,"min":373,"toon":467},"claude-legacy":{"json":542,"sent":389,"min":389,"toon":396}},"roundTrip":true,"sameAsReference":true},
+  {"id":"savings","door":"/savings.json","bytes":{"json":29123,"sent":18029,"min":17850,"toon":14045},"tokens":{"o200k_base":{"json":9164,"sent":5965,"min":5825,"toon":5270},"cl100k_base":{"json":9172,"sent":5965,"min":5813,"toon":5275},"claude-legacy":{"json":8247,"sent":6006,"min":5689,"toon":4743}},"roundTrip":true,"sameAsReference":true},
+  {"id":"open","door":"/open.json","bytes":{"json":32769,"sent":24626,"min":24420,"toon":25055},"tokens":{"o200k_base":{"json":9658,"sent":7275,"min":7100,"toon":7753},"cl100k_base":{"json":9684,"sent":7221,"min":7036,"toon":7776},"claude-legacy":{"json":9731,"sent":7686,"min":7381,"toon":7606}},"roundTrip":true,"sameAsReference":true},
+  {"id":"offers","door":"/offers.json","bytes":{"json":4080,"sent":3552,"min":3552,"toon":3666},"tokens":{"o200k_base":{"json":1022,"sent":868,"min":868,"toon":928},"cl100k_base":{"json":1034,"sent":874,"min":874,"toon":938},"claude-legacy":{"json":1053,"sent":905,"min":905,"toon":947}},"roundTrip":true,"sameAsReference":true},
+  {"id":"routes","door":"/routes.json","bytes":{"json":6305,"sent":4523,"min":4523,"toon":3015},"tokens":{"o200k_base":{"json":1892,"sent":1205,"min":1205,"toon":868},"cl100k_base":{"json":1897,"sent":1209,"min":1209,"toon":873},"claude-legacy":{"json":1910,"sent":1332,"min":1332,"toon":959}},"roundTrip":true,"sameAsReference":true},
+  {"id":"briefs","door":"/briefs.json","bytes":{"json":14001,"sent":11431,"min":11431,"toon":9157},"tokens":{"o200k_base":{"json":3657,"sent":2681,"min":2681,"toon":2201},"cl100k_base":{"json":3595,"sent":2614,"min":2614,"toon":2196},"claude-legacy":{"json":3754,"sent":2897,"min":2897,"toon":2408}},"roundTrip":true,"sameAsReference":true},
+  {"id":"fair","door":"/fair.json","bytes":{"json":8362,"sent":7378,"min":7273,"toon":7243},"tokens":{"o200k_base":{"json":2387,"sent":2014,"min":1933,"toon":2061},"cl100k_base":{"json":2399,"sent":2022,"min":1932,"toon":2076},"claude-legacy":{"json":2361,"sent":2143,"min":1957,"toon":2023}},"roundTrip":true,"sameAsReference":true},
+  {"id":"pricing","door":"/pricing.json","bytes":{"json":12722,"sent":10925,"min":10875,"toon":11270},"tokens":{"o200k_base":{"json":3646,"sent":3064,"min":3027,"toon":3291},"cl100k_base":{"json":3665,"sent":3072,"min":3024,"toon":3315},"claude-legacy":{"json":3750,"sent":3238,"min":3161,"toon":3338}},"roundTrip":true,"sameAsReference":true},
+  {"id":"connect","door":"/connect.json","bytes":{"json":25909,"sent":19126,"min":19084,"toon":19329},"tokens":{"o200k_base":{"json":7495,"sent":5619,"min":5606,"toon":6033},"cl100k_base":{"json":7524,"sent":5609,"min":5591,"toon":6036},"claude-legacy":{"json":7907,"sent":6211,"min":6139,"toon":6386}},"roundTrip":true,"sameAsReference":true},
+  {"id":"agents","door":"/agents?limit=25","bytes":{"json":25076,"sent":18203,"min":18203,"toon":19013},"tokens":{"o200k_base":{"json":7913,"sent":6089,"min":6089,"toon":6602},"cl100k_base":{"json":7918,"sent":6035,"min":6035,"toon":6599},"claude-legacy":{"json":8209,"sent":6343,"min":6343,"toon":6769}},"roundTrip":true,"sameAsReference":true},
+  {"id":"mcp-tools","door":"POST /mcp tools/list","bytes":{"json":65113,"sent":40323,"min":40323,"toon":44955},"tokens":{"o200k_base":{"json":14335,"sent":9709,"min":9709,"toon":10403},"cl100k_base":{"json":14307,"sent":9659,"min":9659,"toon":10376},"claude-legacy":{"json":14341,"sent":9827,"min":9827,"toon":9916}},"roundTrip":true,"sameAsReference":true}
+ ]
+}
