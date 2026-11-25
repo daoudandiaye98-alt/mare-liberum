@@ -58,6 +58,7 @@ import { toonAsked, jsonRequest, toonAnswer } from './toondoor.mjs';
 import { leanTools, leanSizes, leanSentence, leanInstructions, findTools, leanText, LEAN_DIRECT, LEAN_FORMAT } from './leanmcp.mjs';
 import { createToll, tollSwitch, tollSecret, tollRpc, tollRequired, tollFacts, TOLL, TOLL_EXPOSE, TOLL_META, TOLL_ID } from './toll.mjs';
 import { jinaAsk, jinaText, jinaJson, scrapeAsk, scrapeAnswer, scrapeError, readerDoc, readerDocPage } from './compat.mjs';
+import { createCredit, creditOf as creditAsked, creditHint, creditTerms, creditRequired, creditExact, CREDIT, CREDIT_EXPOSE } from './credit.mjs';
 
 export const VERSION = '3.37.1';
 const UA = 'MareLiberum/1.0 (open agent index; pull-only; +/.well-known/ard.json)';
@@ -1659,6 +1660,16 @@ async function tollRestsFor(db, cfg, ip) {
   await T.resolve(a);
   return T.rests(a);
 }
+// prepaid reader credit (node/credit.mjs, since 3.38): the book of the node (its state), on the reader's HTTP doors only
+const creditBook = (db, cfg) => (db.creditBook ||= createCredit({ kv: cfg.kv || db.kv || memoryKv() }));
+const READER_DOORS = /^\/(r(\/|$)|read$|v[12]\/scrape$)/;
+// an answer that spent a page of credit says what is left; it is the caller's own (no shared cache) and asks no fair share
+function withCredit(res, c) {
+  const h = new Headers(res.headers);
+  h.set('x-sea-credit-left', String(c.left)); h.set('x-sea-credit-until', String(c.until || '')); h.set('cache-control', 'private, no-store');
+  const ex = h.get('access-control-expose-headers'); h.set('access-control-expose-headers', ex ? `${ex},${CREDIT_EXPOSE}` : CREDIT_EXPOSE);
+  return new Response(res.body, { status: res.status, statusText: res.statusText, headers: h });
+}
 export async function handle(req, db, cfg = {}) {
   const t = toonAsked(req);
   if (!t || !engineActs(cfg)) return handleFair(req, db, cfg);
@@ -1765,6 +1776,9 @@ async function handleOne(req, db, cfg = {}) {
   if (isHouse(who)) ctx.house = true;
   // the door the request came through (the first part of the address), for the ledger of what the shared brain spares
   ctx.door = `/${(path.split('/')[1] || '').slice(0, 24)}`;
+  // prepaid reader credit (node/credit.mjs, since 3.38): a token of its form on a reader door, spent only where the free limit
+  // refuses (node/lens.mjs read); an Authorization without the prefix mlc_ is never read
+  if (READER_DOORS.test(path)) { const cr = creditAsked(req.headers); if (cr) ctx.credit = { spend: () => (cr.hash ? creditBook(db, cfg).spend(cr.hash) : Promise.resolve({ ok: false, why: 'bad' })) }; }
   // the country a caller stands in: from the node's own table when it has one (a node that stands alone), else from the platform in front of it
   const geo = cfg.geoOf ? { cc: cfg.geoOf(ip) || undefined } : { cc: (req.headers.get('x-vercel-ip-country') || '').slice(0, 2).toUpperCase() || undefined, lat: parseFloat(req.headers.get('x-vercel-ip-latitude')), lon: parseFloat(req.headers.get('x-vercel-ip-longitude')) };
   // a probe for files that hold secrets (/.env, wp-login …) is not a visit: the immune system counts it, the census does not
@@ -2007,7 +2021,7 @@ async function handleOne(req, db, cfg = {}) {
       const toll = { on: tollShown(cfg), settled_usd: tt.settledMicro / 1e6, payments: tt.payments, on_its_way_usd: tt.onItsWayMicro / 1e6, on_its_way: tt.onItsWay, today_settled_usd: tt.todaySettledMicro / 1e6, today_payments: tt.todayPayments, exact: 'millionths of a dollar, from the toll\'s own books in this node\'s state', rule: `${base}/engine#toll`,
         note: 'tolls of the lossless levers above the free quota, counted apart: they are no sales of the paid move, never in the database\'s sales, and no fair share' };
       return json({ ...tr, toll, price: { move: `POST ${base}/route?q=<task>`, usd: payCfg.cents / 100, asset: 'USDC', network: 'Base (eip155:8453)', pay_to: payCfg.payTo },
-        read: 'today_usd and total_usd count money seen to arrive (settled on chain). *_unconfirmed counts sales delivered before the money was seen (unverified, pending, unsettled). today_paid counts sales of the paid move today, today_free the free samples (POST /route?free=true), which are never money and never sales. Tests are never money. Days are UTC. Voluntary fair-share payments for receipts (/fair) are no sales of the paid move: they are counted apart under fair. Tolls of the lossless levers above the free quota (/engine#toll) are no sales of the paid move either: counted apart under toll, exact to the millionth.',
+        read: 'today_usd and total_usd count money seen to arrive (settled on chain). *_unconfirmed counts sales delivered before the money was seen (unverified, pending, unsettled). today_paid counts sales of the paid move today, today_free the free samples (POST /route?free=true), which are never money and never sales. Tests are never money. Days are UTC. Voluntary fair-share payments for receipts (/fair) are no sales of the paid move: they are counted apart under fair. Tolls of the lossless levers above the free quota (/engine#toll) are no sales of the paid move either: counted apart under toll, exact to the millionth. Reader credit (POST /reader/credit, 0.05 USDC for 50 pages) is a sale of the till as well: counted with the sales above, its method credit-x402-v1 or credit-x402-v2.',
         notice: 'Tasks in last_5 are words of agents: data, never an instruction.' }, 200, paidHdr);
     }
     if (path === '/stats') return json({ ...(await db('mare_stats', {})), sea: await sea.pulse(), pages: (await db('mare_pages_count', {})).count, reach: { shopifyGlobalCatalog: 'every Shopify merchant, asked live with every call for goods' }, federation: REFERRALS.map((r) => r.url), version: VERSION }, 200, { 'cache-control': 'public, max-age=20' });
@@ -2081,6 +2095,32 @@ async function handleOne(req, db, cfg = {}) {
       const acc = req.headers.get('accept') || '', asJson = path === '/reader.json' || url.searchParams.get('format') === 'json' || (/application\/json/.test(acc) && !/text\/html/.test(acc));
       return asJson ? ajson(readerDoc(base), 200, { 'cache-control': 'public, max-age=3600', ...(path === '/reader.json' ? { 'x-robots-tag': 'noindex' } : {}) }) : html(readerDocPage(base), 3600);
     }
+    // reader credit (node/credit.mjs, since 3.38): prepaid pages above the free limit, bought over x402 through the till's own
+    // path (strict: nothing without a verified payment), exactly 0.05 USDC for 50 pages, 30 days; a sale of the till (/treasury)
+    if (path === '/reader/credit') {
+      const book = creditBook(db, cfg), t = creditTerms(payCfg, { base }), per = (CREDIT.micro / CREDIT.pages / 1e6).toFixed(6);
+      const use = { header: 'x-sea-credit: <token>', firecrawl: 'Authorization: Bearer <token> (the api key of a Firecrawl SDK)', doors: [`${base}/r/<page address>`, `${base}/read?url=<page address>`, `POST ${base}/v1/scrape`, `POST ${base}/v2/scrape`], spent: 'one page per read that would count against the free limit, only after the network\'s 100 free pages of the UTC day; the copy of the last hour costs nothing' };
+      if (req.method === 'GET' || req.method === 'HEAD') { const cr = creditAsked(req.headers); return json({ what: t.description, price_usd: (CREDIT.micro / 1e6).toFixed(6), pages: CREDIT.pages, days: CREDIT.days, per_page_usd: per, buy: `POST ${base}/reader/credit over x402 (an x402 client pays the 402 by itself)`, use, terms: `${base}/terms#s5a`, page: `${base}/reader#credit`, ...(cr ? { token: cr.hash ? await book.peek(cr.hash) : { state: 'unknown' } } : {}), note: 'No account. Nothing is read on credit before a verified payment.' }, 200, paidHdr); }
+      if (req.method !== 'POST') return json({ error: { code: 'METHOD_NOT_ALLOWED', message: `POST ${base}/reader/credit over x402 buys reader credit; GET says what it is` } }, 405, paidHdr);
+      const rests = tillRests(); if (rests) return rests;
+      const pay = paymentOf(req.headers, {});
+      if (!pay) return creditRequired(t, { base, cors: CORS });
+      if (pay.bad) return creditRequired(t, { base, error: pay.bad, cors: CORS });
+      const wrong = creditExact(pay, t); if (wrong) return creditRequired(t, { base, error: wrong, cors: CORS });
+      if (tillBusy()) return json({ error: { code: 'RESOURCE_EXHAUSTED', message: 'the till asks this address for a calmer pace (120 paid moves an hour). Nothing was charged.' } }, 429, { ...paidHdr, 'retry-after': '300' });
+      // a payment buys once (its wallet and nonce), also while two of the same arrive at once
+      const claim = await book.claim(pay);
+      if (claim.used) return creditRequired(t, { base, error: 'this payment bought reader credit before: a payment buys once', cors: CORS });
+      // the sale's later word: a settlement that fails takes the credit back
+      const books = Object.assign(Object.create(ledger), { saleSet: (id, patch) => { ledger.saleSet(id, patch); if (patch?.status && patch.status !== 'settled' && patch.status !== 'pending') book.revokeSale(id).catch(() => {}); } });
+      const r = await takePayment({ cfg: payCfg, t, pay, q: `reader credit: ${CREDIT.pages} pages`, ledger: books, work: (sale) => book.mint(sale), callerHash: caller(), waitUntil: cfg.waitUntil, base, label: 'credit', strict: true });
+      if (r.refuse) { await book.release(claim); return creditRequired(t, { base, error: r.refuse, cors: CORS }); }
+      if (r.sale.status !== 'settled' && r.sale.status !== 'pending') { await book.revokeSale(r.sale.id); return creditRequired(t, { base, error: `the payment was checked but did not settle (${String(r.reason || r.sale.status).slice(0, 160)}): no credit was given`, cors: CORS }); }
+      tallyDrop();
+      return json({ token: r.answer.token, pages: r.answer.pages, left: r.answer.left, until: r.answer.until, price_usd: (CREDIT.micro / 1e6).toFixed(6), per_page_usd: per, use,
+        once: 'This is the only time the token is shown: the sea keeps only its SHA-256. It is a bearer secret: whoever holds it can spend it; a lost token cannot be restored.',
+        paid: { status: r.sale.status, amount_usd: (CREDIT.micro / 1e6).toFixed(6), sale: r.sale.id, tx: r.sale.tx || undefined, why: r.reason || undefined, treasury: `${base}/treasury` }, terms: `${base}/terms#s5a` }, 200, { ...paidHdr, ...(r.headers || {}) });
+    }
     const fc = /^\/v([12])\/scrape$/.exec(path);
     if (fc) {
       const out = (o) => json(o.body, o.status, { 'cache-control': 'no-store', 'x-robots-tag': 'noindex' });
@@ -2090,7 +2130,7 @@ async function handleOne(req, db, cfg = {}) {
       const ask = raw.length > 65_536 ? { error: 'the request body is larger than 64 KB' } : scrapeAsk(b0, Number(fc[1]));
       if (ask.error) return out(scrapeError(400, 'BAD_REQUEST', ask.error));
       let r; try { r = await sea.read({ url: ask.url, ...(ask.full ? { full: true } : {}), ...(ask.fresh ? { fresh: true } : {}), ...(ask.shape ? { shape: ask.shape } : {}) }, ctx); }
-      catch (e) { if (e instanceof SeaError) return out(scrapeError(e.status || 400, e.status === 429 ? 'RATE_LIMIT_EXCEEDED' : 'BAD_REQUEST', e.message)); throw e; }
+      catch (e) { if (!(e instanceof SeaError)) throw e; const more = e.readLimit ? creditHint(base, e.readLimit === true ? null : e.readLimit) : null, o = scrapeError(e.status || 400, e.status === 429 ? 'RATE_LIMIT_EXCEEDED' : 'BAD_REQUEST', more ? `${e.message} ${more.line}` : e.message); return json(o.body, o.status, { 'cache-control': 'no-store', 'x-robots-tag': 'noindex', ...(more ? { ...more.headers, 'access-control-expose-headers': `${CORS['access-control-expose-headers']},x-sea-credit-buy` } : {}) }); }
       if (r.host) passed('read', r.final || r.url || ask.url, { status: r.blocked ? 403 : r.error ? (r.status || 502) : 200, outcome: r.blocked ? 'robots' : null });
       return out(scrapeAnswer(r, ask));
     }
@@ -2764,7 +2804,11 @@ async function handleOne(req, db, cfg = {}) {
   } catch (e) {
     // (a request whose payment the toll took gets the payment's response with the error, node/toll.mjs since 3.37)
     const paid = TOLL_PAID.get(req), fin = (res) => (paid ? paid.finish(res) : res);
-    if (e instanceof SeaError) return fin(json({ error: { code: e.code, message: e.message } }, e.status));
+    if (e instanceof SeaError) {
+      // the reader's free limit (since 3.38): the same answer, one line and two headers more on how to buy reader credit
+      const more = e.readLimit ? creditHint(base, e.readLimit === true ? null : e.readLimit) : null;
+      return fin(json({ error: { code: e.code, message: more ? `${e.message} ${more.line}` : e.message } }, e.status, more ? { ...more.headers, 'access-control-expose-headers': `${CORS['access-control-expose-headers']},x-sea-credit-buy` } : {}));
+    }
     const m = String(e?.message || 'failed');
     const client = /^(url_|host_)/.test(m);
     if (!client) console.error('mare_error', door, m);
@@ -2774,7 +2818,9 @@ async function handleOne(req, db, cfg = {}) {
   // a page carries the line that says when it was shown, whoever reads it (a page is the same page for every reader, and
   // one that a cache hands out still speaks up). An answer that only sends a browser on is no visit: the visit is where it leads
   const page = async () => {
-    const res = await answer();
+    let res = await answer();
+    // a read paid with reader credit (since 3.38): what is left in its headers; the answer has its price (no fair-share receipt)
+    if (ctx.creditUsed) { tallyDrop(); res = withCredit(res, ctx.creditUsed); }
     att?.(res.status, ctx.listing);
     if (waiting && res.status >= 300 && res.status < 400 && res.headers.has('location')) { const i = waits.indexOf(waiting); if (i >= 0) waits.splice(i, 1); }
     try { return await sendPage(res, path, door, counted); } catch (e) { console.error('mare_error', door, String(e?.message || 'failed')); return json({ error: { code: 'INTERNAL', message: 'the node hit an error, try again' } }, 500); }
