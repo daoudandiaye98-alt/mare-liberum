@@ -220,6 +220,8 @@ export async function declareAnswer({ req, path, base, kv, ip, mail = mailConfig
 
 // ------------------------------------------------------------------ the operator reads them with the moderation key, nobody else
 const sameHash = (key, want) => { try { const a = Buffer.from(createHash('sha256').update(String(key)).digest('hex')), b = Buffer.from(String(want || '')); return a.length === b.length && timingSafeEqual(a, b); } catch { return false; } };
+// the same check for the operator's other doors (since 3.38: the books and the digest, node/books.mjs)
+export const operatorKeyOk = (req, keySha = MOD_KEY_SHA) => { const key = req.headers.get('x-mare-mod') || ''; return !!key && sameHash(key, keySha); };
 export async function operatorAnswer({ req, url, base, kv, keySha = MOD_KEY_SHA }) {
   const J = { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex' };
   const key = req.headers.get('x-mare-mod') || '';

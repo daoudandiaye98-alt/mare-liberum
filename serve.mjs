@@ -14,7 +14,7 @@ import { Readable } from 'node:stream';
 import { join, dirname, normalize, extname, sep } from 'node:path';
 import { readFileSync, statSync, createReadStream } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { handle, startToll, AGENT_LINK, AGENT_HINT } from './node/core.mjs';
+import { handle, startToll, startBooks, stopBooks, AGENT_LINK, AGENT_HINT } from './node/core.mjs';
 import { createMem } from './node/mem.mjs';
 import { memoryKv } from './node/flow.mjs';
 import { durableKv, createMemStore, KEPT } from './node/durable.mjs';
@@ -76,6 +76,9 @@ const ledger = createLedger({ url: process.env.MARE_DB_URL, key: process.env.MAR
 // the toll of the lossless levers (node/toll.mjs): a payment an earlier run left on its way is checked now (on Base: settled
 // or released), behind the start
 try { waitUntil(startToll(db, { kv, waitUntil, ledger, base })); } catch (e) { log('mare_toll', e?.message); }
+// the books from the chain (node/books.mjs): every USDC transfer into the till's wallet, read from Base on their own timer and
+// kept in the state on disk; only a node with a copy on disk reads them (MARE_BOOKS=off switches it off)
+if (disk) { try { startBooks(db, { kv, ledger, base }); } catch (e) { log('mare_books', e?.message); } }
 
 // files that travel beside the node (fonts, icons, the key of the search engines): a web server in front serves them
 // first; a node without one serves them itself
@@ -140,6 +143,7 @@ async function stop(sig) {
   server.close(); server.closeIdleConnections?.();
   for (let i = 0; i < 60 && open > 0; i++) await new Promise((r) => setTimeout(r, 100));
   await Promise.race([Promise.allSettled([...later]), new Promise((r) => setTimeout(r, 5000))]);
+  try { await Promise.race([stopBooks(db), new Promise((r) => setTimeout(r, 3000))]); } catch {}
   try { await kv.settle?.(); } catch {}
   try { await ledger.settle(); } catch {}
   try { await disk?.close(); } catch {}

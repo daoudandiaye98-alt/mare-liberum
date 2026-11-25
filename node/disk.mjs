@@ -86,6 +86,8 @@ export function diskKv(file, { everyMs = 60000, minTtlMs = 120000, skip = () => 
       let line; try { line = `${JSON.stringify([k, e, x])}\n`; } catch { return false; }
       try { const fd = openSync(jfile, 'a'); try { writeSync(fd, line); fsyncSync(fd); } finally { closeSync(fd); } atOnce++; return true; } catch (err) { log('mare_disk_write', err?.message); return false; }
     },
+    // the names that start with a prefix and have not ended (since 3.38, for the operator's digest, node/books.mjs): read only
+    keys(prefix = '') { const t = now(), out = []; for (const [k, x] of m) if (k.startsWith(prefix) && !(x.e && x.e <= t)) out.push(k); return out; },
     ready, save,
     // the last pass, for the moment the node is asked to stop
     async close() { clearInterval(timer); if (writing) await writing; return save(); },

@@ -21,6 +21,8 @@ import { createMem } from '../node/mem.mjs';
 import { memoryKv } from '../node/flow.mjs';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
+// the nodes of this proof never read the live chain: the books of node/books.mjs stay off in every run of serve.mjs (since 3.38)
+process.env.MARE_BOOKS = 'off';
 let passed = 0, failed = 0;
 const proof = async (name, fn) => { try { await fn(); passed++; console.log(`  ok   ${name}`); } catch (e) { failed++; console.log(`  FAIL ${name}\n       ${String(e?.stack || e).split('\n').slice(0, 5).join('\n       ')}`); } };
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
