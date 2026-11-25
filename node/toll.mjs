@@ -56,7 +56,7 @@ export const TOLL_FILE = new URL('../config/toll.json', import.meta.url);
 // settlement never below the smallest sum the facilitator's fee allows (node/fair.mjs FAIR.minMicro), a price within the rate
 // card of /savings
 const LIMITS = { freeTokensPerNetworkPerDay: [0, 1e9], share: [1e-6, 0.2], settleAtUsd: [0.05, 10], usdPerMillion: [1e-6, TOKEN_PRICE.high] };
-export const TOLL_DEFAULTS = Object.freeze({ freeTokensPerNetworkPerDay: 100_000, share: 0.2, settleAtUsd: 0.05, usdPerMillion: TOKEN_PRICE.mid });
+export const TOLL_DEFAULTS = Object.freeze({ freeTokensPerNetworkPerDay: 10_000, share: 0.2, settleAtUsd: 0.05, usdPerMillion: TOKEN_PRICE.mid });
 // the values of config/toll.json, each checked; one out of its range falls back to its default (and says so in .fallback)
 export function tollConfig(raw) {
   const c = raw && typeof raw === 'object' ? raw : {}, fallback = [];
