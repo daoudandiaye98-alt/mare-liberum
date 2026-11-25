@@ -14,9 +14,9 @@ import { homedir } from 'node:os';
 import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
-import { toToon, fromToon, TOON, ToonError } from '../node/toon.mjs';
+import { toToon, fromToon, TOON, ToonError, TOON_MIN_GAIN } from '../node/toon.mjs';
 import { savingOf, engineHeaders, RATIO } from '../node/engine.mjs';
-import { prefersToon, toonAsked, jsonRequest, toonAnswer, toonTag, jsonTag } from '../node/toondoor.mjs';
+import { prefersToon, toonAsked, jsonRequest, toonAnswer, toonTag, jsonTag, toonOrJson, fieldsOf, project } from '../node/toondoor.mjs';
 import { freezeTime, refTree, nodeOf, brokenCopy, runIn, drop, headersOf, same, RECEIPT_IDS, REF } from './engine-kit.mjs';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
@@ -81,15 +81,17 @@ if (refLib) {
 } else console.log('  note the reference implementation is not installed (npm install --prefix ~/.cache/toon-ref @toon-format/toon): that cross-check did not run');
 
 // ------------------------------------------------------------------ 3. real answers of the sea
-console.log('real answers of the sea (tools/fixtures/toon/sea, read from mareliberum.dev 3.34.1): JSON against TOON by the one rule (node/engine.mjs)');
+console.log(`real answers of the sea (tools/fixtures/toon/sea, read from mareliberum.dev 3.34.1): compact JSON against TOON by the one rule (node/engine.mjs); TOON goes out only at ${TOON_MIN_GAIN * 100} % fewer tokens or more`);
 const SEA = readdirSync(join(FX, 'sea')).filter((f) => f.endsWith('.json')).sort();
-const seaRows = SEA.map((f) => { const text = readFileSync(join(FX, 'sea', f), 'utf8'), v = JSON.parse(text), t = toToon(v); return { name: f.replace(/\.json$/, ''), text, v, t, s: savingOf('toon', { before: text, beforeForm: 'json', after: t, afterForm: 'toon' }) }; });
-for (const r of seaRows) console.log(`       ${r.name.padEnd(8)} JSON ${String(r.s.bytes.before).padStart(6)} B ≈ ${String(r.s.before).padStart(5)} tokens · TOON ${String(r.s.bytes.after).padStart(6)} B ≈ ${String(r.s.after).padStart(5)} tokens · ${r.s.saved > 0 ? `TOON spares ${r.s.saved}` : 'TOON is not smaller: JSON is sent'}`);
+const seaRows = SEA.map((f) => { const text = readFileSync(join(FX, 'sea', f), 'utf8'), v = JSON.parse(text), t = toToon(v), c = JSON.stringify(v); return { name: f.replace(/\.json$/, ''), text, v, t, s: savingOf('toon', { before: c, beforeForm: 'json', after: t, afterForm: 'toon' }), pick: toonOrJson(v) }; });
+for (const r of seaRows) console.log(`       ${r.name.padEnd(8)} compact JSON ${String(r.s.bytes.before).padStart(6)} B ≈ ${String(r.s.before).padStart(5)} tokens · TOON ${String(r.s.bytes.after).padStart(6)} B ≈ ${String(r.s.after).padStart(5)} tokens (${(r.s.saved / r.s.before * 100).toFixed(1)} % fewer) · sent: ${r.pick.form === 'toon' ? 'TOON' : 'compact JSON'}`);
 console.log(`       (tokens by ${RATIO.unit}: json ${RATIO.json}, toon ${RATIO.toon}${RATIO.assumption ? `; an assumption until the bench measures them: ${RATIO.basis}` : ''})`);
 await proof(`all ${SEA.length} real answers decode from their TOON to the same data`, () => { for (const r of seaRows) assert.ok(same(fromToon(r.t), r.v), r.name); });
-await proof('TOON is smaller than JSON on the tabular answers (routes, savings) by the one rule', () => {
-  for (const n of ['routes', 'savings']) { const r = seaRows.find((x) => x.name === n); assert.ok(r.s.saved > 0 && r.s.bytes.after < r.s.bytes.before, `${n}: ${r.s.before} -> ${r.s.after}`); }
-  assert.match(toToon(seaRows.find((x) => x.name === 'routes').v), /\[\d+\]\{[^}]+\}:\n/, 'the doors of /routes.json become a table');
+await proof(`TOON only where it pays (TOON_MIN_GAIN = ${TOON_MIN_GAIN}): the table of /routes.json goes out as TOON, every answer under the threshold as its compact JSON`, () => {
+  assert.equal(TOON_MIN_GAIN, 0.2);
+  const routes = seaRows.find((x) => x.name === 'routes'); assert.equal(routes.pick.form, 'toon'); assert.match(routes.t, /\[\d+\]\{[^}]+\}:\n/, 'the doors of /routes.json become a table');
+  for (const r of seaRows) { const pays = r.s.saved > 0 && r.s.saved >= TOON_MIN_GAIN * r.s.before; assert.equal(r.pick.form, pays ? 'toon' : 'json', r.name); if (!pays) assert.equal(r.pick.text, JSON.stringify(r.v), `${r.name}: the compact JSON`); }
+  const savings = seaRows.find((x) => x.name === 'savings'); assert.ok(savings.s.saved > 0 && savings.pick.form === 'json', 'savings: TOON is smaller, but not by 20 %: compact JSON');
 });
 
 // ------------------------------------------------------------------ 4. fmt=toon on the JSON doors, against 3.34.1
@@ -128,14 +130,16 @@ if (theirs) {
 }
 // the TOON answers
 const pairs = [];
-await proof('fmt=toon and Accept: text/toon: the JSON answer re-encoded, text/toon per the spec, vary: accept, the engine headers of savingOf, every other header kept', async () => {
-  for (const p of ['/savings.json', '/search?q=mcp', '/about', '/fair.json']) {
+const compactOf = (t) => JSON.stringify(JSON.parse(t));
+const TOON_DOORS = ['/routes.json', '/web.json', '/lighthouse.json'];
+await proof('fmt=toon and Accept: text/toon: where TOON is 20 % fewer tokens than the compact JSON, the answer as TOON (text/toon, vary: accept, the engine headers of savingOf), every other header kept', async () => {
+  for (const p of TOON_DOORS) {
     const j = await ours.call(p), viaFmt = await ours.call(`${p}${p.includes('?') ? '&' : '?'}fmt=toon`), viaAcc = await ours.call(p, { accept: 'text/toon' });
     for (const t of [viaFmt, viaAcc]) {
       assert.equal(t.status, 200); assert.equal(t.headers.get('content-type'), 'text/toon; charset=utf-8', p);
       assert.ok(same(fromToon(t.text), JSON.parse(j.text)), `${p}: the TOON says what the JSON says`);
-      const s = savingOf('toon', { before: j.text, beforeForm: 'json', after: t.text, afterForm: 'toon' });
-      assert.ok(s.saved > 0); for (const [k, v] of Object.entries(engineHeaders(s))) assert.equal(t.headers.get(k), v, `${p} ${k}`);
+      const s = savingOf('toon', { before: compactOf(j.text), beforeForm: 'json', after: t.text, afterForm: 'toon' });
+      assert.ok(s.saved >= TOON_MIN_GAIN * s.before, `${p}: TOON pays`); for (const [k, v] of Object.entries(engineHeaders(s))) assert.equal(t.headers.get(k), v, `${p} ${k}`);
       assert.equal(t.headers.get('x-sea-engine-lossy'), null); assert.match(t.headers.get('vary') || '', /\baccept\b/i);
       for (const [k, v] of j.headers) if (!['content-type', 'content-length', 'vary', 'etag', 'access-control-expose-headers'].includes(k)) assert.equal(t.headers.get(k), v, `${p}: header ${k} kept`);
       assert.match(t.headers.get('access-control-expose-headers') || '', /x-sea-engine-tokens/);
@@ -143,72 +147,103 @@ await proof('fmt=toon and Accept: text/toon: the JSON answer re-encoded, text/to
     pairs.push({ p, j, t: viaFmt });
   }
 });
-await proof('only an Accept that rates text/toon above JSON asks for it (or names it first at the same rate); */*, text/* and no Accept never do', () => {
+await proof('under the threshold the compact JSON goes out and the note says why: /savings.json (TOON 16 % fewer), /search (19 %), /open.json (TOON larger); no engine header, no count', async () => {
+  const n0 = counted.length;
+  for (const p of ['/savings.json', '/search?q=mcp', '/open.json']) {
+    const j = await ours.call(p), t = await ours.call(`${p}${p.includes('?') ? '&' : '?'}fmt=toon`), c = compactOf(j.text);
+    const s = savingOf('toon', { before: c, beforeForm: 'json', after: toToon(JSON.parse(j.text)), afterForm: 'toon' });
+    assert.ok(s.saved < TOON_MIN_GAIN * s.before, `${p} is under the threshold`);
+    assert.equal(t.text, c, `${p}: the compact JSON`); assert.match(t.headers.get('content-type'), /^application\/json/); assert.match(t.headers.get('x-sea-engine-note'), /^json: TOON would be \d+ tokens against \d+ of compact JSON, less than 20 % fewer$/);
+    assert.equal(t.headers.get('x-sea-engine'), null);
+  }
+  assert.equal(counted.length, n0);
+});
+await proof('only an Accept that rates text/toon above JSON asks for it (or names it first at the same rate); */*, text/* and no Accept never do; /compress and the app door are never asked', () => {
   for (const a of ['text/toon', 'text/toon, application/json', 'application/json;q=0.5, text/toon', 'text/toon;q=0.9, */*;q=0.8', 'TEXT/TOON']) assert.equal(prefersToon(a), true, a);
   for (const a of ['', '*/*', 'text/*', 'application/json', 'application/json, text/toon', 'text/toon;q=0.5, application/json', 'text/toon;q=0', 'text/toonish', 'application/toon']) assert.equal(prefersToon(a), false, a);
   const r = (u, accept) => new Request(`https://mare.test${u}`, { headers: accept ? { accept } : {} });
-  assert.equal(toonAsked(r('/about?fmt=toon')).by, 'fmt=toon'); assert.equal(toonAsked(r('/about?FMT=TOON')).by, 'fmt=toon');
-  for (const [u, a] of [['/about'], ['/about?fmt=compact'], ['/about?fmt=toonx'], ['/about?xfmt=toon'], ['/mcp/app?fmt=toon'], ['/mcp/app', 'text/toon'], ['/about', '*/*']]) assert.equal(toonAsked(r(u, a)), null, `${u} ${a || ''}`);
+  assert.equal(toonAsked(r('/about?fmt=toon')).by, 'fmt=toon'); assert.equal(toonAsked(r('/about?FMT=TOON')).by, 'fmt=toon'); assert.equal(toonAsked(r('/about?fields=a')).by, 'fields');
+  for (const [u, a] of [['/about'], ['/about?fmt=compact'], ['/about?fmt=toonx'], ['/about?xfmt=toon'], ['/about?fields='], ['/about?fields=,.'], ['/mcp/app?fmt=toon'], ['/mcp/app', 'text/toon'], ['/compress?fmt=toon'], ['/compress', 'text/toon'], ['/compress?fields=out'], ['/about', '*/*']]) assert.equal(toonAsked(r(u, a)), null, `${u} ${a || ''}`);
 });
-await proof('the door is asked exactly what a JSON client asks: fmt=toon taken out, every other part of the query and the body byte for byte, Accept: application/json', async () => {
-  const req = new Request('https://mare.test/route?q=a%20b+c&fmt=toon&free=true&x=%C3%BC', { method: 'POST', headers: { accept: 'text/toon', 'content-type': 'application/json', 'if-none-match': '"abc.toon", W/"d"' }, body: '{"q":"ä"}' });
+await proof('the door is asked exactly what a JSON client asks: fmt=toon and fields= taken out, every other part of the query and the body byte for byte, Accept: application/json', async () => {
+  const req = new Request('https://mare.test/route?q=a%20b+c&fmt=toon&free=true&fields=x.y&x=%C3%BC', { method: 'POST', headers: { accept: 'text/toon', 'content-type': 'application/json', 'if-none-match': '"abc.toon", W/"d"' }, body: '{"q":"ä"}' });
   const t = toonAsked(req), inner = await jsonRequest(req, t);
   assert.equal(new URL(inner.url).search, '?q=a%20b+c&free=true&x=%C3%BC'); assert.equal(inner.headers.get('accept'), 'application/json');
   assert.equal(await inner.text(), '{"q":"ä"}'); assert.equal(inner.headers.get('if-none-match'), '"abc", W/"d"'); assert.equal(t.heldToon, true);
 });
-await proof('where TOON is not smaller, the JSON answer is sent as it was, saying why in x-sea-engine-note, with no engine headers and no count', async () => {
-  const n0 = counted.length, j = await ours.call('/open.json'), t = await ours.call('/open.json?fmt=toon');
-  const s = savingOf('toon', { before: j.text, beforeForm: 'json', after: toToon(JSON.parse(j.text)), afterForm: 'toon' });
-  assert.ok(!(s.saved > 0), 'the proof needs an answer TOON does not shorten: /open.json');
-  assert.equal(t.text, j.text); assert.match(t.headers.get('content-type'), /^application\/json/); assert.match(t.headers.get('x-sea-engine-note'), /^json kept: TOON is not smaller/);
-  assert.equal(t.headers.get('x-sea-engine'), null); assert.equal(counted.length, n0);
-});
-await proof('errors and JSON-RPC envelopes stay JSON, said in the note; the app door ignores the ask byte for byte', async () => {
-  const e = await ours.call('/nope-404?fmt=toon'), e0 = await ours.call('/nope-404');
-  assert.equal(e.status, 404); assert.equal(e.text, e0.text); assert.match(e.headers.get('x-sea-engine-note'), /status 404/);
+await proof('left alone, byte for byte: errors (with fmt=toon or fields=), answers that carry x-sea-engine already (a door of the engine, e.g. /compress), the app door; JSON-RPC stays JSON', async () => {
+  const e0 = await ours.call('/nope-404');
+  for (const q of ['?fmt=toon', '?fields=error', '?fmt=toon&fields=error.code']) { const e = await ours.call(`/nope-404${q}`); assert.equal(e.status, 404); assert.equal(e.text, e0.text); assert.deepEqual(headersOf(e.headers), headersOf(e0.headers)); }
+  const shapedAlready = new Response('{"out":"x","form":"text"}', { headers: { 'content-type': 'application/json', 'x-sea-engine': 'squeeze' } });
+  assert.equal(await toonAnswer(shapedAlready, { toon: true, fields: fieldsOf('out') }), shapedAlready, 'an answer the engine shaped is returned as it is');
   const m = await ours.rpc('/mcp?fmt=toon', 'tools/list'), m0 = await ours.rpc('/mcp', 'tools/list');
   assert.equal(m.text, m0.text); assert.match(m.headers.get('x-sea-engine-note'), /JSON-RPC/);
-  for (const o of [{}, { accept: 'text/toon' }]) { const a = await ours.rpc('/mcp/app?fmt=toon', 'tools/list', undefined, o), b = await ours.rpc('/mcp/app', 'tools/list'); assert.equal(a.text, b.text); assert.deepEqual(headersOf(a.headers), headersOf(b.headers)); }
+  for (const o of [{}, { accept: 'text/toon' }]) { const a = await ours.rpc('/mcp/app?fmt=toon&fields=result', 'tools/list', undefined, o), b = await ours.rpc('/mcp/app', 'tools/list'); assert.equal(a.text, b.text); assert.deepEqual(headersOf(a.headers), headersOf(b.headers)); }
 });
-await proof('counted for an agent through countEngine (lever toon, the saving of the headers, subject the door\'s path, a mind\'s key never); never for the sea\'s own calls, crawlers or HEAD; the house agent apart', async () => {
+// fields=
+await proof('fields=a,b.c: only the named members, in their own order, an array element by element; lossy and said so; measured against the compact JSON of the whole answer', async () => {
+  const j = await ours.call('/routes.json'), f = await ours.call('/routes.json?fields=topics.id,topics.title,shut'), full = JSON.parse(j.text), got = JSON.parse(f.text);
+  assert.equal(f.status, 200); assert.match(f.headers.get('content-type'), /^application\/json/);
+  assert.deepEqual(Object.keys(got), ['topics', 'shut'].filter((k) => k in full));
+  assert.equal(got.topics.length, full.topics.length); for (const [i, t] of got.topics.entries()) assert.deepEqual(t, { id: full.topics[i].id, title: full.topics[i].title });
+  const s = savingOf('fields', { before: JSON.stringify(full), beforeForm: 'json', after: f.text, afterForm: 'json', lossy: true });
+  assert.equal(f.headers.get('x-sea-engine'), 'fields'); assert.equal(f.headers.get('x-sea-engine-lossy'), '1'); assert.equal(f.headers.get('x-sea-engine-tokens'), `${s.before}->${s.after}`); assert.equal(f.headers.get('x-sea-engine-saved'), String(s.saved));
+  for (const [k, v] of j.headers) if (!['content-type', 'content-length', 'vary', 'etag', 'access-control-expose-headers'].includes(k)) assert.equal(f.headers.get(k), v, `header ${k} kept`);
+  assert.deepEqual(project({ a: [{ b: 1, c: 2 }, { b: 3 }, 5, [{ b: 4 }]], d: { e: { f: 1, g: 2 } }, h: 'x' }, fieldsOf('a.b, d.e.g ,zz.top')), { a: [{ b: 1 }, { b: 3 }, [{ b: 4 }]], d: { e: { g: 2 } } });
+  assert.deepEqual(project([{ x: 1, y: 2 }, { x: 3 }], fieldsOf('x')), [{ x: 1 }, { x: 3 }], 'a root array is projected element by element');
+});
+await proof('fields=: a path that is not there gives nothing, never an error; the fair receipt always stays, its headers too', async () => {
+  const u = await ours.call('/routes.json?fields=no.such.path'); assert.equal(u.status, 200); assert.equal(u.text, '{}');
+  const body = { a: Array.from({ length: 20 }, (_, i) => ({ x: i, y: i * 2, name: `row ${i}` })), other: 'long text '.repeat(40), receipt: { id: 'r20261125abcdefgh', saved_tokens: 12, url: 'https://mare.test/fair/r/r20261125abcdefgh' } };
+  const res = () => new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json; charset=utf-8', 'x-sea-receipt': 'https://mare.test/fair/r/r20261125abcdefgh', 'x-sea-saved-tokens': '12', 'cache-control': 'private' } });
+  for (const [o, check] of [[{ toon: false, fields: fieldsOf('a.x') }, (t) => JSON.parse(t)], [{ toon: true, fields: fieldsOf('nothing') }, (t) => JSON.parse(t)], [{ toon: true }, (t) => fromToon(t)]]) {
+    const r0 = res(), r = await toonAnswer(r0, o), v = check(await r.text());
+    assert.deepEqual(v.receipt, body.receipt, 'the receipt stays'); for (const k of ['x-sea-receipt', 'x-sea-saved-tokens', 'cache-control']) assert.equal(r.headers.get(k), r0.headers.get(k));
+  }
+});
+await proof('fields= with fmt=toon: the projection first, then TOON where it pays; both savings counted apart (fields lossy, toon lossless), the headers say both', async () => {
   counted.length = 0;
-  const a = await ours.call('/savings.json?fmt=toon', { ip: '203.0.113.7' });
+  const j = await ours.call('/routes.json'), f = await ours.call('/routes.json?fields=topics.id,topics.title&fmt=toon', { ip: '203.0.113.8' });
+  assert.equal(f.headers.get('content-type'), 'text/toon; charset=utf-8'); assert.ok(same(fromToon(f.text), project(JSON.parse(j.text), fieldsOf('topics.id,topics.title'))));
+  assert.equal(f.headers.get('x-sea-engine'), 'fields,toon'); assert.equal(f.headers.get('x-sea-engine-lossy'), '1');
+  assert.deepEqual(counted.map((c) => c.lever), ['fields', 'toon']); assert.equal(counted[0].s.lossy, true); assert.equal(counted[1].s.lossy, false);
+  assert.equal(f.headers.get('x-sea-engine-saved'), String(counted[0].s.saved + counted[1].s.saved)); assert.equal(f.headers.get('x-sea-engine-tokens'), `${counted[0].s.before}->${counted[1].s.after}`);
+});
+await proof('counted for an agent through countEngine (the lever of each saving, the saving of the headers, subject the door\'s path, a mind\'s key never); never for the sea\'s own calls, crawlers or HEAD; the house agent apart', async () => {
+  counted.length = 0;
+  const a = await ours.call('/routes.json?fmt=toon', { ip: '203.0.113.7' });
   assert.equal(counted.length, 1); const c = counted[0];
   assert.equal(c.lever, 'toon'); assert.equal(`${c.s.before}->${c.s.after}`, a.headers.get('x-sea-engine-tokens')); assert.equal(String(c.s.saved), a.headers.get('x-sea-engine-saved'));
-  assert.equal(c.subject, '/savings.json'); assert.equal(c.ctx.door, '/savings.json'); assert.equal(c.ctx.ip, '203.0.113.7'); assert.equal(c.ctx.house, undefined);
+  assert.equal(c.subject, '/routes.json'); assert.equal(c.ctx.door, '/routes.json'); assert.equal(c.ctx.ip, '203.0.113.7'); assert.equal(c.ctx.house, undefined);
   for (const ua of ['MareLiberum-session/1.0', 'Mozilla/5.0 (compatible; ClaudeBot/1.0; +claudebot@anthropic.com)', 'Mozilla/5.0 (compatible; GPTBot/1.2; +https://openai.com/gptbot)', 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)', 'Mozilla/5.0 (compatible; PerplexityBot/1.0; +https://perplexity.ai/perplexitybot)']) {
-    const r = await ours.call('/savings.json?fmt=toon', { ua }); assert.equal(r.headers.get('content-type'), 'text/toon; charset=utf-8', ua);
+    const r = await ours.call('/routes.json?fmt=toon&fields=topics.id', { ua }); assert.equal(r.headers.get('x-sea-engine'), 'fields,toon', ua);
   }
-  const h = await ours.call('/savings.json?fmt=toon', { head: true }); assert.equal(h.headers.get('content-type'), 'text/toon; charset=utf-8');
+  const h = await ours.call('/routes.json?fmt=toon', { head: true }); assert.equal(h.headers.get('content-type'), 'text/toon; charset=utf-8');
   assert.equal(counted.length, 1, 'no count for the sea, crawlers or HEAD');
-  await ours.call('/savings.json?fmt=toon', { ua: 'Angel/1.0' }); assert.equal(counted.length, 2); assert.equal(counted[1].ctx.house, true);
+  await ours.call('/routes.json?fmt=toon', { ua: 'Angel/1.0' }); assert.equal(counted.length, 2); assert.equal(counted[1].ctx.house, true);
   // a mind's address is its key: what reaches the ledger is the door, /m/…
   const key = String(JSON.parse((await ours.call('/m/new')).text).mind || '').split('/m/')[1]; assert.ok(key);
   for (const text of ['one note', 'another note', 'a third note']) assert.equal((await ours.call(`/m/${key}/add`, { method: 'POST', body: { text } })).status, 200);
-  const n1 = counted.length, mr = await ours.call(`/m/${key}?fmt=toon`);
-  assert.equal(mr.headers.get('content-type'), 'text/toon; charset=utf-8'); assert.equal(counted.length, n1 + 1);
+  const n1 = counted.length, mr = await ours.call(`/m/${key}?fields=notes.text`);
+  assert.equal(mr.headers.get('x-sea-engine'), 'fields'); assert.equal(counted.length, n1 + 1);
   assert.equal(counted.at(-1).subject, '/m/…'); assert.ok(counted.every((x) => !JSON.stringify(x).includes(key)), 'the key never reaches the ledger');
 });
-await proof('the fair receipt of a JSON answer survives: its field and its headers are in the TOON answer', async () => {
-  const body = { a: [{ x: 1, y: 2 }, { x: 3, y: 4 }, { x: 5, y: 6 }], receipt: { id: 'r20261125abcdefgh', saved_tokens: 12, url: 'https://mare.test/fair/r/r20261125abcdefgh' } };
-  const res = new Response(JSON.stringify(body), { headers: { 'content-type': 'application/json; charset=utf-8', 'x-sea-receipt': 'https://mare.test/fair/r/r20261125abcdefgh', 'x-sea-saved-tokens': '12', 'cache-control': 'private' } });
-  const t = await toonAnswer(res, {});
-  assert.ok(same(fromToon(await t.text()), body)); for (const k of ['x-sea-receipt', 'x-sea-saved-tokens', 'cache-control']) assert.equal(t.headers.get(k), res.headers.get(k));
-});
-await proof('validators stay the door\'s: a TOON answer carries its tag marked .toon, a TOON If-None-Match is asked as the JSON tag, a 304 passes through', async () => {
-  const mk = (status, etag) => new Response(status === 304 ? null : JSON.stringify({ rows: [{ a: 1, b: 2 }, { a: 3, b: 4 }, { a: 5, b: 6 }] }), { status, headers: { 'content-type': 'application/json', ...(etag ? { etag } : {}) } });
+await proof('validators stay the door\'s: a TOON answer carries its tag marked .toon, a TOON If-None-Match is asked as the JSON tag, a 304 passes through; a changed JSON carries none', async () => {
+  const rows = Array.from({ length: 20 }, (_, i) => ({ a: i, b: i * 2, name: `row ${i}` }));
+  const mk = (status, etag, body = { rows }) => new Response(status === 304 ? null : JSON.stringify(body), { status, headers: { 'content-type': 'application/json', ...(etag ? { etag } : {}) } });
   assert.equal((await toonAnswer(mk(200, '"v1"'))).headers.get('etag'), '"v1.toon"'); assert.equal((await toonAnswer(mk(200, 'W/"v1"'))).headers.get('etag'), 'W/"v1.toon"');
+  assert.equal((await toonAnswer(mk(200, '"v1"'), { toon: false, fields: fieldsOf('rows.a') })).headers.get('etag'), null, 'a projection is another document: no tag');
   const r304 = await toonAnswer(mk(304, '"v1"'), { heldToon: true }); assert.equal(r304.status, 304); assert.equal(r304.headers.get('etag'), '"v1.toon"'); assert.equal(await r304.text(), '');
   const md304 = mk(304, '"page"'); assert.equal(await toonAnswer(md304, { heldToon: false }), md304, 'a 304 for what the client holds passes through untouched');
   assert.equal(jsonTag(toonTag('"x"')), '"x"'); assert.equal(toonTag(toonTag('"x"')), '"x.toon"');
   const md = new Response('# page', { headers: { 'content-type': 'text/markdown; charset=utf-8', etag: '"page"' } }), m = await toonAnswer(md); assert.equal(m.headers.get('etag'), '"page"'); assert.equal(await m.text(), '# page');
 });
 if (theirs) {
-  await proof('resting ("engine" in rest of immune:policy) or switched off (MARE_ENGINE=off), nothing of it acts: fmt=toon and Accept: text/toon answer as 3.34.1 does', async () => {
+  await proof('resting ("engine" in rest of immune:policy) or switched off (MARE_ENGINE=off), nothing of it acts: fmt=toon, Accept: text/toon and fields= answer as 3.34.1 does', async () => {
     // a fresh pair of nodes, called in lockstep: the live counters of /open.json are the same on both
     const A = await nodeOf(ROOT, { site: SITE }), B = await nodeOf(refDir, { site: SITE }), seen = [];
     await A.call('/stats'); await B.call('/stats'); A.db.flow.countEngine = (...x) => seen.push(x);
-    const asks = [['/savings.json?fmt=toon'], ['/search?q=mcp&fmt=toon'], ['/savings.json', 'text/toon'], ['/about', 'text/toon'], ['/open.json?fmt=toon'], ['/nope-404?fmt=toon'], ['/brain?q=x&fmt=toon', 'text/html']];
+    const asks = [['/routes.json?fmt=toon'], ['/search?q=mcp&fmt=toon'], ['/routes.json', 'text/toon'], ['/about', 'text/toon'], ['/open.json?fmt=toon'], ['/nope-404?fmt=toon'], ['/brain?q=x&fmt=toon', 'text/html'], ['/routes.json?fields=topics.id'], ['/routes.json?fields=topics.id&fmt=toon']];
     for (const [p, accept] of asks) await sameAnswer(p, accept ? { accept } : {}, { engine: 'off' }, {}, A, B);
     A.immune.set({ rest: ['engine'] });
     try { for (const [p, accept] of [...asks, ...DEFAULTS]) await sameAnswer(p, accept ? { accept } : {}, {}, {}, A, B); } finally { A.immune.set({}); }
@@ -228,11 +263,18 @@ if (CONTROLS) {
     ['the encoder leaves a number-like string unquoted', 'node/toon.mjs', '|| NUM_LIKE.test(s) ', ''],
     ['the encoder ends with a newline', 'node/toon.mjs', "return out.join('\\n');", "return out.join('\\n') + '\\n';"],
     ['tables ignore that rows must have the same keys', 'node/toon.mjs', 'if (ok.length !== ks.length) return null;', ''],
-    ['the layer shapes answers nobody asked for', 'node/toondoor.mjs', 'export function toonAsked(req) {', "export function toonAsked(req) { if (!/mcp\\/app/.test(req.url)) return { url: new URL(req.url), path: new URL(req.url).pathname, by: 'accept' };"],
-    ['TOON is sent even where it is larger', 'node/toondoor.mjs', 'if (!(s.saved > 0)) return kept(', 'if (false) return kept('],
+    ['the threshold is gone (TOON wherever it is smaller)', 'node/toon.mjs', 'export const TOON_MIN_GAIN = 0.2;', 'export const TOON_MIN_GAIN = 0;'],
+    ['TOON is sent even where it is larger', 'node/toondoor.mjs', 's.saved > 0 && s.saved >= TOON_MIN_GAIN * s.before ?', 'true ?'],
+    ['the layer shapes answers nobody asked for', 'node/toondoor.mjs', 'export function toonAsked(req) {', "export function toonAsked(req) { if (!/mcp\\/app/.test(req.url)) return { url: new URL(req.url), path: new URL(req.url).pathname, by: 'accept', toon: true, fields: null };"],
     ['crawlers are counted', 'node/core.mjs', "who.kind !== 'self' && !READERS.includes(who.kind);\n  const res = await handleFair(await jsonRequest(req, t), db, cfg);", "who.kind !== 'self';\n  const res = await handleFair(await jsonRequest(req, t), db, cfg);"],
     ['the rest switch is not asked', 'node/core.mjs', "const engineActs = (cfg) => engineSwitch(cfg) && !immune.atRest?.('engine');", 'const engineActs = (cfg) => true;'],
-    ['a TOON answer drops the headers of the JSON answer', 'node/toondoor.mjs', "  const h = new Headers(res.headers);\n  h.set('content-type', TOON.type);", "  const h = new Headers();\n  h.set('content-type', TOON.type);"],
+    ['a shaped answer drops the headers of the JSON answer', 'node/toondoor.mjs', "const h = new Headers(res.headers); h.delete('content-length');", "const h = new Headers(); h.delete('content-length');"],
+    ['errors are shaped too', 'node/toondoor.mjs', 'if (res.status !== 200 && res.status !== 201) return res;', 'if (false) return res;'],
+    ['an answer the engine shaped is shaped again', 'node/toondoor.mjs', "if (res.headers.has('x-sea-engine')) return res;", ''],
+    ['a projection keeps what was not named', 'node/toondoor.mjs', 'const sub = node.get(k); if (sub === undefined) continue;', 'const sub = node.get(k) ?? true;'],
+    ['a projection drops the fair receipt', 'node/toondoor.mjs', "if (!Array.isArray(v) && Object.prototype.hasOwnProperty.call(v, 'receipt') && !Object.prototype.hasOwnProperty.call(w, 'receipt')) put(w, 'receipt', v.receipt);", ''],
+    ['a path that is not there is an error', 'node/toondoor.mjs', "  return undefined;\n}\n\n// ------------------------------------------------------------------ TOON where it pays", "  throw new Error('no such path');\n}\n\n// ------------------------------------------------------------------ TOON where it pays"],
+    ['a projection is counted as lossless', 'node/toondoor.mjs', "after: JSON.stringify(w), afterForm: 'json', lossy: true });", "after: JSON.stringify(w), afterForm: 'json', lossy: false });"],
   ];
   for (const [name, file, from, to] of C) {
     controls++;

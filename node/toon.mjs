@@ -17,6 +17,10 @@ export const TOON = Object.freeze({
   spec: '4.4', date: '2026-10-08', url: 'https://github.com/toon-format/spec/blob/v4.4.0/SPEC.md', home: 'https://toonformat.dev',
   media: 'text/toon', type: 'text/toon; charset=utf-8', ext: '.toon', implementation: 'node/toon.mjs (Mare Liberum, no dependencies)',
 });
+// TOON is sent only where it pays: at least this share fewer tokens than the compact JSON of the same answer (the research
+// for 3.35: against compact JSON TOON saves on tables only, and costs accuracy in agentic use, arXiv 2605.29676). Read by
+// node/toondoor.mjs, node/leanmcp.mjs and node/squeeze.mjs
+export const TOON_MIN_GAIN = 0.2;
 export class ToonError extends Error { constructor(m, line) { super(line ? `toon: ${m} (line ${line})` : `toon: ${m}`); this.name = 'ToonError'; this.line = line || null; } }
 
 const KEY_OK = /^[A-Za-z_][A-Za-z0-9_.]*$/;

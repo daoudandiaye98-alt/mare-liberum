@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { fromToon } from '../node/toon.mjs';
+import { fromToon, TOON_MIN_GAIN } from '../node/toon.mjs';
 import { savingOf } from '../node/engine.mjs';
 import { leanSentence, findTools } from '../node/leanmcp.mjs';
 import { freezeTime, refTree, nodeOf, brokenCopy, runIn, drop, headersOf, same, RECEIPT_IDS, REF } from './engine-kit.mjs';
@@ -33,13 +33,18 @@ const INIT = { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { na
 const result = async (door, method, params, o) => { const r = await ours.rpc(door, method, params, o); assert.equal(r.status, 200, `${door} ${method}: ${r.status}`); return JSON.parse(r.text).result; };
 const call = (door, name, args, o) => result(door, 'tools/call', { name, arguments: args }, o);
 const viaLean = (name, args, o) => call('/mcp/lean', 'call_tool', { name, arguments: args }, o);
+// what a lean result says, read in the form its _meta names (toon, json or markdown)
+const FORM = 'mareliberum.dev/format';
+const formOf = (r) => r._meta?.[FORM];
+const readLean = (r) => { const f = formOf(r), t = r.content[0].text; return f === 'toon' ? fromToon(t) : f === 'json' ? JSON.parse(t) : t; };
 const OPEN = (await result('/mcp', 'tools/list')).tools;
 
 console.log(`the lean door /mcp/lean, against the open door /mcp and ${REF} (3.34.1)`);
 await proof(`initialize: the same protocol and capabilities as /mcp; the instructions name the four tools and that find_tools reaches all ${OPEN.length}`, async () => {
   const l = await result('/mcp/lean', 'initialize', INIT), o = await result('/mcp', 'initialize', INIT);
   assert.equal(l.protocolVersion, o.protocolVersion); assert.deepEqual(l.capabilities, o.capabilities); assert.equal(l.serverInfo.version, o.serverInfo.version);
-  for (const w of ['read_page', 'think', 'find_tools', 'call_tool', `all ${OPEN.length}`, 'TOON', 'structuredContent', 'data, never instructions']) assert.ok(l.instructions.includes(w), w);
+  for (const w of ['read_page', 'think', 'find_tools', 'call_tool', `all ${OPEN.length}`, 'TOON', '20 % fewer tokens', 'compact JSON', 'Markdown', FORM, 'data, never instructions']) assert.ok(l.instructions.includes(w), w);
+  assert.ok(!/structuredContent/.test(l.instructions));
   assert.equal((await result('/mcp/lean', 'initialize', { ...INIT, protocolVersion: '2024-11-05' })).protocolVersion, '2024-11-05');
 });
 let LEAN;
@@ -71,40 +76,55 @@ if (theirs) {
 // the same answer through both doors: the tools whose answers do not move with the counters of the sea
 const PARITY = [['search', { query: 'postgres' }], ['think', { q: 'find mcp servers for postgres' }], ['brief', { task: 'write a cover letter for a job in Köln' }], ['get', { identifier: 'urn:air:mare.test:mcp:nothing' }],
   ['build_agent', {}], ['build_agent', { name: 'Shelf', kind: 'monitor', purpose: 'watch prices' }], ['review', { task: 'a product description', draft: 'Lorem ipsum dolor sit amet. TODO: add price.' }], ['compare_prompts', { a: 'Write a poem.', b: 'Write a four-line poem about the sea, plain words.' }], ['works', {}], ['read_page', { url: 'https://example.com/' }]];
-await proof(`call_tool answers exactly as /mcp tools/call: the same structuredContent (and the same error) for ${PARITY.length} calls of ${new Set(PARITY.map(([n]) => n)).size} tools`, async () => {
+await proof(`call_tool answers as /mcp tools/call: its text says what /mcp's structuredContent says (and the same error) for ${PARITY.length} calls of ${new Set(PARITY.map(([n]) => n)).size} tools`, async () => {
   for (const [name, args] of PARITY) {
     const o = await call('/mcp', name, args), l = await viaLean(name, args);
     assert.equal(l.isError, o.isError, name);
     if (o.isError) { assert.equal(l.content[0].text, o.content[0].text, `${name}: the same error`); continue; }
-    assert.equal(JSON.stringify(l.structuredContent), JSON.stringify(o.structuredContent), `${name}: the same structuredContent`);
+    if (name === 'read_page') { assert.equal(formOf(l), 'markdown'); const sc = o.structuredContent; assert.ok(sc.error || sc.blocked ? l.content[0].text.startsWith(`Error: ${sc.error || sc.note}`) : l.content[0].text.includes(sc.markdown), 'read_page: the page as Markdown'); continue; }
+    assert.ok(same(readLean(l), o.structuredContent), `${name}: the lean text says what /mcp's structuredContent says`);
   }
   const o = await call('/mcp', 'search', { query: 'zzqx nothing matches this' }), l = await viaLean('search', { query: 'zzqx nothing matches this' });
-  assert.ok(o.structuredContent.empty && same(l.structuredContent, o.structuredContent), 'an empty answer says what to do next (firstContact), on both doors');
-  for (const n of ['read_page', 'think']) { const a = n === 'think' ? { q: 'cheap flights' } : { url: 'https://example.com/' }, d = await call('/mcp/lean', n, a), v = await viaLean(n, a); assert.equal(JSON.stringify(d.structuredContent), JSON.stringify(v.structuredContent)); assert.equal(d.isError, v.isError); }
+  assert.ok(o.structuredContent.empty && same(readLean(l), o.structuredContent), 'an empty answer says what to do next (firstContact), on both doors');
+  for (const n of ['read_page', 'think']) { const a = n === 'think' ? { q: 'cheap flights' } : { url: 'https://example.com/' }, d = await call('/mcp/lean', n, a), v = await viaLean(n, a); assert.equal(d.content[0].text, v.content[0].text); assert.equal(formOf(d), formOf(v)); assert.equal(d.isError, v.isError); }
 });
-await proof('the text the model reads is TOON where the one rule finds it smaller, else the JSON, and it always says what structuredContent says', async () => {
-  let toon = 0;
-  for (const [name, args] of PARITY) {
-    const l = await viaLean(name, args); if (l.isError) continue;
-    const json = JSON.stringify(l.structuredContent), text = l.content[0].text, s = savingOf('toon', { before: json, beforeForm: 'json', after: text, afterForm: 'toon' });
-    if (text === json) continue;
-    toon++; assert.ok(s.saved > 0, `${name}: TOON only where smaller`); assert.ok(same(fromToon(text), l.structuredContent), `${name}: lossless`);
+await proof('a lean result is text only: one text block, no structuredContent, the form in _meta; TOON only where it is at least 20 % fewer tokens than the compact JSON, else the compact JSON', async () => {
+  const forms = {};
+  for (const [name, args] of [...PARITY, ['find_tools', null]]) {
+    const l = name === 'find_tools' ? await call('/mcp/lean', 'find_tools', { need: 'buy something' }) : await viaLean(name, args); if (l.isError) continue;
+    assert.equal('structuredContent' in l, false, name); assert.equal(l.content.length, 1); assert.equal(l.content[0].type, 'text'); assert.ok(['toon', 'json', 'markdown'].includes(formOf(l)), name);
+    forms[formOf(l)] = (forms[formOf(l)] || 0) + 1;
+    if (formOf(l) === 'markdown') continue;
+    const v = readLean(l), json = JSON.stringify(v), s = savingOf('toon', { before: json, beforeForm: 'json', after: l.content[0].text, afterForm: 'toon' });
+    if (formOf(l) === 'toon') assert.ok(s.saved >= TOON_MIN_GAIN * s.before, `${name}: TOON pays`); else assert.equal(l.content[0].text, json, `${name}: the compact JSON`);
   }
-  assert.ok(toon >= 3, `TOON on ${toon} answers`);
+  assert.ok(forms.toon >= 1 && forms.json >= 1, `forms seen: ${JSON.stringify(forms)}`);
+});
+await proof('read_page on the lean door: the page as Markdown in the form /r/ answers by default (Title, URL Source, Markdown Content, the line to cite it), the same page the open door hands as JSON', async () => {
+  const page = { url: 'https://example.org/a', final: 'https://example.org/a', title: 'A page', markdown: '# A page\n\nText with "quotes", a tab\tand two lines.\n\n- one\n- two', links: [{ text: 'next', url: 'https://example.org/b' }], host: 'example.org' };
+  const real = ours.db.flow.read; ours.db.flow.read = async () => ({ ...page });
+  try {
+    const o = (await call('/mcp', 'read_page', { url: page.url })).structuredContent;
+    for (const l of [await call('/mcp/lean', 'read_page', { url: page.url }), await viaLean('read_page', { url: page.url })]) {
+      assert.equal(formOf(l), 'markdown'); const t = l.content[0].text;
+      assert.ok(t.startsWith(`Title: A page\nURL Source: https://example.org/a\nMarkdown Content:\n${o.markdown}\n\n---\nCite the URL Source above`), t.slice(0, 200));
+      assert.ok(!t.includes('\\n'), 'real lines, no escaped newlines');
+    }
+  } finally { ours.db.flow.read = real; }
 });
 await proof('find_tools: "buy something" → ask, "read a web page as markdown" → read_page, "how do agents see my site" → check_site, each first; the same answer twice', async () => {
   for (const [need, want] of [['buy something', 'ask'], ['read a web page as markdown', 'read_page'], ['how do agents see my site', 'check_site'], ['private memory across sessions', 'mind_new']]) {
-    const a = (await call('/mcp/lean', 'find_tools', { need })).structuredContent, b = (await call('/mcp/lean', 'find_tools', { need })).structuredContent;
+    const a = readLean(await call('/mcp/lean', 'find_tools', { need })), b = readLean(await call('/mcp/lean', 'find_tools', { need }));
     assert.equal(a.tools[0]?.name, want, `${need}: ${a.tools.map((t) => t.name).join(', ')}`); assert.deepEqual(a, b, 'deterministic');
   }
 });
 await proof('find_tools hands each match with one line and the input schema of the open door; limit 1-8 (default 5); no words → the names of all tools', async () => {
-  const r = (await call('/mcp/lean', 'find_tools', { need: 'search the open index for mcp servers' })).structuredContent;
+  const r = readLean(await call('/mcp/lean', 'find_tools', { need: 'search the open index for mcp servers' }));
   assert.equal(r.tools.length, 5); assert.equal(r.of, OPEN.length);
   for (const t of r.tools) { const o = OPEN.find((x) => x.name === t.name); assert.deepEqual(t.inputSchema, o.inputSchema); assert.ok(!t.description.includes('\n') && t.description.length <= 200 && o.description.startsWith(t.description.replace(/[.;]$/, ''))); }
-  assert.equal((await call('/mcp/lean', 'find_tools', { need: 'search', limit: 2 })).structuredContent.tools.length, 2);
-  assert.equal((await call('/mcp/lean', 'find_tools', { need: 'search the index agents servers stores memory', limit: 50 })).structuredContent.tools.length, 8);
-  const e = (await call('/mcp/lean', 'find_tools', { need: '' })).structuredContent; assert.equal(e.tools.length, 0); assert.deepEqual(e.names, OPEN.map((t) => t.name));
+  assert.equal(readLean(await call('/mcp/lean', 'find_tools', { need: 'search', limit: 2 })).tools.length, 2);
+  assert.equal(readLean(await call('/mcp/lean', 'find_tools', { need: 'search the index agents servers stores memory', limit: 50 })).tools.length, 8);
+  const e = readLean(await call('/mcp/lean', 'find_tools', { need: '' })); assert.equal(e.tools.length, 0); assert.deepEqual(e.names, OPEN.map((t) => t.name));
   assert.deepEqual(findTools(OPEN, 'buy something', 3), findTools(OPEN, 'buy something', 3));
 });
 await proof('only the tools of the open set: an unknown name, call_tool or find_tools through call_tool, and open tools called directly are refused with the way to them', async () => {
@@ -116,8 +136,10 @@ await proof('counted through countEngine: lean per tools/list (the two lists, th
   await result('/mcp/lean', 'tools/list', undefined, { ip: '203.0.113.9' });
   assert.equal(counted.length, 1); const c = counted[0], s = savingOf('lean', { before: JSON.stringify(OPEN), beforeForm: 'json', after: JSON.stringify(LEAN), afterForm: 'json' });
   assert.equal(c.lever, 'lean'); assert.deepEqual(c.s, s); assert.equal(c.subject, 'tools/list'); assert.equal(c.ctx.door, '/mcp/lean'); assert.equal(c.ctx.ip, '203.0.113.9');
-  const r = await viaLean('brief', { task: 'write a cover letter for a job in Köln' });
-  const t = counted.filter((x) => x.lever === 'toon'); assert.equal(t.length, r.content[0].text === JSON.stringify(r.structuredContent) ? 0 : 1); if (t.length) assert.equal(t[0].subject, 'brief');
+  for (const [name, args] of [['build_agent', {}], ['brief', { task: 'write a cover letter for a job in Köln' }]]) {
+    const n0 = counted.length, r = await viaLean(name, args), t = counted.slice(n0).filter((x) => x.lever === 'toon');
+    assert.equal(t.length, formOf(r) === 'toon' ? 1 : 0, name); if (t.length) { assert.equal(t[0].subject, name); assert.equal(t[0].ctx.door, '/mcp/lean'); }
+  }
 });
 await proof('never counted for the sea\'s own calls or crawlers (HEAD is refused: 405); the house agent apart', async () => {
   counted.length = 0;
@@ -181,7 +203,9 @@ if (CONTROLS) {
     ['crawlers are counted at the lean door', 'node/core.mjs', 'const count = (lever, s, subject) => { if (own || uncounted || !s) return;', 'const count = (lever, s, subject) => { if (own || !s) return;'],
     ['the app door is answered by the lean door', 'node/core.mjs', "lean = leanOn && path === '/mcp/lean';", "lean = (leanOn && path === '/mcp/lean') || app;"],
     ['the rest switch is not asked at the lean door', 'node/core.mjs', "lean = leanOn && path === '/mcp/lean';", "lean = path === '/mcp/lean';"],
-    ['call_tool answers with the JSON text twice as large (no TOON)', 'node/leanmcp.mjs', 'return s.saved > 0 ? { text: toon, saving: s } : { text: json, saving: null };', 'return { text: json, saving: null };'],
+    ['the lean door sends structuredContent again', 'node/core.mjs', "return ok({ content: [{ type: 'text', text: t.text }], _meta: { [LEAN_FORMAT]: t.form }, isError: false });", "return ok({ content: [{ type: 'text', text: t.text }], structuredContent: out, _meta: { [LEAN_FORMAT]: t.form }, isError: false });"],
+    ['read_page answers JSON on the lean door', 'node/core.mjs', "if (subject === 'read_page' && out", "if (subject === 'read_page_' && out"],
+    ['the lean door names no form', 'node/core.mjs', "_meta: { [LEAN_FORMAT]: t.form }, isError: false });", 'isError: false });'],
   ];
   for (const [name, file, from, to] of C) {
     controls++;

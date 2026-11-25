@@ -50,7 +50,7 @@ import { createFair, withReceipt, fairSwitch, fairData, fairPage, receiptJson, r
 import { tallyDrop } from './tally.mjs';
 import { engineSwitch } from './engine.mjs';
 import { toonAsked, jsonRequest, toonAnswer } from './toondoor.mjs';
-import { leanTools, leanSizes, leanSentence, leanInstructions, findTools, leanText, LEAN_DIRECT } from './leanmcp.mjs';
+import { leanTools, leanSizes, leanSentence, leanInstructions, findTools, leanText, LEAN_DIRECT, LEAN_FORMAT } from './leanmcp.mjs';
 import { savingOf } from './engine.mjs';
 
 export const VERSION = '3.34.1';
@@ -946,8 +946,11 @@ async function mcp(db, base, msg, ip, app = false, own = false, house = false, u
 // ------------------------------------------------------------------ the lean MCP door /mcp/lean (node/leanmcp.mjs, since 3.35)
 // Four tools instead of every tool: read_page and think as the open door defines them, find_tools and call_tool, which
 // calls any tool of the open set through the same mcpCall, firstContact and commission links as /mcp (door '/mcp/lean').
-// What the model reads of a result is TOON where that is smaller; structuredContent is the object /mcp returns. Counted
-// through the ledger (countEngine): toon per tool call, lean per tools/list; never the sea's own calls or crawlers.
+// A result is text only (no structuredContent: the open door declares no outputSchema, and clients that pass both blocks
+// to the model pay twice): TOON where it is at least TOON_MIN_GAIN fewer tokens than the compact JSON, else the compact
+// JSON; read_page the page as Markdown in the form /r/ answers by default. The form is named in the result's _meta
+// (mareliberum.dev/format). Counted through the ledger (countEngine): toon per tool call where TOON was sent, lean per
+// tools/list; never the sea's own calls or crawlers.
 const LEAN_TOOLS = leanTools(OPEN_TOOLS);
 const LEAN_LIST = { before: JSON.stringify(OPEN_TOOLS), after: JSON.stringify(LEAN_TOOLS) }; // the tool lists as /connect measures the doors
 // one call at the lean door, counted per tool and day like the open door's: call_tool under the tool it called
@@ -959,7 +962,14 @@ async function mcpLean(db, base, msg, ip, own = false, house = false, uncounted 
   if (msg.id === undefined) return null; // notification
   const ectx = { door: '/mcp/lean', ip, ...(house ? { house: true } : {}) };
   const count = (lever, s, subject) => { if (own || uncounted || !s) return; try { const p = db.flow?.countEngine?.(lever, s, ectx, subject); p?.catch?.(() => {}); } catch {} };
-  const result = (out, subject) => { const t = leanText(out); count('toon', t.saving, subject); return ok({ content: [{ type: 'text', text: t.text }], structuredContent: out, isError: false }); };
+  const result = (out, subject) => {
+    if (subject === 'read_page' && out && typeof out === 'object' && (typeof out.markdown === 'string' || out.error || out.blocked)) {
+      const text = out.error || out.blocked ? `Error: ${out.error || out.note}\nURL Source: ${out.url || ''}\n` : readAnswer(out);
+      return ok({ content: [{ type: 'text', text }], _meta: { [LEAN_FORMAT]: 'markdown' }, isError: false });
+    }
+    const t = leanText(out); count('toon', t.saving, subject);
+    return ok({ content: [{ type: 'text', text: t.text }], _meta: { [LEAN_FORMAT]: t.form }, isError: false });
+  };
   const fail = (text) => ok({ content: [{ type: 'text', text }], isError: true });
   switch (msg.method) {
     case 'initialize': {
@@ -1563,9 +1573,10 @@ const fairOf = (db, cfg) => (db.fairLedger ||= createFair({ kv: cfg.kv || db.kv 
 // a HEAD request (serve.mjs turns it into GET and says head) delivers no body: no receipt for it, and no count in the ledger
 const isHead = (req, cfg) => !!cfg.head || req.method === 'HEAD';
 // The engine room (node/engine.mjs, since 3.35) acts only where an agent asks for it and while it neither rests ("engine"
-// in rest of immune:policy) nor is switched off (MARE_ENGINE=off). Outermost: TOON on every JSON door (node/toondoor.mjs):
-// fmt=toon, or an Accept that prefers text/toon. The doors answer JSON as always (receipt and all); the answer is then
-// re-encoded, counted like the Markdown of handleMd (never the sea's own calls, crawlers or HEAD; the house agent apart).
+// in rest of immune:policy) nor is switched off (MARE_ENGINE=off). Outermost, on every JSON door (node/toondoor.mjs):
+// fmt=toon or an Accept that prefers text/toon (TOON where it pays), fields=a,b.c (only those members). The doors answer
+// JSON as always (receipt and all); the answer is then shaped, counted like the Markdown of handleMd (never the sea's own
+// calls, crawlers or HEAD; the house agent apart).
 // A request that does not ask never reaches it: its answer is byte for byte what it was.
 const engineActs = (cfg) => engineSwitch(cfg) && !immune.atRest?.('engine');
 const READERS = ['ai-crawler', 'crawler', 'search', 'search-ai'];
@@ -1577,7 +1588,7 @@ export async function handle(req, db, cfg = {}) {
   const res = await handleFair(await jsonRequest(req, t), db, cfg);
   const base = String(cfg.base || t.url.origin).replace(/\/+$/, ''), subject = engineDoorOf(t.path);
   const ectx = { door: `/${(t.path.split('/')[1] || '').slice(0, 24)}`, ip: (req.headers.get('x-forwarded-for') || 'unknown').split(',')[0].trim(), ...(isHouse(who) ? { house: true } : {}) };
-  return toonAnswer(res, { heldToon: !!t.heldToon, count: counts ? (s) => { const p = seaOf(db, cfg, base).countEngine?.('toon', s, ectx, subject); p?.catch?.(() => {}); } : null });
+  return toonAnswer(res, { heldToon: !!t.heldToon, toon: t.toon, fields: t.fields, count: counts ? (s) => { const p = seaOf(db, cfg, base).countEngine?.(s.lever, s, ectx, subject); p?.catch?.(() => {}); } : null });
 }
 async function handleFair(req, db, cfg = {}) {
   if (!fairOn(cfg) || isHead(req, cfg)) return handleMd(req, db, cfg);
