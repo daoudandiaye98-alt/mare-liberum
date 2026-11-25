@@ -882,7 +882,7 @@ const BREAK = [
   ['F1/I1 taken back: callers told apart by their name (the sea\'s own, crawlers, Angel, "bot")', 'node/core.mjs', 'if (!tollActs(cfg) || (isHead(req, cfg) && !head)) return null;', "if (!tollActs(cfg) || (isHead(req, cfg) && !head) || /MareLiberum|Angel|bot|monitor/i.test(req.headers.get('user-agent') || '')) return null;"],
   ['HEAD tolled', 'node/core.mjs', 'if (!tollActs(cfg) || (isHead(req, cfg) && !head)) return null;', 'if (!tollActs(cfg)) return null;'],
   ['3.37.1 taken back: the 304 of a conditional HEAD free again', 'node/core.mjs', 'await tollGate(req, db, cfg, { ip, base, head }) : null;', '(head ? null : await tollGate(req, db, cfg, { ip, base, head })) : null;'],
-  ['F1b/I1 taken back: a HEAD of /r/ says "unchanged" while the toll is due', 'node/core.mjs', 'const quiet = eng && !wantJson && isHead(req, cfg) ? await tollRestsFor(db, cfg, ip) : false;', 'const quiet = false;'],
+  ['F1b/I1 taken back: a HEAD of /r/ says "unchanged" while the toll is due', 'node/core.mjs', 'const quiet = eng && !wantJson && head && !tg ? await tollRestsFor(db, cfg, ip) : false;', 'const quiet = false;'],
   ['the lossy projection tolled with TOON (fields= and fmt=toon)', 'node/core.mjs', "const d = g.decide(got.find((s) => s.lever === 'toon')?.saved || 0);", "const d = g.decide(got.reduce((x, s) => x + (s.saved || 0), 0));"],
   ['the lossy part of /compress tolled (q, budget)', 'node/press.mjs', 'd = toll.decide(r.parts.lossless?.saved || 0);', 'd = toll.decide(r.saving.saved || 0);'],
   ['F3/I4 taken back: budget= dropped beside since= while the toll is due', 'node/core.mjs', 'const normal = pressRead({ since: null, budget: eng.budget, strip: eng.strip }, {', 'const normal = pressRead({ since: null, budget: null, strip: [] }, {'],
