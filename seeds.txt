@@ -11,3 +11,4 @@ cisco.com
 agent-economy-english.floot.app
 store.agentexchange.work
 bazaar.agentexchange.work
+openagentboard.net
