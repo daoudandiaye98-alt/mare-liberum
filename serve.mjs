@@ -14,7 +14,7 @@ import { Readable } from 'node:stream';
 import { join, dirname, normalize, extname, sep } from 'node:path';
 import { readFileSync, statSync, createReadStream } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { handle, AGENT_LINK, AGENT_HINT } from './node/core.mjs';
+import { handle, startToll, AGENT_LINK, AGENT_HINT } from './node/core.mjs';
 import { createMem } from './node/mem.mjs';
 import { memoryKv } from './node/flow.mjs';
 import { durableKv, createMemStore, KEPT } from './node/durable.mjs';
@@ -69,6 +69,9 @@ const shelf = createShelf();
 // the record of the till (sales of the paid move) and of the walks through /via/ addresses, in the long memory when
 // there is one (node/ledger.mjs); written behind the answers, never in their way
 const ledger = createLedger({ url: process.env.MARE_DB_URL, key: process.env.MARE_DB_KEY, secret: process.env.MARE_DB_SECRET, log, waitUntil });
+// the toll of the lossless levers (node/toll.mjs): a payment an earlier run left on its way is checked now (on Base: settled
+// or released), behind the start
+try { waitUntil(startToll(db, { kv, waitUntil, ledger, base })); } catch (e) { log('mare_toll', e?.message); }
 
 // files that travel beside the node (fonts, icons, the key of the search engines): a web server in front serves them
 // first; a node without one serves them itself
@@ -123,11 +126,13 @@ server.on('error', (e) => { log('mare_listen', e?.message); process.exit(1); });
 server.keepAliveTimeout = 65000; server.headersTimeout = 20000; server.requestTimeout = 45000;
 server.listen(port, host, () => console.log(`Mare Liberum on ${base} · MCP ${base}/mcp · harbours ${base}/harbour · ${db.size()} entries in the index · state ${disk ? `on disk (${disk.state().loaded} names read)` : 'in memory'} · long memory ${store ? 'on' : 'off'} · immune system ${immune.mode} · countries ${geoOf ? `by table (${geoOf.rows} rows)` : 'off'}${carried.length ? ` · carried over: ${carried.map((c) => `${c.id} (${c.days} days, ${c.names} names, ${c.sightings} sightings)`).join(', ')}` : ''}`));
 
-// asked to stop: no new callers, the ones here are answered, what waits is written, the copy on disk is made once more
+// asked to stop: the copy on disk first (before anything that can wait: a stop cut short keeps what was written), then no new
+// callers, the ones here are answered, what waits is written, the copy on disk is made once more
 async function stop(sig) {
   if (stopping) return; stopping = true;
-  console.log(`Mare Liberum: ${sig}, closing`);
   const t = setTimeout(() => process.exit(0), 20000); t.unref?.();
+  try { await disk?.save(); } catch {}
+  console.log(`Mare Liberum: ${sig}, closing`);
   server.close(); server.closeIdleConnections?.();
   for (let i = 0; i < 60 && open > 0; i++) await new Promise((r) => setTimeout(r, 100));
   await Promise.race([Promise.allSettled([...later]), new Promise((r) => setTimeout(r, 5000))]);
