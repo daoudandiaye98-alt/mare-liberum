@@ -317,6 +317,13 @@ await proof('initialize (two protocol versions) and tools/list of /mcp/app are b
     assert.equal(r.status, 200, k); assert.equal(norm(r.text, VERSION), norm(FIX.bodies[k].body, FIX.version), `${k} of /mcp/app differs`);
   }
 });
+await proof('the lean page\'s figures are still true: tools/list of /mcp and /mcp/lean on this tree has the tools and bytes the bench measured (else run node tools/engine-bench.mjs again)', async () => {
+  for (const [door, side] of [['/mcp', BM.full], ['/mcp/lean', BM.lean]]) {
+    const r = await call(door, { method: 'POST', headers: { accept: 'application/json, text/event-stream', 'content-type': 'application/json', 'user-agent': 'reach-pages-proof/1.0' }, body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }) });
+    const list = JSON.parse(r.text).result; assert.equal(list.tools.length, side.tools, `${door}: ${list.tools.length} tools, the bench counted ${side.tools}`); assert.equal(Buffer.byteLength(JSON.stringify(list)), side.bytes, `${door}: the tool list is no longer the size the bench measured`);
+  }
+  assert.deepEqual(BM.lean.names, ['read_page', 'think', 'find_tools', 'call_tool']);
+});
 await proof('package.json runs this proof as proof:reach-pages', () => assert.equal(JSON.parse(rd('package.json')).scripts['proof:reach-pages'], 'node tools/reach-pages-proof.mjs'));
 
 rmSync(dir, { recursive: true, force: true });
