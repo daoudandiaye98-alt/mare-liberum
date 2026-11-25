@@ -1279,6 +1279,14 @@ async function indexFamilies(sea, base, topics) {
   let works = []; try { works = ((await sea.works({ limit: 60, base })).works || []).filter((w) => w.votes.up - w.votes.down >= 2).map((w) => `/works/${w.id}`); } catch {}
   return { hubs: [...HUB_PATHS], lists: INDEX_LISTS(), changed: [...works, ...topics.map((t) => `/brain/${t}`), ...mapped] };
 }
+// the needs whose pick or price moved on this tide, as pages for IndexNow: only a need the current found 3 or more offers for
+// (below that its page says noindex, and buy.xml leaves it out); a need's page that says noindex is no page to tell
+const buyIndexable = async (kv, slug) => { const s = kv ? await kv.get(`tide:${slug}`).catch(() => null) : null; return !!s && Number.isFinite(s.offers) && s.offers >= 3; };
+export async function buyMovers(refreshed, kv) {
+  const out = [];
+  for (const x of Array.isArray(refreshed) ? refreshed : []) if (x?.slug && x.change && x.change !== 'steady' && needOf(x.slug) && (await buyIndexable(kv, x.slug))) out.push(`/buy/${x.slug}`);
+  return out;
+}
 // what changed and when (node/tidings.mjs), one record per store of the node
 const TIDE_OF = new WeakMap(), NO_KV = {};
 const tidingsOf = (cfg) => { const k = cfg.kv || NO_KV; let t = TIDE_OF.get(k); if (!t) TIDE_OF.set(k, (t = createTidings({ kv: cfg.kv }))); return t; };
@@ -1309,7 +1317,11 @@ export async function indexNowChanged(db, base, sea, cfg) {
   if (now - lastPost < TIDINGS.everyMs) return { ...seen, skipped: 'a post within 3 hours' };
   const fam = await indexFamilies(sea, base), all = [...fam.hubs, ...fam.lists, ...fam.changed];
   if (!(await t.knowsAny())) { await t.known(all); return { ...seen, skipped: 'learned what was told; new pages from the next run on' }; }
-  const fresh = await t.fresh(all), queued = await t.queued();
+  const fresh = await t.fresh(all), queued0 = await t.queued();
+  // a need's page queued earlier that now says noindex (fewer than 3 offers on the current's last reading) is left out, and leaves the queue
+  const queued = [], dropped = [];
+  for (const p of queued0) { const m = /^\/buy\/([a-z0-9-]{2,80})$/.exec(p); if (m && !(await buyIndexable(kv, m[1]))) dropped.push(p); else queued.push(p); }
+  if (dropped.length) await t.sent(dropped);
   const paths = [...new Set([...queued, ...fresh])].slice(0, TIDINGS.perPost);
   if (!paths.length) return { ...seen, sent: 0, note: 'nothing changed since the last post' };
   const urls = paths.map((p) => base + p);
@@ -1317,7 +1329,8 @@ export async function indexNowChanged(db, base, sea, cfg) {
   const out = { at: new Date(now).toISOString(), sent: urls.length, status: r.status, order: { changed: paths.filter((p) => queued.includes(p)).length, new: paths.filter((p) => !queued.includes(p)).length } };
   await kv.set('indexnow:changed:last', out, 2 * 86400);
   await kv.set(`indexnow:changed:${day}`, [...((await kv.get(`indexnow:changed:${day}`).catch(() => null)) || []), out].slice(-12), 2 * 86400);
-  if (r.status >= 200 && r.status < 300) { await t.sent(paths); await t.known(fresh); }
+  // what was told leaves the queue; of the new pages only those this post carried are told (a page cut by the 10,000 waits for the next)
+  if (r.status >= 200 && r.status < 300) { const told = new Set(paths); await t.sent(paths); await t.known(fresh.filter((p) => told.has(p))); }
   return { ...seen, ...out };
 }
 
@@ -1836,7 +1849,7 @@ async function handleOne(req, db, cfg = {}) {
     if (path === '/say') return json(await sea.say(await args(), ctx));
     if (path === '/inbox') return json(await sea.inbox(await args()));
     // the ecosystem: the current, watches, the reef, work between agents, seals, the heartbeat
-    if (path === '/tide') { const t = await sea.tide(await args(), ctx); try { if (!t?.calm) { const m = (async () => { await sea.flushSave?.(); await fairOf(db, cfg).flush().catch((e) => console.error('mare_fair', e?.message)); await sea.flushOpen?.(); await attentionOf(db, cfg).flush().catch((e) => console.error('mare_attention', e?.message)); if (!immune.atRest?.('market')) await sea.marketSweep?.(); })().catch((e) => console.error('mare_market', e?.message)); cfg.waitUntil?.(m); } } catch {} try { if (!t?.calm && !ctx.readOnly && !immune.atRest?.('proof')) cfg.waitUntil?.(proofTide(cfg.kv || db.kv, cfg.proofRead).catch(() => null)); } catch {} try { const moved = (t?.refreshed || []).filter((x) => x?.slug && x.change && x.change !== 'steady' && needOf(x.slug)).map((x) => `/buy/${x.slug}`); const p = (async () => { if (moved.length && !ctx.readOnly) await tidingsOf(cfg).queue(moved); await indexNowDaily(db, base, sea, cfg).catch(() => {}); if (!ctx.readOnly && !immune.atRest?.('tidings')) await indexNowChanged(db, base, sea, cfg).catch((e) => console.error('mare_tidings', e?.message)); })(); cfg.waitUntil?.(p); } catch {} try { const g = db('mare_stats', {}).then((idx) => sea.gaugeLakes(idx)).catch(() => {}); cfg.waitUntil?.(g); } catch {} return json(t); }
+    if (path === '/tide') { const t = await sea.tide(await args(), ctx); try { if (!t?.calm) { const m = (async () => { await sea.flushSave?.(); await fairOf(db, cfg).flush().catch((e) => console.error('mare_fair', e?.message)); await sea.flushOpen?.(); await attentionOf(db, cfg).flush().catch((e) => console.error('mare_attention', e?.message)); if (!immune.atRest?.('market')) await sea.marketSweep?.(); })().catch((e) => console.error('mare_market', e?.message)); cfg.waitUntil?.(m); } } catch {} try { if (!t?.calm && !ctx.readOnly && !immune.atRest?.('proof')) cfg.waitUntil?.(proofTide(cfg.kv || db.kv, cfg.proofRead).catch(() => null)); } catch {} try { const p = (async () => { const moved = ctx.readOnly ? [] : await buyMovers(t?.refreshed, cfg.kv); if (moved.length) await tidingsOf(cfg).queue(moved); await indexNowDaily(db, base, sea, cfg).catch(() => {}); if (!ctx.readOnly && !immune.atRest?.('tidings')) await indexNowChanged(db, base, sea, cfg).catch((e) => console.error('mare_tidings', e?.message)); })(); cfg.waitUntil?.(p); } catch {} try { const g = db('mare_stats', {}).then((idx) => sea.gaugeLakes(idx)).catch(() => {}); cfg.waitUntil?.(g); } catch {} return json(t); }
     if (path === '/indexnow.json') { const d = new Date().toISOString().slice(0, 10), run = (await cfg.kv?.get(`indexnow:${d}`).catch(() => null)) || { today: 'not yet' }, more = (await cfg.kv?.get(`indexnow:changed:${d}`).catch(() => null)) || []; return json(more.length ? { ...run, changed: more } : run, 200, { 'cache-control': 'public, max-age=60' }); }
     if (path === '/tides') return json(await sea.tides(await args()), 200, { 'cache-control': 'public, max-age=60' });
     if (path === '/instinct.json' || path === '/instinct') return json(await sea.instinctState(), 200, { 'cache-control': 'public, max-age=30' });

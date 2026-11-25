@@ -111,7 +111,7 @@ const viaOf = (t, url) => t.via.viaUrl(url, { base: BASE }).slice(BASE.length);
 const viaM = (t, url) => t.via.viaUrl(url, { base: BASE, m: true }).slice(BASE.length);
 const reEsc = (x) => x.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // a commission link, wherever it stands: a tagged or wrapped address, or a via address handed out as one (m=1)
-const isCommissionLink = (u) => TAGGED.test(u) && !/someoneelse/.test(u) || /\/via\/[A-Za-z0-9_-]+\?(?:[^"]*&)?m=1(?:&|$)/.test(u);
+const isCommissionLink = (u) => TAGGED.test(u) && !/someoneelse/.test(u) || /\/via\/[A-Za-z0-9_-]+\?(?:[^"]*&)?m=[A-Za-z0-9_-]{8}(?:&|$)/.test(u);
 
 // ------------------------------------------------------------------ the checks (each throws when its rule is broken; the negative controls break them)
 const checks = {
@@ -225,7 +225,7 @@ const checks = {
     t.set(ON); t.rest(false);
     const h = (await t.call('/buy/trail-running-shoes', { headers: PERSON })).text;
     assert.ok(!/awin1\.com|skimresources\.com|viglink\.com/.test(h), 'no wrapped link stands in the page: those go through /via/');
-    const as = [...h.matchAll(/<a ([^>]*)>/g)].map((m) => m[1]), viaLinks = as.filter((a) => /href="https:\/\/mareliberum\.dev\/via\/[^"]*[?&]m=1"/.test(a)), direct = as.filter((a) => /href="https:\/\/www\.amazon\.de\/[^"]*tag=mareliberum-21"/.test(a));
+    const as = [...h.matchAll(/<a ([^>]*)>/g)].map((m) => m[1]), viaLinks = as.filter((a) => /href="https:\/\/mareliberum\.dev\/via\/[^"]*[?&]m=[A-Za-z0-9_-]{8}"/.test(a)), direct = as.filter((a) => /href="https:\/\/www\.amazon\.de\/[^"]*tag=mareliberum-21"/.test(a));
     assert.ok(viaLinks.length >= 4, `${viaLinks.length} commission links through /via/`); assert.ok(direct.length >= 2, `${direct.length} direct Amazon links`);
     for (const a of [...viaLinks, ...direct]) assert.match(a, /rel="sponsored nofollow noopener"/);
     assert.equal(h.split(t.cm.COMMISSION_MARK).length - 1, viaLinks.length + direct.length, 'each commission link carries the marker');
@@ -287,8 +287,8 @@ const checks = {
   // Ziff. 2(e)) and no wrapper touches it; it is handed out only as the direct, visible link with Amazon's sentence beside it
   async amazonNeverVia(t) {
     t.rest(false);
-    const AMZ = ['https://www.amazon.de/dp/B0ALPHA', 'https://smile.amazon.de/dp/B0ALPHA?th=1', 'https://www.amazon.com/dp/B0US', 'https://www.amazon.co.uk/dp/B0UK'];
-    const configs = [{ domains: { 'amazon.de': { tag: 'mareliberum-21' }, 'amazon.com': { tag: 'mare-20' } } }, { domains: { 'amazon.de': { tag: 'mareliberum-21', direct: false } } },
+    const AMZ = ['https://www.amazon.de/dp/B0ALPHA', 'https://smile.amazon.de/dp/B0ALPHA?th=1', 'https://www.amazon.com/dp/B0US', 'https://www.amazon.co.uk/dp/B0UK', 'https://www.amazon.co.za/dp/B0ZA', 'https://www.amazon.com.au/dp/B0AU', 'https://www.amazon.com.mx/dp/B0MX', 'https://www.amazon.sa/dp/B0SA', 'https://a.co/d/abc123', 'https://amzn.to/3xYz', 'https://amzn.com/dp/B0X', 'https://amzn.eu/d/x1'];
+    const configs = [{ domains: { 'amazon.de': { tag: 'mareliberum-21' }, 'amazon.com': { tag: 'mare-20' }, 'amazon.co.za': { tag: 'mare-za' } } }, { domains: { 'amazon.de': { tag: 'mareliberum-21', direct: false } } }, { awin: { affid: '1234567', merchants: { 'beta-shoes.example': '4711' } }, wrap: { network: 'skimlinks', id: '123X456', agentsAllowed: true } },
       { domains: { 'amazon.de': { tag: 'mareliberum-21' } }, wrap: { network: 'skimlinks', id: '123X456', agentsAllowed: true } }, { wrap: { network: 'sovrn', key: 'k3y', agentsAllowed: true, direct: false } }, ON];
     for (const c of configs) {
       t.set(c);
@@ -300,6 +300,17 @@ const checks = {
     }
     t.set(ON); const h = (await t.call('/buy/trail-running-shoes', { headers: PERSON })).text;
     for (const m of h.matchAll(/<a [^>]*href="(https:\/\/mareliberum\.dev\/via\/[^"]+)"/g)) { const tok = new URL(m[1].replace(/&amp;/g, '&')).pathname.slice(5); assert.doesNotMatch(t.via.decodeVia(tok)?.url || '', /amazon\./, 'no Amazon address through /via/ on the page'); }
+  },
+  // M10: the mark is signed like the token: a made-up mark, the old "m=1", or the mark of another address carries no commission
+  async signedMark(t) {
+    t.set(ON); t.rest(false);
+    const u = 'https://beta-shoes.example/products/beta', other = 'https://beta-shoes.example/products/other', base = viaOf(t, u);
+    const good = viaM(t, u), m = new URL(BASE + good).searchParams.get('m'), mOther = new URL(BASE + viaM(t, other)).searchParams.get('m');
+    assert.match(m, /^[A-Za-z0-9_-]{8}$/); assert.notEqual(m, mOther, 'each address its own mark');
+    const ok = await t.call(good, { headers: PERSON }); assert.match(ok.headers.get('location'), /^https:\/\/www\.awin1\.com\//, 'the sea\'s own mark carries the commission'); assert.equal(ok.headers.get('x-via-commission'), 'awin');
+    for (const bad of ['1', mOther, 'AAAAAAAA', `${m}x`, m.slice(0, 7), '']) {
+      const r = await t.call(`${base}?m=${encodeURIComponent(bad)}`, { headers: PERSON }); assert.equal(r.status, 302); assert.equal(r.headers.get('location'), u, `m=${bad}: no commission`); assert.equal(r.headers.get('x-via-commission'), null);
+    }
   },
   // wherever a commission link can stand, it says so: on every page a person opens (the words beside the link), in every JSON
   // answer (commission: true on its object), in the Markdown an assistant reads (the same words)
@@ -322,14 +333,14 @@ const checks = {
     let js = 0;
     const walk = (v) => { if (Array.isArray(v)) return v.forEach(walk); if (!v || typeof v !== 'object') return; for (const x of Object.values(v)) { if (typeof x === 'string' && isCommissionLink(x)) { js++; assert.equal(v.commission, true, `JSON: commission: true beside ${x.slice(0, 80)}`); } else walk(x); } };
     answers.forEach(walk); assert.ok(js >= 8, `${js} commission links in JSON`);
-    assert.ok(links(answers[4]).some(([, u]) => /\/via\/[^?]+\?(?:.*&)?m=1/.test(u)), 'the brain hands out its commission link as one');
+    assert.ok(links(answers[4]).some(([, u]) => /\/via\/[^?]+\?(?:.*&)?m=[A-Za-z0-9_-]{8}/.test(u)), 'the brain hands out its commission link as one');
   },
   // the via addresses of other answers say so where their place pays one (the answer gets the rule once)
   async viaMarks(t) {
     t.set(ON); t.rest(false);
     const out = t.via.rewriteForAgents({ paths: [{ name: 'a', to: 'https://beta-shoes.example/products/beta' }, { name: 'b', to: 'https://mareliberum.dev/brain' }, { name: 'c', to: 'https://www.amazon.de/dp/B0ALPHA' }] }, { base: BASE, cm: t.cm.viaCommissionFor, rule: t.cm.COMMISSION_RULE });
-    assert.equal(out.paths[0].commission, true); assert.equal(out.paths[0].commission_network, 'awin'); assert.match(out.paths[0].to, /^https:\/\/mareliberum\.dev\/via\/[^?]+\?m=1$/, 'the address stays the via address, handed out as a commission link');
-    assert.doesNotMatch(out.paths[2].to, /m=1/, 'the Amazon via address is no commission link');
+    assert.equal(out.paths[0].commission, true); assert.equal(out.paths[0].commission_network, 'awin'); assert.match(out.paths[0].to, /^https:\/\/mareliberum\.dev\/via\/[^?]+\?m=[A-Za-z0-9_-]{8}$/, 'the address stays the via address, handed out as a commission link (signed mark)');
+    assert.doesNotMatch(out.paths[2].to, /[?&]m=/, 'the Amazon via address is no commission link');
     assert.equal(out.paths[1].commission, undefined); assert.equal(out.paths[2].commission, undefined, 'an Amazon via address carries no commission'); assert.equal(out.commission_rule, t.cm.COMMISSION_RULE);
     const none = t.via.rewriteForAgents({ paths: [{ to: 'https://www.amazon.de/dp/B0ALPHA' }] }, { base: BASE }); assert.ok(!('commission' in none.paths[0]) && !('commission_rule' in none), 'without cm: as before');
   },
@@ -354,6 +365,7 @@ await proof('"commission" in rest: everything as if nothing were set (decide, /v
 await proof('other answers: a via address to a place that pays one says so, the answer says the rule once; without cm nothing changes', () => checks.viaMarks(T));
 console.log('Amazon, and the words beside every commission link');
 await proof('Amazon never rides a /via/ redirect with a tag, whatever the configuration (direct: false, a wrapper, both): a person goes to Amazon as it is, the page links Amazon directly with its sentence', () => checks.amazonNeverVia(T));
+await proof('M10: the commission mark on a via address is signed like the token; the old m=1, a made-up mark or another address\'s mark carries none', () => checks.signedMark(T));
 await proof('wherever a commission link stands it says so: the words beside it on every page and in the Markdown, commission: true in every JSON answer (decide, ask, MCP, A2A, the brain)', () => checks.markedEverywhere(T));
 console.log('where the ids come from, and what the sea keeps');
 await proof('config/commission.json: the shipped (empty) file and no file are off and answer byte for byte the same; ids in the file turn it on; MARE_COMMISSION wins over the file', () => checks.configFile(T));
@@ -373,7 +385,9 @@ const MUTANTS = [
   ['someone else\'s tag is taken', 'commission.mjs', 'if (d.params.some(([k]) => u.searchParams.has(k))) return null;', '', 'noHijack'],
   ['the page hides the marker', 'needs.mjs', 'mark: ` ${cmMark}', 'mark: `', 'page'],
   ['the marker is only a sign with a tooltip', 'commission.mjs', 'export const COMMISSION_MARK = `<small class="cm">${COMMISSION_WORDS}</small>`;', 'export const COMMISSION_MARK = `<small class="cm" title="${COMMISSION_WORDS}">*</small>`;', 'markedEverywhere'],
-  ['a via address carries a commission it never said', 'via.mjs', "let c = null; if (at.searchParams.get('m') === '1') { try { c = commission(target); } catch {} }", 'let c = null; try { c = commission(target); } catch {}', 'viaWalks'],
+  ['a via address carries a commission it never said', 'via.mjs', "let c = null; if (markHolds(d.url, at.searchParams.get('m'))) { try { c = commission(target); } catch {} }", 'let c = null; try { c = commission(target); } catch {}', 'viaWalks'],
+  ['M10 taken back: any mark is believed', 'via.mjs', "let c = null; if (markHolds(d.url, at.searchParams.get('m'))) {", "let c = null; if (at.searchParams.has('m')) {", 'signedMark'],
+  ['M3 taken back: the Amazon pattern of before', 'commission.mjs', "export const AMAZON = /(^|\\.)(amazon\\.(?:[a-z]{2,3}|(?:co|com)\\.[a-z]{2})|a\\.co|amzn\\.(?:to|com|eu|asia))$/;", "export const AMAZON = /(^|\\.)amazon\\.(com|de|co\\.uk|fr|it|es|nl|se|pl|ie|com\\.be|com\\.tr|ca|com\\.mx|com\\.br|co\\.jp|in|com\\.au|sg|ae|sa|eg)$/;", 'amazonNeverVia'],
   ['Amazon rides /via/ with its tag', 'commission.mjs', 'direct: amazon || params.direct === true', 'direct: params.direct === true', 'amazonNeverVia'],
   ['a wrapper wraps Amazon', 'commission.mjs', 'if (AMAZON.test(host)) return null;', '', 'amazonNeverVia'],
   ['a wrapper without the network\'s consent', 'commission.mjs', ' && c.wrap.agentsAllowed === true', '', 'rules'],
