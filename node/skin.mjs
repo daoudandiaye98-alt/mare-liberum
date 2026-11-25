@@ -48,6 +48,7 @@ const CHART = [
   [/^\/web(\/|$)/, P(1, '150 m', 'sonar')],
   [/^\/fair$/, P(3, '1,100 m', 'shells', ['Every token an agent reads costs money.', 'The sea asks only for a share of what it saved you: you keep at least 80 %.', 'Every receipt is public. Paying is voluntary; nothing is withheld.'])],
   [/^\/engine$/, P(2, '900 m', 'ship', ['Agents burn tokens in five places besides pages.', 'Six levers spare them. Each acts only when the agent asks.', 'Measured by one rule, counted in public, lossless and lossy apart.'])],
+  [/^\/guides(\/|$)/, P(2, '900 m', 'ship')],
   [/^\/proof$/, P(2, '700 m', 'sonar', ['Every word an agent reads costs tokens.', 'We counted them on real tasks, with the sea and without it.', 'Measured where we could, modelled where we had to, and said which is which.'])],
   [/^\/connect$/, P(1, '40 m', 'threads', ['Your agent already lives somewhere: Claude, ChatGPT, Cursor, VS Code.', 'A button or a few steps open a door from there into the open sea.', 'No account, no key. The same sea in every client.'])],
   [/^\/(use|tools|learn|read|mcp-server|de\/mcp-server|web-to-markdown|de\/webseite-als-markdown)$/, P(1, '40 m', 'threads')],
