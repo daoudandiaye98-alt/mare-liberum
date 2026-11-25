@@ -44,7 +44,7 @@ async function tree(dir) {
 }
 const prof = (d) => ({ d, s: 200, at: '2026-11-22T10:00:00.000Z', t: `${d} home`, ds: 'A shop', g: 'B' });
 const paths = (post) => post.urlList.map((u) => u.slice(BASE.length) || '/');
-const THIN = /^\/(check|atlas\/country|e)\/|^\/brief\/[^/]+\/./;
+const THIN = /^\/(check|atlas\/country|e)\/|^\/brief\/[^/]+\/./, TEN = 10000;
 
 // ------------------------------------------------------------------ the checks (each throws when its rule is broken; the negative controls break them)
 const checks = {
@@ -56,6 +56,8 @@ const checks = {
     assert.notEqual(f(page(7, '<p>shop.example joined</p>')), f(page(7)), 'words are');
     assert.notEqual(f(page(7, '<a href="/site/shop.example">x</a>')), f(page(7, '<a href="/site/other.example">x</a>')), 'links are');
     assert.notEqual(f(page(7).replace('"Sea"', '"Sea of agents"')), f(page(7)), 'structured data is');
+    const fair = (id) => page(7, `<table><tr><td><a href="/fair/r/${id}">${id}</a></td><td>$0.000449</td></tr></table>`);
+    assert.equal(f(fair('r20261125xefvuh8g')), f(fair('r20261125abc123de')), 'M1: a new receipt id is no change (/fair)'); assert.equal(f(fair('r20261126zzzzzzzz')), f(fair('r20261125xefvuh8g')));
   },
   async stable(t) {
     // every hub, looked at twice as the sea looks at it, with time between (the clocks and counters move): no hub changes by
@@ -97,12 +99,14 @@ const checks = {
     // the tide moves things: a store joins the market (its hub changes), the current saw a need's price move, the Atlas mapped a new site
     await t.kv.set('market:s:verified-shop.example', { host: 'verified-shop.example', at: new Date().toISOString(), level: 2, as: 'verified', reasons: ['x'], ucp: { ok: true, name: 'Verified Shop' }, age: { since: '2020-01-01' } }, 864000);
     await t.kv.set('market:idx', { 'verified-shop.example': [2, TODAY, 'Verified Shop'] }, 864000);
-    await t.T.queue(['/buy/running-shoes']);
+    await t.kv.set('tide:running-shoes', { t: new Date().toISOString(), offers: 5 }, 864000); await t.kv.set('tide:thin-need', { t: new Date().toISOString(), offers: 2 }, 864000);
+    await t.T.queue(['/buy/running-shoes', '/buy/thin-need']);
     await t.kv.set('atlas:good-shop.example', prof('good-shop.example'), 864000); await t.kv.set('atlas:recent', ['good-shop.example'], 864000);
     await t.back(1); assert.equal((await t.changed()).skipped, 'looked within 3 hours'); assert.equal(POSTS.length, 1);
     await t.back(4); const r2 = await t.changed(); assert.equal(r2.status, 202, JSON.stringify(r2)); assert.equal(POSTS.length, 2);
     const sent = paths(POSTS[1]);
     for (const p of ['/brain/market', '/buy/running-shoes', '/site/good-shop.example']) assert.ok(sent.includes(p), `${p} told`);
+    assert.ok(!sent.includes('/buy/thin-need'), 'M2: a need with fewer than 3 offers says noindex and is not told');
     assert.ok(sent.length < 20, `only what changed: ${sent.length} (${sent.join(' ')})`); assert.ok(!sent.some((p) => THIN.test(p)), 'no thin page');
     assert.equal(POSTS[1].host, 'mareliberum.dev'); assert.equal(POSTS[1].key, KEY); assert.equal(POSTS[1].keyLocation, `${BASE}/${KEY}.txt`);
     const mods = (await t.kv.get('tidings:hubs')) || {}, hubsSent = sent.filter((p) => t.hubs.HUB_SET.has(p));
@@ -110,7 +114,7 @@ const checks = {
     assert.deepEqual(await t.T.queued(), [], 'what was told leaves the queue');
     const j = JSON.parse((await t.call('/indexnow.json', { accept: 'application/json' })).text); assert.equal(j.changed?.length, 1); assert.equal(j.changed[0].sent, sent.length);
     // a look is due, but the last post was a moment ago: nothing is told yet
-    await t.T.queue(['/buy/another-need']); await t.kv.set('tidings:last', { at: new Date(Date.now() - 4 * 3600e3).toISOString() }, 864000);
+    await t.kv.set('tide:another-need', { t: new Date().toISOString(), offers: 4 }, 864000); await t.T.queue(['/buy/another-need']); await t.kv.set('tidings:last', { at: new Date(Date.now() - 4 * 3600e3).toISOString() }, 864000);
     const r3 = await t.changed(); assert.equal(r3.skipped, 'a post within 3 hours', JSON.stringify(r3)); assert.equal(POSTS.length, 2);
     // then only what changed since; and when nothing changed, nothing
     await t.back(4); await t.changed(); assert.equal(POSTS.length, 3); assert.deepEqual(paths(POSTS[2]), ['/buy/another-need']);
@@ -119,10 +123,32 @@ const checks = {
   async cap(t) {
     if (!(await t.kv.get(`indexnow:${TODAY}`))?.sent) await t.daily();
     POSTS.length = 0; await t.back(4);
-    const many = Array.from({ length: 12000 }, (_, i) => `/buy/need-${i}`); await t.T.queue(many);
+    const many = Array.from({ length: 12000 }, (_, i) => `/brain/topic-${i}`); await t.T.queue(many);
     const a = await t.changed(); assert.equal(paths(POSTS[0]).length, 10000, `${POSTS[0]?.urlList.length} in one post`); assert.equal(a.sent, 10000);
     await t.back(4); await t.changed(); assert.equal(POSTS.length, 2); assert.equal(paths(POSTS[1]).length, 2000, 'the rest in the next post');
     assert.deepEqual(new Set([...paths(POSTS[0]), ...paths(POSTS[1])]), new Set(many), 'each once');
+  },
+  // M2: the tide queues a need's page only when the current found 3 or more offers for it (below that the page says noindex)
+  async movers(t) {
+    const { NEEDS, slugOf } = await import(pathToFileURL(join(ROOT, 'node/needs.mjs')).href), [a, b, c] = NEEDS.slice(3).map(slugOf);
+    await t.kv.set(`tide:${a}`, { t: '2026-11-25T10:00:00Z', offers: 5 }, 864000); await t.kv.set(`tide:${b}`, { t: '2026-11-25T10:00:00Z', offers: 2 }, 864000); await t.kv.set(`tide:${c}`, { t: '2026-11-25T10:00:00Z', offers: 4 }, 864000);
+    const out = await t.core.buyMovers([{ slug: a, change: 'price_drop' }, { slug: b, change: 'new_pick' }, { slug: c, change: 'steady' }, { slug: 'not-a-need-at-all', change: 'charted' }, { slug: a, change: 'price_up' }], t.kv);
+    assert.deepEqual([...new Set(out)], [`/buy/${a}`], `only the moved need with 3 or more offers: ${out}`);
+  },
+  // M2: a page of the families cut by the 10,000 of one post is not told yet: it goes with the next post
+  async cutFresh(t) {
+    POSTS.length = 0;
+    if (!(await t.kv.get(`indexnow:${TODAY}`))?.sent) await t.daily();
+    const sites = Array.from({ length: 10 }, (_, i) => `cut-shop-${i}.example`);
+    for (const d of sites) await t.kv.set(`atlas:${d}`, prof(d), 864000);
+    await t.kv.set('atlas:recent', sites, 864000);
+    await t.T.queue(Array.from({ length: TEN - 5 }, (_, i) => `/brain/cut-topic-${i}`));
+    POSTS.length = 0; await t.back(4); await t.changed();
+    const first = paths(POSTS[0] || { urlList: [] }), told1 = first.filter((p) => p.startsWith('/site/cut-shop-'));
+    assert.equal(first.length, TEN); assert.equal(told1.length, 5, `5 of the 10 new pages fit: ${told1.length}`);
+    await t.back(4); await t.changed();
+    const second = paths(POSTS[1] || { urlList: [] }).filter((p) => p.startsWith('/site/cut-shop-'));
+    assert.deepEqual(new Set([...told1, ...second]), new Set(sites.map((d) => `/site/${d}`)), `the 5 cut pages go with the next post: ${second.length}`);
   },
   async buy(t) {
     assert.equal(t.core.buyMoved([{ t: '2026-11-20T10:00:00Z', price: 10, store: 'a' }, { t: '2026-11-21T10:00:00Z', price: 10, store: 'a' }, { t: '2026-11-22T10:00:00Z', price: 9, store: 'a' }, { t: '2026-11-23T10:00:00Z', price: 9, store: 'a' }]), '2026-11-22');
@@ -174,6 +200,8 @@ await proof('works.xml: only works agents confirmed (the rule that lifts their n
 console.log('IndexNow, the second path');
 await proof('after the daily run, at most every 3 hours: only the hubs that changed, the needs that moved and pages never told; no thin page; the queue empties; /indexnow.json says so', () => checks.indexnow(T));
 await proof('at most 10,000 addresses in one post; the rest in the next, each once', () => checks.cap(T));
+await proof('M2: the tide queues a need only when the current found 3 or more offers (below that the page says noindex)', () => checks.movers(T));
+await proof('M2: new pages cut by the 10,000 of one post are not marked told: they go with the next post', async () => checks.cutFresh(await tree(ROOT)));
 console.log(`       ${POSTS.length} posts in the last check, all to the fake IndexNow; the network was never used`);
 
 // ------------------------------------------------------------------ negative controls
@@ -183,10 +211,14 @@ const MUTANTS = [
   ['a live hub is dated today again (M3)', 'hubs.mjs', 'return live ? s : s && s > STATIC_DAY', 'return live ? today : s && s > STATIC_DAY', 'sitemap'],
   ['no 3 hours between two posts', 'core.mjs', 'if (now - lastPost < TIDINGS.everyMs) return', 'if (false) return', 'indexnow'],
   ['more than 10,000 in one post', 'core.mjs', '.slice(0, TIDINGS.perPost);', ';', 'cap'],
-  ['what was told stays in the queue', 'core.mjs', 'if (r.status >= 200 && r.status < 300) { await t.sent(paths); await t.known(fresh); }', 'if (r.status >= 200 && r.status < 300) { await t.known(fresh); }', 'indexnow'],
+  ['what was told stays in the queue', 'core.mjs', 'const told = new Set(paths); await t.sent(paths);', 'const told = new Set(paths);', 'indexnow'],
   ['every hub is told, changed or not', 'core.mjs', 'const paths = [...new Set([...queued, ...fresh])]', 'const paths = [...new Set([...queued, ...fresh, ...fam.hubs])]', 'indexnow'],
   ['buy.xml keeps the thin needs', 'core.mjs', 'if (snap && Number.isFinite(snap.offers) && snap.offers < 3) return \'\';', '', 'buy'],
   ['works.xml lists unconfirmed works', 'core.mjs', '&& (w.votes?.up || 0) - (w.votes?.down || 0) >= 2)', ')', 'works'],
+  ['M1 taken back: receipt ids count as a change', 'tidings.mjs', ".replace(/r\\d{8}[a-z0-9]{8}/g, 'r-receipt')", '', 'fingerprint'],
+  ['M2 taken back: the tide queues needs below 3 offers', 'core.mjs', "&& needOf(x.slug) && (await buyIndexable(kv, x.slug))) out.push", "&& needOf(x.slug)) out.push", 'movers'],
+  ['M2 taken back: a queued need below 3 offers is told', 'core.mjs', "if (m && !(await buyIndexable(kv, m[1]))) dropped.push(p); else queued.push(p);", "queued.push(p);", 'indexnow'],
+  ['M2 taken back: cut pages are marked told', 'core.mjs', "await t.known(fresh.filter((p) => told.has(p)));", "await t.known(fresh);", 'cutFresh'],
 ];
 for (const [what, file, from, to, check] of MUTANTS) {
   await proof(`broken: ${what} → ${check} fails`, async () => {

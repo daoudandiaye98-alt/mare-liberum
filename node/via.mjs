@@ -56,9 +56,17 @@ export function wrapTarget(raw, base) {
 // c (the minute) marks an address handed out by a door the sea already counted the click at (/d/…, /go/…): the walk
 // that follows within two minutes is carried as always, but not counted a second time
 // m marks an address the sea handed out as a commission link, said so where it stands (commission: true in JSON, the words
-// beside the link on a page; node/commission.mjs): only such an address may carry a commission when a person opens it
+// beside the link on a page; node/commission.mjs): only such an address may carry a commission when a person opens it. The
+// mark is signed like the token (6 bytes of HMAC-SHA256 with the node's key, over "commission|" and the address), so an
+// address someone made up, or the mark of another address, carries none
+export function commissionMark(url, key = viaKey()) { return createHmac('sha256', key).update(`commission|${String(url)}`).digest().subarray(0, VIA.macBytes).toString('base64url'); }
+export function markHolds(url, m, key = viaKey()) {
+  const s = String(m || ''); if (!/^[A-Za-z0-9_-]{8}$/.test(s)) return false;
+  const a = Buffer.from(s, 'base64url'), b = Buffer.from(commissionMark(url, key), 'base64url');
+  return a.length === b.length && timingSafeEqual(a, b);
+}
 export function viaUrl(url, { base, q, priv, counted, m } = {}) {
-  const p = new URLSearchParams(); if (q) p.set('q', String(q).slice(0, 120)); if (priv) p.set('p', '1'); if (counted) p.set('c', String(Math.floor(counted / 60000))); if (m) p.set('m', '1');
+  const p = new URLSearchParams(); if (q) p.set('q', String(q).slice(0, 120)); if (priv) p.set('p', '1'); if (counted) p.set('c', String(Math.floor(counted / 60000))); if (m) p.set('m', commissionMark(url));
   const s = p.toString();
   return `${String(base).replace(/\/+$/, '')}/via/${encodeVia(url)}${s ? `?${s}` : ''}`;
 }
@@ -202,7 +210,7 @@ export async function viaProxy({ req, token, base, ip, ua, readOnly = false, onH
   if (person && typeof commission === 'function') {
     // a commission only on an address the sea handed out as a commission link, said so where it stood (m): every other
     // address leads the person to the place as it is
-    let c = null; if (at.searchParams.get('m') === '1') { try { c = commission(target); } catch {} }
+    let c = null; if (markHolds(d.url, at.searchParams.get('m'))) { try { c = commission(target); } catch {} }
     hit(302);
     if (!priv) { try { onWalk?.(d.url, q); } catch {} }
     return new Response(null, { status: 302, headers: { location: c?.url || target, 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow', 'x-via': 'mare-liberum', 'x-via-target': target, ...(c ? { 'x-via-commission': c.network } : {}), ...VIA_CORS } });

@@ -15,11 +15,15 @@ export const TIDINGS = { everyMs: 3 * 3600e3, perPost: 10_000, queueMax: 20_000,
 
 // a page as the comparison sees it: its words, links and structured data. Scripts that run and styles are the frame's
 // behaviour and look (they change with a release, which changes the words as well); digits are counts, clocks, dates and
-// versions; the units of time follow the clock ("3 minutes ago", "2 hours ago"); spacing is no content
+// versions; receipt ids are new with every counted answer; the units of time follow the clock ("3 minutes ago", "2 hours
+// ago"); spacing is no content
 export function fingerprint(html) {
   const s = String(html || '')
     .replace(/<script\b(?![^>]*application\/ld\+json)[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+    // the id of a fair-share receipt (node/fair.mjs: r + the day + 8 letters) is a new id with every counted answer, no change
+    // of the page; it goes before the digits do, which would leave its letters behind
+    .replace(/r\d{8}[a-z0-9]{8}/g, 'r-receipt')
     .replace(/\d+/g, '#')
     .replace(/\b(second|minute|hour|day|week|month|year)s?\b/gi, 'time')
     .replace(/\s+/g, ' ').replace(/ ?(<[^>]*>) ?/g, '$1');

@@ -35,11 +35,13 @@ export const COMMISSION_RULE = 'Some links may earn the sea a commission from th
 
 // the addresses that are never touched: the sea's own, payment pages, and what already leads through a network
 const OWN = /(^|\.)(mareliberum\.dev|mare-liberum\.vercel\.app)$/;
-const NEVER = /(^|\.)(stripe\.com|paypal\.com|klarna\.com|coinbase\.com|go\.skimresources\.com|skimresources\.com|redirect\.viglink\.com|viglink\.com|awin1\.com|amzn\.to|amzn\.eu|shareasale\.com|anrdoezrs\.net|dpbolvw\.net|jdoqocy\.com|kqzyfj\.com|tkqlhce\.com|linksynergy\.com|impact\.com|pxf\.io|sjv\.io|partnerize\.com|prf\.hn|rstyle\.me|shopstyle\.it|howl\.me|bit\.ly)$/;
+const NEVER = /(^|\.)(stripe\.com|paypal\.com|klarna\.com|coinbase\.com|go\.skimresources\.com|skimresources\.com|redirect\.viglink\.com|viglink\.com|awin1\.com|a\.co|amzn\.to|amzn\.eu|amzn\.com|amzn\.asia|shareasale\.com|anrdoezrs\.net|dpbolvw\.net|jdoqocy\.com|kqzyfj\.com|tkqlhce\.com|linksynergy\.com|impact\.com|pxf\.io|sjv\.io|partnerize\.com|prf\.hn|rstyle\.me|shopstyle\.it|howl\.me|bit\.ly)$/;
 // a value the operator gives: ids, tags and parameter names are short, plain and printable
 const ID = /^[A-Za-z0-9._~-]{1,80}$/, PARAM = /^[A-Za-z0-9_-]{1,32}$/, HOST = /^(?=.{3,253}$)[a-z0-9-]+(\.[a-z0-9-]+)*\.[a-z]{2,24}$/;
 // Amazon's addresses, and the sentence Amazon asks for beside every link (in German on amazon.de, else in English)
-export const AMAZON = /(^|\.)amazon\.(com|de|co\.uk|fr|it|es|nl|se|pl|ie|com\.be|com\.tr|ca|com\.mx|com\.br|co\.jp|in|com\.au|sg|ae|sa|eg)$/;
+// every amazon.<tld>, the two-part country domains among them (amazon.co.uk, amazon.co.za, amazon.com.au …), and Amazon's short
+// links (a.co, amzn.to, amzn.com, amzn.eu, amzn.asia: those are never touched at all, see NEVER)
+export const AMAZON = /(^|\.)(amazon\.(?:[a-z]{2,3}|(?:co|com)\.[a-z]{2})|a\.co|amzn\.(?:to|com|eu|asia))$/;
 export const AMAZON_SAYS = (host) => (/\.de$/.test(host) ? 'Als Amazon-Partner verdiene ich an qualifizierten Verkäufen.' : 'As an Amazon Associate I earn from qualifying purchases.');
 const SAY = (v) => (typeof v === 'string' && v.length >= 10 && v.length <= 200 && !/[<>\p{Cc}]/u.test(v) ? v : null);
 const WRAPS = {
