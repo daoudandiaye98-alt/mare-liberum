@@ -192,7 +192,7 @@ export function pressRead(P, { r, md, st, a = {}, target, base, req, versions, c
     // the frame (this line, the source, how to cite, how to read again) and at least minBudget tokens of the page: a smaller
     // budget is raised to that, and said so
     const foot = `Read it again for only what changed: ${again}\n`, env = readAnswer({ ...r, markdown: '' });
-    const line = (B, kept, of, left, matched = 1) => `Fitted to ${B > P.budget ? `${n(B)} tokens, the least this page takes (you asked for ${n(P.budget)})` : `your budget of ${n(B)} tokens`} (lossy): ${n(kept)} of ${n(of)} blocks of the page kept, about ${n(left)} tokens left out${q ? (matched ? `, the parts that answer "${q}" first` : `; nothing matched "${q}": headings and first blocks`) : ''}. The whole page: without budget=\n`;
+    const line = (B, kept, of, left, matched = 1) => `Fitted to ${B > P.budget ? `${n(B)} tokens, the least this page takes (you asked for ${n(P.budget)})` : `your budget of ${n(B)} tokens`} (lossy): ${n(kept)} of ${n(of)} blocks of the page kept, about ${n(left)} tokens left out${q ? (matched ? `, the parts that answer "${q}" first` : `; nothing matched "${q}": the first paragraph and the headings`) : ''}. Without budget= the whole page comes.\n`;
     const frameOf = (B) => tokensOf('md', line(B, 1e6, 1e6, 1e9) + env + foot);
     const B = Math.max(P.budget, frameOf(P.budget + 1e7) + SQUEEZE.minBudget);
     const room = B - frameOf(B) - 1;                 // (one token for the rounding of the parts)

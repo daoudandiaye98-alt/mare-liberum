@@ -196,7 +196,14 @@ await proof('a question keeps the block that answers it, under its heading, in t
 await proof('a budget (with a question) keeps the answer and stays inside the budget, measured', () => {
   for (const [q, ans] of QA) for (const b of [80, 150, 400]) { const f = fitBudget(HANDBOOK, { q, budget: b }); assert.ok(f.lossy && f.out.includes(ans), `${q} @${b}`); assert.ok(tokensOf('md', f.out) <= b, `${tokensOf('md', f.out)} <= ${b}`); }
 });
-await proof('a budget without a question: every heading, the first block of each section, then the densest; inside the budget', () => {
+await proof('a block longer than what is left goes in as its best sentences (the gap inside it marked), a cut list keeps its indents', () => {
+  seed = 11; const long = Array.from({ length: 14 }, sentence); long.splice(7, 0, 'The night pilot for the Kiel canal is booked on channel 73 before 18:00.');
+  const md = `# Pilots\n\n${long.join(' ')}\n\n## Other\n\n${para()}`;
+  for (const b of [80, 100, 140]) { const f = fitBudget(md, { q: 'How do I book the night pilot for the Kiel canal?', budget: b }); assert.ok(f.out.includes('channel 73 before 18:00'), `@${b}: the answer sentence`); assert.ok(tokensOf('md', f.out) <= b); assert.match(f.out, /\[… [\d,]+ tokens left out\] The night pilot/); }
+  const list = `# L\n\n${Array.from({ length: 30 }, (_, i) => (i % 3 ? `  - sub item ${i} ${sentence()}` : `- item ${i} ${sentence()}`)).join('\n')}`;
+  const f = fitBudget(list, { budget: 120 }); assert.ok(/\n {2}- sub item/.test(f.out), 'a nested list keeps its indents'); assert.ok(tokensOf('md', f.out) <= 120);
+});
+await proof('a budget without a question: the first paragraph, every heading, the first block of each section, then the densest; inside the budget', () => {
   const heads = HANDBOOK.split('\n').filter((l) => /^#{1,6} /.test(l)), b = 700;
   const f = fitBudget(HANDBOOK, { budget: b });
   for (const h of heads) assert.ok(f.out.includes(h), `heading kept: ${h}`);
