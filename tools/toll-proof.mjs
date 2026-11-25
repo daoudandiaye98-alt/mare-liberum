@@ -1,4 +1,4 @@
-// Mare Liberum · proof of the harbour toll (3.37, "Der Hafenzoll", node/toll.mjs): up to 100,000 tokens saved by the
+// Mare Liberum · proof of the harbour toll (3.37, "Der Hafenzoll", node/toll.mjs): up to 10,000 tokens saved by the
 // lossless levers stay free per network and UTC day; above that an answer costs 20 % of what it saved at the mid price of
 // /savings (USD 2 per million), accrued in millionths of a dollar and settled over x402 in one payment from $0.05; a caller
 // that does not pay gets the normal answer, the lever not applied; nobody is blocked.
@@ -97,6 +97,8 @@ const pageOf = (seed0, sections = 60, extra = '') => { let seed = seed0; const r
   return `<!doctype html><html><head><title>Harbour handbook ${seed0}</title></head><body><nav><a href="/">Home</a></nav><main><h1>Harbour handbook ${seed0}</h1>${Array.from({ length: sections }, (_, i) => `<h2>Section ${i + 1}</h2><p>${para()}</p><p>${para()}</p>`).join('\n')}${extra}</main></body></html>`; };
 // a text for /compress whose lossless steps spare about 180,000 tokens (HTML to the reader's Markdown): one crosses the quota
 const BIG = `<html><body>${Array.from({ length: 6000 }, (_, i) => `<div class="c-${i} wrap" style="margin:0;padding:0" data-x="${i}"><span class="s">line ${i} of the harbour handbook</span></div>`).join('\n')}</body></html>`;
+// (since the quota is 10,000: a text that crosses it and stays below $0.05, about 60,000 spared tokens)
+const OVER = `<html><body>${Array.from({ length: 2000 }, (_, i) => `<div class="c-${i} wrap" style="margin:0;padding:0" data-x="${i}"><span class="s">line ${i} of the harbour handbook</span></div>`).join('\n')}</body></html>`;
 const MID = `<html><body>${Array.from({ length: 300 }, (_, i) => `<div class="m-${i}" style="margin:0"><span>berth ${i} of the inner harbour</span></div>`).join('\n')}</body></html>`;
 // Markdown with what the lossless steps take (white space, a paragraph said twice, tracking parameters) and blocks to fit
 const PIERS = Array.from({ length: 40 }, (_, i) => `## Pier ${i + 1}\n\n  The ferry leaves at 0${i % 10}:30 from pier ${i + 1}.   Tickets: https://ferry.toll-proof.dev/t?utm_source=x&id=${i}   \n\nThe harbour office answers every question about berths, cranes and fuel at the quay, all day long.\n\nThe harbour office answers every question about berths, cranes and fuel at the quay, all day long.\n`).join('\n');
@@ -175,11 +177,11 @@ const MD = 'text/markdown';
 
 // ================================================================== the numbers and the formula
 console.log('the numbers of config/toll.json and the formula');
-await proof('config/toll.json: 100,000 free tokens per network and day, a share of 0.2, settled from $0.05, at USD 2 per million (the mid price of /savings, the same number); a value out of its range falls back and says so', () => {
+await proof('config/toll.json: 10,000 free tokens per network and day (since 3.37.2, D1; 100,000 before), a share of 0.2, settled from $0.05, at USD 2 per million (the mid price of /savings, the same number); a value out of its range falls back and says so', () => {
   const raw = JSON.parse(readFileSync(join(ROOT, 'config/toll.json'), 'utf8'));
-  assert.deepEqual([raw.freeTokensPerNetworkPerDay, raw.share, raw.settleAtUsd, raw.usdPerMillion], [100000, 0.2, 0.05, 2]);
+  assert.deepEqual([raw.freeTokensPerNetworkPerDay, raw.share, raw.settleAtUsd, raw.usdPerMillion], [10000, 0.2, 0.05, 2]);
   assert.equal(raw.usdPerMillion, TOKEN_PRICE.mid, 'the price is the ledger\'s mid price');
-  const C = TOLL.TOLL; assert.deepEqual([C.free, C.share, C.settleAtUsd, C.usdPerMillion, C.settleMicro, C.fallback.length], [100000, 0.2, 0.05, 2, 50000, 0]);
+  const C = TOLL.TOLL; assert.deepEqual([C.free, C.share, C.settleAtUsd, C.usdPerMillion, C.settleMicro, C.fallback.length], [10000, 0.2, 0.05, 2, 50000, 0]);
   const bad = TOLL.tollConfig({ freeTokensPerNetworkPerDay: -1, share: 0.5, settleAtUsd: 0.01, usdPerMillion: 'x' });
   assert.deepEqual([...bad.fallback].sort(), ['freeTokensPerNetworkPerDay', 'settleAtUsd', 'share', 'usdPerMillion']); assert.equal(bad.share, 0.2); assert.equal(bad.settleMicro, 50000);
 });
@@ -191,27 +193,27 @@ await proof('the price of tokens above the quota is floor(tokens × 0.2 × USD 2
   for (const t of [0, 99, 100, 101, 12345, 10_000_000]) assert.equal(TOLL.microOf(t, other), Math.floor(t / 100), `share 0.1 at USD 0.10: ${t} tokens`);
   assert.equal(TOLL.microOf(-5), 0); assert.equal(TOLL.microOf('nonsense'), 0);
 });
-await proof('the free quota to the token: an answer that ends exactly at 100,000 is free; the next answers are tolled only once their price is at least $0.000001 (one or two tokens above it cost nothing and are not tolled); an answer that crosses the quota pays only for the part above it; at $0.05 the toll is due (14 answers of 9,077 tokens)', async () => {
+await proof('the free quota to the token: an answer that ends exactly at the quota (10,000) is free; the next answers are tolled only once their price is at least $0.000001 (one or two tokens above it cost nothing and are not tolled); an answer that crosses the quota pays only for the part above it; at $0.05 the toll is due (14 answers of 9,077 tokens)', async () => {
   const T = TOLL.createToll({ kv: memoryKv(), sweepMs: 0 });
   const a = await T.account('192.0.2.10');
-  let d = T.decide(a, 90923); assert.deepEqual([d.state, d.lever, d.tolled], ['free', true, 0]);
-  d = T.decide(a, 9077); assert.deepEqual([d.state, d.tolled, a.s], ['free', 0, 100000], 'exactly at the boundary: free');
+  const F = TOLL.TOLL.free; let d = T.decide(a, F - 9077); assert.deepEqual([d.state, d.lever, d.tolled], ['free', true, 0]);
+  d = T.decide(a, 9077); assert.deepEqual([d.state, d.tolled, a.s], ['free', 0, F], 'exactly at the boundary: free');
   d = T.decide(a, 1); assert.deepEqual([d.state, d.lever, d.micro, a.t, TOLL.openMicro(a)], ['free', true, 0, 0, 0], 'one token above the quota: priced $0.000000, not tolled');
   d = T.decide(a, 2); assert.deepEqual([d.state, a.t, a.n, a.id], ['free', 0, 0, null], 'two tokens: priced $0.000000, not tolled, no toll id');
   d = T.decide(a, 3); assert.deepEqual([d.state, d.tolled, d.micro, d.open], ['open', 3, 1, 1], 'three tokens: $0.000001');
   d = T.decide(a, 9077); assert.deepEqual([d.state, d.tolled, d.micro, d.open], ['open', 9077, 3630, 3631], 'the open sum is the sum of the answers\' prices');
-  const b = await T.account('192.0.2.11'); T.decide(b, 95000); d = T.decide(b, 9077); assert.deepEqual([d.state, d.free, d.tolled, d.micro], ['open', 5000, 4077, twoFifths(4077)], 'the crossing answer pays for 4,077 tokens');
-  const c = await T.account('192.0.2.12'); T.decide(c, 100000); let k = 0;
+  const b = await T.account('192.0.2.11'); T.decide(b, F - 5000); d = T.decide(b, 9077); assert.deepEqual([d.state, d.free, d.tolled, d.micro], ['open', 5000, 4077, twoFifths(4077)], 'the crossing answer pays for 4,077 tokens');
+  const c = await T.account('192.0.2.12'); T.decide(c, F); let k = 0;
   while (k < 100 && (d = T.decide(c, 9077)).state === 'open') k++; // (bounded: a toll that never comes due ends here too)
   assert.equal(k, 14, 'fourteen answers of 9,077 tokens reach $0.05'); assert.equal(d.state, 'paused'); assert.equal(d.lever, false); assert.equal(d.open, 14 * 3630);
-  assert.equal(c.t, 14 * 9077, 'nothing of the paused answer was written as tolled'); assert.equal(c.s, 100000 + 14 * 9077);
+  assert.equal(c.t, 14 * 9077, 'nothing of the paused answer was written as tolled'); assert.equal(c.s, F + 14 * 9077);
   assert.deepEqual(T.decide(c, 0), { state: null, lever: true, saved: 0, tolled: 0, micro: 0 }, 'an answer that saved nothing is left as it is');
 });
 await proof('the open sum is the exact sum of the prices the answers named (F4): 300 answers of 7 tokens above the quota open $0.000600 (each $0.000002), 1,000 answers of 2 tokens open nothing and say nothing; over HTTP the x-sea-toll-usd of every tolled answer adds up to the sum the 402 asks', async () => {
-  const T = TOLL.createToll({ kv: memoryKv(), sweepMs: 0 }), a = await T.account('192.0.2.20'); T.decide(a, 100000);
+  const T = TOLL.createToll({ kv: memoryKv(), sweepMs: 0 }), a = await T.account('192.0.2.20'); T.decide(a, TOLL.TOLL.free);
   let told = 0; for (let i = 0; i < 300; i++) { const d = T.decide(a, 7); assert.equal(d.micro, 2); told += d.micro; }
   assert.equal(told, 600); assert.equal(TOLL.openMicro(a), 600, 'not floor(2,100 × 0.4) = 840');
-  const b = await T.account('192.0.2.21'); T.decide(b, 100000);
+  const b = await T.account('192.0.2.21'); T.decide(b, TOLL.TOLL.free);
   for (let i = 0; i < 1000; i++) { const d = T.decide(b, 2); assert.equal(d.state, 'free'); assert.deepEqual(T.headers(d, BASE, b), {}); }
   assert.deepEqual([b.t, b.m, TOLL.openMicro(b), b.id], [0, 0, 0, null]);
   const ip = net(); let sum = 0, page = newPage(60);
@@ -225,7 +227,7 @@ await proof('the open sum is the exact sum of the prices the answers named (F4):
 console.log('below the free quota every lever answer is byte for byte what it was');
 await proof(`below the quota: TOON, since= and the 304, /compress and /mcp/lean tools/call answer byte for byte as with the toll off and as ${REF} (the version masked), with no toll header`, async () => {
   assert.ok(THEIRS, `a tree of ${REF}`);
-  const url = newPage(30), nodes = [ON, OFF, THEIRS], ips = nodes.map(() => net()), got = nodes.map(() => []);
+  const url = newPage(6), nodes = [ON, OFF, THEIRS], ips = nodes.map(() => net()), got = nodes.map(() => []);
   for (let i = 0; i < nodes.length; i++) {
     const n = nodes[i], ip = ips[i], first = await n.call(`/r/${url}`, { ip, accept: MD }), tag = first.h.etag;
     got[i].push(first, await n.call(`/r/${url}?since=${bare(tag)}`, { ip, accept: MD }), await n.call(`/r/${url}`, { ip, accept: MD, headers: { 'if-none-match': tag } }),
@@ -243,18 +245,18 @@ await proof(`below the quota: TOON, since= and the 304, /compress and /mcp/lean 
 console.log('above the quota the toll accrues, and every tolled answer says so');
 await proof('the answer that crosses the quota pays exactly for the tokens above it; every tolled answer names this answer\'s toll, the open sum (the sum of the answers\' tolls) and the id; nothing of the toll in a shared cache', async () => {
   const ip = net(), page = newPage(60);
-  const c1 = await compress(ON, ip), saved = Number(c1.h['x-sea-engine-saved']);
-  assert.ok(saved > 100000, `one text spares more than the quota: ${saved}`);
-  assert.equal(c1.h['x-sea-toll-state'], 'open'); assert.equal(Number(c1.h['x-sea-toll-tokens']), saved - 100000, 'only the part above the quota');
-  let sum = twoFifths(saved - 100000);
+  const c1 = await compress(ON, ip, OVER), saved = Number(c1.h['x-sea-engine-saved']);
+  const F = TOLL.TOLL.free; assert.ok(saved > F, `one text spares more than the quota: ${saved}`);
+  assert.equal(c1.h['x-sea-toll-state'], 'open'); assert.equal(Number(c1.h['x-sea-toll-tokens']), saved - F, 'only the part above the quota');
+  let sum = twoFifths(saved - F);
   assert.equal(micro(c1.h['x-sea-toll-usd']), sum); assert.equal(micro(c1.h['x-sea-toll-open-usd']), sum);
   assert.match(c1.h['x-sea-toll-id'], TOLL.TOLL_ID); const id = c1.h['x-sea-toll-id'];
-  assert.match(c1.h['x-sea-toll'], new RegExp(`^${c1.h['x-sea-toll-usd']} USD for this answer: 20 % of ${saved - 100000} tokens saved above the free 100000 a day, at USD 2 per million; ${c1.h['x-sea-toll-open-usd']} USD open, settled by x402 from 0\\.050000 USD: x-sea-toll: pay with a lever request, or POST https://mare\\.test/fair/pay\\?r=${id}$`));
+  assert.match(c1.h['x-sea-toll'], new RegExp(`^${c1.h['x-sea-toll-usd']} USD for this answer: 20 % of ${saved - F} tokens saved above the free ${F} a day, at USD 2 per million; ${c1.h['x-sea-toll-open-usd']} USD open, settled by x402 from 0\\.050000 USD: x-sea-toll: pay with a lever request, or POST https://mare\\.test/fair/pay\\?r=${id}$`));
   assert.equal(c1.h['cache-control'], 'private, no-store'); for (const k of ['x-sea-toll', 'x-sea-toll-id', 'x-sea-toll-open-usd']) assert.ok(c1.h['access-control-expose-headers'].split(',').includes(k), k);
   assert.ok(/^[\x20-\x7e]+$/.test(c1.h['x-sea-toll']), 'the line is ASCII');
   const first = await ON.call(`/r/${page}`, { ip, accept: MD }), tag = bare(first.h.etag);
   noToll(first, 'a page read the first time saves nothing by a lever');
-  let tokens = saved - 100000;
+  let tokens = saved - F;
   for (let i = 0; i < 2; i++) {
     const r = await ON.call(`/r/${page}?since=${tag}`, { ip, accept: MD }), s = Number(r.h['x-sea-engine-saved']); tokens += s; sum += twoFifths(s);
     assert.match(r.text, /^Unchanged since e1-/); assert.equal(r.h['x-sea-toll-state'], 'open'); assert.equal(Number(r.h['x-sea-toll-tokens']), s);
@@ -264,13 +266,13 @@ await proof('the answer that crosses the quota pays exactly for the tokens above
 });
 await proof('per answer, not once a day: the same text twice is tolled twice (the ledger counts it once, and stays as it is)', async () => {
   const ip = net(), n0 = counted.length;
-  const a = await compress(ON, ip, BIG), b = await compress(ON, ip, BIG);
+  const a = await compress(ON, ip, OVER), b = await compress(ON, ip, OVER);
   assert.equal(Number(b.h['x-sea-toll-tokens']), Number(b.h['x-sea-engine-saved']), 'the whole saving of the second answer');
   assert.equal(micro(b.h['x-sea-toll-open-usd']), twoFifths(Number(a.h['x-sea-toll-tokens'])) + twoFifths(Number(b.h['x-sea-toll-tokens'])));
   assert.equal(counted.slice(n0).filter((x) => x.lever === 'squeeze' && x.ip === ip).length, 2, 'the ledger is handed both');
 });
 await proof('only the lossless part is tolled: TOON with fields= pays for what TOON spared (the projection is lossy and free); /compress with a budget pays for its lossless steps, not for what the budget cut', async () => {
-  const ip = net(); await compress(ON, ip); // above the quota, the toll open and not yet due
+  const ip = net(); await compress(ON, ip, OVER); // above the quota, the toll open and not yet due
   const proj = await OFF.call('/routes.json?fields=topics', { ip: net() }), both = await ON.call('/routes.json?fmt=toon&fields=topics', { ip });
   const toonPart = Number(both.h['x-sea-engine-saved']) - Number(proj.h['x-sea-engine-saved']);
   assert.ok(Number(proj.h['x-sea-engine-saved']) > 0, 'the projection spared tokens'); assert.ok(toonPart > 100, `TOON spared tokens of its own: ${toonPart}`);
@@ -458,23 +460,26 @@ await proof('replayed: a payment that settled once, sent again (by the same netw
   const other = await ON.call('/routes.json?fmt=toon', { ip: ip2, headers: { 'payment-signature': pay } }); assert.equal(other.status, 402); assert.match(other.j.error, /used before/);
   assert.equal(asked.length, 0); assert.ok(TOLL.openMicro(await acct(ON, ip)) > s0); assert.equal(await openOf(ON, ip2), open2);
 });
-await proof('a payment verified but still settling holds the toll: the normal answer, never asked twice (no 402 while it is on its way), cleared the moment the settlement lands behind the answer', async () => {
+await proof('a payment verified but still settling holds the toll: never asked twice (no 402 while it is on its way), the lever answers go on meanwhile and accrue (D3, 3.37.2), cleared the moment the settlement lands behind the answer', async () => {
   const ip = net(); await pause(ON, ip); const open = await openOf(ON, ip);
   let release; const landing = new Promise((r) => { release = r; });
   const awake = setInterval(() => {}, 50); // the till waits for a settlement on a timer that keeps no process alive (unref): this one does
   facilitator = (kind) => (kind === 'verify' ? answer({ isValid: true, payer: PAYER }) : landing.then(() => answer({ success: true, transaction: `0x${'cd'.repeat(32)}`, network: 'eip155:8453', payer: PAYER })));
   try {
     const r = await ON.call('/routes.json?fmt=toon', { ip, headers: { 'payment-signature': v2(open) } });
-    assert.equal(r.status, 200); assert.match(r.h['content-type'], /^application\/json/, 'the normal answer while it settles'); assert.match(r.h['x-sea-toll-payment'], /^pending: /); assert.equal(r.h['x-sea-toll-state'], 'settling');
-    const ask = await ON.call('/routes.json?fmt=toon', { ip, headers: { 'x-sea-toll': 'pay' } }); assert.equal(ask.status, 200, 'not asked twice'); assert.equal(ask.h['x-sea-toll-state'], 'settling');
+    assert.equal(r.status, 200); assert.equal(r.h['content-type'], 'text/toon; charset=utf-8', 'the lever answer while it settles'); assert.match(r.h['x-sea-toll-payment'], /^pending: /); assert.equal(r.h['x-sea-toll-state'], 'settling');
+    assert.match(r.h['x-sea-toll'], /^settling: a payment of \d+\.\d{6} USD is on its way, and the lever answers go on meanwhile; \d+\.\d{6} USD for this answer: /); assert.ok(micro(r.h['x-sea-toll-usd']) > 0, 'what it saves accrues');
+    const ask = await ON.call('/routes.json?fmt=toon', { ip, headers: { 'x-sea-toll': 'pay' } }); assert.equal(ask.status, 200, 'not asked twice'); assert.equal(ask.h['x-sea-toll-state'], 'settling'); assert.equal(ask.h['content-type'], 'text/toon; charset=utf-8');
+    for (let i = 0; i < 3; i++) { const c = await compress(ON, ip, MID); assert.equal(c.h['x-sea-toll-state'], 'settling', 'never paused while a payment is held'); assert.notEqual(c.j.out, MID, 'the lever answer'); }
     const fp = await ON.call(`/fair/pay?r=${(await acct(ON, ip)).id}`, { method: 'POST', ip }); assert.equal(fp.j.payable, false); assert.match(fp.j.reason, /nothing is open/);
     const tr = await ON.call('/treasury', { ip: net() }); assert.equal(micro(tr.j.toll.on_its_way_usd), open); assert.equal(tr.j.toll.on_its_way, 1);
     release(); await settled();
     const after = await ON.call('/routes.json?fmt=toon', { ip }); assert.equal(after.h['content-type'], 'text/toon; charset=utf-8', 'lean again once it settled');
     const a = await acct(ON, ip); assert.equal(a.h.length, 0); assert.equal(a.pm, open, 'what it paid for is paid');
+    assert.ok(TOLL.openMicro(a) > 0, 'what accrued meanwhile is open now');
   } finally { clearInterval(awake); }
 });
-await proof('a settlement that never comes back (I6): past the terms\' time the chain is asked (USDC authorizationState on Base, eth_call): used → settled and booked, lean again; not used and past validBefore → released, due again; no answer → asked again, released an hour after its time; a node that cannot ask the chain releases it after its time', async () => {
+await proof('a settlement that never comes back (I6, D3): past the terms\' time the chain is asked (USDC authorizationState on Base, eth_call): used → settled and booked; not used and past validBefore → released, due again; nothing is released without the chain\'s word: no answer, or a node that cannot ask the chain, keeps the payment held (lever answers go on) and asks again with backoff', async () => {
   const D0 = T0, payAt = async (n, ip, nonce) => { const open = await openOf(n, ip); facilitator = hangs(); const r = await n.call('/routes.json?fmt=toon', { ip, headers: { 'payment-signature': v2(open, { nonce }) } }); assert.match(r.h['x-sea-toll-payment'], /^pending: /); await settled(); return open; };
   try {
     const NOC = await nodeOf(ROOT, { cfg: { chainRpc: 'off' } }); calm(NOC);
@@ -483,7 +488,7 @@ await proof('a settlement that never comes back (I6): past the terms\' time the 
     const o1 = await payAt(ON, i1, n1), o2 = await payAt(ON, i2, n2), o3 = await payAt(ON, i3, n3), o4 = await payAt(NOC, i4, n4);
     const total0 = (await books(ON)).total.micro;
     chain = (from, nonce) => (nonce === n1 ? true : nonce === n2 ? false : null); rpcAsked.length = 0;
-    later(120); for (const ip of [i1, i2, i3]) assert.equal((await ON.call('/routes.json?fmt=toon', { ip })).h['x-sea-toll-state'], 'settling', 'within the terms\' time: held');
+    later(120); for (const ip of [i1, i2, i3]) { const r = await ON.call('/routes.json?fmt=toon', { ip }); assert.equal(r.h['x-sea-toll-state'], 'settling', 'within the terms\' time: held'); assert.equal(r.h['content-type'], 'text/toon; charset=utf-8', 'the lever answers go on'); }
     assert.equal(rpcAsked.length, 0, 'the chain is not asked while the settlement may still come');
     later(185); // 305 s after the payments: past maxTimeoutSeconds
     const r1 = await ON.call('/routes.json?fmt=toon', { ip: i1 }); assert.equal(r1.h['content-type'], 'text/toon; charset=utf-8', 'used: settled, lean again');
@@ -492,14 +497,16 @@ await proof('a settlement that never comes back (I6): past the terms\' time the 
     const B1 = await books(ON); assert.equal(B1.pays.find((x) => x.nonce === n1).status, 'settled'); assert.equal(B1.total.micro, total0 + o1, 'booked');
     assert.equal((await ON.call('/routes.json?fmt=toon', { ip: i2 })).h['x-sea-toll-state'], 'settling', 'not used, but validBefore not yet past: held');
     later(60);
-    assert.equal((await ON.call('/routes.json?fmt=toon', { ip: i2 })).h['x-sea-toll-state'], 'paused', 'not used and past validBefore: released, due again'); assert.equal(await openOf(ON, i2), o2);
+    assert.equal((await ON.call('/routes.json?fmt=toon', { ip: i2 })).h['x-sea-toll-state'], 'paused', 'not used and past validBefore: released, due again'); assert.ok(await openOf(ON, i2) >= o2, 'the held sum is open again (and what accrued meanwhile)');
     assert.equal((await books(ON)).pays.find((x) => x.nonce === n2).status, 'released');
     assert.equal((await ON.call('/routes.json?fmt=toon', { ip: i3 })).h['x-sea-toll-state'], 'settling', 'no answer from the chain: held');
-    assert.equal((await NOC.call('/routes.json?fmt=toon', { ip: i4 })).h['x-sea-toll-state'], 'paused', 'no chain check possible: released after its time'); assert.equal(await openOf(NOC, i4), o4);
-    assert.match((await books(NOC)).pays.find((x) => x.nonce === n4).why, /no chain check is possible/);
-    later(3600);
-    assert.equal((await ON.call('/routes.json?fmt=toon', { ip: i3 })).h['x-sea-toll-state'], 'paused', 'no answer for an hour after its time: released'); assert.equal(await openOf(ON, i3), o3);
-    assert.equal((await ON.call('/treasury', { ip: net() })).j.toll.on_its_way, 0, 'nothing left on its way');
+    assert.equal((await NOC.call('/routes.json?fmt=toon', { ip: i4 })).h['x-sea-toll-state'], 'settling', 'no chain check possible: held, never released'); assert.equal((await books(NOC)).pays.find((x) => x.nonce === n4).status, 'pending');
+    const asked3 = () => rpcAsked.filter((x) => x.params?.[0]?.data?.endsWith(n3.slice(2))).length, k0 = asked3();
+    for (let i = 0; i < 12; i++) { later(600); await ON.call('/routes.json?fmt=toon', { ip: i3 }); await NOC.call('/routes.json?fmt=toon', { ip: i4 }); }
+    assert.equal((await ON.call('/routes.json?fmt=toon', { ip: i3 })).h['x-sea-toll-state'], 'settling', 'two hours without the chain\'s word: still held'); assert.equal((await books(NOC)).pays.find((x) => x.nonce === n4).status, 'pending', 'no chain to ask: still held');
+    const k1 = asked3(); assert.ok(k1 > k0 && k1 - k0 < 12, `asked again, ever later (${k1 - k0} times in two hours, not every request)`);
+    chain = (from, nonce) => (nonce === n3 ? true : null); later(3600); await ON.call('/routes.json?fmt=toon', { ip: i3 });
+    assert.equal((await books(ON)).pays.find((x) => x.nonce === n3).status, 'settled', 'the chain\'s word, once it comes'); assert.equal((await ON.call('/treasury', { ip: net() })).j.toll.on_its_way, 0, 'nothing left on its way'); void o3; void o4;
   } finally { T0 = D0; chain = () => null; }
 });
 await proof('a payment found on its way when a node starts is checked at once (I6): the settlement the stopped node waited for landed (used) → settled, its network lean again; one not yet used and still valid is held, and released once its time is past', async () => {
@@ -569,7 +576,7 @@ await proof('a toll id: 402 for the exact open sum and paid → cleared, from it
   const paid = await ON.call('/fair/pay', { method: 'POST', ip, body: { r: [a.id] }, headers: { 'payment-signature': v2(open) } });
   assert.equal(paid.status, 200); assert.equal(paid.j.paid.status, 'settled'); assert.equal(paid.j.paid.amount_usd, TOLL.usd6(open)); assert.deepEqual(paid.j.paid.tolls, [a.id]); assert.ok(paid.h['payment-response']);
   assert.equal(TOLL.openMicro(a), 0); assert.equal((await ON.call('/routes.json?fmt=toon', { ip })).h['content-type'], 'text/toon; charset=utf-8');
-  const small = net(); await compress(ON, small); const b = await acct(ON, small);
+  const small = net(); await compress(ON, small, OVER); const b = await acct(ON, small);
   const below = await ON.call(`/fair/pay?r=${b.id}`, { method: 'POST', ip: small }); assert.equal(below.j.payable, false); assert.equal(below.j.reason, 'below the minimum'); assert.equal(below.j.minimum_usd, '0.050000');
   const mixed = await ON.call(`/fair/pay?r=${b.id},r20261125aaaaaaaa`, { method: 'POST', ip: small }); assert.equal(mixed.status, 400); assert.match(mixed.j.error.message, /Nothing was charged/);
   const unknown = await ON.call('/fair/pay?r=t20261125zzzzzzzz', { method: 'POST', ip: small }); assert.equal(unknown.status, 404);
@@ -586,7 +593,7 @@ await proof('networks apart: a network that owes leaves the next one free and by
   assert.equal(TOLL.tollNet('2001:db8:7:1::1'), '2001:db8:7::/48'); assert.equal(TOLL.tollNet('::ffff:203.0.113.66'), '203.0.113.66'); assert.equal(TOLL.tollNet('203.0.113.66'), '203.0.113.66');
 });
 await proof('the cap of networks a day fails closed (M4): past 50,000 networks a new one gets the normal answers of the lossless levers (state full, no lever, nothing owed, never an error, never a 402); a network kept before goes on as before', async () => {
-  const N = await nodeOf(ROOT); calm(N); const kept = net(); await compress(N, kept);
+  const N = await nodeOf(ROOT); calm(N); const kept = net(); await compress(N, kept, OVER);
   const T = N.db.tollBook; for (let i = 0; i < 50_000; i++) await T.account(`2001:${(0x100 + (i >> 16)).toString(16)}:${(i & 0xffff).toString(16)}::1`);
   const ip = net(), c = await compress(N, ip);
   assert.equal(c.status, 200); assert.equal(c.j.out, BIG, 'the text as sent'); assert.equal(c.j.status, 'unchanged: the toll keeps no more networks today'); assert.equal(c.h['x-sea-toll-state'], 'full'); assert.match(c.h['x-sea-toll'], /^full: .*nothing is owed$/);
@@ -676,7 +683,7 @@ await proof('no caller is told apart by its name (I1): on a network that owes, t
     const p = await ON.call('/routes.json?fmt=toon', { ip, ua, headers: { 'x-sea-toll': 'pay' } }); assert.equal(p.status, 402, `${ua}: asked to pay like anyone`);
   }
   const bot = net(), st = []; for (let i = 0; i < 3; i++) st.push((await compress(ON, bot, BIG, { ua: 'acme-agent-bot/1.0' })).h['x-sea-toll-state']);
-  assert.deepEqual(st, ['open', 'open', 'paused'], 'the same quota and toll as any network');
+  assert.equal(st[0], 'open', 'tolled above the quota like any network'); assert.equal(st[2], 'paused', 'and due like any network');
   const self = net(), n0 = counted.length; const s = await ON.call('/routes.json?fmt=toon', { ip: self, ua: 'MareLiberum-session/1.0' });
   assert.equal(s.h['content-type'], 'text/toon; charset=utf-8'); assert.equal(counted.slice(n0).filter((x) => x.ip === self).length, 0, 'the ledger\'s rules stay: the sea\'s own calls are counted nowhere');
   assert.ok((await acct(ON, self)).s > 0, 'but the toll counts them toward the free quota like any other');
@@ -695,7 +702,7 @@ await proof('a HEAD of /r/ says nothing for free (I1): below the quota it has th
   const t = await ON.call('/routes.json?fmt=toon', { ip, head: true }), u = await OFF.call('/routes.json?fmt=toon', { ip: net(), head: true }); noToll(t, 'HEAD of TOON'); sameAs(t, ON.version, u, OFF.version, 'HEAD of TOON (no body: nothing to toll)');
 });
 await proof('a conditional HEAD of /r/ is the 304 lever (3.37.1): its 304 has the saving of the GET\'s 304 by savingOf, counts toward the free quota and once a day in the ledger, costs the same above the quota with the same toll headers; while the levers rest no ETag and never a 304; since= alone is no lever for a HEAD (the plain HEAD, free); off, a HEAD 304 is what it was', async () => {
-  const ip = net(), url = newPage(50), ipOff = net();
+  const ip = net(), url = newPage(30), ipOff = net();
   const tag = (await ON.call(`/r/${url}`, { ip, accept: MD })).h.etag; await OFF.call(`/r/${url}`, { ip: ipOff, accept: MD });
   const get304 = await OFF.call(`/r/${url}`, { ip: net(), accept: MD, headers: { 'if-none-match': tag } }), saved = Number(get304.h['x-sea-engine-saved']); assert.equal(get304.status, 304); assert.ok(saved > 1000);
   // under the quota: the very 304 of the toll off, counted toward the quota and in the ledger like the 304 of a GET
@@ -705,7 +712,7 @@ await proof('a conditional HEAD of /r/ is the 304 lever (3.37.1): its 304 has th
   assert.equal((await acct(ON, ip)).s, s0 + saved, 'counted toward the free quota'); assert.deepEqual(counted.slice(n0).filter((x) => x.ip === ip).map((x) => [x.lever, x.saved]), [['delta', saved]], 'in the ledger as the 304 of a GET');
   assert.equal(counted.slice(n0).filter((x) => x.ip === ipOff).length, 0, 'toll off: a HEAD is counted nowhere, as before');
   // above the quota: the same price and headers as the GET's 304
-  await compress(ON, ip); const open0 = await openOf(ON, ip);
+  await compress(ON, ip, OVER); const open0 = await openOf(ON, ip);
   const g = await ON.call(`/r/${url}`, { ip, accept: MD, headers: { 'if-none-match': tag } }), h = await ON.call(`/r/${url}`, { ip, accept: MD, head: true, headers: { 'if-none-match': tag } });
   for (const [what, r] of [['GET', g], ['HEAD', h]]) { assert.equal(r.status, 304, what); assert.equal(r.h['x-sea-toll-state'], 'open', what); assert.equal(Number(r.h['x-sea-toll-tokens']), saved, what); assert.equal(micro(r.h['x-sea-toll-usd']), twoFifths(saved), what); }
   assert.equal(await openOf(ON, ip), open0 + 2 * twoFifths(saved), 'both priced alike');
@@ -715,6 +722,17 @@ await proof('a conditional HEAD of /r/ is the 304 lever (3.37.1): its 304 has th
   // due: the HEAD's 304 rests with the lever, no ETag, no 402
   await pause(ON, ip); const d = await ON.call(`/r/${url}`, { ip, accept: MD, head: true, headers: { 'if-none-match': tag, 'x-sea-toll': 'pay' } });
   assert.equal(d.status, 200); assert.equal(d.h.etag, undefined); assert.equal(d.h['x-sea-toll-state'], 'paused');
+});
+await proof('once a network has used its free quota for the day, a HEAD of /r/ carries no ETag (D2, 3.37.2): no tag to compare itself, with or without since=; a 304 to it is still the lever, tolled, without ETag; under the quota the ETag as before; a GET carries it always', async () => {
+  const ip = net(), url = newPage(6), first = await ON.call(`/r/${url}`, { ip, accept: MD }), tag = first.h.etag;
+  const under = await ON.call(`/r/${url}`, { ip, accept: MD, head: true }); assert.equal(under.h.etag, tag, 'under the quota: the ETag as before'); assert.ok(under.h['x-sea-delta']);
+  for (let i = 0; i < 8 && (await acct(ON, ip)).s < TOLL.TOLL.free; i++) await compress(ON, ip, MID);
+  const a = await acct(ON, ip); assert.ok(a.s >= TOLL.TOLL.free, 'the quota used'); assert.ok(TOLL.openMicro(a) < TOLL.TOLL.settleMicro, 'open, not due');
+  for (const [what, r] of [['HEAD', await ON.call(`/r/${url}`, { ip, accept: MD, head: true })], ['HEAD with since=', await ON.call(`/r/${url}?since=${bare(tag)}`, { ip, accept: MD, head: true })], ['HEAD with If-None-Match', await ON.call(`/r/${url}`, { ip, accept: MD, head: true, headers: { 'if-none-match': tag } })]]) {
+    assert.equal(r.h.etag, undefined, `${what}: no ETag`); assert.equal(r.h['x-sea-delta'], undefined, `${what}: no x-sea-delta`);
+    if (what === 'HEAD with If-None-Match') { assert.equal(r.status, 304, 'the 304 lever'); assert.equal(r.h['x-sea-toll-state'], 'open', 'tolled as a GET\'s 304'); }
+  }
+  const g = await ON.call(`/r/${url}`, { ip, accept: MD }); assert.equal(g.h.etag, tag, 'a GET carries it: the page itself is read');
 });
 await proof(`/mcp/app answers byte for byte as ${REF} (but for the version in serverInfo) and as with the toll off, also for a network that owes and asks to pay`, async () => {
   assert.ok(THEIRS, `a tree of ${REF}`); const ip = net(); await pause(ON, ip);
@@ -770,7 +788,7 @@ await proof(`the toll switched off, resting, or without a server secret: every d
   const keep = process.env.MARE_VIA_SECRET; delete process.env.MARE_VIA_SECRET; let unkeyed; try { unkeyed = await DOOR_RUN(U, net()); } finally { process.env.MARE_VIA_SECRET = keep; }
   assert.equal(theirs.length, off.length);
   for (let i = 0; i < theirs.length; i++) { const [name] = theirs[i]; for (const [what, run, v, ref] of [['off', off, OFF.version, theirs], ['resting', resting, ON.version, theirs], ['no secret', unkeyed, U.version, theirs2]]) { noToll(run[i][1], `${what}: ${name}`); sameAs(run[i][1], v, ref[i][1], THEIRS.version, `${what}: ${name}`); } }
-  assert.ok(Number(off[1][1].h['x-sea-engine-saved']) > 100000, 'the lever still acts above the quota');
+  assert.ok(Number(off[1][1].h['x-sea-engine-saved']) > TOLL.TOLL.free, 'the lever still acts above the quota');
   const on = await DOOR_RUN(ON, net()); assert.equal(on[0][1].h['x-sea-toll-state'], 'open', 'and on, the same run is tolled'); assert.equal(on[2][1].h['x-sea-toll-state'], 'paused');
 });
 await proof('MARE_TOLL=off in the environment, "till" in rest, a till without wallet or facilitator, or no server secret (M6): no toll; the pages say whether it acts', async () => {
@@ -814,16 +832,16 @@ console.log('the facts where agents and people read them');
 await proof('/engine (a section "The toll" with the example $0.003630), /engine.json, /fair, /pricing (one line) and llms.txt say the price, the free quota, $0.05, the normal answer and that unpaid tolls are not collected, and what they say is so (M7): no name is apart, the ledger counts once a day and the toll every answer, the books apart, which pages keep the toll section; the terms are left to the release of the legal texts', async () => {
   const ip = net(), e = await ON.call('/engine', { ip, accept: 'text/html' }), ej = (await ON.call('/engine.json', { ip })).j.toll;
   assert.ok(e.text.includes('<h2 id="toll">The toll</h2>'));
-  for (const w of ['Up to 100,000 saved tokens per network and UTC day stay free', '20 % of the tokens it saved, at USD 2 per million', 'reads a page of 9,128 tokens again with since=', '9,077 tokens saved', '0.2 × 9,077 × $2 / 1,000,000 = $0.003630', 'settled once the open sum reaches $0.05', 'An agent without a wallet gets the normal answer', 'Unpaid tolls are not collected', 'the lean answers pause and the normal answers continue', 'one IPv4 address or one IPv6 /48', 'the open sum is the sum of these, exactly']) {
+  for (const w of ['Up to 10,000 saved tokens per network and UTC day stay free', '20 % of the tokens it saved, at USD 2 per million', 'reads a page of 9,128 tokens again with since=', '9,077 tokens saved', '0.2 × 9,077 × $2 / 1,000,000 = $0.003630', 'settled once the open sum reaches $0.05', 'An agent without a wallet gets the normal answer', 'Unpaid tolls are not collected', 'the lean answers pause and the normal answers continue', 'one IPv4 address or one IPv6 /48', 'the open sum is the sum of these, exactly']) {
     assert.ok(e.text.replace(/&amp;/g, '&').replace(/&#39;/g, '\'').includes(w), `/engine: ${w}`);
   }
-  assert.equal(ej.numbers.example.usd, '0.003630'); assert.equal(ej.numbers.freeTokensPerNetworkPerDay, 100000); assert.equal(ej.on, true);
+  assert.equal(ej.numbers.example.usd, '0.003630'); assert.equal(ej.numbers.freeTokensPerNetworkPerDay, 10000); assert.equal(ej.on, true);
   assert.doesNotMatch(ej.never, /anything the ledger does not count/); assert.match(ej.never, /No caller is told apart by its name/); assert.doesNotMatch(ej.never, /^Never tolled: the sea's own calls, crawlers/);
   assert.match(ej.levers, /the ledger counts a saving once a day per network and subject; the toll counts every answer that saved/);
   assert.match(ej.unpaid, /Nobody is blocked: a lever request that does not pay never gets an error from the toll/); assert.match(ej.books, /never counted with the paid route or with fair share, never written into the database's record of the till/);
   assert.doesNotMatch(ej.switch, /every answer is what it was in 3\.36/); assert.match(ej.switch, /every lever answer is what it was in 3\.36; only the pages that describe it \(\/engine, \/fair, \/pricing, \/treasury, \/open, each also as data, and llms\.txt\) keep their toll section/);
   const f = await ON.call('/fair', { ip, accept: 'text/html' }); assert.ok(f.text.includes('The toll, apart from fair share') && f.text.includes('Unpaid tolls are not collected'));
-  const p = await ON.call('/pricing', { ip, accept: 'text/html' }), pj = await ON.call('/pricing.json', { ip }), line = 'Up to 100,000 tokens saved by the lossless levers stay free per network and UTC day; above that an answer costs 20 % of the tokens it saved, at USD 2 per million, settled over x402 in one payment from $0.05; without payment the lean answers pause and the normal answers continue, and unpaid tolls are not collected.';
+  const p = await ON.call('/pricing', { ip, accept: 'text/html' }), pj = await ON.call('/pricing.json', { ip }), line = 'Up to 10,000 tokens saved by the lossless levers stay free per network and UTC day; above that an answer costs 20 % of the tokens it saved, at USD 2 per million, settled over x402 in one payment from $0.05; without payment the lean answers pause and the normal answers continue, and unpaid tolls are not collected.';
   assert.equal(p.text.split('id="toll"').length - 1, 1, '/pricing: one line'); assert.ok(p.text.includes(line), '/pricing: the line'); assert.ok(pj.j.toll.includes(line) && pj.j.toll.endsWith('https://mare.test/engine#toll'), '/pricing.json: the line');
   // the legal texts (node/legal.mjs) by what they say of the toll: the numbers of config/toll.json and the rules of the code
   const C = TOLL.TOLL, dec = (x) => x.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, '\'').replace(/&amp;/g, '&').replace(/\u00a0/g, ' ');
@@ -835,7 +853,7 @@ await proof('/engine (a section "The toll" with the example $0.003630), /engine.
   assert.ok(preise.includes(`Zoll einer Antwort = ${String(C.share).replace('.', ',')} × eingesparte Tokens oberhalb des Freikontingents × ${de.usd} / 1.000.000`), '/de/preise: the formula');
   assert.ok(privacy.includes('The harbour toll counts IPv6 by its first 48 bits (/48).'), '/privacy: /48'); assert.ok(/Hafenzoll[^.]*\/48|\/48[^.]*Hafenzoll/.test(ds), '/de/datenschutz: /48');
   assert.equal(TOLL.tollNet('2001:db8:7:1::1'), '2001:db8:7::/48', 'the code keys IPv6 by /48');
-  const l = SITE['/llms.txt'].body; for (const w of ['The toll: up to 100,000 tokens saved by the lossless levers stay free per network and UTC day', 'one IPv6 /48', '0.2 x 9,077 x $2 / 1,000,000 = $0.003630', 'x-sea-toll: pay', 'POST https://mareliberum.dev/fair/pay?r=<x-sea-toll-id> from the same network', 'left alone', 'unpaid tolls are not collected', 'act while the toll is due', 'https://mareliberum.dev/engine#toll']) assert.ok(l.includes(w), `llms.txt: ${w}`);
+  const l = SITE['/llms.txt'].body; for (const w of ['The toll: up to 10,000 tokens saved by the lossless levers stay free per network and UTC day', 'one IPv6 /48', '0.2 x 9,077 x $2 / 1,000,000 = $0.003630', 'x-sea-toll: pay', 'POST https://mareliberum.dev/fair/pay?r=<x-sea-toll-id> from the same network', 'left alone', 'unpaid tolls are not collected', 'act while the toll is due', 'https://mareliberum.dev/engine#toll']) assert.ok(l.includes(w), `llms.txt: ${w}`);
   // the claim itself: with the toll switched off, the pages it names keep their toll section, and the other pages are origin/main's
   const F = await nodeOf(ROOT, { cfg: { toll: 'off' } }), M = await nodeOf(refDir); calm(F); calm(M);
   const tmask = (s, v) => mask(s, v).replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?Z?/g, '<T>');
@@ -847,11 +865,12 @@ await proof('/engine (a section "The toll" with the example $0.003630), /engine.
     assert.equal(a.status, b.status, path); assert.equal(tmask(a.text, F.version), tmask(b.text, M.version), `${path}: as ${REF}`);
   }
 });
-await proof('3.37.1 in VERSION, server.json, server-dev.json, server-lean.json and gemini-extension.json; RELEASES: 3.37.1 without day and pull request, 3.37.0 on 2026-11-25T22:51:04+01:00 with #28, 3.36.0 on 2026-11-25T19:03:27+01:00 with #27; proof:toll in package.json', async () => {
-  assert.equal(ON.version, '3.37.1'); for (const f of ['server.json', 'server-dev.json', 'server-lean.json', 'gemini-extension.json']) assert.equal(JSON.parse(readFileSync(join(ROOT, f), 'utf8')).version, '3.37.1', f);
-  assert.deepEqual([RELEASES[0].version, RELEASES[0].at, RELEASES[0].pr], ['3.37.1', null, undefined]); assert.ok(RELEASES[0].what.length > 40 && !RELEASES[0].what.includes('\n'));
-  assert.deepEqual([RELEASES[1].version, RELEASES[1].at, RELEASES[1].pr], ['3.37.0', '2026-11-25T22:51:04+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/28']);
-  assert.deepEqual([RELEASES[2].version, RELEASES[2].at, RELEASES[2].pr], ['3.36.0', '2026-11-25T19:03:27+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/27']);
+await proof('3.38.0 in VERSION, server.json, server-dev.json, server-lean.json and gemini-extension.json; RELEASES: 3.38.0 without day and pull request, 3.37.1 on 2026-11-25T23:02:33+01:00 with #29, 3.37.0 on 2026-11-25T22:51:04+01:00 with #28, 3.36.0 on 2026-11-25T19:03:27+01:00 with #27; proof:toll in package.json', async () => {
+  assert.equal(ON.version, '3.38.0'); for (const f of ['server.json', 'server-dev.json', 'server-lean.json', 'gemini-extension.json']) assert.equal(JSON.parse(readFileSync(join(ROOT, f), 'utf8')).version, '3.38.0', f);
+  assert.deepEqual([RELEASES[0].version, RELEASES[0].at, RELEASES[0].pr], ['3.38.0', null, undefined]); assert.ok(RELEASES[0].what.length > 40 && !RELEASES[0].what.includes('\n'));
+  assert.deepEqual([RELEASES[1].version, RELEASES[1].at, RELEASES[1].pr], ['3.37.1', '2026-11-25T23:02:33+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/29']);
+  assert.deepEqual([RELEASES[2].version, RELEASES[2].at, RELEASES[2].pr], ['3.37.0', '2026-11-25T22:51:04+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/28']);
+  assert.deepEqual([RELEASES[3].version, RELEASES[3].at, RELEASES[3].pr], ['3.36.0', '2026-11-25T19:03:27+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/27']);
   assert.equal(JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).scripts['proof:toll'], 'node tools/toll-proof.mjs');
 });
 
@@ -866,9 +885,16 @@ const BREAK = [
   ['rounded up instead of down', 'node/toll.mjs', "* BigInt(C.priceE6)) / 1_000_000_000_000n)", "* BigInt(C.priceE6) + 999_999_999_999n) / 1_000_000_000_000n)"],
   ['no free quota', 'node/toll.mjs', 'const free = Math.max(0, Math.min(s, C.free - a.s)), tolled = s - free, micro = microOf(tolled, C);', 'const free = 0, tolled = s - free, micro = microOf(tolled, C);'],
   ['the quota counted once more than it holds (100,001 free)', 'node/toll.mjs', 'const free = Math.max(0, Math.min(s, C.free - a.s)), tolled = s - free, micro = microOf(tolled, C);', 'const free = Math.max(0, Math.min(s, C.free + 1 - a.s)), tolled = s - free, micro = microOf(tolled, C);'],
-  ['never due: the lever answer for a caller that does not pay', 'node/toll.mjs', 'if (micro > 0 && openMicro(a) >= C.settleMicro) {', 'if (false) {'],
+  ['never due: the lever answer for a caller that does not pay', 'node/toll.mjs', 'if (micro > 0 && !held && openMicro(a) >= C.settleMicro) {', 'if (false) {'],
+  ['D1 taken back: the free quota at 100,000 again', 'config/toll.json', '"freeTokensPerNetworkPerDay": 10000', '"freeTokensPerNetworkPerDay": 100000'],
+  ['D1 taken back: the terms say 100.000 while the code takes 10,000', 'node/legal.mjs', "'Freikontingent: Bis zu 10.000 durch", "'Freikontingent: Bis zu 100.000 durch"],
+  ['D2 taken back: a HEAD above the quota carries the ETag', 'node/core.mjs', '  return T.rests(a) || T.spent(a);', '  return T.rests(a);'],
+  ['D3 taken back: released an hour after its time without the chain\'s word', 'node/toll.mjs', 'else { const n = (tries.get(p.id) || 0) + 1;', "else if (t >= final + RETRY) await finish(p, 'released', { why: 'an hour' }); else { const n = (tries.get(p.id) || 0) + 1;"],
+  ['D3 taken back: released after its time where the chain cannot be asked', 'node/toll.mjs', 'else { const n = (tries.get(p.id) || 0) + 1;', "else if (!can && t >= final) await finish(p, 'released', { why: 'no chain' }); else { const n = (tries.get(p.id) || 0) + 1;"],
+  ['D3 taken back: the chain asked on every request (no backoff)', 'node/toll.mjs', 'nextAt.set(p.id, t + (word === false', 'nextAt.set(p.id, t + 0 * (word === false'],
+  ['D3 taken back: the lever answers rest while a payment is held', 'node/toll.mjs', "const held = a.h.length > 0;\n", "const held = a.h.length > 0; if (micro > 0 && held) { a.x++; save(a); return { state: 'settling', lever: false, saved: s, tolled, micro: 0, open: openMicro(a), held: heldMicro(a), id: a.id }; }\n"],
   ['F4/M1 taken back: the open sum rounded once over all tolled tokens', 'node/toll.mjs', 'if (micro > 0) { a.t += tolled; a.m += micro; a.n++;', 'if (micro > 0) { a.t += tolled; a.m = microOf(a.t, C); a.n++;'],
-  ['F4/M1 taken back: an answer priced $0.000000 tolled', 'node/toll.mjs', "return micro > 0 ? { state: 'open', lever: true,", "return tolled > 0 ? { state: 'open', lever: true,"],
+  ['F4/M1 taken back: an answer priced $0.000000 tolled', 'node/toll.mjs', "return micro > 0 ? { state: held ? 'settling' : 'open', lever: true,", "return tolled > 0 ? { state: held ? 'settling' : 'open', lever: true,"],
   ['the 402 asks one millionth more than is open', 'node/toll.mjs', 'const t = tollTerms(payCfg, { base, ids, micro });', 'const t = tollTerms(payCfg, { base, ids, micro: micro + 1 });'],
   ['a payment for another sum taken (on /fair/pay)', 'node/toll.mjs', 'const exact = exactOf(p, t); if (exact)', 'const exact = exactOf(p, t); if (false)'],
   ['a replayed payment not refused', 'node/toll.mjs', "if (seen) return { required: t, tokens, error: 'this payment was used before: nothing was cleared' };", ''],
@@ -903,7 +929,6 @@ const BREAK = [
   ['I5 taken back: the copy written last when a node stops', 'serve.mjs', '  try { await disk?.save(); } catch {}\n', ''],
   ['F9a/I6 taken back: a payment without a verdict taken (unverified)', 'node/toll.mjs', "label: 'toll', strict: true,", "label: 'toll', strict: false,"],
   ['F9b/I6 taken back: the chain\'s "used" not taken as settled', 'node/toll.mjs', "if (word === true) await finish(p, 'settled',", "if (word === true) await finish(p, 'released',"],
-  ['F9b/I6 taken back: a payment that cannot be checked held for good', 'node/toll.mjs', "else if (!can) { if (t >= ends) await finish(p, 'released',", "else if (!can) { if (false) await finish(p, 'released',"],
   ['F9c/I6 taken back: a payment an earlier run left is not asked about at once', 'node/toll.mjs', "for (const p of b.pays) if (p.status === 'pending') inherited.add(p.id);", ''],
   ['F5/M2 taken back: a second payer gets 409', 'node/core.mjs', 'else if (r.busy) { g.busy = true; TOLL_PAID.set(req, g); }', "else if (r.busy) g.answer = json({ error: { code: 'ABORTED', message: 'busy' } }, 409);"],
   ['F14/M3 taken back: /compress after a payment answers an error without the payment\'s response', 'node/core.mjs', 'return tg ? tg.finish(res) : res;\n    }', 'return res;\n    }'],

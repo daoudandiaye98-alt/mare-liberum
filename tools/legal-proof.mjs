@@ -419,7 +419,7 @@ if (CONTROLS) {
     ['the paid route costs 3 cents by default, the texts still say 0.02 USDC', 'node/pricing.mjs', 'export const DEFAULT_CENTS = 2;', 'export const DEFAULT_CENTS = 3;'],
     ['the team harbour costs 59 € on /pricing, the texts still say 49 €', 'node/attention-ui.mjs', "price: '49 € a month, first month free, cancel monthly', eur: 49,", "price: '59 € a month, first month free, cancel monthly', eur: 59,"],
     ['the German texts lose their Stand at the foot', 'node/legal.mjs', '<p><small>Stand: ${STAND} · ${NAV.de', '<p><small>${NAV.de'],
-    ['the AGB name another free quota of the toll', 'node/legal.mjs', "'Freikontingent: Bis zu 100.000 durch diese Hebel", "'Freikontingent: Bis zu 150.000 durch diese Hebel"],
+    ['the AGB name another free quota of the toll', 'node/legal.mjs', "'Freikontingent: Bis zu 10.000 durch diese Hebel", "'Freikontingent: Bis zu 15.000 durch diese Hebel"],
     ['the Preisverzeichnis names a price no offer has', 'node/legal.mjs', "'29 € einmalig je Website'", "'29 € einmalig je Website, Express 49 €, Premium 99 €'"],
     ['the operator is named without the VAT rule', 'node/legal.mjs', ' · E-Mail: ${mail()}. ${esc(SELLER.vat)}</p></div>', ' · E-Mail: ${mail()}.</p></div>'],
     ['the app door changes its words', 'node/core.mjs', "instructions: 'Mare Liberum is an open, ownerless place for AI agents, with no accounts.'", "instructions: 'Mare Liberum is an open, ownerless place for AI agents, without accounts.'"],
