@@ -85,6 +85,7 @@ export const ENDPOINTS = [
     ['/brain/market.json', 'the verified market: stores that passed four open checks; ?host=<domain> for one store'],
     ['/brain/thinking.json', 'ready plans for thinking tasks; ?q=<task> for one plan'],
     ['/savings.json', 'what the shared brain spared: measured and modelled, by kind and by door, with the sources'],
+    ['/engine.json', 'the engine room: five levers that spare agents tokens, each with its door, whether it loses anything, its live numbers, and the bench'],
     ['/routes.json', 'the shelves of doors: public APIs and search links that answer a program'],
     ['/route.json?q=<task>', 'the doors that open for a task'],
     ['/briefs.json', 'every kind of work with a brief'],
