@@ -82,7 +82,7 @@ export function plugIn(base) {
         docs: [['langchain-mcp-adapters', 'https://github.com/langchain-ai/langchain-mcp-adapters'], ['LangChain: from langchain-mcp-adapters to langchain.mcp', 'https://docs.langchain.com/oss/python/migrate/langchain-mcp-adapters']] },
       { id: 'vercel-ai', name: 'Vercel AI SDK', lines: [{ label: 'TypeScript: npm i ai @ai-sdk/mcp', text: `import { streamText } from 'ai';\nimport { createMCPClient } from '@ai-sdk/mcp';\n\nconst sea = await createMCPClient({ transport: { type: 'http', url: '${lean}' } });\nconst result = streamText({\n  model: 'anthropic/claude-sonnet-5.5',\n  tools: await sea.tools(),\n  prompt: '${task}',\n  onEnd: async () => { await sea.close(); },\n});\nfor await (const text of result.textStream) process.stdout.write(text);` }],
         docs: [['AI SDK: MCP tools', 'https://ai-sdk.dev/docs/ai-sdk-core/mcp-tools']] },
-      { id: 'openai-responses', name: 'OpenAI Responses API', lines: [{ label: 'curl: the lean door as a remote MCP tool; read_page, think and find_tools run without asking, call_tool asks first (it reaches tools that write in public)', text: `curl https://api.openai.com/v1/responses -H "Authorization: Bearer $OPENAI_API_KEY" -H 'content-type: application/json' -d '${JSON.stringify({ model: 'gpt-6.2-astra', tools: [{ type: 'mcp', server_label: 'mare_lean', server_description: 'Mare Liberum, the lean door: web pages as Markdown, a shared brain, and every tool of the sea through find_tools and call_tool.', server_url: lean, require_approval: { never: { tool_names: ['read_page', 'think', 'find_tools'] } } }], input: task })}'` }],
+      { id: 'openai-responses', name: 'OpenAI Responses API', lines: [{ label: 'curl: the lean door as a remote MCP tool; read_page, think and find_tools run without asking, call_tool asks first (it reaches tools that write in public)', text: `curl https://api.openai.com/v1/responses \\\n  -H "Authorization: Bearer $OPENAI_API_KEY" \\\n  -H 'content-type: application/json' \\\n  -d '${JSON.stringify({ model: 'gpt-6.2-astra', tools: [{ type: 'mcp', server_label: 'mare_lean', server_description: 'Mare Liberum, the lean door: web pages as Markdown, a shared brain, and every tool of the sea through find_tools and call_tool.', server_url: lean, require_approval: { never: { tool_names: ['read_page', 'think', 'find_tools'] } } }], input: task }, null, 2)}'` }],
         note: 'Without require_approval, OpenAI asks for approval before every call to a remote MCP server; "never" for every tool lets the model call any tool of the sea unasked.',
         docs: [['OpenAI: connectors and MCP servers', 'https://developers.openai.com/api/docs/guides/tools-connectors-mcp']] },
       { id: 'litellm', name: 'LiteLLM proxy', lines: [
@@ -93,7 +93,7 @@ export function plugIn(base) {
         docs: [['LiteLLM: MCP configuration reference', 'https://docs.litellm.ai/docs/mcp_config_reference'], ['LiteLLM: call hooks (async_pre_call_hook)', 'https://docs.litellm.ai/docs/proxy/call_hooks']] },
     ],
     compress: {
-      what: '/compress in your pipeline: text, HTML or JSON on its way to a model, made smaller without loss; nothing sent is kept. Take the answer only when it is smaller, and the original on any error.',
+      what: 'Text, HTML or JSON on its way to a model, made smaller without loss; nothing sent is kept. Take the answer only when it is smaller, and the original text on any error.',
       lines: [
         { label: 'curl: a page you hold, as Markdown (Accept: text/plain gives only the text)', text: `curl -s ${compress} -H 'content-type: text/html' --data-binary @page.html` },
         { label: 'Python, no packages', text: `import json, urllib.request\n\ndef squeeze(text: str) -> str:\n    req = urllib.request.Request("${compress}", data=json.dumps({"text": text}).encode(), headers={"content-type": "application/json"})\n    try:\n        with urllib.request.urlopen(req, timeout=5) as r:\n            out = json.load(r).get("out")\n        return out if isinstance(out, str) and len(out.encode()) < len(text.encode()) else text\n    except Exception:\n        return text` },
@@ -165,11 +165,12 @@ const STYLE = `<style>
 .ratio{display:flex;height:12px;border-radius:6px;overflow:hidden;margin:6px 0 2px;background:var(--line,#1b3048)}
 .ratio i{display:block;height:100%;background:var(--sea);transform-origin:left;animation:grow 1.1s var(--ease,ease) both}
 @keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
-.plugs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,21rem),1fr));gap:var(--s4,24px);margin:var(--s4,24px) 0}
+.plugs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,34rem),1fr));gap:var(--s4,24px);margin:var(--s4,24px) 0}
 .plug{display:flex;flex-direction:column;gap:8px;min-width:0}
 .plug h3{margin:0}
 .plug p{margin:0}
-.plug pre{margin:0 0 6px;white-space:pre-wrap;word-break:break-all;font-size:13.5px}
+.plug pre{margin:0 0 6px;font-size:13.5px}
+.plug pre code::before{content:"";float:right;width:60px;height:28px}
 @media (prefers-reduced-motion:reduce){.ratio i{animation:none}}
 </style>`;
 
@@ -200,7 +201,7 @@ ${M ? `<p><small>The MCP list: the open door's <code>tools/list</code> as one JS
   const plugBox = (c) => `<div class="box plug" id="plug-${esc(c.id)}"><h3>${esc(c.name)}</h3>${lines(c.lines)}${c.note ? `<p class="muted"><small>${esc(c.note)}</small></p>` : ''}${c.more ? `<p><small><a href="${esc(rel(c.more))}">The install button for ${esc(c.name)} on /connect</a></small></p>` : ''}${c.file ? `<p><small>The callback: <a href="${esc(c.file)}" rel="noopener">integrations/gateways/litellm_mare_compress.py</a></small></p>` : ''}${checked(c.docs)}</div>`;
   const plugHtml = P ? `<p>The levers one step away in the clients and gateways agents already run in. The lean door goes in where a client adds an MCP server; every line follows the client's own documentation, read on ${esc(P.checked)} and linked under it. The reading levers need nothing installed: since=, budget= and fields= are parameters of the doors above. Every MCP client on <a href="/connect">/connect</a> has the lean door as a second option beside the full one.</p>
 <div class="plugs">${P.clients.map(plugBox).join('')}</div>
-<div class="box plug" id="plug-compress"><h3>/compress in your pipeline</h3><p>${esc(P.compress.what)}</p>${lines(P.compress.lines)}<p><small>Ready for a gateway: ${P.compress.files.map((f) => `<a href="${esc(f.url)}" rel="noopener">${esc(f.name)}</a>`).join(' · ')}. Both send only tool results above a size, take the answer only when it is smaller and keep the original text on any error or timeout.</small></p>${checked(P.compress.docs)}</div>` : '';
+<div class="plugs"><div class="box plug" id="plug-compress"><h3>/compress in your pipeline</h3><p>${esc(P.compress.what)}</p>${lines(P.compress.lines)}<p><small>Ready for a gateway: ${P.compress.files.map((f) => `<a href="${esc(f.url)}" rel="noopener">${esc(f.name)}</a>`).join(' · ')}. Both send only tool results above a size, take the answer only when it is smaller and keep the original text on any error or timeout.</small></p>${checked(P.compress.docs)}</div></div>` : '';
   const body = `${STYLE}<h1>The engine room of the sea</h1>
 <p class="hero-n"><b>${n(L.lossless.saved)}</b>tokens the engine room spared agents without losing anything · ${n(L.lossless.answers + L.lossy.answers)} ${L.lossless.answers + L.lossy.answers === 1 ? 'answer' : 'answers'} · lossy, apart: ${n(L.lossy.saved)}</p>
 <p class="pulse">Open, no account: six measured levers, one public ledger. Nothing changes unless an agent asks.</p>

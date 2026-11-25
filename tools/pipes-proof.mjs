@@ -212,8 +212,8 @@ await proof('the lines: Claude Code, Cursor, VS Code, Codex, Gemini CLI, the Ope
   assert.match(t('langchain'), new RegExp(`from langchain_mcp_adapters\\.client import MultiServerMCPClient[\\s\\S]*MultiServerMCPClient\\(\\{"mare-lean": \\{"transport": "http", "url": "${LEAN}"\\}\\}\\)[\\s\\S]*await client\\.get_tools\\(\\)`));
   assert.match(t('langchain', 1), new RegExp(`from langchain\\.mcp import MCPAdapter[\\s\\S]*async with MCPAdapter\\("${LEAN}"\\) as sea:[\\s\\S]*await sea\\.list_tools\\(\\)`));
   assert.match(t('vercel-ai'), new RegExp(`import \\{ createMCPClient \\} from '@ai-sdk/mcp';[\\s\\S]*createMCPClient\\(\\{ transport: \\{ type: 'http', url: '${LEAN}' \\} \\}\\)[\\s\\S]*tools: await sea\\.tools\\(\\)[\\s\\S]*onEnd: async \\(\\) => \\{ await sea\\.close\\(\\); \\}`));
-  const body = JSON.parse(/-d '(\{.*\})'$/.exec(t('openai-responses'))[1]), tool = body.tools[0];
-  assert.ok(t('openai-responses').startsWith('curl https://api.openai.com/v1/responses -H "Authorization: Bearer $OPENAI_API_KEY"'));
+  const body = JSON.parse(/-d '(\{[\s\S]*\})'$/.exec(t('openai-responses'))[1]), tool = body.tools[0];
+  assert.ok(t('openai-responses').startsWith('curl https://api.openai.com/v1/responses \\\n  -H "Authorization: Bearer $OPENAI_API_KEY" \\\n  -H \'content-type: application/json\' \\\n  -d \'{'));
   assert.equal(tool.type, 'mcp'); assert.equal(tool.server_url, LEAN); assert.match(tool.server_label, /^[a-z_]+$/);
   assert.deepEqual(tool.require_approval, { never: { tool_names: ['read_page', 'think', 'find_tools'] } }, 'read-only tools unasked; call_tool asks first');
   assert.equal(t('litellm'), `mcp_servers:\n  mare_lean:\n    url: "${LEAN}"\n    transport: "http"\n    auth_type: "none"`);
