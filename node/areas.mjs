@@ -462,7 +462,7 @@ export function createAreas(h) {
         reading: { readsToday: reads?.total || 0, tokensSpared30d: sv?.last30days?.measuredBy?.markdown ?? sv?.last30days?.tokens?.measured ?? 0 }, doors: { doors: DOORS.length },
         saved: sv ? { reuses30d: sv.last30days.reuses, tokens30d: sv.last30days.tokens, wh30d: sv.last30days.wh, reusesAll: sv.all.reuses, whAll: sv.all.wh, since: sv.since, engine30d: sv.last30days.measuredBy?.engine || 0,
           // every token spared so far: measured (Markdown) and modelled (reuses), mid = measured + the middle of the modelled range
-          tokensAll: { mid: sv.all.tokens.mid, measured: sv.all.tokens.measured, modelled: sv.all.modelled.mid, low: sv.all.tokens.low, high: sv.all.tokens.high } } : null };
+          tokensAll: { mid: sv.all.tokens.mid, measured: sv.all.tokens.measured, markdown: sv.all.measuredBy?.markdown ?? sv.all.tokens.measured, engine: sv.all.measuredBy?.engine || 0, modelled: sv.all.modelled.mid, low: sv.all.tokens.low, high: sv.all.tokens.high } } : null };
     },
   };
   return areas;
