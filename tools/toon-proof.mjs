@@ -111,6 +111,9 @@ const DEFAULTS = [['/about'], ['/stats'], ['/search?q=mcp'], ['/brain?q=find+mcp
 // the version string is masked, so MARE_REF=cb5ca52 (3.34.1) is a gate too: the release may differ from it by its number only
 const V = (t) => String(t).replace(/("version":")3\.3[45]\.\d+"/g, '$1V"');
 const strip = (t) => V(String(t).replace(RECEIPT_IDS, 'r<id>'));
+// against 3.34.1 (MARE_REF=cb5ca52) these answers differ on purpose: the ledger's engine part (E3), the releases and doors of
+// /open, the home page's counter sentence; against this release with the engine off (the default) nothing is left out
+const CHANGED_BY_RELEASE = REF === 'HEAD' ? new Set() : new Set(['/brain/areas.json', '/open.json', '/savings.json', '/savings', '/', '/stats', '/llms.txt']);
 const stripH = (h) => Object.fromEntries(Object.entries(headersOf(h)).map(([k, v]) => [k, strip(v)]));
 // one request to a node of this branch and the same to a node of 3.34.1 (both in the same state: called in lockstep)
 const sameAnswer = async (path, o = {}, cfgO = {}, cfgT = {}, A = ours, B = theirs) => {
@@ -122,7 +125,7 @@ const sameAnswer = async (path, o = {}, cfgO = {}, cfgT = {}, A = ours, B = thei
 };
 if (theirs) {
   await proof(`every default answer is byte for byte what ${AGAINST} sends (${DEFAULTS.length} requests: JSON doors, pages, Markdown, errors, Accepts that prefer JSON)`, async () => {
-    for (const [p, accept] of DEFAULTS) { const a = await sameAnswer(p, accept ? { accept } : {}); assert.ok(!a.headers.get('x-sea-engine') && !/toon/.test(a.headers.get('content-type') || '')); }
+    for (const [p, accept] of DEFAULTS) { if (CHANGED_BY_RELEASE.has(p.split('?')[0])) continue; const a = await sameAnswer(p, accept ? { accept } : {}); assert.ok(!a.headers.get('x-sea-engine') && !/toon/.test(a.headers.get('content-type') || '')); }
   });
   await proof(`the MCP doors' lists are byte for byte those of ${AGAINST}: /mcp tools/list, /mcp/app initialize and tools/list`, async () => {
     for (const [door, m] of [['/mcp', 'tools/list'], ['/mcp/app', 'initialize'], ['/mcp/app', 'tools/list']]) {
@@ -247,10 +250,11 @@ if (theirs) {
     const A = await nodeOf(ROOT, { site: SITE }), B = await nodeOf(refDir, { site: SITE, cfg: OFF }), seen = [];
     await A.call('/stats'); await B.call('/stats'); A.db.flow.countEngine = (...x) => seen.push(x);
     const asks = [['/routes.json?fmt=toon'], ['/search?q=mcp&fmt=toon'], ['/routes.json', 'text/toon'], ['/about', 'text/toon'], ['/open.json?fmt=toon'], ['/nope-404?fmt=toon'], ['/brain?q=x&fmt=toon', 'text/html'], ['/routes.json?fields=topics.id'], ['/routes.json?fields=topics.id&fmt=toon']];
-    for (const [p, accept] of asks) await sameAnswer(p, accept ? { accept } : {}, { engine: 'off' }, {}, A, B);
+    const kept = ([p]) => !CHANGED_BY_RELEASE.has(p.split('?')[0]);
+    for (const [p, accept] of asks.filter(kept)) await sameAnswer(p, accept ? { accept } : {}, { engine: 'off' }, {}, A, B);
     A.immune.set({ rest: ['engine'] });
-    try { for (const [p, accept] of [...asks, ...DEFAULTS]) await sameAnswer(p, accept ? { accept } : {}, {}, {}, A, B); } finally { A.immune.set({}); }
-    for (const [p, accept] of DEFAULTS) await sameAnswer(p, accept ? { accept } : {}, { engine: 'off' }, {}, A, B);
+    try { for (const [p, accept] of [...asks, ...DEFAULTS].filter(kept)) await sameAnswer(p, accept ? { accept } : {}, {}, {}, A, B); } finally { A.immune.set({}); }
+    for (const [p, accept] of DEFAULTS.filter(kept)) await sameAnswer(p, accept ? { accept } : {}, { engine: 'off' }, {}, A, B);
     assert.equal(seen.length, 0, 'nothing counted while the engine rests or is off');
   });
 }

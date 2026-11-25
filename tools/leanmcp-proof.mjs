@@ -168,9 +168,9 @@ if (theirs) {
   const strip = (t) => V(String(t).replace(RECEIPT_IDS, 'r<id>'));
   await proof(`the discovery documents name the lean door in one line each (server card, agent card, /connect), and differ from ${AGAINST} by nothing else`, async () => {
     const sc = JSON.parse((await ours.call('/.well-known/mcp/server-card.json')).text), sc0 = (await theirs.call('/.well-known/mcp/server-card.json')).text;
-    assert.deepEqual(sc.remotes[1], { type: 'streamable-http', url: `${BASE}/mcp/lean` }); sc.remotes.splice(1, 1); assert.equal(JSON.stringify(sc), sc0);
+    assert.deepEqual(sc.remotes[1], { type: 'streamable-http', url: `${BASE}/mcp/lean` }); sc.remotes.splice(1, 1); assert.equal(V(JSON.stringify(sc)), V(sc0));
     const ac = JSON.parse((await ours.call('/.well-known/agent-card.json')).text), ac0 = (await theirs.call('/.well-known/agent-card.json')).text, line = ` (the lean door, 4 tools that reach all: ${BASE}/mcp/lean)`;
-    assert.ok(ac.description.includes(line)); ac.description = ac.description.replace(line, ''); assert.equal(JSON.stringify(ac), ac0);
+    assert.ok(ac.description.includes(line)); ac.description = ac.description.replace(line, ''); assert.equal(V(JSON.stringify(ac)), V(ac0));
     const cj = (await ours.call('/connect.json')).text, cj0 = (await theirs.call('/connect.json')).text, lean = cj.split('\n').filter((l) => l.startsWith('"lean":'));
     assert.equal(lean.length, 1); assert.match(lean[0], /"url":"https:\/\/mare\.test\/mcp\/lean","tools":4/); assert.equal(strip(cj.split('\n').filter((l) => !l.startsWith('"lean":')).join('\n')), strip(cj0));
     const cp = (await ours.call('/connect', { accept: 'text/html' })).text, cp0 = (await theirs.call('/connect', { accept: 'text/html' })).text, para = /<p id="door-lean">[^\n]*<\/p>\n/;
@@ -183,7 +183,7 @@ if (theirs) {
       for (const m of ['initialize', 'tools/list']) {
         const p = m === 'initialize' ? INIT : undefined, l = await A.rpc('/mcp/lean', m, p, { cfg }), o = await A.rpc('/mcp', m, p, { cfg }), r = await B.rpc('/mcp', m, p);
         assert.equal(l.text, o.text, `lean ${m} answers as /mcp`); assert.equal(V(o.text), V(r.text), `/mcp ${m} is ${AGAINST}`);
-        assert.equal((await A.rpc('/mcp/app', m, p, { cfg })).text, (await B.rpc('/mcp/app', m, p)).text);
+        assert.equal(V((await A.rpc('/mcp/app', m, p, { cfg })).text), V((await B.rpc('/mcp/app', m, p)).text));
       }
       for (const path of ['/.well-known/mcp/server-card.json', '/.well-known/agent-card.json', '/connect.json']) { const a = await A.call(path, { cfg }), b = await B.call(path); assert.equal(strip(a.text), strip(b.text), path); }
       assert.equal(strip((await A.call('/connect', { accept: 'text/html', cfg })).text), strip((await B.call('/connect', { accept: 'text/html' })).text));
