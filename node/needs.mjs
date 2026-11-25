@@ -78,7 +78,9 @@ function spark(h) {
 // meets a commission link), or null. Such a link says rel="sponsored" and carries the marker; the page says the rule
 export function buyPage({ need, slug, products, stores, country, base, at, decision, history = [], cm = null, cmMark = '', cmRule = '' }) {
   // (an offer that already pays through its catalog, promoted with a rate of its own, keeps its link as it is)
-  const go = (u, p, rel = 'nofollow noopener') => { const v = cm && u && !p?.promoted && typeof p?.commission !== 'number' ? cm(u) : null; return v ? { href: v, rel: 'sponsored nofollow noopener', mark: ` ${cmMark}` } : { href: u, rel, mark: '' }; };
+  // (cm gives { href, note }: a /via/ address, or for a rule handed out only directly, Amazon's, the visible tagged link, with the
+  // sentence that network asks for beside it)
+  const go = (u, p, rel = 'nofollow noopener') => { const v = cm && u && !p?.promoted && typeof p?.commission !== 'number' ? cm(u) : null; return v ? { href: v.href, rel: 'sponsored nofollow noopener', mark: ` ${cmMark}${v.note ? ` <small class="cm-note">${esc(v.note)}</small>` : ''}` } : { href: u, rel, mark: '' }; };
   let marked = 0; const seen = (l) => { if (l.mark) marked++; return l; };
   const canon = `${base}/buy/${slug}`, n = products.length, shops = new Set(products.map((p) => p.storeHost)).size;
   const T = title(need), cheapest = products.length ? products.reduce((a, b) => (b.price < a.price && b.currency === a.currency ? b : a)) : null;

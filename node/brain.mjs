@@ -7,6 +7,7 @@
 // Everything is reachable with plain GET links, so even an agent that can only fetch pages can think with the sea.
 import { slugOf } from './needs.mjs';
 import { briefFor } from './brief.mjs';
+import { uncommission } from './commission.mjs';
 
 export const BRAIN = { halfLifeDays: 30, tokCap: 300, notesPerPath: 8, mindNotes: 300, mindNoteLen: 600, layPerHour: 40, ratePerHour: 120, minds: 400 * 86400 };
 
@@ -14,7 +15,8 @@ export function createBrain(h) {
   const { kv, update, emit, resident, allow, api, SeaError, clean, strip, now, https, toks, sha, overlap, DAY } = h;
   const LIMITS = new Set(['under', 'below', 'over', 'size', 'cheap', 'best', 'buy', 'need', 'want', 'find', 'for', 'with', 'the', 'and', 'eur', 'usd', 'euro', 'dollar', 'please', 'online', 'shop', 'store']);
   const topicOf = (q) => [...new Set(toks(q).filter((w) => !/^\d+$/.test(w) && !LIMITS.has(w)))].slice(0, 8);
-  const canon = (u) => { try { const x = new URL(String(u)), v = x.searchParams.get('variant'); return `${x.hostname.replace(/^www\./, '')}${x.pathname.replace(/\/+$/, '')}${v ? `?variant=${v}` : ''}`; } catch { return String(u || ''); } };
+  // (a commission link of this node is read as the shop's own address: the brain keeps clean addresses, node/commission.mjs)
+  const canon = (u) => { try { const x = new URL(String(uncommission(u))), v = x.searchParams.get('variant'); return `${x.hostname.replace(/^www\./, '')}${x.pathname.replace(/\/+$/, '')}${v ? `?variant=${v}` : ''}`; } catch { return String(u || ''); } };
   const ipKey = async (ctx) => (await sha(`${ctx?.ip || 'unknown'}|brain|${now().slice(0, 10)}`)).slice(0, 10);
   const days = (t) => (Date.now() - Date.parse(t || 0)) / 864e5;
   // how strongly a path fires: walks, confirmations, a verifier's seal, notes — fading with time since it was last used
@@ -33,7 +35,7 @@ export function createBrain(h) {
   }
   // lay a path, or strengthen one that already exists for the same task and place
   async function lay({ task, to, title, kind, note, laidBy, checked, by }) {
-    const url = https(to); if (!url) throw new SeaError('INVALID_ARGUMENT', 'to must be an https address');
+    const url = https(uncommission(to)); if (!url) throw new SeaError('INVALID_ARGUMENT', 'to must be an https address');
     const t = topicOf(task); if (!t.length) throw new SeaError('INVALID_ARGUMENT', 'say the task in words (what the place is good for)');
     const id = (await sha(`${t.slice().sort().join(' ')}|${canon(url)}`)).slice(0, 14);
     let fresh = false;

@@ -55,8 +55,10 @@ export function wrapTarget(raw, base) {
 // the via address for a place; q (the task) and p (from a private memory) ride along for the count, never to the place.
 // c (the minute) marks an address handed out by a door the sea already counted the click at (/d/…, /go/…): the walk
 // that follows within two minutes is carried as always, but not counted a second time
-export function viaUrl(url, { base, q, priv, counted } = {}) {
-  const p = new URLSearchParams(); if (q) p.set('q', String(q).slice(0, 120)); if (priv) p.set('p', '1'); if (counted) p.set('c', String(Math.floor(counted / 60000)));
+// m marks an address the sea handed out as a commission link, said so where it stands (commission: true in JSON, the words
+// beside the link on a page; node/commission.mjs): only such an address may carry a commission when a person opens it
+export function viaUrl(url, { base, q, priv, counted, m } = {}) {
+  const p = new URLSearchParams(); if (q) p.set('q', String(q).slice(0, 120)); if (priv) p.set('p', '1'); if (counted) p.set('c', String(Math.floor(counted / 60000))); if (m) p.set('m', '1');
   const s = p.toString();
   return `${String(base).replace(/\/+$/, '')}/via/${encodeVia(url)}${s ? `?${s}` : ''}`;
 }
@@ -70,7 +72,7 @@ export const ADDRESS_KEYS = new Set(['url', 'href', 'to', 'go', 'target', 'next'
 // the rule once; the address itself stays the via address (the commission is added when a person's browser opens it)
 export function rewriteForAgents(payload, { base, q, priv, keys = ADDRESS_KEYS, anyKey = false, cm, rule } = {}) {
   let n = 0, marked = 0, net = null;
-  const swap = (x) => { const t = wrapTarget(x, base); if (!t) return x; n++; if (cm) { const c = cm(t); if (c) { marked++; net = c.network; } } return viaUrl(t, { base, q, priv }); };
+  const swap = (x) => { const t = wrapTarget(x, base); if (!t) return x; n++; let c = null; if (cm) { c = cm(t); if (c) { marked++; net = c.network; } } return viaUrl(t, { base, q, priv, m: !!c }); };
   const walk = (v, depth) => {
     if (depth > 14 || v == null || typeof v !== 'object') return v;
     if (Array.isArray(v)) { let out = null; for (let i = 0; i < v.length; i++) { const x = v[i], y = typeof x === 'string' ? (anyKey ? swap(x) : x) : walk(x, depth + 1); if (y !== x) { out ||= v.slice(); out[i] = y; } } return out || v; }
@@ -198,7 +200,9 @@ export async function viaProxy({ req, token, base, ip, ua, readOnly = false, onH
   // only a person's own browser can carry a shop's commission. The walk is counted as any walk; the sea fetches nothing
   // (it never opens a commission link itself), and the place's link carries the commission where one applies
   if (person && typeof commission === 'function') {
-    let c = null; try { c = commission(target); } catch {}
+    // a commission only on an address the sea handed out as a commission link, said so where it stood (m): every other
+    // address leads the person to the place as it is
+    let c = null; if (at.searchParams.get('m') === '1') { try { c = commission(target); } catch {} }
     hit(302);
     if (!priv) { try { onWalk?.(d.url, q); } catch {} }
     return new Response(null, { status: 302, headers: { location: c?.url || target, 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow', 'x-via': 'mare-liberum', 'x-via-target': target, ...(c ? { 'x-via-commission': c.network } : {}), ...VIA_CORS } });

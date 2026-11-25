@@ -233,7 +233,9 @@ await proof('/sitemap.xml names the hubs first, dated by the newest hub; /sitema
   const idx = (await call('/sitemap.xml')).text; assert.match(idx, new RegExp(`^<\\?xml[^>]*\\?><sitemapindex[^>]*><sitemap><loc>${BASE}/sitemaps/hubs\\.xml</loc><lastmod>${STATIC_DAY}</lastmod></sitemap>`));
   const site = (await call('/sitemaps/site.xml')).text, locs = [...site.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1].slice(BASE.length) || '/');
   for (const p of HUB_PATHS) assert.ok(!locs.includes(p), `hub ${p} stands in site.xml`);
-  for (const p of ['/route', '/pulse', '/treasury', '/.well-known/agent-card.json', '/via/howto', '/pay/howto']) assert.ok(locs.includes(p), `${p} stays for agents (the till release lists it)`);
+  for (const p of ['/pulse', '/.well-known/agent-card.json', '/via/howto', '/pay/howto']) assert.ok(locs.includes(p), `${p} stays for agents (the till release lists it)`);
+  // (3.34.0: /route and /treasury answer noindex, and a sitemap names no page that asks not to be indexed; Search Console flags it)
+  for (const p of ['/route', '/treasury']) assert.ok(!locs.includes(p), `${p} answers noindex and stands in no sitemap`);
   assert.ok(locs.includes('/atlas/country/de') && locs.some((p) => p.startsWith('/brief/')) && locs.includes('/llms.txt'), 'the other pages stay');
   for (const m of ['site', 'brain', 'buy', 'briefs-i18n', 'sites-live']) assert.ok(idx.includes(`/sitemaps/${m}.xml`), m);
   assert.ok(idx.includes(`<loc>${BASE}/sitemaps/site.xml</loc></sitemap>`), 'site.xml is not dated by the build');

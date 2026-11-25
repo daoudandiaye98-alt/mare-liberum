@@ -136,10 +136,23 @@ const checks = {
     assert.ok(x.includes(`<loc>${BASE}/buy/${c}</loc><changefreq>`), 'never read: as before, without a day');
     assert.equal((x.match(/<url>/g) || []).length, NEEDS.length - 1);
   },
+  // the works: real pages (a result in words, its task, its license), indexable once agents confirmed them (net votes 2 or
+  // more): exactly those stand in works.xml, dated by the day they were published; a node without a works store has an empty map
+  async works(t) {
+    const W = (id, up, down, at) => ({ id, votes: { up, down }, at });
+    const x = t.core.worksSitemap(BASE, [W('abcdef1', 3, 0, '2026-11-20T10:00:00Z'), W('abcdef2', 2, 1, '2026-11-21T10:00:00Z'), W('abcdef3', 5, 1, '2999-01-01T00:00:00Z'), W('bad id!', 9, 0, '2026-11-20'), W('abcdef4', 0, 0, '2026-11-22T00:00:00Z')], TODAY);
+    assert.ok(x.includes(`<url><loc>${BASE}/works/abcdef1</loc><lastmod>2026-11-20</lastmod></url>`), 'a confirmed work, dated by its day');
+    assert.ok(x.includes(`<url><loc>${BASE}/works/abcdef3</loc></url>`), 'no day from the future');
+    assert.ok(!x.includes('abcdef2') && !x.includes('abcdef4') && !x.includes('bad id'), 'a work below the rule says noindex itself and stands in no map');
+    const r = await t.call('/sitemaps/works.xml'); assert.equal(r.status, 200); assert.match(r.text, /<urlset[^>]*><\/urlset>$/, 'a node without a works store: an empty map');
+    const { workPage } = await import(pathToFileURL(join(ROOT, 'node/pages.mjs')).href), w = { id: 'abcdef1', kind: 'research', title: 'A result', license: 'CC BY 4.0', score: 1, votes: { up: 1, down: 0 }, at: '2026-11-20T10:00:00Z', body: 'text' };
+    assert.match(workPage(BASE, w), /<meta name="robots" content="noindex">/, 'the page agrees: below the rule it says noindex'); assert.doesNotMatch(workPage(BASE, { ...w, votes: { up: 2, down: 0 } }), /noindex/);
+  },
   async families(t) {
     // every family of pages has its map, each map holds at most 50,000 addresses, robots.txt names the index
     const idx = (await t.call('/sitemap.xml')).text;
-    for (const m of ['hubs', 'site', 'briefs-i18n', 'buy', 'brain', 'sites-live']) assert.ok(idx.includes(`${BASE}/sitemaps/${m}.xml`), m);
+    for (const m of ['hubs', 'site', 'briefs-i18n', 'buy', 'brain', 'works', 'sites-live']) assert.ok(idx.includes(`${BASE}/sitemaps/${m}.xml`), m);
+    for (const p of ['/route', '/treasury']) assert.ok(!(await t.call('/sitemaps/site.xml')).text.includes(`<loc>${BASE}${p}</loc>`), `${p} answers noindex and stands in no map`);
     const src = readFileSync(join(ROOT, 'node/core.mjs'), 'utf8'); assert.match(src, /const PER_MAP = (\d+);/); assert.ok(Number(/const PER_MAP = (\d+);/.exec(src)[1]) <= 50000); assert.match(src, /ds\.slice\(0, 45000\)/);
     assert.match(readFileSync(join(ROOT, 'site/robots.txt'), 'utf8'), /^Sitemap: https:\/\/mareliberum\.dev\/sitemap\.xml$/m);
     const site = (await t.call('/sitemaps/site.xml')).text; assert.ok(site.includes(`<loc>${BASE}/status</loc>`), '/status, a page that stood in IndexNow only, has its place');
@@ -156,7 +169,8 @@ await proof('a look: the first knows no day; the same page is no change; a chang
 console.log('lastmod (M3)');
 await proof('hubs.xml: a live hub names no day before a change was seen, then that day; a fixed hub never older than STATIC_DAY; no day from the future; the index takes the newest', () => checks.sitemap(T));
 await proof('buy.xml: a need is dated by the last move of its pick or price; a need with fewer than 3 offers on the current is left out; a need never read stays, without a day', () => checks.buy(T));
-await proof('every family has its map, each map at most 50,000 addresses, robots.txt names the index; /status is listed and indexable', () => checks.families(T));
+await proof('every family has its map (works too), each map at most 50,000 addresses, robots.txt names the index; /status is listed and indexable; /route and /treasury (noindex) are not', () => checks.families(T));
+await proof('works.xml: only works agents confirmed (the rule that lifts their noindex), dated by the day they were published, none from the future', () => checks.works(T));
 console.log('IndexNow, the second path');
 await proof('after the daily run, at most every 3 hours: only the hubs that changed, the needs that moved and pages never told; no thin page; the queue empties; /indexnow.json says so', () => checks.indexnow(T));
 await proof('at most 10,000 addresses in one post; the rest in the next, each once', () => checks.cap(T));
@@ -172,6 +186,7 @@ const MUTANTS = [
   ['what was told stays in the queue', 'core.mjs', 'if (r.status >= 200 && r.status < 300) { await t.sent(paths); await t.known(fresh); }', 'if (r.status >= 200 && r.status < 300) { await t.known(fresh); }', 'indexnow'],
   ['every hub is told, changed or not', 'core.mjs', 'const paths = [...new Set([...queued, ...fresh])]', 'const paths = [...new Set([...queued, ...fresh, ...fam.hubs])]', 'indexnow'],
   ['buy.xml keeps the thin needs', 'core.mjs', 'if (snap && Number.isFinite(snap.offers) && snap.offers < 3) return \'\';', '', 'buy'],
+  ['works.xml lists unconfirmed works', 'core.mjs', '&& (w.votes?.up || 0) - (w.votes?.down || 0) >= 2)', ')', 'works'],
 ];
 for (const [what, file, from, to, check] of MUTANTS) {
   await proof(`broken: ${what} → ${check} fails`, async () => {
