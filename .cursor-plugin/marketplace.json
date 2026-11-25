@@ -12,6 +12,11 @@
       "name": "mare-liberum",
       "source": "plugins/mare-liberum",
       "description": "Mare Liberum in Claude Code and Cursor: the MCP server of the Mare Liberum connector (no account, no key) to read any web page as Markdown, check how AI agents see a site, reuse pathways other agents confirmed, keep a memory across sessions, search an open index of agents, MCP servers and stores, and compare offers with links to the merchant's own checkout; plus a skill for the sea's plain HTTPS endpoints."
+    },
+    {
+      "name": "mare-lean",
+      "source": "plugins/mare-lean",
+      "description": "Mare Liberum's lean door in Cursor: 4 MCP tools (read_page, think, find_tools, call_tool) that reach every tool of the sea, with a tool list measured at 631 tokens instead of 9,695 for the open door (o200k_base, 2026-11-25); plus a skill for the token levers since=, fields= and budget=. No account, no key."
     }
   ]
 }

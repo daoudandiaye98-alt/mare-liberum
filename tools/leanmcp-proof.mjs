@@ -25,7 +25,7 @@ globalThis.fetch = async (u) => { throw new Error(`the proof does not use the ne
 freezeTime();
 const SITE = { '/llms.txt': { body: readFileSync(join(ROOT, 'site/llms.txt'), 'utf8'), type: 'text/plain; charset=utf-8' } };
 // the version string is masked, so MARE_REF=cb5ca52 (3.34.1) is a gate too: the release may differ from it by its number only
-const V = (t) => String(t).replace(/("version":")3\.3[45]\.\d+"/g, '$1V"');
+const V = (t) => String(t).replace(/("version":")3\.3[4-6]\.\d+"/g, '$1V"');
 const BASE = 'https://mare.test', refDir = refTree(ROOT);
 const ours = await nodeOf(ROOT, { site: SITE, base: BASE }), theirs = refDir ? await nodeOf(refDir, { site: SITE, base: BASE, cfg: OFF }) : null;
 const counted = [];
@@ -172,9 +172,13 @@ if (theirs) {
     const ac = JSON.parse((await ours.call('/.well-known/agent-card.json')).text), ac0 = (await theirs.call('/.well-known/agent-card.json')).text, line = ` (the lean door, 4 tools that reach all: ${BASE}/mcp/lean)`;
     assert.ok(ac.description.includes(line)); ac.description = ac.description.replace(line, ''); assert.equal(V(JSON.stringify(ac)), V(ac0));
     const cj = (await ours.call('/connect.json')).text, cj0 = (await theirs.call('/connect.json')).text, lean = cj.split('\n').filter((l) => l.startsWith('"lean":'));
-    assert.equal(lean.length, 1); assert.match(lean[0], /"url":"https:\/\/mare\.test\/mcp\/lean","tools":4/); assert.equal(strip(cj.split('\n').filter((l) => !l.startsWith('"lean":')).join('\n')), strip(cj0));
-    const cp = (await ours.call('/connect', { accept: 'text/html' })).text, cp0 = (await theirs.call('/connect', { accept: 'text/html' })).text, para = /<p id="door-lean">[^\n]*<\/p>\n/;
-    assert.match(cp, para); assert.equal(strip(cp.replace(para, '')), strip(cp0));
+    assert.equal(lean.length, 1); assert.match(lean[0], /"url":"https:\/\/mare\.test\/mcp\/lean","tools":4/);
+    // since 3.36 every client that takes an MCP address carries the lean door as its second option (clients[].lean, and a
+    // block of its own in its box on the page): the doors' line and those, nothing else
+    const cjo = JSON.parse(cj); delete cjo.doors.lean; assert.equal(cjo.clients.filter((c) => c.lean).length, 18); for (const c of cjo.clients) delete c.lean;
+    assert.equal(strip(`${ours.core.lineJson(cjo)}\n`), strip(cj0));
+    const cp = (await ours.call('/connect', { accept: 'text/html' })).text, cp0 = (await theirs.call('/connect', { accept: 'text/html' })).text, para = /<p id="door-lean">[^\n]*<\/p>\n/, opt = /<div class="lean-opt" id="lean-[a-z0-9-]+">[\s\S]*?<\/div>\n/g;
+    assert.match(cp, para); assert.equal((cp.match(opt) || []).length, 18); assert.equal(strip(cp.replace(para, '').replace(opt, '')), strip(cp0));
   });
   await proof(`resting ("engine" in rest of immune:policy) or switched off (MARE_ENGINE=off): /mcp/lean answers as /mcp; /mcp, the app door, the cards and /connect are ${AGAINST} byte for byte`, async () => {
     const A = await nodeOf(ROOT, { site: SITE, base: BASE }), B = await nodeOf(refDir, { site: SITE, base: BASE, cfg: OFF }), seen = [];

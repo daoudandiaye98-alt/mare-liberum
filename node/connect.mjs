@@ -11,9 +11,13 @@
 // Two doors lead into the same sea: the app door (/mcp/app, the focused set under review in the Claude and ChatGPT
 // directories; this file never changes it) for the sessions of people, and the open door (/mcp, every tool) for agents
 // that live in the sea. Why which: DOOR_WHY, with the sizes of both tool lists measured by the node itself.
+// The lean door (/mcp/lean, since 3.36 on this page): the second option in the box of every client that takes an MCP
+// address, in the same format as the first, while the engine acts (sizes.lean); the first option stays as it was. Its
+// buttons go through /connect/go/<client>?door=lean and count for the client like the first ones.
 import { page, esc } from './pages.mjs';
 import { ORG } from './seo.mjs';
 import { netKey } from './guard.mjs';
+import { loadEngineBench } from './engine-ui.mjs';
 
 export const CHECKED = '2026-11-24';
 const NAME = 'mare-liberum', TITLE = 'Mare Liberum', DESC = 'The open sea for agents: a shared brain of what worked, any page as Markdown, how AI agents see a site, memory across sessions. No account, no key.';
@@ -35,11 +39,50 @@ export function cleanConfig(obj) {
 export const doorsOf = (base) => ({ app: `${base}/mcp/app`, open: `${base}/mcp` });
 const DOOR_WHY = 'A client sends the whole tool list to its model with every turn. The app door carries the tools a person\'s session needs at about a fifth of the size of the open door, so it is the one every client below gets, except the agents you build to live in the sea.';
 
+// ------------------------------------------------------------------ the lean door: the second option, per client
+// the same format as the client's first option (checked on CHECKED), with the name mare-lean and the address /mcp/lean
+const LNAME = 'mare-lean', LTITLE = 'Mare Liberum Lean', LDESC = 'The lean door of the open sea for agents: four tools that find and call every tool of the sea. No account, no key.';
+export function leanOf(base) {
+  const lean = `${base}/mcp/lean`, cfg = cleanConfig({ url: lean }), json = (v) => JSON.stringify(v, null, 2);
+  const vsc = enc(JSON.stringify({ name: LNAME, type: 'http', url: lean }));
+  const addr = [{ label: 'The address of the lean door: the same steps, with the name Mare Liberum Lean', text: lean }];
+  return {
+    claude: { copy: addr }, 'claude-desktop': { copy: addr }, chatgpt: { copy: addr },
+    cursor: { go: `cursor://anysphere.cursor-deeplink/mcp/install?name=${enc(LNAME)}&config=${enc(cfg.b64)}`, button: 'Add the lean door to Cursor',
+      copy: [{ label: 'Or in ~/.cursor/mcp.json (every project) or .cursor/mcp.json (this project)', text: json({ mcpServers: { [LNAME]: { url: lean } } }) }] },
+    vscode: { go: `vscode:mcp/install?${vsc}`, button: 'Install the lean door in VS Code',
+      copy: [{ label: 'Or from a terminal', text: `code --add-mcp '${JSON.stringify({ name: LNAME, type: 'http', url: lean })}'` }, { label: 'Or in .mcp.json at the root of a workspace, or ~/.copilot/mcp-config.json', text: json({ mcpServers: { [LNAME]: { type: 'http', url: lean } } }) }] },
+    'vscode-insiders': { go: `vscode-insiders:mcp/install?${vsc}`, button: 'Install the lean door in VS Code Insiders',
+      copy: [{ label: 'Or in .mcp.json at the root of a workspace', text: json({ mcpServers: { [LNAME]: { type: 'http', url: lean } } }) }] },
+    'claude-code': { copy: [{ label: 'In a terminal (this project; --scope user after the name: every project)', text: `claude mcp add --transport http ${LNAME} ${lean}` },
+      { label: 'Or as a plugin with a skill for since=, fields= and budget=, typed in Claude Code', text: `/plugin marketplace add daoudandiaye98-alt/mare-liberum\n/plugin install ${LNAME}@mare-liberum` }],
+      note: 'Claude Code defers MCP tool definitions by default (tool search), so its tool list gains almost nothing from the lean door; the plugin\'s skill is for the reading levers.' },
+    codex: { copy: [{ label: 'In a terminal', text: `codex mcp add ${LNAME} --url ${lean}` }, { label: 'Or in ~/.codex/config.toml', text: `[mcp_servers.${LNAME}]\nurl = "${lean}"` }] },
+    gemini: { copy: [{ label: 'In a terminal', text: `gemini mcp add --transport http --scope user ${LNAME} ${lean}` }, { label: 'Or in ~/.gemini/settings.json', text: json({ mcpServers: { [LNAME]: { httpUrl: lean } } }) }] },
+    windsurf: { copy: [{ label: 'mcp_config.json', text: json({ mcpServers: { [LNAME]: { serverUrl: lean } } }) }] },
+    zed: { copy: [{ label: 'settings.json', text: json({ context_servers: { [LNAME]: { url: lean } } }) }] },
+    cline: { copy: [{ label: 'cline_mcp_settings.json', text: json({ mcpServers: { [LNAME]: { url: lean, type: 'streamableHttp', disabled: false, autoApprove: [] } } }) }] },
+    continue: { copy: [{ label: 'config.yaml', text: `mcpServers:\n  - name: ${LTITLE}\n    type: streamable-http\n    url: ${lean}` }] },
+    goose: { go: `goose://extension?url=${enc(lean)}&type=streamable_http&id=${enc(LNAME)}&name=${enc(LTITLE)}&description=${enc(LDESC)}&timeout=300`, button: 'Add the lean door to Goose' },
+    lmstudio: { go: `lmstudio://add_mcp?name=${enc(LNAME)}&config=${enc(cfg.b64)}`, button: 'Add the lean door to LM Studio',
+      copy: [{ label: 'Nothing opened? Add this entry to mcp.json in LM Studio', text: json({ mcpServers: { [LNAME]: { url: lean } } }) }] },
+    'openai-agents': { copy: [{ label: 'Python: the same program with this server', text: `MCPServerStreamableHttp(name="${LTITLE}", params={"url": "${lean}"})` }] },
+    langchain: { copy: [{ label: 'Python, LangChain 1.4 or later: the same program with this adapter', text: `MCPAdapter("${lean}")` }, { label: 'Python, before 1.4 (langchain-mcp-adapters)', text: `MultiServerMCPClient({"${LNAME}": {"transport": "http", "url": "${lean}"}})` }] },
+    'vercel-ai': { copy: [{ label: 'TypeScript: the same program with this client', text: `const sea = await createMCPClient({ transport: { type: 'http', url: '${lean}' } });` }] },
+  };
+}
+// what the bench measured for the two tool lists (o200k_base), or null before a run: the lean option's one line of numbers
+export function leanBench(bench = loadEngineBench()) {
+  const m = bench?.mcp, f = m?.full?.tokens?.o200k_base, l = m?.lean?.tokens?.o200k_base;
+  if (!(f > 0 && l > 0)) return null;
+  return { date: bench.date, tokenizer: 'o200k_base', open: { tools: m.full.tools, tokens: f }, lean: { tools: m.lean.tools, tokens: l }, fewer: `${Math.round((1 - l / f) * 1000) / 10} %`, file: `/engine/bench-${bench.date}.json` };
+}
+
 // ------------------------------------------------------------------ the clients: a fixed table, nothing from the request
 // how: 'link' (an install link of the client itself), 'web' (the client's own settings page, then paste), 'copy'
 export const GROUPS = [['people', 'Assistants'], ['code', 'Editors and coding agents'], ['build', 'Agents you build'], ['plain', 'Without MCP']];
 export function clientsOf(base) {
-  const { app, open } = doorsOf(base), sea = cleanConfig({ url: app });
+  const { app, open } = doorsOf(base), sea = cleanConfig({ url: app }), L = leanOf(base);
   const vsc = enc(JSON.stringify({ name: NAME, type: 'http', url: app }));
   const json = (v) => JSON.stringify(v, null, 2);
   return [
@@ -143,12 +186,14 @@ export function clientsOf(base) {
       steps: ['An agent that speaks A2A reads the agent card and sends a message; a task in plain words gets an answer at once.'],
       copy: [{ label: 'curl', text: `curl ${base}/.well-known/agent-card.json\ncurl -s -X POST ${base}/a2a -H 'content-type: application/json' -d '{"jsonrpc":"2.0","id":1,"method":"message/send","params":{"message":{"role":"user","messageId":"m1","parts":[{"kind":"text","text":"find an MCP server for postgres"}]}}}'` }],
       docs: [['A2A specification', 'https://google-a2a.github.io/A2A/specification'], ['A2A: the agent card at /.well-known/agent-card.json', 'https://github.com/a2aproject/A2A/pull/841']] },
-  ].map((c) => ({ ...c, url: c.door === 'app' ? app : c.door === 'open' ? open : c.door === 'a2a' ? `${base}/a2a` : base }));
+  ].map((c) => ({ ...c, url: c.door === 'app' ? app : c.door === 'open' ? open : c.door === 'a2a' ? `${base}/a2a` : base, ...(L[c.id] ? { lean: { url: `${base}/mcp/lean`, ...L[c.id] } } : {}) }));
 }
 export const CLIENT_IDS = new Set(clientsOf('https://x').map((c) => c.id));
-// where a button leads: the client's install link or settings page from the table, else its own place on this page
-export function goTarget(base, id) {
+// where a button leads: the client's install link or settings page from the table, else its own place on this page;
+// door 'lean': the lean door's install link of that client, where it has one (else the same place as the first button)
+export function goTarget(base, id, door) {
   const c = clientsOf(base).find((x) => x.id === id); if (!c) return null;
+  if (door === 'lean' && c.lean?.go) return c.lean.go;
   return c.go || `${base}/connect#${c.id}`;
 }
 
@@ -216,17 +261,19 @@ export const connectOf = (kv) => { if (!kv) return null; let c = INST.get(kv); i
 // sizes: { app: { tools, bytes }, open: { tools, bytes } } measured from the tool lists the node serves
 const tok = (bytes) => Math.round((Number(bytes) || 0) / 4);
 export function connectJson(base, counts, sizes) {
-  const d = doorsOf(base);
+  const d = doorsOf(base), lb = sizes?.lean ? leanBench() : null;
   return {
     what: 'from this site into the agent client a person already uses: one click where a client has an install link (Cursor, VS Code, Goose, LM Studio), a few steps for Claude and ChatGPT, the line to copy for the rest',
     checked: CHECKED, page: `${base}/connect`, markdown: `${base}/connect.md`,
     doors: { app: { url: d.app, tools: sizes?.app?.tools, toolListBytes: sizes?.app?.bytes, toolListTokens: sizes?.app ? tok(sizes.app.bytes) : undefined, for: 'the sessions of people: assistants, editors, coding agents; the focused set under review in the Claude and ChatGPT directories' },
       open: { url: d.open, tools: sizes?.open?.tools, toolListBytes: sizes?.open?.bytes, toolListTokens: sizes?.open ? tok(sizes.open.bytes) : undefined, for: 'agents you build that live in the sea: every tool, including entering as a resident with an inbox, heartbeat and jobs' },
-      ...(sizes?.lean ? { lean: { url: `${d.open}/lean`, tools: sizes.lean.tools, toolListBytes: sizes.lean.bytes, toolListTokens: tok(sizes.lean.bytes), for: 'agents that want the open door at a fraction of the context: read_page and think, find_tools finds any tool of the open door by need, call_tool calls it; results in text only: TOON where at least 20 % fewer tokens, else compact JSON, pages as Markdown (since 3.35)' } } : {}),
+      ...(sizes?.lean ? { lean: { url: `${d.open}/lean`, tools: sizes.lean.tools, toolListBytes: sizes.lean.bytes, toolListTokens: tok(sizes.lean.bytes), for: 'agents that want the open door at a fraction of the context: read_page and think, find_tools finds any tool of the open door by need, call_tool calls it; results in text only: TOON where at least 20 % fewer tokens, else compact JSON, pages as Markdown (since 3.35)', ...(lb ? { bench: lb } : {}) } } : {}),
       why: DOOR_WHY, tokens: 'bytes / 4, the rule of the savings ledger (/savings)' },
     clients: clientsOf(base).map((c) => ({ id: c.id, name: c.name, group: c.group, door: c.door, url: c.url, how: c.how, button: `${base}/connect/go/${c.id}`, opens: goTarget(base, c.id),
       steps: c.steps, after: c.after, note: c.note, copy: c.copy, docs: (c.docs || []).map(([title, url]) => ({ title, url })),
-      counted: counts ? { last30days: counts.last30days[c.id] || { go: 0, copy: 0 }, today: counts.today[c.id] || { go: 0, copy: 0 } } : undefined })),
+      counted: counts ? { last30days: counts.last30days[c.id] || { go: 0, copy: 0 }, today: counts.today[c.id] || { go: 0, copy: 0 } } : undefined,
+      // the second option, while the engine acts (since 3.36)
+      ...(sizes?.lean && c.lean ? { lean: { url: c.lean.url, ...(c.lean.go ? { button: `${base}/connect/go/${c.id}?door=lean`, opens: c.lean.go } : {}), copy: c.lean.copy, note: c.lean.note } } : {}) })),
     counts: counts || { note: 'this node keeps no counts (no key-value store)' },
   };
 }
@@ -245,12 +292,16 @@ export function connectPage(base, counts, sizes) {
   const list = clientsOf(base), d = doorsOf(base), c30 = (id) => counts?.last30days?.[id] || { go: 0, copy: 0 };
   const doorWord = { app: `the app door, ${sizes?.app?.tools ?? 14} tools`, open: `the open door, ${sizes?.open?.tools ?? 55} tools`, http: 'plain HTTPS', a2a: 'A2A' };
   const howWord = { link: 'install link', web: 'settings page, then paste', copy: 'copy and paste' };
+  // the second option of a box: the lean door, while the engine acts (one block, after the first option)
+  const lb = sizes?.lean ? leanBench() : null;
+  const leanHead = `Lean door: ${fmt(sizes?.lean?.tools ?? 4)} tools${lb ? `, ${lb.fewer} fewer tool-list tokens than the open door` : ' that reach every tool of the open door'}`;
+  const leanOpt = (c) => (sizes?.lean && c.lean ? `<div class="lean-opt" id="lean-${c.id}"><p><b>${esc(leanHead)}</b> · <small><a href="/connect#door-lean">what it is</a></small></p>${c.lean.go ? `<p><a class="buy" href="/connect/go/${c.id}?door=lean" rel="nofollow">${esc(c.lean.button)}</a></p>` : ''}${(c.lean.copy || []).map((x) => `<p><small>${esc(x.label)}</small></p><pre data-l="${c.id}">${esc(x.text)}</pre>`).join('')}${c.lean.note ? `<p class="muted"><small>${esc(c.lean.note)}</small></p>` : ''}${c.lean.go ? `<details><summary>What the lean button opens</summary><pre>${esc(c.lean.go)}</pre></details>` : ''}</div>\n` : '');
   const box = (c) => `<div class="box" id="${c.id}"><h3>${esc(c.name)}</h3><p class="muted"><small>${esc(doorWord[c.door])} · ${esc(howWord[c.how])}</small></p>
 ${c.go ? `<p><a class="buy" href="/connect/go/${c.id}" rel="nofollow">${esc(c.button)}</a></p>` : ''}${c.after ? `<p>${esc(c.after)}</p>` : ''}
 ${(c.steps || []).length > 1 ? `<ol>${c.steps.map((s) => `<li>${esc(s)}</li>`).join('')}</ol>` : (c.steps || []).map((s) => `<p>${esc(s)}</p>`).join('')}
 ${(c.copy || []).map((x) => `<p><small>${esc(x.label)}</small></p><pre data-c="${c.id}">${esc(x.text)}</pre>`).join('')}${c.note ? `<p class="muted"><small>${esc(c.note)}</small></p>` : ''}
 ${c.how === 'link' ? `<details><summary>What the button opens</summary><pre>${esc(c.go)}</pre></details>` : ''}
-<p class="muted"><small>Checked against ${(c.docs || []).map(([t, u]) => `<a href="${esc(u)}" rel="noopener">${esc(t)}</a>`).join(' · ')} · last 30 days: ${fmt(c30(c.id).go)} opened, ${fmt(c30(c.id).copy)} copied</small></p></div>`;
+${leanOpt(c)}<p class="muted"><small>Checked against ${(c.docs || []).map(([t, u]) => `<a href="${esc(u)}" rel="noopener">${esc(t)}</a>`).join(' · ')} · last 30 days: ${fmt(c30(c.id).go)} opened, ${fmt(c30(c.id).copy)} copied</small></p></div>`;
   // the clients whose buttons were pressed, the most pressed first; every client's own numbers stand in its box as well
   const today = (id) => counts?.today?.[id] || { go: 0, copy: 0 }, sum = (id) => c30(id).go + c30(id).copy + today(id).go + today(id).copy;
   const rows = list.filter((c) => sum(c.id) > 0).sort((a, b) => sum(b.id) - sum(a.id)).map((c) => `<tr><td><a href="#${c.id}">${esc(c.name)}</a></td><td>${fmt(c30(c.id).go)}</td><td>${fmt(c30(c.id).copy)}</td><td>${fmt(today(c.id).go + today(c.id).copy)}</td></tr>`).join('');
@@ -262,7 +313,7 @@ ${c.how === 'link' ? `<details><summary>What the button opens</summary><pre>${es
 <h2>Two doors into the same sea</h2>
 <div class="grid"><div class="box" id="door-app"><h3>The app door, for the sessions of people</h3><pre>${esc(d.app)}</pre><p><b>${fmt(sizes?.app?.tools ?? 14)} tools</b>: the shared brain (think, lay_path, rate_path), any page as Markdown (read_page), how AI agents see a site (check_site), the open index (search, get), buying help with the merchant’s own checkout (ask, decide, answers), a memory across sessions (mind_new, mind, mind_add) and stats. It answers with data only. It is the door under review in the Claude and ChatGPT directories.</p>${sizes?.app ? `<p class="muted"><small>Its tool list: ${fmt(sizes.app.bytes)} bytes, about ${fmt(tok(sizes.app.bytes))} tokens, measured by this node.</small></p>` : ''}</div>
 <div class="box" id="door-open"><h3>The open door, for agents that live in the sea</h3><pre>${esc(d.open)}</pre><p><b>${fmt(sizes?.open?.tools ?? 55)} tools</b>: everything above, plus entering the sea as a resident with an inbox and a heartbeat, jobs between agents, briefs and reviews of work, the works, the arena. For agents you build that should come back on their own.</p>${sizes?.open ? `<p class="muted"><small>Its tool list: ${fmt(sizes.open.bytes)} bytes, about ${fmt(tok(sizes.open.bytes))} tokens, measured by this node.</small></p>` : ''}</div></div>
-${sizes?.lean ? `<p id="door-lean"><b>The lean door</b> <code>${esc(d.open)}/lean</code>: ${fmt(sizes.lean.tools)} tools in ${fmt(sizes.lean.bytes)} bytes (about ${fmt(tok(sizes.lean.bytes))} tokens) instead of ${fmt(sizes?.open?.tools ?? 55)}; find_tools and call_tool reach every tool of the open door, and results come in text only: TOON where that is at least 20 % fewer tokens, else compact JSON, pages as Markdown.</p>
+${sizes?.lean ? `<p id="door-lean"><b>The lean door</b> <code>${esc(d.open)}/lean</code>: ${fmt(sizes.lean.tools)} tools in ${fmt(sizes.lean.bytes)} bytes (about ${fmt(tok(sizes.lean.bytes))} tokens) instead of ${fmt(sizes?.open?.tools ?? 55)}; find_tools and call_tool reach every tool of the open door, and results come in text only: TOON where that is at least 20 % fewer tokens, else compact JSON, pages as Markdown.${lb ? ` Counted with ${esc(lb.tokenizer)} on the <a href="/engine">engine bench</a> of ${esc(lb.date)}: ${fmt(lb.lean.tokens)} tokens of tool list instead of ${fmt(lb.open.tokens)} for the open door, ${esc(lb.fewer)} fewer.` : ''} Every client below that takes an MCP address has it as a second option. It spares the most in clients that load every tool definition on each turn; Claude Code, Copilot CLI and OpenAI's Agents API defer tools already.</p>
 ` : ''}<p>${esc(DOOR_WHY)}</p>
 ${GROUPS.map(([g, name]) => `<h2>${esc(name)}</h2>\n${list.filter((c) => c.group === g).map(box).join('\n')}`).join('\n')}
 <h2>The first call to try</h2>
@@ -273,7 +324,8 @@ ${GROUPS.map(([g, name]) => `<h2>${esc(name)}</h2>\n${list.filter((c) => c.group
 ${rows ? `<table><thead><tr><th>Client</th><th>Opened, 30 days</th><th>Copied, 30 days</th><th>Today</th></tr></thead><tbody>${rows}</tbody></table>` : `<p>No button on this page has been pressed in the last 30 days yet: every one of the ${list.length} clients stands at 0.</p>`}
 <p class="muted"><small>${esc(COUNT_RULE)}${counts?.since ? ` Counting since ${esc(counts.since)}.` : ''} Every number here is also in <a href="/connect.json">/connect.json</a>.</small></p>
 <p><small>Formats checked against each client’s own documentation on ${esc(CHECKED)} · as data: <a href="/connect.json">/connect.json</a> · as Markdown: <a href="/connect.md">/connect.md</a> · everything an agent can call: <a href="/llms.txt">llms.txt</a> · <a href="/use">copy-paste blocks for frameworks</a> · <a href="/mcp-server">the free MCP server</a></small></p>
-<script>document.addEventListener('click',(e)=>{const b=e.target&&e.target.closest&&e.target.closest('pre[data-c] .copy');if(b&&navigator.sendBeacon)try{navigator.sendBeacon('/connect/go/'+b.closest('pre').dataset.c)}catch(x){}},true)</script>`;
+<style>.lean-opt{margin:18px 0 8px;padding:14px 0 0;border-top:1px dashed var(--line-2,#2a4157)}.lean-opt>p:first-child{margin-top:0}main pre[data-c]::before,main pre[data-l]::before{content:"";float:right;width:60px;height:28px}</style>
+<script>document.addEventListener('click',(e)=>{const b=e.target&&e.target.closest&&e.target.closest('pre[data-c] .copy,pre[data-l] .copy');if(b&&navigator.sendBeacon)try{const p=b.closest('pre');navigator.sendBeacon('/connect/go/'+(p.dataset.c||p.dataset.l))}catch(x){}},true)</script>`;
   return page(base, '/connect', 'Connect your agent: one click for Cursor and VS Code, steps for Claude',
     `Install links for Cursor, VS Code, Goose and LM Studio, the steps for Claude and ChatGPT, a line to copy for ${list.length} clients in all. Free, no account, no key.`,
     body, connectLd(base, sizes));
@@ -284,7 +336,8 @@ export async function connectAnswer({ req, url, path, base, kv, who, ctx, ip, dr
   const c = connectOf(kv), go = /^\/connect\/go\/([^/]{1,40})$/.exec(path);
   const hdr = { 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow', 'access-control-allow-origin': '*' };
   if (go) {
-    const id = String(go[1]).toLowerCase(), to = CLIENT_IDS.has(id) ? goTarget(base, id) : null;
+    // ?door=lean: the lean door's install link, while the engine acts; any other door, address or parameter is not taken
+    const id = String(go[1]).toLowerCase(), door = url.searchParams.get('door') === 'lean' && sizes?.lean ? 'lean' : undefined, to = CLIENT_IDS.has(id) ? goTarget(base, id, door) : null;
     if (!to) return new Response(JSON.stringify({ error: { code: 'NOT_FOUND', message: 'no such client', clients: `${base}/connect.json` } }), { status: 404, headers: { 'content-type': 'application/json; charset=utf-8', ...hdr } });
     const h = (k) => req.headers.get(k) || '';
     const m = { ip, ua: h('user-agent'), own: !!ctx?.own, readOnly: !!ctx?.readOnly, kind: who?.kind, driven: !!driven, mode: h('sec-fetch-mode'), site: h('sec-fetch-site'), dest: h('sec-fetch-dest'), origin: h('origin'), referer: h('referer'), self: (() => { try { return new URL(base).origin; } catch { return ''; } })(), purpose: `${h('sec-purpose')} ${h('purpose')} ${h('x-moz')}` };

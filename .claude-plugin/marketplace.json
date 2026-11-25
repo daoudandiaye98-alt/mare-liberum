@@ -23,6 +23,22 @@
         "a2a",
         "llms-txt"
       ]
+    },
+    {
+      "name": "mare-lean",
+      "source": "./plugins/mare-lean",
+      "description": "Mare Liberum's lean door in Claude Code: 4 MCP tools (read_page, think, find_tools, call_tool) that reach every tool of the sea, with a tool list measured at 631 tokens instead of 9,695 for the open door (o200k_base, 2026-11-25); plus a skill for the token levers since=, fields= and budget=. No account, no key.",
+      "version": "1.0.0",
+      "category": "agents",
+      "tags": [
+        "mcp",
+        "remote-mcp",
+        "agents",
+        "tokens",
+        "context-window",
+        "web-to-markdown",
+        "toon"
+      ]
     }
   ]
 }

@@ -50,6 +50,60 @@ export const SOURCES = [
   { what: 'OpenAI: tool search and defer_loading; in the Agents API MCP tools are deferred', url: 'https://developers.openai.com/api/docs/guides/tools-tool-search' },
   { what: 'Atlassian mcp-compressor (29 March 2026): the same pattern of a few meta-tools in front of many, before the lean door', url: 'https://www.atlassian.com/blog/developer/mcp-compression-preventing-tool-bloat-in-ai-agents' },
 ];
+// ------------------------------------------------------------------ plug it in (since 3.36)
+// The levers one step away in the clients and gateways agents run in: the lean door as each client adds an MCP server,
+// and /compress in a pipeline, a LiteLLM proxy and the Vercel AI SDK. Every line in the format of the documentation named
+// beside it, read on PLUG_CHECKED; the snippets of the pipeline run against a node in tools/pipes-proof.mjs.
+export const PLUG_CHECKED = '2026-11-25';
+const REPO = 'https://github.com/daoudandiaye98-alt/mare-liberum';
+export function plugIn(base) {
+  const lean = `${base}/mcp/lean`, compress = `${base}/compress`, json = (v) => JSON.stringify(v, null, 2);
+  const task = 'Read https://example.com and give me the three main points.';
+  return {
+    checked: PLUG_CHECKED,
+    clients: [
+      { id: 'claude-code', name: 'Claude Code', lines: [
+        { label: 'The lean door, in a terminal (this project; --scope user after the name: every project)', text: `claude mcp add --transport http mare-lean ${lean}` },
+        { label: 'Or the plugin: the lean door and a skill for since=, fields= and budget=, typed in Claude Code', text: '/plugin marketplace add daoudandiaye98-alt/mare-liberum\n/plugin install mare-lean@mare-liberum' }],
+        note: 'Claude Code defers MCP tool definitions by default (tool search), so its tool list gains almost nothing here; the skill tells the agent when to read again with since= and when to ask for fewer fields.',
+        docs: [['Claude Code: MCP', 'https://code.claude.com/docs/en/mcp'], ['Claude Code: marketplace reference', 'https://code.claude.com/docs/en/plugins/marketplace-reference']] },
+      { id: 'cursor', name: 'Cursor', lines: [{ label: '~/.cursor/mcp.json (every project) or .cursor/mcp.json (this project); the install button stands on /connect', text: json({ mcpServers: { 'mare-lean': { url: lean } } }) }],
+        more: `${base}/connect#lean-cursor`, docs: [['Cursor: MCP', 'https://cursor.com/docs/context/mcp'], ['Cursor: MCP install links', 'https://cursor.com/docs/mcp/install-links']] },
+      { id: 'vscode', name: 'VS Code', lines: [{ label: 'In a terminal', text: `code --add-mcp '${JSON.stringify({ name: 'mare-lean', type: 'http', url: lean })}'` }, { label: 'Or .mcp.json at the root of a workspace, or ~/.copilot/mcp-config.json', text: json({ mcpServers: { 'mare-lean': { type: 'http', url: lean } } }) }],
+        more: `${base}/connect#lean-vscode`, docs: [['VS Code: MCP configuration reference', 'https://code.visualstudio.com/docs/agents/reference/mcp-configuration']] },
+      { id: 'codex', name: 'OpenAI Codex', lines: [{ label: 'In a terminal', text: `codex mcp add mare-lean --url ${lean}` }, { label: 'Or ~/.codex/config.toml', text: `[mcp_servers.mare-lean]\nurl = "${lean}"` }],
+        docs: [['OpenAI Codex: Model Context Protocol', 'https://developers.openai.com/codex/mcp']] },
+      { id: 'gemini', name: 'Gemini CLI', lines: [{ label: 'In a terminal', text: `gemini mcp add --transport http --scope user mare-lean ${lean}` }, { label: 'Or ~/.gemini/settings.json (httpUrl: Streamable HTTP)', text: json({ mcpServers: { 'mare-lean': { httpUrl: lean } } }) }],
+        docs: [['Gemini CLI: MCP servers', 'https://www.geminicli.com/docs/tools/mcp-server']] },
+      { id: 'openai-agents', name: 'OpenAI Agents SDK', lines: [{ label: 'Python: pip install openai-agents', text: `import asyncio\nfrom agents import Agent, Runner\nfrom agents.mcp import MCPServerStreamableHttp\n\nasync def main():\n    async with MCPServerStreamableHttp(name="Mare Liberum Lean", params={"url": "${lean}"}) as sea:\n        agent = Agent(name="Assistant", mcp_servers=[sea])\n        print((await Runner.run(agent, "${task}")).final_output)\n\nasyncio.run(main())` }],
+        docs: [['OpenAI Agents SDK: MCP', 'https://openai.github.io/openai-agents-python/mcp/']] },
+      { id: 'langchain', name: 'LangChain', lines: [{ label: 'Python: pip install langchain-mcp-adapters', text: `from langchain_mcp_adapters.client import MultiServerMCPClient\n\nasync def sea_tools():\n    client = MultiServerMCPClient({"mare-lean": {"transport": "http", "url": "${lean}"}})\n    return await client.get_tools()` },
+        { label: 'Python, LangChain 1.4 or later: pip install "langchain[mcp]" (the migration guide moves the adapters into langchain.mcp)', text: `from langchain.agents import create_agent\nfrom langchain.mcp import MCPAdapter\n\nasync def main():\n    async with MCPAdapter("${lean}") as sea:\n        agent = create_agent("openai:gpt-4.1", await sea.list_tools())\n        return await agent.ainvoke({"messages": [{"role": "user", "content": "${task}"}]})` }],
+        docs: [['langchain-mcp-adapters', 'https://github.com/langchain-ai/langchain-mcp-adapters'], ['LangChain: from langchain-mcp-adapters to langchain.mcp', 'https://docs.langchain.com/oss/python/migrate/langchain-mcp-adapters']] },
+      { id: 'vercel-ai', name: 'Vercel AI SDK', lines: [{ label: 'TypeScript: npm i ai @ai-sdk/mcp', text: `import { streamText } from 'ai';\nimport { createMCPClient } from '@ai-sdk/mcp';\n\nconst sea = await createMCPClient({ transport: { type: 'http', url: '${lean}' } });\nconst result = streamText({\n  model: 'anthropic/claude-sonnet-5.5',\n  tools: await sea.tools(),\n  prompt: '${task}',\n  onEnd: async () => { await sea.close(); },\n});\nfor await (const text of result.textStream) process.stdout.write(text);` }],
+        docs: [['AI SDK: MCP tools', 'https://ai-sdk.dev/docs/ai-sdk-core/mcp-tools']] },
+      { id: 'openai-responses', name: 'OpenAI Responses API', lines: [{ label: 'curl: the lean door as a remote MCP tool; read_page, think and find_tools run without asking, call_tool asks first (it reaches tools that write in public)', text: `curl https://api.openai.com/v1/responses \\\n  -H "Authorization: Bearer $OPENAI_API_KEY" \\\n  -H 'content-type: application/json' \\\n  -d '${JSON.stringify({ model: 'gpt-6.2-astra', tools: [{ type: 'mcp', server_label: 'mare_lean', server_description: 'Mare Liberum, the lean door: web pages as Markdown, a shared brain, and every tool of the sea through find_tools and call_tool.', server_url: lean, require_approval: { never: { tool_names: ['read_page', 'think', 'find_tools'] } } }], input: task }, null, 2)}'` }],
+        note: 'Without require_approval, OpenAI asks for approval before every call to a remote MCP server; "never" for every tool lets the model call any tool of the sea unasked.',
+        docs: [['OpenAI: connectors and MCP servers', 'https://developers.openai.com/api/docs/guides/tools-connectors-mcp']] },
+      { id: 'litellm', name: 'LiteLLM proxy', lines: [
+        { label: 'config.yaml: the lean door behind the proxy\'s MCP gateway (clients reach it at /mcp, or /mare_lean/mcp for this server alone)', text: `mcp_servers:\n  mare_lean:\n    url: "${lean}"\n    transport: "http"\n    auth_type: "none"` },
+        { label: 'config.yaml: tool results through /compress before they reach the model (litellm_mare_compress.py beside config.yaml)', text: 'litellm_settings:\n  callbacks: litellm_mare_compress.proxy_handler_instance' }],
+        note: 'The callback sends a tool result only when it is longer than 2,000 characters, takes the answer only when it is smaller, and keeps the original text on any error or timeout.',
+        file: `${REPO}/blob/main/integrations/gateways/litellm_mare_compress.py`,
+        docs: [['LiteLLM: MCP configuration reference', 'https://docs.litellm.ai/docs/mcp_config_reference'], ['LiteLLM: call hooks (async_pre_call_hook)', 'https://docs.litellm.ai/docs/proxy/call_hooks']] },
+    ],
+    compress: {
+      what: 'Text, HTML or JSON on its way to a model, made smaller without loss; nothing sent is kept. Take the answer only when it is smaller, and the original text on any error.',
+      lines: [
+        { label: 'curl: a page you hold, as Markdown (Accept: text/plain gives only the text)', text: `curl -s ${compress} -H 'content-type: text/html' --data-binary @page.html` },
+        { label: 'Python, no packages', text: `import json, urllib.request\n\ndef squeeze(text: str) -> str:\n    req = urllib.request.Request("${compress}", data=json.dumps({"text": text}).encode(), headers={"content-type": "application/json"})\n    try:\n        with urllib.request.urlopen(req, timeout=5) as r:\n            out = json.load(r).get("out")\n        return out if isinstance(out, str) and len(out.encode()) < len(text.encode()) else text\n    except Exception:\n        return text` },
+        { label: 'TypeScript, no packages', text: `export async function squeeze(text: string): Promise<string> {\n  try {\n    const r = await fetch('${compress}', { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ text }), signal: AbortSignal.timeout(5000) });\n    const out = (await r.json())?.out;\n    return r.ok && typeof out === 'string' && new TextEncoder().encode(out).length < new TextEncoder().encode(text).length ? out : text;\n  } catch {\n    return text;\n  }\n}` },
+        { label: 'Vercel AI SDK: every tool result through /compress (vercel-ai-mare-compress.ts)', text: `import { wrapLanguageModel } from 'ai';\nimport { mareCompress } from './vercel-ai-mare-compress';\n\nconst model = wrapLanguageModel({ model: yourModel, middleware: mareCompress() });` }],
+      files: [{ name: 'LiteLLM proxy callback', url: `${REPO}/blob/main/integrations/gateways/litellm_mare_compress.py` }, { name: 'Vercel AI SDK middleware', url: `${REPO}/blob/main/integrations/gateways/vercel-ai-mare-compress.ts` }],
+      docs: [['AI SDK: language model middleware', 'https://ai-sdk.dev/docs/ai-sdk-core/middleware'], ['LiteLLM: call hooks', 'https://docs.litellm.ai/docs/proxy/call_hooks']],
+      use: `${compress} (GET says how)` },
+  };
+}
 export const CACHING = 'list prices for uncached input tokens; a client that had the same text in its prompt cache pays 0.025 to 0.1 times that (Claude, OpenAI and Google pricing), so a saving on a cached prefix such as a tool list is worth far less than this';
 const n = (x) => (x == null || !Number.isFinite(Number(x)) ? '–' : Number(x).toLocaleString('en-US'));
 const pct = (a, b) => (b > 0 ? `${Math.round((1 - a / b) * 1000) / 10} %` : '–');
@@ -75,6 +129,7 @@ export function engineData(base, { savings, on = true, bench = loadEngineBench()
       usd: { low: usdOf(all.lossless.saved, TOKEN_PRICE.low), mid: usdOf(all.lossless.saved, TOKEN_PRICE.mid), high: usdOf(all.lossless.saved, TOKEN_PRICE.high), of: 'the lossless tokens at the rate card of /savings (USD per million uncached input tokens), modelled', caching: CACHING },
       note: 'tokens before, after and saved by the one rule of savingOf, counted once a day per network and subject; lossless ones are part of the measured figure of /savings, lossy ones are in no figure of the headline' },
     levers,
+    plug: plugIn(base),
     bench: bench ? benchSummary(base, bench) : null,
     ratio: { ...RATIO },
     rules: ENGINE_RULES, sources: SOURCES,
@@ -110,6 +165,12 @@ const STYLE = `<style>
 .ratio{display:flex;height:12px;border-radius:6px;overflow:hidden;margin:6px 0 2px;background:var(--line,#1b3048)}
 .ratio i{display:block;height:100%;background:var(--sea);transform-origin:left;animation:grow 1.1s var(--ease,ease) both}
 @keyframes grow{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+.plugs{display:grid;grid-template-columns:repeat(auto-fit,minmax(min(100%,34rem),1fr));gap:var(--s4,24px);margin:var(--s4,24px) 0}
+.plug{display:flex;flex-direction:column;gap:8px;min-width:0}
+.plug h3{margin:0}
+.plug p{margin:0}
+.plug pre{margin:0 0 6px;font-size:13.5px}
+.plug pre code::before{content:"";float:right;width:60px;height:28px}
 @media (prefers-reduced-motion:reduce){.ratio i{animation:none}}
 </style>`;
 
@@ -133,7 +194,14 @@ ${T ? `<h3>JSON answers as TOON</h3>${nums([[n(T.sent), `tokens: ${b.fixtures} r
 <details><summary>Every answer of the run, one by one (${n(b.rows.length)})</summary><div class="tw"><table class="tbl"><thead><tr><th>answer</th><th>JSON, indented</th><th>JSON as sent</th><th>TOON</th><th>TOON against what is sent</th></tr></thead><tbody>${benchRows}</tbody></table></div></details>
 <p><small>Tokens counted with ${esc((b.tokenizers || []).map((t) => `${t.id} (${t.package})`).join(', '))}; the table shows ${esc(tk)}, the run has all three. TOON from ${esc(b.toon?.implementation || 'unknown')}${b.toon?.spec ? `, spec ${esc(b.toon.spec)}` : ''}${b.toon?.reference ? `; its output equals the reference implementation's (${esc(b.toon.reference.implementation)}) for ${n(b.toon.reference.sameOutput)} of ${n(b.toon.reference.of)} answers` : ''}. Every TOON answer was decoded again and compared with the JSON: ${b.rows.every((r) => r.roundTrip) ? 'all equal' : 'not all equal (see the run)'}. Run of ${esc(b.date)} on ${esc(b.node || 'a local node')}: <a href="/engine/bench-${esc(b.date)}.json">the run as data</a>; reproduce it with <code>node tools/engine-bench.mjs</code>.</small></p>
 ${M ? `<p><small>The MCP list: the open door's <code>tools/list</code> as one JSON answer against a lean list (${esc(M.how || '')}).</small></p>` : ''}` : '<p class="muted">No run of the engine bench is on this node yet: the bench numbers appear here with the first run (node tools/engine-bench.mjs).</p>';
-  const R = v.ratio;
+  const R = v.ratio, P = v.plug;
+  const rel = (u) => String(u).replace(base, '') || '/';
+  const lines = (list) => list.map((l) => `<p><small>${esc(l.label)}</small></p><pre><code>${esc(l.text)}</code></pre>`).join('');
+  const checked = (docs) => `<p class="muted"><small>Checked against ${docs.map(([t, u]) => `<a href="${esc(u)}" rel="noopener">${esc(t)}</a>`).join(' · ')}</small></p>`;
+  const plugBox = (c) => `<div class="box plug" id="plug-${esc(c.id)}"><h3>${esc(c.name)}</h3>${lines(c.lines)}${c.note ? `<p class="muted"><small>${esc(c.note)}</small></p>` : ''}${c.more ? `<p><small><a href="${esc(rel(c.more))}">The install button for ${esc(c.name)} on /connect</a></small></p>` : ''}${c.file ? `<p><small>The callback: <a href="${esc(c.file)}" rel="noopener">integrations/gateways/litellm_mare_compress.py</a></small></p>` : ''}${checked(c.docs)}</div>`;
+  const plugHtml = P ? `<p>The levers one step away in the clients and gateways agents already run in. The lean door goes in where a client adds an MCP server; every line follows the client's own documentation, read on ${esc(P.checked)} and linked under it. The reading levers need nothing installed: since=, budget= and fields= are parameters of the doors above. Every MCP client on <a href="/connect">/connect</a> has the lean door as a second option beside the full one.</p>
+<div class="plugs">${P.clients.map(plugBox).join('')}</div>
+<div class="plugs"><div class="box plug" id="plug-compress"><h3>/compress in your pipeline</h3><p>${esc(P.compress.what)}</p>${lines(P.compress.lines)}<p><small>Ready for a gateway: ${P.compress.files.map((f) => `<a href="${esc(f.url)}" rel="noopener">${esc(f.name)}</a>`).join(' · ')}. Both send only tool results above a size, take the answer only when it is smaller and keep the original text on any error or timeout.</small></p>${checked(P.compress.docs)}</div></div>` : '';
   const body = `${STYLE}<h1>The engine room of the sea</h1>
 <p class="hero-n"><b>${n(L.lossless.saved)}</b>tokens the engine room spared agents without losing anything · ${n(L.lossless.answers + L.lossy.answers)} ${L.lossless.answers + L.lossy.answers === 1 ? 'answer' : 'answers'} · lossy, apart: ${n(L.lossy.saved)}</p>
 <p class="pulse">Open, no account: six measured levers, one public ledger. Nothing changes unless an agent asks.</p>
@@ -141,7 +209,7 @@ ${M ? `<p><small>The MCP list: the open door's <code>tools/list</code> as one JS
 <h2>Spare tokens: six levers</h2>
 <div class="levers">${v.levers.map(lever).join('')}</div>
 <p><small>Live from the ledger${L.since ? `, counting since ${esc(L.since)}` : ''}: ${n(L.today.lossless.saved)} tokens spared without loss today, ${n(L.last30days.lossless.saved)} in the last 30 days. Lossless, they are worth about $${(v.live.usd.mid).toFixed(2)} at $${TOKEN_PRICE.mid.toFixed(2)} a million input tokens: ${esc(CACHING)}. Every answer the engine shaped says so in its headers: <code>x-sea-engine</code>, <code>x-sea-engine-tokens</code> (before-&gt;after), <code>x-sea-engine-saved</code>, and <code>x-sea-engine-lossy</code> when it lost something.</small></p>
-<h2>The bench</h2>
+${plugHtml ? `<h2 id="plug">Plug it in</h2>\n${plugHtml}\n` : ''}<h2>The bench</h2>
 ${benchHtml}
 <h2>One measuring rule</h2>
 <p>${esc(ENGINE_RULES.measuring)} ${esc(ENGINE_RULES.apart)}</p>

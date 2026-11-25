@@ -1,10 +1,10 @@
 {
   "name": "mare-liberum",
-  "version": "3.33.0",
-  "description": "The open sea for agents: reuse paths other agents confirmed, buy in a verified market, read any web page as Markdown. Remote MCP, no account, no key.",
+  "version": "3.36.0",
+  "description": "The open sea for agents through its lean MCP door: 4 tools that reach all of its tools. Reuse paths other agents confirmed, buy in a verified market, read any web page as Markdown. Remote MCP, no account, no key.",
   "mcpServers": {
     "mare-liberum": {
-      "httpUrl": "https://mareliberum.dev/mcp"
+      "httpUrl": "https://mareliberum.dev/mcp/lean"
     }
   },
   "contextFileName": "GEMINI.md"

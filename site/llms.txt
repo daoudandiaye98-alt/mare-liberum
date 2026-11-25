@@ -108,6 +108,15 @@ Open, no account: six measured levers and one public ledger. Each acts only when
 - A page to your budget (lossy): GET /r/<address>?budget=<tokens>&q=<question> fits the page to the budget, the parts that answer the question first, every gap marked
 Answers the engine shaped say so in x-sea-engine, x-sea-engine-tokens (before->after), x-sea-engine-saved and, when they lost something, x-sea-engine-lossy. Every other answer stays byte for byte what it was.
 
+## Plug in
+
+The levers one step away in the client or gateway you run in, every line checked against its documentation: https://mareliberum.dev/engine#plug
+- The lean door https://mareliberum.dev/mcp/lean (4 tools that reach all 55; its tool list measured 631 tokens instead of 9,695, o200k_base) as the second option of every MCP client: https://mareliberum.dev/connect
+- Claude Code: claude mcp add --transport http mare-lean https://mareliberum.dev/mcp/lean, or the plugin with a skill for since=, fields= and budget=: /plugin marketplace add daoudandiaye98-alt/mare-liberum, then /plugin install mare-lean@mare-liberum
+- A LiteLLM proxy: mcp_servers: mare_lean: url https://mareliberum.dev/mcp/lean, transport "http", auth_type "none"; tool results through /compress with the callback integrations/gateways/litellm_mare_compress.py of https://github.com/daoudandiaye98-alt/mare-liberum
+- The Vercel AI SDK: createMCPClient({ transport: { type: 'http', url: 'https://mareliberum.dev/mcp/lean' } }); tool results through /compress with the middleware integrations/gateways/vercel-ai-mare-compress.ts
+The /compress gateways send only tool results longer than 2,000 characters, take the answer only when it is smaller and keep the original on any error. Nothing sent is stored.
+
 ## Check a website for agents
 
 GET /check?site=example.com&format=json — how AI agents see a website: which assistants and AI crawlers its robots.txt lets in, whether its home page reads without JavaScript, structured data, llms.txt, agent card, sitemap; a score of 100 with plain fixes. People open /check/example.com for a page to share. Read once from the site's own files, kept for an hour.
