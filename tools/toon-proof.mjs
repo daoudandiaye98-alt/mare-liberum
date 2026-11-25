@@ -108,7 +108,9 @@ await wake();
 // change by one sanctioned line each and are proved in tools/leanmcp-proof.mjs)
 const DEFAULTS = [['/about'], ['/stats'], ['/search?q=mcp'], ['/brain?q=find+mcp+servers+for+postgres'], ['/brain/areas.json'], ['/savings.json'], ['/fair.json'], ['/open.json'], ['/brief.json?q=write+a+cover+letter'], ['/works.json'], ['/routes.json'],
   ['/nope-404'], ['/', 'text/html'], ['/', 'text/markdown'], ['/brain?q=x', 'text/html'], ['/savings', 'text/html'], ['/llms.txt', '*/*'], ['/about', '*/*'], ['/search?q=mcp', 'application/json, text/toon'], ['/search?q=mcp', 'text/toon;q=0.5, application/json']];
-const strip = (t) => String(t).replace(RECEIPT_IDS, 'r<id>');
+// the version string is masked, so MARE_REF=cb5ca52 (3.34.1) is a gate too: the release may differ from it by its number only
+const V = (t) => String(t).replace(/("version":")3\.3[45]\.\d+"/g, '$1V"');
+const strip = (t) => V(String(t).replace(RECEIPT_IDS, 'r<id>'));
 const stripH = (h) => Object.fromEntries(Object.entries(headersOf(h)).map(([k, v]) => [k, strip(v)]));
 // one request to a node of this branch and the same to a node of 3.34.1 (both in the same state: called in lockstep)
 const sameAnswer = async (path, o = {}, cfgO = {}, cfgT = {}, A = ours, B = theirs) => {
@@ -125,7 +127,7 @@ if (theirs) {
   await proof(`the MCP doors' lists are byte for byte those of ${AGAINST}: /mcp tools/list, /mcp/app initialize and tools/list`, async () => {
     for (const [door, m] of [['/mcp', 'tools/list'], ['/mcp/app', 'initialize'], ['/mcp/app', 'tools/list']]) {
       const params = m === 'initialize' ? { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'toon-proof', version: '1' } } : undefined;
-      const a = await ours.rpc(door, m, params), b = await theirs.rpc(door, m, params); assert.equal(a.text, b.text, `${door} ${m}`); assert.deepEqual(headersOf(a.headers), headersOf(b.headers));
+      const a = await ours.rpc(door, m, params), b = await theirs.rpc(door, m, params); assert.equal(V(a.text), V(b.text), `${door} ${m}`); assert.deepEqual(headersOf(a.headers), headersOf(b.headers));
     }
   });
 }
