@@ -22,7 +22,7 @@ export function fingerprint(html) {
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
     .replace(/\d+/g, '#')
     .replace(/\b(second|minute|hour|day|week|month|year)s?\b/gi, 'time')
-    .replace(/\s+/g, ' ');
+    .replace(/\s+/g, ' ').replace(/ ?(<[^>]*>) ?/g, '$1');
   return createHash('sha256').update(s).digest('hex').slice(0, 20);
 }
 const h8 = (p) => createHash('sha256').update(String(p)).digest('hex').slice(0, 8);
