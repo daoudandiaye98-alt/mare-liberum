@@ -18,7 +18,7 @@ const smooth = (t, a, b) => ease(clamp((t - a) / (b - a)));
 const secs = $$('.sc'), N = secs.length, cards = secs.map((s) => s.querySelector('.card'));
 const plates = $$('.plate'), imgs = plates.map((p) => p.querySelector('img'));
 const cv = $('#field'), g = cv && cv.getContext('2d');
-const count = $('#count'), countN = $('#countn'), countL = $('#countl'), ringF = $('#ringf'), ringN = $('#ringn');
+const count = $('#count'), countN = $('#countn'), countL = $('#countl'), countQ = $('#countq'), ringF = $('#ringf'), ringN = $('#ringn');
 const h1 = $('#h1'), veil = $('.veil'), heroOut = [$('#top .card'), $('#top .cue')].filter(Boolean);
 let vw = 0, vh = 0, land = false, A = [0], dpr = 1, raf = 0, lastT = -1, waterY = 0, region = null;
 
@@ -61,8 +61,9 @@ function counter(t) {
   const RAW = 227167, SEA = 865;
   let v = still ? (t < 1.5 ? RAW : SEA) : t < 1.3 ? RAW * ease(clamp((t - 0.42) / 0.5)) : RAW * Math.pow(SEA / RAW, ease(clamp((t - 1.3) / 0.58)));
   v = Math.round(v); if (v !== shownV) { countN.textContent = fmt(v); shownV = v; }
-  const sea = still ? t >= 1.5 : t >= 1.62, l = sea ? 'tokens through the sea, the same task' : 'tokens of raw HTML for one task';
+  const sea = still ? t >= 1.5 : t >= 1.62, l = sea ? 'tokens through the sea, the same task' : 'tokens for one task if it reads raw HTML', q = sea ? 'measured; median of 25 tasks, 24 Nov 2026' : 'upper bound; pages measured, search loop modelled';
   if (countL.textContent !== l) countL.textContent = l;
+  if (countQ && countQ.textContent !== q) countQ.textContent = q;
 }
 
 // ---- the field of tokens
