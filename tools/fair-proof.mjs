@@ -148,7 +148,7 @@ await proof('no receipt for the sea\'s own calls, for crawlers, or for an answer
 await proof('a JSON answer that is an object carries "receipt" as its last field; nothing else in it changes', async () => {
   const q = '/brain/thinking.json?q=write%20a%20market%20research%20report%20on%20e-bikes';
   const on = await call(q), off = await call(q, { cfg: OFF });
-  assert.ok(on.j.receipt, 'the field'); assert.deepEqual(Object.keys(on.j.receipt), ['id', 'saved_tokens', 'fair_share_usd', 'voluntary', 'url']); assert.equal(on.j.receipt.url, on.h.get('x-sea-receipt'));
+  assert.ok(on.j.receipt, 'the field'); assert.deepEqual(Object.keys(on.j.receipt), ['id', 'saved_tokens', 'fair_share_usd', 'voluntary', 'note', 'url']); assert.equal(on.j.receipt.note, FAIR.usdNote); assert.ok(Buffer.byteLength(`,\n"receipt":${JSON.stringify(on.j.receipt)}`) <= FAIR.fieldBytes, 'the allowance covers the field'); assert.equal(on.j.receipt.url, on.h.get('x-sea-receipt'));
   assert.equal(Object.keys(on.j).pop(), 'receipt');
   assert.equal(on.text, withField(off.text, 'receipt', on.j.receipt), 'the answer with fair share off, plus the field: byte for byte');
   noReceipt(off, 'fair share off');

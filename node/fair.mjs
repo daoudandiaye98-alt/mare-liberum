@@ -45,8 +45,8 @@ export const FAIR = {
   bundleMax: 5000,
   keepDays: 30,
   drop: 1000,
-  // what the receipt field adds to a JSON answer, in bytes, counted against the saving of that answer (it is about 140)
-  fieldBytes: 240,
+  // what the receipt field adds to a JSON answer, in bytes, counted against the saving of that answer (it is about 260)
+  fieldBytes: 320,
   voluntary: 'Paying is voluntary. Nothing is withheld for not paying, and no payment changes any order, verification, verdict or answer.',
   drops: 'A drop is a unit of account: 1,000 input tokens an agent did not have to spend, on the conservative basis (lower + modelled). It is a count kept on the server only: no export, no transfer, no copy on any chain, and no address of the sea moves drops. It is not sold and not paid out, and it promises no value.',
   // beside every dollar figure that is worked out from tokens (not beside money actually received)
@@ -318,7 +318,7 @@ export function createFair({ kv, now = () => new Date().toISOString(), base: bas
 
 // ------------------------------------------------------------------ the receipt on the answer: headers, and a field in JSON objects
 const EXPOSE = 'x-sea-saved-tokens,x-sea-fair-share-usd,x-sea-receipt';
-const compactOf = (r, base) => ({ id: r.id, saved_tokens: r.tokens.conservative, fair_share_usd: usd6(r.shareMicro.mid), voluntary: true, url: `${base}/fair/r/${r.id}` });
+const compactOf = (r, base) => ({ id: r.id, saved_tokens: r.tokens.conservative, fair_share_usd: usd6(r.shareMicro.mid), voluntary: true, note: FAIR.usdNote, url: `${base}/fair/r/${r.id}` });
 // the field goes in as the last member of the object, in the object's own layout; what does not read back as the same
 // object with the field is sent as it was
 export function withField(text, key, value) {
@@ -397,7 +397,7 @@ export async function fairData(base, fair, { on, ledger } = {}) {
       micro: { valueLow: t.valueMicro.low, valueMid: t.valueMicro.mid, valueHigh: t.valueMicro.high, accrued: t.shareMicro, settled: t.settledMicro, onItsWay: t.onItsWayMicro, unit: 'millionths of a US dollar (USDC base units)' } },
     drop: FAIR.drops, method: METHOD, voluntary: FAIR.voluntary,
     calculator: w ? { bench: { label: w.label, date: w.date, with: w.with, withoutText: w.withoutText, withoutHtml: w.withoutHtml, tasks: w.tasks, saves: w.saves, with_is: w.with_is, without_is: w.without_is, median: true, tokenizer: BENCH.tokenizer, proof: `${base}/proof`, runs: w.runs.map((f) => `${base}/proof/${f}`) }, rate: FAIR.rate.modelled, priceMid: P.mid, note: 'the bench is a default, not a promise: receipts measure each answer', usdNote: FAIR.usdNote } : null,
-    pay: { how: `POST ${base}/fair/pay?r=<id>[,<id>…]`, minimumUsd: usd6(FAIR.minMicro), bundleMax: FAIR.bundleMax, x402: 'the answer is 402 with the exact unpaid sum; pay it with PAYMENT-SIGNATURE (v2) or X-PAYMENT (v1)', headers: ['x-sea-saved-tokens (conservative basis)', 'x-sea-fair-share-usd', 'x-sea-receipt (the receipt\'s address)'], field: 'JSON answers that are an object carry "receipt": {id, saved_tokens, fair_share_usd, voluntary, url}; MCP and A2A answers carry the headers only', receipts: `${base}/fair/r/<id>(.json)`, keptDays: FAIR.keepDays },
+    pay: { how: `POST ${base}/fair/pay?r=<id>[,<id>…]`, minimumUsd: usd6(FAIR.minMicro), bundleMax: FAIR.bundleMax, x402: 'the answer is 402 with the exact unpaid sum; pay it with PAYMENT-SIGNATURE (v2) or X-PAYMENT (v1)', headers: ['x-sea-saved-tokens (conservative basis)', 'x-sea-fair-share-usd', 'x-sea-receipt (the receipt\'s address)'], field: 'JSON answers that are an object carry "receipt": {id, saved_tokens, fair_share_usd, voluntary, note, url}; MCP and A2A answers carry the headers only', receipts: `${base}/fair/r/<id>(.json)`, keptDays: FAIR.keepDays },
     recent: recent.map((r) => ({ id: r.id, at: r.at, door: r.door, conservative: r.tokens.conservative, upper: r.tokens.upper, shareUsd: usd6(r.shareMicro.mid), shareNote: FAIR.usdNote, shareMicro: r.shareMicro.mid, status: statusOf(r, paid), url: `${base}/fair/r/${r.id}` })),
     never: [FAIR.voluntary, 'The sea only receives: no bot of the sea pays, no wallet of the sea pays out, nothing is minted, sold or transferred.', 'Crawlers and the sea\'s own calls get no receipt; the house agent (Angel) and the app door (/mcp/app) get none either.', 'A receipt in a payment is retired: it is never counted or billed again.', FAIR.drops],
     links: { savings: `${base}/savings`, proof: `${base}/proof`, pricing: `${base}/pricing`, treasury: `${base}/treasury`, open: `${base}/open` } };
