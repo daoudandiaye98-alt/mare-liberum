@@ -1615,8 +1615,10 @@ const withoutPayment = (req) => {
 // pay, or a payment header that pays the till's wallet exactly the open sum), the payment is taken, or the 402 that asks for it
 // is the answer, before the door works: nothing is done twice for a caller that pays after its 402. A payment header that pays
 // anything else is not the toll's: it is left alone. A second payment while one is being taken: the normal answer, never an error
-async function tollGate(req, db, cfg, { ip, base }) {
-  if (!tollActs(cfg) || isHead(req, cfg)) return null;
+// head: a conditional HEAD of /r/ (since 3.37.1): its 304 is the 304 lever, decided and counted as for a GET; it pays nothing and
+// is asked for nothing (no 402 to a HEAD)
+async function tollGate(req, db, cfg, { ip, base, head = false }) {
+  if (!tollActs(cfg) || (isHead(req, cfg) && !head)) return null;
   const T = tollOf(db, cfg), a = await T.account(ip); if (!a) return null;
   await T.resolve(a);
   const g = { T, a, base, req, paid: null, busy: false, answer: null, ds: [], done: false };
@@ -1626,7 +1628,7 @@ async function tollGate(req, db, cfg, { ip, base }) {
   g.finish = (res) => (g.done ? res : sealToll(res, g, null));
   const payCfg = cfg.pay || payConfig(), carries = !!(req.headers.get('payment-signature') || req.headers.get('x-payment'));
   const mine = carries && T.claims(req.headers, a, payCfg.payTo), asks = TOLL_ASK.test(req.headers.get('x-sea-toll') || '');
-  if ((asks || mine) && T.due(a)) {
+  if (!head && (asks || mine) && T.due(a)) {
     const r = await T.pay({ list: [a], headers: mine ? req.headers : null, body: {}, payCfg, base, callerHash: callerHash(ip, req.headers.get('user-agent')), waitUntil: cfg.waitUntil, foreign: carries && !mine });
     if (r.required) { const o = tollRequired(r.required, { base, error: r.error, tokens: r.tokens, cors: CORS, extra: { ...T.status(a, base), 'access-control-expose-headers': `${CORS['access-control-expose-headers']},${TOLL_EXPOSE}` } }); g.answer = new Response(JSON.stringify(o.body), { status: o.status, headers: o.headers }); }
     else if (r.busy) { g.busy = true; TOLL_PAID.set(req, g); }
@@ -2083,11 +2085,13 @@ async function handleOne(req, db, cfg = {}) {
       // the toll on reading again (node/toll.mjs, since 3.37): since= in the engine's form or If-None-Match with a tag of the
       // reader, on the Markdown answer (the JSON one knows neither); a caller that pays its due toll pays before the page is read,
       // and every answer after that payment says so, an error too
-      const tg = eng && !wantJson && (eng.since || /\be1-[0-9a-f]{20}\b/.test(req.headers.get('if-none-match') || '')) ? await tollGate(req, db, cfg, { ip, base }) : null;
+      // (since 3.37.1) a conditional HEAD is the 304 lever as a conditional GET is: its 304 is decided, counted and tolled the same
+      const head = isHead(req, cfg);
+      const tg = eng && !wantJson && (eng.since || /\be1-[0-9a-f]{20}\b/.test(req.headers.get('if-none-match') || '')) ? await tollGate(req, db, cfg, { ip, base, head }) : null;
       if (tg?.answer) return tg.answer;
       const fin = (res) => (tg ? tg.finish(res) : res);
       // a HEAD never says "unchanged" for free: while the lossless levers rest for this network, no ETag and never a 304
-      const quiet = eng && !wantJson && isHead(req, cfg) ? await tollRestsFor(db, cfg, ip) : false;
+      const quiet = eng && !wantJson && head && !tg ? await tollRestsFor(db, cfg, ip) : false;
       // format=full: the long answer around the reader's whole Markdown of before (toMarkdown), not around the lean one
       const r = await sea.read({ url: target, q: a.q, tag: a.tag, ...(a.format === 'full' && !wantJson ? { full: true } : {}) }, ctx);
       if (r.note && !r.url && !r.error) return fin(new Response(`${r.note}\n${r.how}\n`, { headers: { 'content-type': 'text/plain; charset=utf-8', 'x-robots-tag': 'noindex', ...CORS } }));
@@ -2106,12 +2110,17 @@ async function handleOne(req, db, cfg = {}) {
         // shaped first, counted once the toll decided: the change, the line that says unchanged or the 304, or while the lever
         // rests the normal answer: the page as without since= and If-None-Match (its ETag and x-sea-delta as always), and a
         // budget= of the request still applied (lossy, and free)
-        const versions = (db.pressVersions ||= createVersions()), got = [];
-        const shaped = pressRead(eng, { r, md, st, a, target, base, req, hdr, versions, count: (...x) => got.push(x) });
+        // A HEAD has no body: the one lever it can take is the 304 (If-None-Match); since= is not applied to it, and a HEAD
+        // without a 304 is the plain HEAD, free (no ETag while the levers rest for the network)
+        const versions = (db.pressVersions ||= createVersions()), got = [], bare = (res) => { const h = new Headers(res.headers); h.delete('etag'); h.delete('x-sea-delta'); return new Response(res.body, { status: res.status, headers: h }); };
+        const shaped = pressRead(head ? { since: null, budget: eng.budget, strip: eng.strip } : eng, { r, md, st, a, target, base, req, hdr, versions, count: (...x) => got.push(x) });
+        if (shaped && head && shaped.status !== 304) return tg.finish(tg.T.rests(tg.a) ? bare(shaped) : shaped);
         if (shaped) {
           const d = tg.decide(got.find(([lever]) => lever === 'delta')?.[1]?.saved || 0);
-          if (d.lever) { const c = counter(sea, ctx); for (const x of got) c(...x); return tg.seal(shaped, d); }
-          return tg.seal(pressRead({ since: null, budget: eng.budget, strip: eng.strip }, { r, md, st, a, target, base, req: null, hdr, versions, count: counter(sea, ctx) }) || new Response(md, { status: st, headers: { 'content-type': 'text/markdown; charset=utf-8', ...hdr } }), d);
+          // (the 304 of a HEAD is counted as the 304 of a GET: once a day per network and subject, node/areas.mjs)
+          if (d.lever) { const c = counter(sea, head ? { ...ctx, head: false } : ctx); for (const x of got) c(...x); return tg.seal(shaped, d); }
+          const normal = pressRead({ since: null, budget: eng.budget, strip: eng.strip }, { r, md, st, a, target, base, req: null, hdr, versions, count: counter(sea, ctx) }) || new Response(md, { status: st, headers: { 'content-type': 'text/markdown; charset=utf-8', ...hdr } });
+          return tg.seal(head ? bare(normal) : normal, d);
         }
       }
       return fin(new Response(md, { status: st, headers: { 'content-type': 'text/markdown; charset=utf-8', ...hdr } }));

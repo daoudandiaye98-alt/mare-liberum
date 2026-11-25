@@ -688,10 +688,33 @@ await proof('a HEAD of /r/ says nothing for free (I1): below the quota it has th
   const o1 = await OFF.call(`/r/${url}`, { ip: ipOff, accept: MD, head: true }), o2 = await OFF.call(`/r/${url}`, { ip: ipOff, accept: MD, head: true, headers: { 'if-none-match': tag } });
   assert.equal(h1.h.etag, tag); assert.equal(h2.status, 304); sameAs(h1, ON.version, o1, OFF.version, 'HEAD below the quota'); sameAs(h2, ON.version, o2, OFF.version, 'HEAD 304 below the quota');
   await pause(ON, ip);
-  for (const [what, r] of [['HEAD', await ON.call(`/r/${url}`, { ip, accept: MD, head: true })], ['HEAD with If-None-Match', await ON.call(`/r/${url}`, { ip, accept: MD, head: true, headers: { 'if-none-match': tag } })], ['HEAD with since=', await ON.call(`/r/${url}?since=${bare(tag)}`, { ip, accept: MD, head: true })], ['HEAD asking to pay', await ON.call(`/r/${url}?since=${bare(tag)}`, { ip, accept: MD, head: true, headers: { 'x-sea-toll': 'pay' } })]]) {
-    assert.equal(r.status, 200, what); assert.equal(r.h.etag, undefined, `${what}: no ETag`); assert.equal(r.h['x-sea-delta'], undefined, `${what}: no x-sea-delta`); noToll(r, what);
+  for (const [what, r, paused] of [['HEAD', await ON.call(`/r/${url}`, { ip, accept: MD, head: true })], ['HEAD with If-None-Match', await ON.call(`/r/${url}`, { ip, accept: MD, head: true, headers: { 'if-none-match': tag } }), true], ['HEAD with since=', await ON.call(`/r/${url}?since=${bare(tag)}`, { ip, accept: MD, head: true })], ['HEAD asking to pay', await ON.call(`/r/${url}?since=${bare(tag)}`, { ip, accept: MD, head: true, headers: { 'x-sea-toll': 'pay' } })], ['HEAD with If-None-Match asking to pay', await ON.call(`/r/${url}`, { ip, accept: MD, head: true, headers: { 'if-none-match': tag, 'x-sea-toll': 'pay' } }), true]]) {
+    assert.equal(r.status, 200, what); assert.equal(r.h.etag, undefined, `${what}: no ETag`); assert.equal(r.h['x-sea-delta'], undefined, `${what}: no x-sea-delta`);
+    if (paused) assert.equal(r.h['x-sea-toll-state'], 'paused', `${what}: the 304 lever rests (3.37.1: a conditional HEAD is the 304 lever), no 402 to a HEAD`); else noToll(r, what);
   }
   const t = await ON.call('/routes.json?fmt=toon', { ip, head: true }), u = await OFF.call('/routes.json?fmt=toon', { ip: net(), head: true }); noToll(t, 'HEAD of TOON'); sameAs(t, ON.version, u, OFF.version, 'HEAD of TOON (no body: nothing to toll)');
+});
+await proof('a conditional HEAD of /r/ is the 304 lever (3.37.1): its 304 has the saving of the GET\'s 304 by savingOf, counts toward the free quota and once a day in the ledger, costs the same above the quota with the same toll headers; while the levers rest no ETag and never a 304; since= alone is no lever for a HEAD (the plain HEAD, free); off, a HEAD 304 is what it was', async () => {
+  const ip = net(), url = newPage(50), ipOff = net();
+  const tag = (await ON.call(`/r/${url}`, { ip, accept: MD })).h.etag; await OFF.call(`/r/${url}`, { ip: ipOff, accept: MD });
+  const get304 = await OFF.call(`/r/${url}`, { ip: net(), accept: MD, headers: { 'if-none-match': tag } }), saved = Number(get304.h['x-sea-engine-saved']); assert.equal(get304.status, 304); assert.ok(saved > 1000);
+  // under the quota: the very 304 of the toll off, counted toward the quota and in the ledger like the 304 of a GET
+  let n0 = counted.length, a = await acct(ON, ip), s0 = a.s;
+  const h1 = await ON.call(`/r/${url}`, { ip, accept: MD, head: true, headers: { 'if-none-match': tag } }), o1 = await OFF.call(`/r/${url}`, { ip: ipOff, accept: MD, head: true, headers: { 'if-none-match': tag } });
+  assert.equal(h1.status, 304); noToll(h1, 'a HEAD 304 under the quota'); sameAs(h1, ON.version, o1, OFF.version, 'a HEAD 304 under the quota, as with the toll off');
+  assert.equal((await acct(ON, ip)).s, s0 + saved, 'counted toward the free quota'); assert.deepEqual(counted.slice(n0).filter((x) => x.ip === ip).map((x) => [x.lever, x.saved]), [['delta', saved]], 'in the ledger as the 304 of a GET');
+  assert.equal(counted.slice(n0).filter((x) => x.ip === ipOff).length, 0, 'toll off: a HEAD is counted nowhere, as before');
+  // above the quota: the same price and headers as the GET's 304
+  await compress(ON, ip); const open0 = await openOf(ON, ip);
+  const g = await ON.call(`/r/${url}`, { ip, accept: MD, headers: { 'if-none-match': tag } }), h = await ON.call(`/r/${url}`, { ip, accept: MD, head: true, headers: { 'if-none-match': tag } });
+  for (const [what, r] of [['GET', g], ['HEAD', h]]) { assert.equal(r.status, 304, what); assert.equal(r.h['x-sea-toll-state'], 'open', what); assert.equal(Number(r.h['x-sea-toll-tokens']), saved, what); assert.equal(micro(r.h['x-sea-toll-usd']), twoFifths(saved), what); }
+  assert.equal(await openOf(ON, ip), open0 + 2 * twoFifths(saved), 'both priced alike');
+  // since= alone is no lever for a HEAD: the plain HEAD, free, nothing counted
+  n0 = counted.length; const before = await openOf(ON, ip), sHead = await ON.call(`/r/${url}?since=${bare(tag)}`, { ip, accept: MD, head: true });
+  assert.equal(sHead.status, 200); noToll(sHead, 'HEAD with since='); assert.equal(sHead.h['x-sea-engine'], undefined, 'no lever'); assert.equal(await openOf(ON, ip), before); assert.equal(counted.slice(n0).filter((x) => x.ip === ip).length, 0);
+  // due: the HEAD's 304 rests with the lever, no ETag, no 402
+  await pause(ON, ip); const d = await ON.call(`/r/${url}`, { ip, accept: MD, head: true, headers: { 'if-none-match': tag, 'x-sea-toll': 'pay' } });
+  assert.equal(d.status, 200); assert.equal(d.h.etag, undefined); assert.equal(d.h['x-sea-toll-state'], 'paused');
 });
 await proof(`/mcp/app answers byte for byte as ${REF} (but for the version in serverInfo) and as with the toll off, also for a network that owes and asks to pay`, async () => {
   assert.ok(THEIRS, `a tree of ${REF}`); const ip = net(); await pause(ON, ip);
@@ -802,7 +825,16 @@ await proof('/engine (a section "The toll" with the example $0.003630), /engine.
   const f = await ON.call('/fair', { ip, accept: 'text/html' }); assert.ok(f.text.includes('The toll, apart from fair share') && f.text.includes('Unpaid tolls are not collected'));
   const p = await ON.call('/pricing', { ip, accept: 'text/html' }), pj = await ON.call('/pricing.json', { ip }), line = 'Up to 100,000 tokens saved by the lossless levers stay free per network and UTC day; above that an answer costs 20 % of the tokens it saved, at USD 2 per million, settled over x402 in one payment from $0.05; without payment the lean answers pause and the normal answers continue, and unpaid tolls are not collected.';
   assert.equal(p.text.split('id="toll"').length - 1, 1, '/pricing: one line'); assert.ok(p.text.includes(line), '/pricing: the line'); assert.ok(pj.j.toll.includes(line) && pj.j.toll.endsWith('https://mare.test/engine#toll'), '/pricing.json: the line');
-  const t = await ON.call('/terms', { ip: net(), accept: 'text/html' }), t0 = THEIRS ? await THEIRS.call('/terms', { ip: net(), accept: 'text/html' }) : null; assert.ok(t0, `a tree of ${REF}`); sameAs(t, ON.version, t0, THEIRS.version, '/terms');
+  // the legal texts (node/legal.mjs) by what they say of the toll: the numbers of config/toll.json and the rules of the code
+  const C = TOLL.TOLL, dec = (x) => x.replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, '\'').replace(/&amp;/g, '&').replace(/\u00a0/g, ' ');
+  const en = { free: C.free.toLocaleString('en-US'), usd: `USD ${C.usdPerMillion}`, at: `USD ${C.settleAtUsd}` }, de = { free: C.free.toLocaleString('de-DE'), usd: `${C.usdPerMillion} USD`, at: `${String(C.settleAtUsd).replace('.', ',')} USD` };
+  const legal = async (path) => { const r = await ON.call(path, { ip: net(), accept: 'text/html' }); assert.equal(r.status, 200, path); return dec(r.text); };
+  const terms = await legal('/terms'), agb = await legal('/de/agb'), preise = await legal('/de/preise'), privacy = await legal('/privacy'), ds = await legal('/de/datenschutz');
+  for (const w of [`up to ${en.free} tokens saved by these levers per network (an IPv4 address or an IPv6 /48 network)`, `${Math.round(C.share * 100)} % of its measured saving, valued at ${en.usd} per million tokens`, `amounts accrue per network until they reach ${en.at}`, 'From the network the toll belongs to, the open amount can also be settled', 'POST /fair/pay?r=<toll id>', 'every other door (/via/ too) and HEAD requests without a 304; a 304 answers a HEAD the same as a GET (the same lever, the same toll)']) assert.ok(terms.includes(w), `/terms: ${w}`);
+  for (const w of [`Bis zu ${de.free} durch diese Hebel eingesparte Tokens je Netz (eine IPv4-Adresse oder ein IPv6-Netz /48)`, `${Math.round(C.share * 100)} % ihrer gemessenen Ersparnis, bewertet mit ${de.usd} je Million Tokens`, `bis sie ${de.at} erreichen`, 'Aus dem Netz, zu dem der Zoll gehört', 'POST /fair/pay?r=<Kennung des Zolls>', 'sowie HEAD-Anfragen ohne 304-Antwort; eine 304-Antwort beantwortet eine HEAD-Anfrage genauso wie eine GET-Anfrage (derselbe Hebel, derselbe Zoll)']) assert.ok(agb.includes(w), `/de/agb: ${w}`);
+  assert.ok(preise.includes(`Zoll einer Antwort = ${String(C.share).replace('.', ',')} × eingesparte Tokens oberhalb des Freikontingents × ${de.usd} / 1.000.000`), '/de/preise: the formula');
+  assert.ok(privacy.includes('The harbour toll counts IPv6 by its first 48 bits (/48).'), '/privacy: /48'); assert.ok(/Hafenzoll[^.]*\/48|\/48[^.]*Hafenzoll/.test(ds), '/de/datenschutz: /48');
+  assert.equal(TOLL.tollNet('2001:db8:7:1::1'), '2001:db8:7::/48', 'the code keys IPv6 by /48');
   const l = SITE['/llms.txt'].body; for (const w of ['The toll: up to 100,000 tokens saved by the lossless levers stay free per network and UTC day', 'one IPv6 /48', '0.2 x 9,077 x $2 / 1,000,000 = $0.003630', 'x-sea-toll: pay', 'POST https://mareliberum.dev/fair/pay?r=<x-sea-toll-id> from the same network', 'left alone', 'unpaid tolls are not collected', 'act while the toll is due', 'https://mareliberum.dev/engine#toll']) assert.ok(l.includes(w), `llms.txt: ${w}`);
   // the claim itself: with the toll switched off, the pages it names keep their toll section, and the other pages are origin/main's
   const F = await nodeOf(ROOT, { cfg: { toll: 'off' } }), M = await nodeOf(refDir); calm(F); calm(M);
@@ -810,7 +842,7 @@ await proof('/engine (a section "The toll" with the example $0.003630), /engine.
   for (const [path, accept] of [['/engine', 'text/html'], ['/engine.json', 'application/json'], ['/engine.md', 'text/markdown'], ['/fair', 'text/html'], ['/fair.json', 'application/json'], ['/pricing', 'text/html'], ['/pricing.json', 'application/json'], ['/treasury', 'application/json'], ['/open.json', 'application/json']]) {
     const r = await F.call(path, { ip: '192.0.2.200', accept }), o = await M.call(path, { ip: '192.0.2.200', accept }); assert.equal(r.status, 200, path); assert.ok(/toll/i.test(r.text) && !/toll/i.test(o.text), `${path}: its toll section`);
   }
-  for (const [path, accept] of [['/', 'text/html'], ['/hello', 'application/json'], ['/stats', 'application/json'], ['/routes.json', 'application/json'], ['/savings.json', 'application/json'], ['/connect', 'text/html'], ['/mcp-server', 'text/html'], ['/robots.txt', 'text/plain'], ['/.well-known/x402', 'application/json'], ['/job', 'application/json'], ['/pay/howto', 'text/plain'], ['/privacy', 'text/html'], ['/terms', 'text/html'], ['/proof.json', 'application/json']]) {
+  for (const [path, accept] of [['/', 'text/html'], ['/hello', 'application/json'], ['/stats', 'application/json'], ['/routes.json', 'application/json'], ['/savings.json', 'application/json'], ['/connect', 'text/html'], ['/mcp-server', 'text/html'], ['/robots.txt', 'text/plain'], ['/.well-known/x402', 'application/json'], ['/job', 'application/json'], ['/pay/howto', 'text/plain'], ['/proof.json', 'application/json']]) {
     const a = await F.call(path, { ip: '192.0.2.200', accept }), b = await M.call(path, { ip: '192.0.2.200', accept });
     assert.equal(a.status, b.status, path); assert.equal(tmask(a.text, F.version), tmask(b.text, M.version), `${path}: as ${REF}`);
   }
@@ -847,12 +879,13 @@ const BREAK = [
   ['nothing written to the kv', 'node/toll.mjs', 'const save = (a, soon = false) => { if (a.key) put(a.key, pack(a), ttlOf(a), soon); };', 'const save = () => {};'],
   ['the switch not asked', 'node/core.mjs', "const tollShown = (cfg) => tollSwitch(cfg) && !immune.atRest?.('toll')", "const tollShown = (cfg) => !immune.atRest?.('toll')"],
   ['the rest switch not asked', 'node/core.mjs', "const tollShown = (cfg) => tollSwitch(cfg) && !immune.atRest?.('toll') && ", "const tollShown = (cfg) => tollSwitch(cfg) && "],
-  ['F1/I1 taken back: callers told apart by their name (the sea\'s own, crawlers, Angel, "bot")', 'node/core.mjs', 'if (!tollActs(cfg) || isHead(req, cfg)) return null;', "if (!tollActs(cfg) || isHead(req, cfg) || /MareLiberum|Angel|bot|monitor/i.test(req.headers.get('user-agent') || '')) return null;"],
-  ['HEAD tolled', 'node/core.mjs', 'if (!tollActs(cfg) || isHead(req, cfg)) return null;', 'if (!tollActs(cfg)) return null;'],
-  ['F1b/I1 taken back: a HEAD of /r/ says "unchanged" while the toll is due', 'node/core.mjs', 'const quiet = eng && !wantJson && isHead(req, cfg) ? await tollRestsFor(db, cfg, ip) : false;', 'const quiet = false;'],
+  ['F1/I1 taken back: callers told apart by their name (the sea\'s own, crawlers, Angel, "bot")', 'node/core.mjs', 'if (!tollActs(cfg) || (isHead(req, cfg) && !head)) return null;', "if (!tollActs(cfg) || (isHead(req, cfg) && !head) || /MareLiberum|Angel|bot|monitor/i.test(req.headers.get('user-agent') || '')) return null;"],
+  ['HEAD tolled', 'node/core.mjs', 'if (!tollActs(cfg) || (isHead(req, cfg) && !head)) return null;', 'if (!tollActs(cfg)) return null;'],
+  ['3.37.1 taken back: the 304 of a conditional HEAD free again', 'node/core.mjs', 'await tollGate(req, db, cfg, { ip, base, head }) : null;', '(head ? null : await tollGate(req, db, cfg, { ip, base, head })) : null;'],
+  ['F1b/I1 taken back: a HEAD of /r/ says "unchanged" while the toll is due', 'node/core.mjs', 'const quiet = eng && !wantJson && head && !tg ? await tollRestsFor(db, cfg, ip) : false;', 'const quiet = false;'],
   ['the lossy projection tolled with TOON (fields= and fmt=toon)', 'node/core.mjs', "const d = g.decide(got.find((s) => s.lever === 'toon')?.saved || 0);", "const d = g.decide(got.reduce((x, s) => x + (s.saved || 0), 0));"],
   ['the lossy part of /compress tolled (q, budget)', 'node/press.mjs', 'd = toll.decide(r.parts.lossless?.saved || 0);', 'd = toll.decide(r.saving.saved || 0);'],
-  ['F3/I4 taken back: budget= dropped beside since= while the toll is due', 'node/core.mjs', 'return tg.seal(pressRead({ since: null, budget: eng.budget, strip: eng.strip }, {', 'return tg.seal(pressRead({ since: null, budget: null, strip: [] }, {'],
+  ['F3/I4 taken back: budget= dropped beside since= while the toll is due', 'node/core.mjs', 'const normal = pressRead({ since: null, budget: eng.budget, strip: eng.strip }, {', 'const normal = pressRead({ since: null, budget: null, strip: [] }, {'],
   ['F3b/I4 taken back: /compress drops the budget and the question while the toll is due', 'node/press.mjs', "if (!d.lever && (opts.q || opts.budget) && r.type !== 'json') raw =", "if (false) raw ="],
   ['the reader\'s JSON answer asked for the toll', 'node/core.mjs', 'const tg = eng && !wantJson && (eng.since', 'const tg = eng && (eng.since'],
   ['tools/list asked for the toll', 'node/core.mjs', "if (lean && list.some((x) => x?.method === 'tools/call'))", "if (lean && list.some((x) => x?.method === 'tools/call' || x?.method === 'tools/list'))"],
