@@ -259,9 +259,15 @@ await proof('llms.txt: a section "Guides for developers" with each guide and the
   assert.ok(sec.includes(`again for ${TOLL_EXAMPLE.page - TOLL_EXAMPLE.saved} tokens`) && sec.includes(`${BM.lean.tools} tools instead of ${BM.full.tools}`));
   assert.match(l, /\n- OpenAPI 3\.1 of the reader[^\n]*: \/openapi\/reader\.json/);
 });
-await proof('/open lists /openapi/reader.json among the doors that answer as data; /engine links the guides', async () => {
+await proof('/open lists /openapi/reader.json among the doors that answer as data; /engine, /web-to-markdown and /mcp-server link the guides (the German pages link no English guide)', async () => {
   assert.ok(ENDPOINTS.some(([, list]) => list.some(([p]) => p === '/openapi/reader.json')));
   assert.ok((await call('/engine')).text.includes('<a href="/guides">/guides</a>'));
+  assert.ok((await call('/web-to-markdown')).text.includes('<a href="/guides/read-a-page-again">')); assert.ok((await call('/mcp-server')).text.includes('<a href="/guides/lean-mcp-tool-list">'));
+  for (const p of ['/de/webseite-als-markdown', '/de/mcp-server']) assert.ok(!(await call(p)).text.includes('href="/guides/'), p);
+});
+await proof('robots.txt lets the search engines and the AI crawlers read the guides, their Markdown and the OpenAPI document', async () => {
+  const { robotsGroups, robotsAllows } = await import('../node/check.mjs'); const g = robotsGroups(rd('site/robots.txt'));
+  for (const ua of ['Googlebot', 'Bingbot', 'Applebot', 'DuckDuckBot', 'GPTBot', 'OAI-SearchBot', 'ClaudeBot', 'Claude-User', 'PerplexityBot']) for (const p of [...PATHS, ...PATHS.map((x) => `${x}.md`), '/openapi/reader.json']) assert.equal(robotsAllows(g, ua, p).allowed, true, `${ua} ${p}`);
 });
 
 console.log('the reader and /compress as OpenAPI 3.1');
