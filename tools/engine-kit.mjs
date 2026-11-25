@@ -49,6 +49,7 @@ export async function nodeOf(rootDir, { base = 'https://mare.test', site, cfg: e
   const { memoryKv } = await import(pathToFileURL(join(rootDir, 'node/flow.mjs')).href);
   const { immune } = await import(pathToFileURL(join(rootDir, 'node/immune.mjs')).href);
   const dir = mkdtempSync(join(tmpdir(), 'mare-node-')), file = join(dir, 'sea.tsv');
+  process.once('exit', () => drop(dir)); // the empty sea of the proof goes with it
   mkdirSync(dir, { recursive: true }); writeFileSync(file, ''); writeFileSync(join(dir, 'build.json'), JSON.stringify({ builtAt: '2026-11-20T10:00:00.000Z', entries: 0, lakes: {} }));
   const db = createMem({ file, base }), cfg = { base, kv: memoryKv(), site, waitUntil: () => {}, ...extra };
   let n = 0;
