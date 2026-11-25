@@ -254,7 +254,7 @@ await proof('the till\'s hard rule holds: the facilitator does not answer → ta
 console.log('the page, the data, the words');
 await proof('/fair: the rule in one sentence, three bases and the rate card, the live ledger, the calculator labelled bench, how to pay, the links; the same as data and as Markdown', async () => {
   const h = await call('/fair', { accept: 'text/html' }); assert.equal(h.status, 200);
-  for (const x of [FAIR.rule, '>lower<', '>modelled<', '>upper<', '0.10', '2.00', '8.00', 'labelled', 'bench', '/fair/pay?r=', 'x-sea-receipt', 'href="/savings"', 'href="/proof"', 'href="/pricing"', 'href="/treasury"', 'id="fcalc"', 'fair share settled on chain', 'drops saved for others by pathways']) assert.ok(h.text.includes(x) || (x === 'labelled' && h.text.includes('The default saving is the bench')), x);
+  for (const x of [FAIR.rule, '>lower<', '>modelled<', '>upper<', '0.10', '2.00', '8.00', 'labelled', 'bench', '/fair/pay?r=', 'x-sea-receipt', 'href="/savings"', 'href="/proof"', 'href="/pricing"', 'href="/treasury"', 'id="fcalc"', 'fair share settled on chain', 'drops saved for others by pathways']) assert.ok(h.text.includes(x) || (x === 'labelled' && h.text.includes('The default saving comes from the bench')), x);
   assert.match(h.text, /data-zone=/, 'dressed in the skin of the sea'); assert.match(h.text, /<h1[^>]*>Fair share, in public<\/h1>/);
   const j = (await call('/fair.json')).j; assert.equal(j.rule, FAIR.rule); assert.equal(j.on, true); assert.equal(j.price.mid, 2); assert.equal(j.calculator.bench.label, 'bench'); assert.equal(j.calculator.bench.saves, BENCH.whole.saves);
   for (const k of ['receipts', 'tokens', 'valueCreatedUsd', 'fairShareAccruedUsd', 'fairShareSettledOnChainUsd', 'drops']) assert.ok(k in j.live, k);
