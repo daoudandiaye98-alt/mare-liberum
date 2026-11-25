@@ -57,7 +57,10 @@ const checks = {
     assert.notEqual(f(page(7, '<a href="/site/shop.example">x</a>')), f(page(7, '<a href="/site/other.example">x</a>')), 'links are');
     assert.notEqual(f(page(7).replace('"Sea"', '"Sea of agents"')), f(page(7)), 'structured data is');
     const fair = (id) => page(7, `<table><tr><td><a href="/fair/r/${id}">${id}</a></td><td>$0.000449</td></tr></table>`);
-    assert.equal(f(fair('r20261125xefvuh8g')), f(fair('r20261125abc123de')), 'M1: a new receipt id is no change (/fair)'); assert.equal(f(fair('r20261126zzzzzzzz')), f(fair('r20261125xefvuh8g')));
+    assert.equal(f(fair('r20261125xefvuh8g')), f(fair('r20261125abc123de')), 'M1: a new receipt id is no change (/fair)');
+    const live = (door, sum, state) => page(7, `<div data-fair-live><table><tr><td>${door}</td><td>${sum}</td><td>${state}</td></tr></table></div><!--/fair-live--><p>The rule stays.</p>`);
+    assert.equal(f(live('/brain', '$0.000449', 'asked'), ), f(live('/route', '$0.001200', 'settled')), 'M1: the live receipts block of /fair (doors, sums, states) is no change');
+    assert.notEqual(f(live('/brain', '$0.000449', 'asked').replace('The rule stays.', 'The rule changed.')), f(live('/brain', '$0.000449', 'asked')), 'words outside the live block still are'); assert.equal(f(fair('r20261126zzzzzzzz')), f(fair('r20261125xefvuh8g')));
   },
   async stable(t) {
     // every hub, looked at twice as the sea looks at it, with time between (the clocks and counters move): no hub changes by
@@ -215,6 +218,7 @@ const MUTANTS = [
   ['every hub is told, changed or not', 'core.mjs', 'const paths = [...new Set([...queued, ...fresh])]', 'const paths = [...new Set([...queued, ...fresh, ...fam.hubs])]', 'indexnow'],
   ['buy.xml keeps the thin needs', 'core.mjs', 'if (snap && Number.isFinite(snap.offers) && snap.offers < 3) return \'\';', '', 'buy'],
   ['works.xml lists unconfirmed works', 'core.mjs', '&& (w.votes?.up || 0) - (w.votes?.down || 0) >= 2)', ')', 'works'],
+  ['M1 taken back: the live block of /fair counts as a change', 'tidings.mjs', ".replace(/<div data-fair-live>[\\s\\S]*?<\\/div><!--\\/fair-live-->/g, '')", '', 'fingerprint'],
   ['M1 taken back: receipt ids count as a change', 'tidings.mjs', ".replace(/r\\d{8}[a-z0-9]{8}/g, 'r-receipt')", '', 'fingerprint'],
   ['M2 taken back: the tide queues needs below 3 offers', 'core.mjs', "&& needOf(x.slug) && (await buyIndexable(kv, x.slug))) out.push", "&& needOf(x.slug)) out.push", 'movers'],
   ['M2 taken back: a queued need below 3 offers is told', 'core.mjs', "if (m && !(await buyIndexable(kv, m[1]))) dropped.push(p); else queued.push(p);", "queued.push(p);", 'indexnow'],

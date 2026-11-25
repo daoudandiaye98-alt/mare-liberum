@@ -21,6 +21,9 @@ export function fingerprint(html) {
   const s = String(html || '')
     .replace(/<script\b(?![^>]*application\/ld\+json)[^>]*>[\s\S]*?<\/script>/gi, '')
     .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, '')
+    // the live block of /fair (node/fair.mjs fairStable: the newest receipts, their doors, sums and states) moves with every
+    // counted answer; it is no change of the page
+    .replace(/<div data-fair-live>[\s\S]*?<\/div><!--\/fair-live-->/g, '')
     // the id of a fair-share receipt (node/fair.mjs: r + the day + 8 letters) is a new id with every counted answer, no change
     // of the page; it goes before the digits do, which would leave its letters behind
     .replace(/r\d{8}[a-z0-9]{8}/g, 'r-receipt')
