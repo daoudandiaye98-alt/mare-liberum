@@ -329,7 +329,8 @@ await proof('the sources carry the areas of the Unibrain (3.32.0) and the two ne
   for (const m of built.matchAll(/<script type="application\/ld\+json">(.*?)<\/script>/gs)) for (const o of JSON.parse(m[1])['@graph'] || []) if (o['@type'] === 'Dataset') assert.equal(o.creator?.name, 'Mare Liberum', 'the home page Dataset names its creator');
   // 3.34 review (verify-3.34.md, last note): the headline number adds the measured upper bound and modelled reuse, and
   // its first words say so; the parts follow, each named for what it is
-  assert.match(p, /tokens spared for AI agents so far, an upper bound against raw HTML plus modelled reuse: measured <span class="snd" data-k="sparedM">\{\{sparedM\}\}<\/span> against raw HTML \(an upper bound\) · modelled <span class="snd" data-k="sparedE">\{\{sparedE\}\}<\/span> from reuse/);
+  // 3.35: the engine room's lossless levers are measured too, so they are named as their own part beside the Markdown
+  assert.match(p, /tokens spared for AI agents so far, measured and modelled: measured <span class="snd" data-k="sparedM">\{\{sparedM\}\}<\/span> against raw HTML \(an upper bound\) · <span class="snd" data-k="sparedN">\{\{sparedN\}\}<\/span> by the engine room's lossless levers · modelled <span class="snd" data-k="sparedE">\{\{sparedE\}\}<\/span> from reuse/);
   const app = readFileSync(new URL('../homepage/src/app.js', import.meta.url), 'utf8'); assert.match(app, /if \(el && !still && goal\(\) > 0\)/, 'no counting up with reduced motion');
 });
 await proof('the node fills the counter in the page it sends: every token spared so far, with its measured and modelled parts', async () => {

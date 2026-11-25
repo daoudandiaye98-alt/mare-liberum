@@ -1488,7 +1488,7 @@ export function headline(d) {
     // the areas of the Unibrain (node/areas.mjs): the verified market, ready plans, and what the shared brain spared
     market: d.areas?.market?.verified, plans: d.areas?.thinking?.kinds, tokens30: d.areas?.saved?.tokens30d?.mid,
     // every token the open sea spared for agents so far: measured (Markdown) and modelled (reuses, the middle of the range)
-    spared: d.areas?.saved?.tokensAll?.mid, sparedM: d.areas?.saved?.tokensAll?.measured, sparedMd: d.areas?.saved?.tokensAll?.markdown, sparedN: d.areas?.saved?.tokensAll?.engine, sparedE: d.areas?.saved?.tokensAll?.modelled,
+    spared: d.areas?.saved?.tokensAll?.mid, sparedM: d.areas?.saved?.tokensAll?.markdown ?? d.areas?.saved?.tokensAll?.measured, sparedN: d.areas?.saved?.tokensAll?.engine ?? 0, sparedE: d.areas?.saved?.tokensAll?.modelled,
     webChecked: d.web?.checked, webBlock: d.web?.shares?.blocksSomeAgent, webAssist: d.web?.shares?.blocksAnAssistant, webLlms: d.web?.shares?.llms, webAvg: d.web?.average,
     // every kind of visitor under its own name (r_people, r_training, …): the table "Today, by what they do"
     ...Object.fromEntries(Object.entries(roles).map(([k, v]) => [`r_${k}`, v])) };
@@ -1546,7 +1546,7 @@ function badgeSvg(label, value, title = `${label}: ${value}`) {
 // the live numbers of the front page in one line, for the front page as Markdown
 function liveLine(d, base) {
   const h = headline(d), at = new Date(d.at).toISOString().slice(11, 16);
-  return `Live, counted ${at} UTC: ${fmtN(h.ai)} visits from AI today and ${fmtN(h.people)} from people · ${fmtN(h.index)} places in the open index · ${fmtN(h.paths)} pathways in the Unibrain · ${fmtN(h.spared)} tokens spared for agents so far (measured ${fmtN(h.sparedMd ?? h.sparedM)} against raw HTML, an upper bound${h.sparedN ? `, and ${fmtN(h.sparedN)} by the engine room's lossless levers` : ''}; modelled ${fmtN(h.sparedE)}) · version ${VERSION}. Every number: ${base}/open`;
+  return `Live, counted ${at} UTC: ${fmtN(h.ai)} visits from AI today and ${fmtN(h.people)} from people · ${fmtN(h.index)} places in the open index · ${fmtN(h.paths)} pathways in the Unibrain · ${fmtN(h.spared)} tokens spared for agents so far (measured ${fmtN(h.sparedM)} against raw HTML, an upper bound${h.sparedN ? `, and ${fmtN(h.sparedN)} by the engine room's lossless levers` : ''}; modelled ${fmtN(h.sparedE)}) · version ${VERSION}. Every number: ${base}/open`;
 }
 // the pages of the sea an assistant reading for a person gets as Markdown: all of them but the via addresses, which
 // carry another site's page and are no page of the sea

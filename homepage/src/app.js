@@ -242,7 +242,7 @@ function live(then) {
     const anim = then(!!(o || s));
     const put = (sel, v) => { if (v == null || isNaN(v)) return; for (const el of $$(sel)) { el.dataset.v = String(v); if (anim) countTo(el, v); else el.textContent = fmt(v); } };
     if (o) { put('[data-k="paths"]', o.brain && o.brain.pathways); put('[data-k="market"]', o.market && o.market.verified); put('#n-checked', o.market && o.market.checked); put('#n-work', o.work && o.work.today); }
-    const h = s && s.hero; if (h) { put('[data-k="spared"]', h.tokens); put('[data-k="sparedM"]', h.measured); put('[data-k="sparedE"]', h.modelled && h.modelled.mid); const el = $('#n-text'); if (el && h.measuredVsText != null) el.textContent = fmt(h.measuredVsText); }
+    const h = s && s.hero; if (h) { put('[data-k="spared"]', h.tokens); const mb = s.engine && s.engine.measuredBy; put('[data-k="sparedM"]', mb && mb.markdown != null ? mb.markdown : h.measured); put('[data-k="sparedN"]', mb ? (mb.engine || 0) : 0); put('[data-k="sparedE"]', h.modelled && h.modelled.mid); const el = $('#n-text'); if (el && h.measuredVsText != null) el.textContent = fmt(h.measuredVsText); }
     const at = $('#n-at'), when = (o && o.at) || (s && s.at); if (at && (o || s)) at.textContent = `read live from /open.json and /savings.json at ${new Date(when || Date.now()).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}`;
   });
 }

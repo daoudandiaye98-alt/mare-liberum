@@ -38,7 +38,7 @@ const R = (() => {
       seals: d.last24h?.seals, shells: d.buoys?.shellsThisMonth, brevets: d.arena?.brevets, day: d.clock?.day, hour: d.clock?.hour,
       // the areas of the Unibrain and what the sea spared for agents so far (node/areas.mjs; the node fills the same keys)
       market: d.areas?.market?.verified, plans: d.areas?.thinking?.kinds, tokens30: d.areas?.saved?.tokens30d?.mid,
-      spared: d.areas?.saved?.tokensAll?.mid, sparedM: d.areas?.saved?.tokensAll?.measured, sparedE: d.areas?.saved?.tokensAll?.modelled,
+      spared: d.areas?.saved?.tokensAll?.mid, sparedM: d.areas?.saved?.tokensAll?.markdown ?? d.areas?.saved?.tokensAll?.measured, sparedN: d.areas?.saved?.tokensAll?.engine ?? 0, sparedE: d.areas?.saved?.tokensAll?.modelled,
     };
   }
   const utc = (t) => { const x = new Date(t); return isNaN(x) ? '' : x.toISOString().slice(11, 16); };
