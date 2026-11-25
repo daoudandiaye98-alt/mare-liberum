@@ -1480,6 +1480,11 @@ export function headline(d) {
     // every kind of visitor under its own name (r_people, r_training, …): the table "Today, by what they do"
     ...Object.fromEntries(Object.entries(roles).map(([k, v]) => [`r_${k}`, v])) };
 }
+// the two buttons the law asks for (node/declare.mjs) stand in the foot of every page (node/skin.mjs). The home page wears a
+// look of its own (site/index.html, built from homepage/), so the node sets them into its foot, beside the stamp, until its
+// sources carry them themselves
+const HOME_LAW = '<p class="foot-law"><a href="/withdraw-contract"><strong>Withdraw from contract</strong></a><br><a href="/cancel-contracts"><strong>Cancel contracts here</strong></a></p>';
+const homeButtons = (html) => (html.includes('href="/withdraw-contract"') ? html : html.replace('<p class="stamp" id="stamp"', `${HOME_LAW}<p class="stamp" id="stamp"`));
 // the home page carries today's numbers in its HTML, so readers that do not run JavaScript (most AI crawlers) see them too
 function homeHtml(raw, d) {
   const h = headline(d), at = new Date(d.at).toUTCString().slice(17, 25);
@@ -1719,7 +1724,7 @@ async function handleOne(req, db, cfg = {}) {
     if (page && req.method === 'GET' && !(path === '/' && /application\/json/.test(req.headers.get('accept') || '') && !/text\/html/.test(req.headers.get('accept') || ''))) {
       let b = path === '/skill.md' ? skillMd(page.body) : page.body;
       if (path === '/llms.txt' || path === '/skill.md') b = withPrice(b, pricingOf(cfg.pay || payConfig(), base));
-      if (path === '/' || path === '/index.html') { try { b = homeHtml(b, await liveNow(sea, db, cfg)); } catch (e) { console.error('mare_home', e?.message); } }
+      if (path === '/' || path === '/index.html') { try { b = homeHtml(b, await liveNow(sea, db, cfg)); } catch (e) { console.error('mare_home', e?.message); } b = homeButtons(b); }
       return new Response(b, { headers: { 'content-type': page.type, 'cache-control': 'public, max-age=60', ...CORS } });
     }
     if (path.startsWith('/e/') && req.method === 'GET') {

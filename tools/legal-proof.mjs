@@ -286,7 +286,7 @@ const LAW = { de: [[BUTTON_DE.withdraw, 'Vertrag widerrufen'], [BUTTON_DE.cancel
 const footOf = (h) => (/<footer id="foot">([\s\S]*?)<\/footer>/.exec(h) || [])[1] || '';
 const langIn = (h) => (/<html[^>]* lang="([a-z]{2})/.exec(h) || [])[1];
 // the pages of a node without a works store or a home page of its own: every hub but these, and the rest of the kinds of page
-const NOT_HERE = { '/': 'the home page is site/index.html, a look of its own that the skin leaves alone', '/works': 'the proof node keeps no works store (on the server /works is a page like any other)' };
+const NOT_HERE = { '/': 'the home page is site/index.html (its own look): the next proof serves it', '/works': 'the proof node keeps no works store (on the server /works is a page like any other)' };
 await proof(`both buttons stand in the foot of every page, set apart and in the page's language: every hub, every legal page, the order pages, the forms, an entry that is not there`, async () => {
   const list = [...HUB_PATHS.filter((p) => !Object.hasOwn(NOT_HERE, p)), ...ALL, '/about', '/offers', '/claim', '/c/owner?from=pricing', '/c/law?from=law', ...Object.keys(DECLARE), '/e/mare.test:mcp:nothing'];
   let n = 0;
@@ -299,6 +299,16 @@ await proof(`both buttons stand in the foot of every page, set apart and in the 
   }
   for (const [lang, two] of Object.entries(LAW)) for (const [href, words] of two) { const r = await node.call(href, { accept: 'text/html', ...BROWSER }); assert.equal(r.status, 200, href); assert.match(r.text, new RegExp(`<h1>${words}</h1>`), `${href}: leads straight to the form of “${words}” (${lang})`); }
   assert.ok(n >= HUB_PATHS.length, `${n} pages`);
+});
+await proof('the home page (site/index.html, a look of its own) carries both buttons in its foot as the node serves it, once', async () => {
+  const HOME = { '/': { body: readFileSync(join(ROOT, 'site/index.html'), 'utf8'), type: 'text/html; charset=utf-8' }, '/index.html': { body: readFileSync(join(ROOT, 'site/index.html'), 'utf8'), type: 'text/html; charset=utf-8' } };
+  for (const p of ['/', '/index.html']) {
+    const r = await node.call(p, { accept: 'text/html', ...BROWSER, cfg: { site: HOME } }), foot = footOf(r.text);
+    assert.equal(r.status, 200, p); assert.equal(langIn(r.text), 'en', p);
+    for (const [href, words] of LAW.en) { assert.ok(foot.includes(`<a href="${href}"><strong>${words}</strong></a>`), `${p}: the foot lacks “${words}”`); assert.equal(r.text.split(`href="${href}"`).length, 2, `${p}: ${href} once`); }
+  }
+  const already = { '/': { body: HOME['/'].body.replace('<p class="stamp" id="stamp"', '<a href="/withdraw-contract">Withdraw from contract</a> <a href="/cancel-contracts">Cancel contracts here</a><p class="stamp" id="stamp"'), type: HOME['/'].type } };
+  const r = await node.call('/', { accept: 'text/html', ...BROWSER, cfg: { site: already } }); assert.equal(r.text.split('href="/withdraw-contract"').length, 2, 'a home page whose sources carry the buttons gets no second pair');
 });
 // what each form may ask (§ 356a Abs. 2 BGB, § 312k Abs. 2 BGB) and nothing more; confirm is the button
 const FIELDS = { withdrawal: ['confirm', 'contract', 'date', 'email', 'name'], termination: ['confirm', 'contract', 'effective', 'email', 'name', 'reason', 'type', 'when'] };
@@ -423,6 +433,7 @@ if (CONTROLS) {
     ['the operator door opens without the key', 'node/declare.mjs', "if (!key || !sameHash(key, keySha))", 'if (false)'],
     ['the Belehrung loses the online function', 'node/legal.mjs', '<p>Sie können Ihr Widerrufsrecht auch online unter', '<p>Sie können Ihr Widerrufsrecht nicht online unter'],
     ['the receipt is mailed although no key is set', 'node/declare.mjs', 'const on = !off && !!key && !!from', 'const on = !off'],
+    ['the home page loses the buttons', 'node/core.mjs', 'b = homeButtons(b);', 'b = b;'],
   ];
   for (const [name, file, from, to] of C) {
     controls++;
