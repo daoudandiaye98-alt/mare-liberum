@@ -8,7 +8,7 @@
 export const STATIC_DAY = '2026-11-24';
 // [path, how often it changes, live]
 export const HUBS = [
-  ['/', 'hourly', 1], ['/connect', 'daily', 1], ['/open', 'daily', 1], ['/proof', 'daily', 1], ['/attention', 'daily', 1], ['/savings', 'daily', 1],
+  ['/', 'hourly', 1], ['/connect', 'daily', 1], ['/open', 'daily', 1], ['/proof', 'daily', 1], ['/attention', 'daily', 1], ['/savings', 'daily', 1], ['/fair', 'daily', 1],
   ['/pricing', 'weekly', 0], ['/claim', 'weekly', 0],
   ['/brain', 'hourly', 1], ['/brain/areas', 'daily', 1], ['/brain/market', 'daily', 1], ['/brain/thinking', 'weekly', 0],
   ['/mcp-server', 'daily', 1], ['/mcp-servers', 'daily', 1], ['/a2a-agents', 'daily', 1], ['/x402-apis', 'daily', 1], ['/use', 'weekly', 0],
