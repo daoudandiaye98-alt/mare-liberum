@@ -230,7 +230,8 @@ export function createAreas(h) {
   // count the door it came through (the first part of the address, as the census writes it): "@<door>|<kind>"
   let pend = {};
   const DOORS_A_DAY = 120;
-  const doorOf = (ctx) => { const d = String(ctx?.door || ''); return /^\/[a-z0-9._-]{0,24}$/i.test(d) ? d.toLowerCase() : null; };
+  // a door is one segment (/brain) or, since 3.35, one segment under it (/mcp/lean)
+  const doorOf = (ctx) => { const d = String(ctx?.door || ''); return /^\/[a-z0-9._-]{0,24}(\/[a-z0-9._-]{1,24})?$/i.test(d) ? d.toLowerCase() : null; };
   // the house agent (Angel, a resident of the sea, ctx.house) is counted apart ("h:<kind>"): never in the headline
   const count = (kind, n = 1, ctx) => {
     if (ctx?.own || ctx?.readOnly || ctx?.uncounted || ctx?.head || !(n > 0)) return;
