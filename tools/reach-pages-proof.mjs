@@ -261,7 +261,7 @@ await proof('llms.txt: a section "Guides for developers" with each guide and the
 });
 await proof('/open lists /openapi/reader.json among the doors that answer as data; /engine, /web-to-markdown and /mcp-server link the guides (the German pages link no English guide)', async () => {
   assert.ok(ENDPOINTS.some(([, list]) => list.some(([p]) => p === '/openapi/reader.json')));
-  assert.ok((await call('/engine')).text.includes('<a href="/guides">/guides</a>'));
+  assert.ok((await call('/engine')).text.includes('<a href="/guides">guides for developers</a>'));
   assert.ok((await call('/web-to-markdown')).text.includes('<a href="/guides/read-a-page-again">')); assert.ok((await call('/mcp-server')).text.includes('<a href="/guides/lean-mcp-tool-list">'));
   for (const p of ['/de/webseite-als-markdown', '/de/mcp-server']) assert.ok(!(await call(p)).text.includes('href="/guides/'), p);
 });
@@ -312,6 +312,13 @@ await proof('the scrape placeholder is in step with the node: a door it does not
     else { assert.ok(p in spec.paths && spec.paths[p].post, `${p} answers ${r.status}: it must stand under paths`); assert.ok(!ph?.paths?.includes(p), `${p} is served: the placeholder must go`); }
   }
   assert.deepEqual(SCRAPE_PATHS, ['/v1/scrape', '/v2/scrape']); assert.match(rd('node/readerapi.mjs'), /PLACEHOLDER/);
+  // the operations ready for the day the doors are served: both under paths, the placeholder gone, every $ref resolving
+  const on = readerOpenApi(BASE, VERSION, { scrape: true });
+  for (const p of SCRAPE_PATHS) assert.ok(on.paths[p]?.post?.operationId && on.paths[p].post.responses[200], p);
+  assert.equal(on['x-mare-placeholder'], undefined); assert.doesNotMatch(on.tags.find((t) => t.name === 'scrape').description, /PLACEHOLDER/);
+  const refs = []; const walk = (v) => { if (Array.isArray(v)) v.forEach(walk); else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) { if (k === '$ref') refs.push(x); else walk(x); } }; walk(on);
+  for (const r of refs) assert.ok(r.replace(/^#\//, '').split('/').reduce((o, k) => o?.[k], on), `$ref ${r}`);
+  assert.equal(new Set(Object.values(on.paths).flatMap((i) => Object.values(i).map((o) => o.operationId))).size, Object.values(on.paths).flatMap((i) => Object.values(i)).length, 'unique operation ids');
 });
 
 console.log('the app door');

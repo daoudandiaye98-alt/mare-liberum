@@ -212,6 +212,7 @@ ${M ? `<p><small>The MCP list: the open door's <code>tools/list</code> as one JS
 <h2>Spare tokens: six levers</h2>
 <div class="levers">${v.levers.map(lever).join('')}</div>
 <p><small>Live from the ledger${L.since ? `, counting since ${esc(L.since)}` : ''}: ${n(L.today.lossless.saved)} tokens spared without loss today, ${n(L.last30days.lossless.saved)} in the last 30 days. Lossless, they are worth about $${(v.live.usd.mid).toFixed(2)} at $${TOKEN_PRICE.mid.toFixed(2)} a million input tokens: ${esc(CACHING)}. Every answer the engine shaped says so in its headers: <code>x-sea-engine</code>, <code>x-sea-engine-tokens</code> (before-&gt;after), <code>x-sea-engine-saved</code>, and <code>x-sea-engine-lossy</code> when it lost something.</small></p>
+<p>Step by step, one task a page, every number with its source: <a href="/guides">guides for developers</a>.</p>
 ${plugHtml ? `<h2 id="plug">Plug it in</h2>\n${plugHtml}\n` : ''}<h2>The bench</h2>
 ${benchHtml}
 <h2>One measuring rule</h2>
@@ -232,6 +233,6 @@ ${v.toll ? `<h2 id="toll">The toll</h2>
 <p><small>Tolled: ${esc(v.toll.levers)}. Free: ${esc(v.toll.free)}. A network: ${esc(v.toll.network)}. ${esc(v.toll.never)} ${esc(v.toll.headers)} ${esc(v.toll.books)} ${esc(v.toll.switch)} This node: <b>${esc(v.toll.state)}</b>. What it brought in: <a href="/treasury">/treasury</a>.</small></p>
 ` : ''}<h2>Switched off, nothing acts</h2>
 <p>${esc(ENGINE_RULES.rest)} This node: <b>${esc(v.state)}</b>.</p>
-<p><small>What the sea saves in all: <a href="/savings">/savings</a> · how it is measured: <a href="/proof">/proof</a> · the fair share of a saving: <a href="/fair">/fair</a> · the guide for agents: <a href="/llms.txt">/llms.txt</a> · as data: <a href="/engine.json">/engine.json</a> · for agents: <a href="/engine.md">/engine.md</a> · step by step, for developers: <a href="/guides">/guides</a></small></p>`;
+<p><small>What the sea saves in all: <a href="/savings">/savings</a> · how it is measured: <a href="/proof">/proof</a> · the fair share of a saving: <a href="/fair">/fair</a> · the guide for agents: <a href="/llms.txt">/llms.txt</a> · as data: <a href="/engine.json">/engine.json</a> · for agents: <a href="/engine.md">/engine.md</a></small></p>`;
   return page(base, '/engine', 'The engine room — six levers that spare AI agents tokens, measured | Mare Liberum', 'Open, no account: TOON for tables, only the fields asked for, a lean MCP door, squeezing for programs, reading only what changed, a page to a token budget. Six levers, each measured by one rule with real tokenizers and counted in one public ledger, lossless and lossy apart, each with where it saves.', body, ld);
 }

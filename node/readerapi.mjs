@@ -8,10 +8,11 @@
 // ┌───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┐
 // │ PLACEHOLDER: /v1/scrape and /v2/scrape (Firecrawl-compatible scrape on the same reader) are being added on the branch │
 // │ night/reader (decision D5 of the night of 25./26.11.2026). They are NOT served by this tree and NOT under paths:      │
-// │ SCRAPE_PLACEHOLDER below holds only what they are meant to be, under x-mare-placeholder. When that branch lands, its │
-// │ builder replaces SCRAPE_PLACEHOLDER with the two operations under paths (SCRAPE_PATHS) and removes the placeholder;   │
-// │ tools/reach-pages-proof.mjs holds the two in step: a door the node answers must stand under paths, a door it does not │
-// │ answer must not.                                                                                                       │
+// │ SCRAPE_PLACEHOLDER below holds only what they are meant to be, under x-mare-placeholder. SCRAPE_OPERATIONS holds the  │
+// │ two operations as that branch answers them at 8b64f5e (node/compat.mjs scrapeAsk, scrapeAnswer, scrapeError), ready: │
+// │ once the doors are served, core.mjs calls readerOpenApi(base, VERSION, { scrape: true }) and they stand under paths  │
+// │ while the placeholder goes. tools/reach-pages-proof.mjs holds the two in step: a door the node answers must stand    │
+// │ under paths, a door it does not answer must not.                                                                     │
 // └───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────┘
 import { SQUEEZE } from './squeeze.mjs';
 import { TOON_MIN_GAIN } from './toon.mjs';
@@ -27,11 +28,45 @@ export const SCRAPE_PLACEHOLDER = Object.freeze({
   until: 'Until these stand under paths, a call to them answers as any address the node does not have (404). Use GET /r/{address} or GET /read?url= meanwhile.',
 });
 
+// the two scrape operations, written from night/reader at 8b64f5e (node/compat.mjs, node/core.mjs); under paths only with
+// readerOpenApi(…, { scrape: true }), which core.mjs asks for once the doors are served
+export const SCRAPE_FORMATS = ['markdown', 'html', 'rawHtml', 'links'];
+export function scrapeOperations() {
+  const op = (v) => ({
+    tags: ['scrape'], operationId: `scrapeV${v}`, summary: `Read a public web page in Firecrawl's v${v} form (POST /v${v}/scrape)`,
+    description: `The same reader as /r/{address}, with its protections (robots.txt, the egress gate, its limits), answering as Firecrawl's v${v} scrape answers: {success, data: {markdown, html, rawHtml, links, metadata}}. No key: an Authorization header is accepted and ignored, never read, logged, kept or sent on. Options the reader does not have are ignored and named in data.warning, never an error.`,
+    requestBody: { required: true, description: 'A JSON object of at most 64 KB.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ScrapeRequest' }, example: { url: 'https://example.com/', formats: ['markdown'] } } } },
+    responses: {
+      200: { description: 'success: true and the page in the formats asked; a page that answered with an error is success: true with its status and the error in data.metadata.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ScrapeResult' } } } },
+      400: { description: 'BAD_REQUEST: no JSON object, no url, or a body larger than 64 KB.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ScrapeError' } } } },
+      403: { description: 'ROBOTS_TXT_DISALLOWED (the site asks readers like this one not to read the page) or NOT_FOR_CRAWLERS.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ScrapeError' } } } },
+      405: { description: 'METHOD_NOT_ALLOWED: only POST.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ScrapeError' } } } },
+      422: { description: 'SCRAPE_FAILED or READER_BUSY.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ScrapeError' } } } },
+      429: { description: 'RATE_LIMIT_EXCEEDED: the free reads of this network for the day are used.', content: { 'application/json': { schema: { $ref: '#/components/schemas/ScrapeError' } } } },
+    },
+  });
+  return { '/v1/scrape': { post: op(1) }, '/v2/scrape': { post: op(2) } };
+}
+const SCRAPE_SCHEMAS = {
+  ScrapeRequest: { type: 'object', required: ['url'], additionalProperties: true, description: 'Firecrawl\'s scrape body; other options are ignored and named in data.warning.', properties: {
+    url: { type: 'string', description: 'The https address of the page.' },
+    formats: { type: 'array', description: 'What to send back (default markdown); an entry may also be an object with type.', items: { oneOf: [{ type: 'string', enum: SCRAPE_FORMATS }, { type: 'object', properties: { type: { type: 'string', enum: SCRAPE_FORMATS } } }] } },
+    onlyMainContent: { type: 'boolean', description: 'false: the long form of the page around its main part.' },
+    includeTags: { type: 'array', items: { type: 'string' }, description: 'Selectors to keep (tag, #id and .class are read).' },
+    excludeTags: { type: 'array', items: { type: 'string' }, description: 'Selectors to leave out (tag, #id and .class are read).' },
+    maxAge: { type: 'integer', minimum: 0, description: 'Milliseconds a copy may be old: from an hour on the reader\'s copy of the last hour may answer; below, the page is read anew (default: v1 0, v2 two days).' },
+  } },
+  ScrapeResult: { type: 'object', required: ['success'], properties: { success: { type: 'boolean', const: true }, data: { type: 'object', properties: {
+    markdown: { type: 'string' }, html: { type: ['string', 'null'] }, rawHtml: { type: ['string', 'null'] }, links: { type: 'array', items: { type: 'string' } },
+    metadata: { type: 'object', additionalProperties: true, properties: { title: { type: 'string' }, description: { type: 'string' }, language: { type: ['string', 'null'] }, sourceURL: { type: 'string' }, url: { type: 'string' }, statusCode: { type: 'integer' }, contentType: { type: 'string' }, cacheState: { type: 'string', enum: ['hit', 'miss'] }, error: { type: 'string' } } },
+    warning: { type: 'string', description: 'What was ignored or limited here.' } } } } },
+  ScrapeError: { type: 'object', required: ['success', 'code', 'error'], properties: { success: { type: 'boolean', const: false }, code: { type: 'string' }, error: { type: 'string' } } },
+};
 const s = (description, extra = {}) => ({ type: 'string', description, ...extra });
 const hdr = (description) => ({ description, schema: { type: 'string' } });
 const err = (description) => ({ description, content: { 'application/json': { schema: { $ref: '#/components/schemas/Error' } } } });
 
-export function readerOpenApi(base, version = '') {
+export function readerOpenApi(base, version = '', { scrape = false } = {}) {
   const gain = `${Math.round(TOON_MIN_GAIN * 100)} %`, mb = Math.round(SQUEEZE.maxBytes / (1024 * 1024));
   const readerParams = [
     { name: 'q', in: 'query', required: false, description: 'Your task in words: the answer names pathways other agents walked to this site, and with budget= the blocks that answer it come first.', schema: { type: 'string', maxLength: 500 } },
@@ -74,9 +109,10 @@ export function readerOpenApi(base, version = '') {
     tags: [
       { name: 'reader', description: 'A public web page as Markdown, and the page read again for only what changed.' },
       { name: 'compress', description: 'Text you already hold, made smaller (the squeeze lever of /engine).' },
-      { name: 'scrape', description: `PLACEHOLDER: ${SCRAPE_PATHS.join(' and ')} are not served yet; see x-mare-placeholder.` },
+      scrape ? { name: 'scrape', description: 'Firecrawl\'s scrape on the same reader: POST /v1/scrape and /v2/scrape.' } : { name: 'scrape', description: `PLACEHOLDER: ${SCRAPE_PATHS.join(' and ')} are not served yet; see x-mare-placeholder.` },
     ],
     paths: {
+      ...(scrape ? scrapeOperations() : {}),
       '/r/{address}': {
         get: {
           tags: ['reader'], operationId: 'readPageMarkdown', summary: 'Read a public web page as Markdown',
@@ -130,10 +166,11 @@ export function readerOpenApi(base, version = '') {
         Error: { type: 'object', properties: { error: { type: 'object', properties: { code: { type: 'string' }, message: { type: 'string' }, use: { type: 'string' } }, required: ['code', 'message'] } }, required: ['error'] },
         ReaderJson: { type: 'object', description: 'The reader\'s answer as data (format=json): the page\'s title, description, language, words, Markdown and links, among others.', properties: { url: { type: 'string' }, final: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' }, markdown: { type: 'string' } }, additionalProperties: true },
         CompressRequest: { type: 'object', description: 'One of text, html or json.', properties: { text: s('Plain text or Markdown.'), html: s('HTML.'), json: { description: 'Any JSON value.' }, q: s('A question: keeps the parts that answer it (lossy).', { maxLength: 500 }), budget: { type: 'integer', minimum: 1, description: 'Tokens: fits the text into them (lossy).' }, type: s('html | json | md | text (else it is found out).', { enum: ['html', 'json', 'md', 'text'] }), url: s('The page an HTML text came from.') }, additionalProperties: false },
+        ...(scrape ? SCRAPE_SCHEMAS : {}),
         CompressResult: { type: 'object', properties: { out: { description: 'The text made smaller (a string; JSON as text).' }, form: s('The form of out: md, json, toon, text.'), tokens: { type: 'object', properties: { before: { type: 'integer' }, after: { type: 'integer' }, saved: { type: 'integer' } }, required: ['before', 'after', 'saved'] }, steps: { type: 'array', items: {} }, lossy: { type: 'boolean' }, note: s('What happened, in words.'), status: s('Only when the lossless steps rest (the toll due): why.'), toll: { type: 'object', description: 'Only when the lossless steps rest (the toll due): its state, the open sum and the line that says it.', additionalProperties: true } }, required: ['out', 'form', 'tokens', 'lossy'] },
       },
     },
     'x-mare-toll-headers': TOLL_EXPOSE.split(','),
-    'x-mare-placeholder': { scrape: SCRAPE_PLACEHOLDER },
+    ...(scrape ? {} : { 'x-mare-placeholder': { scrape: SCRAPE_PLACEHOLDER } }),
   };
 }
