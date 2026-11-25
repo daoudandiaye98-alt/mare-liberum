@@ -23,7 +23,7 @@
 // Runs without the network (this machine and local git only): node tools/toll-proof.mjs   (exit code 1 when a proof fails
 // or a control is not caught)
 //   --no-controls          only the proofs (the controls run this file that way in each broken copy)
-//   MARE_TOLL_REF=<ref>     the release the toll must leave byte for byte when off or resting (default origin/main, 3.36.0)
+//   MARE_TOLL_REF=<ref>     the release the toll must leave byte for byte when off or resting (default 4054f80: 3.36.0 with the legal texts)
 //   MARE_TOLL_REF_DIR=<dir> that release as a tree already extracted (the controls hand it on; no git in their copies)
 import assert from 'node:assert/strict';
 import { mkdtempSync, writeFileSync, readFileSync, rmSync, cpSync, mkdirSync, existsSync } from 'node:fs';
@@ -129,7 +129,9 @@ async function nodeOf(rootDir, { cfg: extra = {}, kv: kv0 = null, ledger: led0 =
 }
 // a pace that never stands in the way of the proof (the immune system of each tree is its own)
 const calm = (n, rest = []) => n.immune.set({ mode: 'normal', rest, pace: { perMinute: 1_000_000, burst: 1_000_000 } });
-const REF = process.env.MARE_TOLL_REF || 'origin/main';
+// since 3.37.1 the tree without the toll is 3.36.0 with the legal texts (legal/texts at 4054f80): the footer of every page and
+// the toll's own § 5 in the terms came with them, so that tree, not origin/main, is what the toll must leave byte for byte
+const REF = process.env.MARE_TOLL_REF || '4054f80ad4ca422cd48ad389e5b63fffdc22f099';
 const refDir = (() => {
   const given = process.env.MARE_TOLL_REF_DIR; if (given && existsSync(join(given, 'node/core.mjs'))) return given;
   const dir = mkdtempSync(join(tmpdir(), 'mare-toll-ref-'));
