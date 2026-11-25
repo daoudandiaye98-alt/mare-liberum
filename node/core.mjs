@@ -980,9 +980,12 @@ async function mcpLean(db, base, msg, ip, own = false, house = false, uncounted 
         capabilities: { tools: { listChanged: false } }, serverInfo: { name: 'mare-liberum', title: 'Mare Liberum (lean door)', version: VERSION }, instructions: leanInstructions(base, OPEN_TOOLS) });
     }
     case 'ping': return ok({});
-    case 'tools/list': count('lean', savingOf('lean', { before: LEAN_LIST.before, beforeForm: 'json', after: LEAN_LIST.after, afterForm: 'json' }), 'tools/list'); return ok({ tools: LEAN_TOOLS });
+    case 'tools/list': return ok({ tools: LEAN_TOOLS });
     case 'tools/call': {
       const name = msg.params?.name, a0 = msg.params?.arguments && typeof msg.params.arguments === 'object' ? msg.params.arguments : {};
+      // what the short list spared counts when a client that listed the tools calls one (once a day per network): a check that
+      // only lists the tools (registry checkers, monitors, scripts) puts no tool list in front of a model, so it spares nothing
+      count('lean', savingOf('lean', { before: LEAN_LIST.before, beforeForm: 'json', after: LEAN_LIST.after, afterForm: 'json' }), 'tools/list');
       try {
         if (name === 'find_tools') return result(findTools(OPEN_TOOLS, a0.need ?? a0.q, a0.limit), 'find_tools');
         let tool = name, args;

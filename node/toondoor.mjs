@@ -20,7 +20,8 @@
 import { toToon, TOON, TOON_MIN_GAIN } from './toon.mjs';
 import { savingOf, engineHeaders } from './engine.mjs';
 
-const LEFT_ALONE = /^\/(mcp\/app|compress)(\/|$)/;
+// left alone: the app door, /compress (its own forms), and the reader /r/<address>, whose query belongs to the page it reads
+const LEFT_ALONE = /^\/(mcp\/app|compress|r)(\/|$)/;
 const JSON_TYPE = /^application\/(json|[a-z.+-]*\+json)\s*(;|$)/i;
 const FMT = /^fmt=toon$/i, FIELDS = /^fields=/i;
 export const ENGINE_EXPOSE = 'x-sea-engine,x-sea-engine-tokens,x-sea-engine-saved,x-sea-engine-lossy,x-sea-engine-note';

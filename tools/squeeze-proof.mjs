@@ -161,8 +161,12 @@ await proof('TOON hook: without node/toon.mjs JSON is minified only; with a TOON
   const live = [(await call('/savings.json', { accept: 'application/json' })).j, (await call('/fair.json', { accept: 'application/json' })).j];
   assert.equal(squeeze(JSON.stringify([{ a: 1 }, { a: 2 }], null, 2)).form, toonReady() ? 'toon' : 'json');
   const ref = `${homedir()}/.cache/mare-proof/node_modules/@toon-format/toon/dist/index.mjs`;
-  if (toonReady() || !existsSync(ref)) { console.log(`       (${toonReady() ? 'node/toon.mjs is there: TOON already in use' : 'reference TOON not installed: path not exercised'})`); return; }
-  const T = await import(ref); toonHook({ toToon: (v) => T.encode(v) });
+  // on the release the sea's own encoder is there (node/toon.mjs) and the rule is proved with it; on a branch without it, with the reference
+  let T = null, own = false;
+  if (toonReady()) { const m = await import('../node/toon.mjs'); T = { encode: m.toToon, decode: m.fromToon }; own = true; }
+  else if (existsSync(ref)) { const R = await import(ref); T = { encode: R.encode, decode: R.decode }; toonHook({ toToon: (v) => R.encode(v) }); }
+  else { console.log('       (no TOON encoder: path not exercised)'); return; }
+  console.log(`       (TOON by ${own ? 'node/toon.mjs, the sea\'s own encoder' : 'the reference implementation, dev only'})`);
   try {
     const rows = Array.from({ length: 40 }, (_, i) => ({ id: i + 1, host: `shop${i}.dev`, verified: i % 3 === 0, price: 10 + i / 4 }));
     const r = squeeze(JSON.stringify({ rows }, null, 2));
@@ -174,7 +178,7 @@ await proof('TOON hook: without node/toon.mjs JSON is minified only; with a TOON
     for (const v of shapes) { const min = JSON.stringify(v), t = T.encode(v), x = squeeze(JSON.stringify(v, null, 2)), worth = tokensOf('toon', t) <= 0.8 * tokensOf('json', min);
       assert.equal(x.form, worth ? 'toon' : 'json', `TOON ${tokensOf('toon', t)} vs JSON ${tokensOf('json', min)} tokens`); assert.deepEqual(worth ? T.decode(x.out) : JSON.parse(x.out), v); }
     assert.equal(TOON_MIN_GAIN, 0.2); assert.equal(squeeze(JSON.stringify(NOTES, null, 2)).form, 'json', 'a table of long texts: TOON spares about 12 %, below the threshold');
-  } finally { toonHook(null); }
+  } finally { if (!own) toonHook(null); }
 });
 await proof('type detection: HTML, JSON, Markdown, text; a given type wins', () => {
   assert.equal(detectType(SHOP), 'html'); assert.equal(detectType('<p>a</p><p>b</p><br>'), 'html'); assert.equal(detectType('{"a":1}'), 'json'); assert.equal(detectType('[1,2'), 'text');
@@ -263,6 +267,23 @@ await proof('the pace: one network that floods /compress with big bodies gets 42
   for (let i = 0; i < 12 && st !== 429; i++) { const r = await call('/compress', { method: 'POST', accept: 'application/json', headers: { 'content-type': 'text/plain' }, body: big, ip: '203.0.113.77' }); st = r.status; ra = r.h['retry-after']; }
   assert.equal(st, 429); assert.ok(Number(ra) >= 1);
 });
+// time (rule 19, verify-3.35 C1): texts written to be slow cost linear time in squeeze, and /compress works beside the node
+// with a time limit, so a page that would take minutes to parse stops one helper and never the node
+await proof('time: 1 MB texts written to be slow pass squeeze in under 500 ms each (fenced spaces, dots under a budget, links under a budget, path links, an open tag)', () => {
+  const n = 1_000_000, slow = [['fenced spaces', '```\nx' + ' '.repeat(n) + 'y\n```', { type: 'text' }], ['dots, budget', 'x' + '.'.repeat(n) + 'y', { type: 'text', budget: 100 }],
+    ['links, budget', '[' + ']('.repeat(n / 2) + 'x', { type: 'md', budget: 100 }], ['path links', '](/' + 'a'.repeat(n), { type: 'md' }], ['an open tag', '<p' + ' '.repeat(n), {}]];
+  for (const [what, text, o] of slow) { const t0 = performance.now(); squeeze(text, o); const ms = performance.now() - t0; assert.ok(ms < 500, `${what}: ${Math.round(ms)} ms`); console.log(`       ${what}: ${Math.round(ms)} ms`); }
+});
+await proof('time: an HTML body that would take minutes to parse is given up after SQUEEZE.timeMs (422), and the node answers others meanwhile', async () => {
+  const slow = '<html><body>' + '<a href="'.repeat(100_000), t0 = performance.now();
+  const pending = call('/compress', { method: 'POST', accept: 'application/json', headers: { 'content-type': 'text/html' }, body: slow, ip: '203.0.113.91' });
+  await new Promise((r) => setTimeout(r, 200));
+  const t1 = performance.now(), other = await call('/compress', { accept: 'application/json' }), quick = performance.now() - t1;
+  const r = await pending, total = performance.now() - t0;
+  assert.equal(r.status, 422, `status ${r.status}`); assert.match(r.text, /TOO_SLOW/);
+  assert.ok(total < SQUEEZE.timeMs + 2000, `given up after ${Math.round(total)} ms`); assert.equal(other.status, 200); assert.ok(quick < 1000, `another door waited ${Math.round(quick)} ms`);
+  console.log(`       given up after ${Math.round(total)} ms; GET /compress answered in ${Math.round(quick)} ms meanwhile`);
+});
 // nothing of a body is kept: every write path is watched while bodies carrying a marker pass
 async function privateRun(post) {
   const w0 = writes.length, l0 = ledgerCalls.length, c0 = counts.length, out = [], orig = { log: console.log, error: console.error, warn: console.warn, info: console.info };
@@ -297,10 +318,12 @@ await proof('the ETag is stable while the page is (the next answer says "a copy 
   const c = await call(`/r/${HB}`); assert.notEqual(c.h.etag, a.h.etag);
   PAGE_HB = asHtml(HANDBOOK); bust(HB); const d = await call(`/r/${HB}`); assert.equal(d.h.etag, a.h.etag, 'the same page, the same ETag');
 });
-await proof('If-None-Match with the ETag (also in a list, bare, or *): 304 without a body, counted as delta; another ETag: the page', async () => {
+// verify-3.35 I3: "*" names no version the agent holds, so it gets its 304 and counts nothing
+await proof('If-None-Match with the ETag (also in a list, or bare): 304 without a body, counted as delta; "*": 304, counted as nothing; another ETag: the page', async () => {
   const a = await call(`/r/${HB}`); counts.length = 0;
-  for (const inm of [a.h.etag, `"x", ${a.h.etag}`, `"${sinceOf(a.h.etag)}"`, '*']) { const r = await call(`/r/${HB}`, { headers: { 'if-none-match': inm } }); assert.equal(r.status, 304, inm); assert.equal(r.buf.length, 0); assert.equal(r.h.etag, a.h.etag); assert.equal(r.h['x-sea-engine'], 'delta'); }
-  assert.equal(counts.length, 4); assert.ok(counts.every((c) => c.lever === 'delta' && c.s.after === 0 && c.s.saved > 0 && c.subject === HB));
+  for (const inm of [a.h.etag, `"x", ${a.h.etag}`, `"${sinceOf(a.h.etag)}"`]) { const r = await call(`/r/${HB}`, { headers: { 'if-none-match': inm } }); assert.equal(r.status, 304, inm); assert.equal(r.buf.length, 0); assert.equal(r.h.etag, a.h.etag); assert.equal(r.h['x-sea-engine'], 'delta'); }
+  assert.equal(counts.length, 3); assert.ok(counts.every((c) => c.lever === 'delta' && c.s.after === 0 && c.s.saved > 0 && c.subject === HB));
+  const star = await call(`/r/${HB}`, { headers: { 'if-none-match': '*' } }); assert.equal(star.status, 304); assert.equal(star.buf.length, 0); assert.equal(star.h['x-sea-engine'], undefined, 'no saving claimed'); assert.equal(counts.length, 3, '"*" counts nothing');
   const o = await call(`/r/${HB}`, { headers: { 'if-none-match': 'W/"e1-00000000000000000000"' } }); assert.equal(o.status, 200); assert.ok(o.text.includes('09:30'));
 });
 await proof('since=<etag>: unchanged → one line; changed → the changed lines under the nearest heading; unknown → the whole page and a note', async () => {
@@ -411,8 +434,8 @@ await negative('a door that keeps what was sent in the kv is caught by the priva
 await negative('a default answer with a line added (the since= hint in the body) is caught by the byte check', async () => { const a = await call(`/r/${HB}`); const b = Buffer.from(`${a.text}Read it again for only what changed: ${a.h['x-sea-delta']}\n`); assert.ok(a.buf.equals(b)); });
 await negative('a reader that takes every since= as its own (a page\'s since=2024-01-01 too) is caught', () => { const strip = (url) => ['since']; assert.deepEqual(strip(new URL(`${BASE}/r/x?since=2024-01-01`)), readerParams(new URL(`${BASE}/r/x?since=2024-01-01`), '/r/x').strip); });
 const REF_TOON = `${homedir()}/.cache/mare-proof/node_modules/@toon-format/toon/dist/index.mjs`;
-if (!toonReady() && existsSync(REF_TOON)) await negative('a squeeze that takes TOON whenever it is smaller (no 20 % threshold) is caught', async () => {
-  const T = await import(REF_TOON), min = JSON.stringify(NOTES), t = T.encode(NOTES), broken = bytesOf(t) < bytesOf(min) ? 'toon' : 'json';
+if (toonReady() || existsSync(REF_TOON)) await negative('a squeeze that takes TOON whenever it is smaller (no 20 % threshold) is caught', async () => {
+  const T = toonReady() ? { encode: (await import('../node/toon.mjs')).toToon } : await import(REF_TOON), min = JSON.stringify(NOTES), t = T.encode(NOTES), broken = bytesOf(t) < bytesOf(min) ? 'toon' : 'json';
   assert.equal(broken, (tokensOf('toon', t) <= 0.8 * tokensOf('json', min)) ? 'toon' : 'json');
 });
 await negative('an x-sea-delta header with the address as it came (not percent-encoded) breaks on letters beyond Latin-1', () => { new Response('x', { headers: { 'x-sea-delta': `${BASE}/r/https://bakery-proof.dev/营业时间?since=e1-0` } }); });

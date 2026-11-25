@@ -15,6 +15,8 @@ import { createHash, randomBytes } from 'node:crypto';
 import { squeeze, fitBudget, diffLines, SQUEEZE, SqueezeError, kindOf, jsonDepth } from './squeeze.mjs';
 import { savingOf, engineHeaders, tokensOf, bytesOf, RATIO, ENGINE_VERSION, engineOn as engineOnOf } from './engine.mjs';
 import { immune } from './immune.mjs';
+import { aside } from './aside.mjs';
+const SQUEEZE_FILE = new URL('./squeeze.mjs', import.meta.url).href;
 import { cleanUrl } from './lean.mjs';
 import { readAnswer } from './compact.mjs';
 
@@ -91,8 +93,15 @@ export async function compressDoor(req, { base, ip, cfg = {}, count = () => fals
     if (typeof input === 'string' && !input.trim()) return fail(400, 'INVALID_ARGUMENT', 'the body holds only white space');
     if (q != null && (typeof q !== 'string' || q.length > 500)) return fail(400, 'INVALID_ARGUMENT', 'q is a question of at most 500 characters');
     if (budget != null && budget !== '' && !(/^\d{1,7}$/.test(String(budget).trim()) && Number(budget) >= 1)) return fail(400, 'INVALID_ARGUMENT', 'budget is a whole number of tokens');
-    let r; try { r = squeeze(input, { type, q: q || undefined, budget: budget === '' || budget == null ? undefined : Number(budget), url: typeof page === 'string' ? page : undefined }); }
-    catch (e) { return e instanceof SqueezeError ? fail(e.status, 'INVALID_ARGUMENT', e.message) : fail(500, 'INTERNAL', 'this text could not be made smaller'); }
+    // beside the node, with a time limit (rule 19): a text written to be slow stops one helper, never the node
+    const opts = { type, q: q || undefined, budget: budget === '' || budget == null ? undefined : Number(budget), url: typeof page === 'string' ? page : undefined };
+    let r; try { r = await aside(SQUEEZE_FILE, 'squeezeAside', [input, opts], { ms: SQUEEZE.timeMs }); }
+    catch (e) {
+      if (e?.code === 'EBUSY') return fail(503, 'UNAVAILABLE', 'the helpers are all busy; try again in a moment', { headers: { 'retry-after': '5' } });
+      if (e?.code === 'ESLOW') return fail(422, 'TOO_SLOW', `this text could not be made smaller within ${SQUEEZE.timeMs / 1000} s: send less, or read a page with /r/<address>`);
+      return fail(500, 'INTERNAL', 'this text could not be made smaller');
+    }
+    if (r?.error) return fail(r.error.status, 'INVALID_ARGUMENT', r.error.message);
     // counted by size only, lossless and lossy apart (each part once a day per network and input)
     const subject = subjectOf(buf);
     count('squeeze', r.parts.lossless, subject);
@@ -165,8 +174,10 @@ export function pressRead(P, { r, md, st, a = {}, target, base, req, versions, c
   // If-None-Match with the ETag of the page: 304, no body (what the agent did not have to read again is counted)
   const inm = req?.headers?.get?.('if-none-match');
   if (inm && matches(inm, tag)) {
-    const s = savingOf('delta', { before: md, beforeForm: 'md', after: '', afterForm: 'md' }); count('delta', s, subject);
-    return new Response(null, { status: 304, headers: { ...shaped, ...engineHeaders(s) } });
+    // counted only for an ETag of this page the agent holds: "*" names no version it read, so it gets its 304 and counts nothing
+    const s = savingOf('delta', { before: md, beforeForm: 'md', after: '', afterForm: 'md' }), held = String(inm).split(',').some((x) => sinceOf(x.trim()) === tag);
+    if (held) count('delta', s, subject);
+    return new Response(null, { status: 304, headers: { ...shaped, ...(held ? engineHeaders(s) : {}) } });
   }
   const when = new Date().toISOString().slice(0, 16).replace('T', ' ');
   if (P?.since) {

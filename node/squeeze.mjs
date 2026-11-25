@@ -39,6 +39,7 @@ export const SQUEEZE = Object.freeze({
   minBudget: 50,            // a budget below this many tokens is raised to it (said so)
   diffCells: 4_000_000,     // the line diff's ceiling: (lines a) × (lines b) after the common start and end
   diffEdits: 1000,          // and the most lines changed it still says line by line
+  timeMs: 2500,             // POST /compress works beside the node (node/aside.mjs) and gives up after this long (rule 19)
 });
 export class SqueezeError extends Error { constructor(message, status = 400) { super(message); this.status = status; } }
 
@@ -57,7 +58,8 @@ export function jsonDepth(s, max = SQUEEZE.jsonDepth) {
   }
   return top;
 }
-const TAGS = /<\/?(p|div|span|a|li|ul|ol|h[1-6]|table|tr|td|th|br|section|article|main|nav|header|footer|img|strong|em|b|i|form|button|script|style|meta|link)\b[^>]*>/gi;
+// the tag's name is enough to tell HTML (no [^>]*> after it: on a long unclosed tag that runs in square time)
+const TAGS = /<\/?(p|div|span|a|li|ul|ol|h[1-6]|table|tr|td|th|br|section|article|main|nav|header|footer|img|strong|em|b|i|form|button|script|style|meta|link)\b/gi;
 export function detectType(s) {
   const t = String(s ?? '').trimStart();
   if (/^[[{]/.test(t)) { if (jsonDepth(t) > SQUEEZE.jsonDepth) return 'json'; try { JSON.parse(t); return 'json'; } catch {} }
@@ -72,15 +74,17 @@ const FENCE = /^\s*(`{3,}|~{3,})/;
 const isRow = (l) => /^\s*\|.*\|\s*$/.test(l) || (/\S \| \S/.test(l) && !/^\s*([-*+]|\d+[.)])\s/.test(l));
 // line ends, the byte order mark, no-break spaces; spaces at the end of a line and runs of spaces inside one (its indent
 // and code stay as they are); three and more empty lines become one
+// spaces and tabs at a line's end, cut in linear time (a regex anchored at the end runs in square time on a long run)
+const trimEnd = (l) => { let e = l.length; while (e > 0 && (l.charCodeAt(e - 1) === 32 || l.charCodeAt(e - 1) === 9)) e--; return l.slice(0, e); };
 export function normalise(s) {
   const lines = String(s ?? '').replace(/^﻿/, '').replace(/\r\n?/g, '\n').split('\n'), out = [];
   let fence = null;
   for (const line of lines) {
     const f = FENCE.exec(line);
-    if (fence) { if (f && f[1][0] === fence[0] && f[1].length >= fence.length) fence = null; out.push(line.replace(/[ \t]+$/, '')); continue; }
-    if (f) { fence = f[1]; out.push(line.replace(/[ \t]+$/, '')); continue; }
+    if (fence) { if (f && f[1][0] === fence[0] && f[1].length >= fence.length) fence = null; out.push(trimEnd(line)); continue; }
+    if (f) { fence = f[1]; out.push(trimEnd(line)); continue; }
     const ind = /^[ \t]*/.exec(line)[0];
-    out.push(ind + line.slice(ind.length).replace(/ /g, ' ').replace(/[ \t]{2,}/g, ' ').replace(/[ \t]+$/, ''));
+    out.push(ind + trimEnd(line.slice(ind.length).replace(/ /g, ' ').replace(/[ \t]{2,}/g, ' ')));
   }
   return out.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '').replace(/\n+$/, '');
 }
@@ -115,7 +119,7 @@ export function sayOnce(s, { min = SQUEEZE.repeatMin } = {}) {
 // every web address without its tracking parameters (utm_…, gclid, fbclid …: the reader's own list)
 const URLS = /https?:\/\/[^\s<>"'`)\]]+/g;
 // (and every path link of Markdown, "](/path?…)")
-const PATH_LINK = /\]\((\/[^)\s]*)\)/g, HERE = 'https://p.invalid';
+const PATH_LINK = /\]\((\/[^()\s]{0,2048})\)/g, HERE = 'https://p.invalid';
 export const cutTracking = (s) => String(s ?? '').replace(URLS, (u) => { const tail = /[.,;:!?]+$/.exec(u)?.[0] || '', bare = tail ? u.slice(0, -tail.length) : u; return cleanUrl(bare) + tail; })
   .replace(PATH_LINK, (m, p) => { if (!p.includes('?')) return m; const c = cleanUrl(HERE + p); return c.startsWith(HERE) ? `](${c.slice(HERE.length)})` : m; });
 
@@ -189,7 +193,7 @@ function orderOf(blocks, q) {
   for (const i of idx) { const b = blocks[i]; if (b.kind === 'heading' || seen.has(b.section)) continue; seen.add(b.section); firsts.push(i); }
   const rest = idx.filter((i) => blocks[i].kind !== 'heading' && !firsts.includes(i)).map((i) => [i, density(blocks[i])]).sort((a, b) => b[1] - a[1] || a[0] - b[0]).map(([i]) => i);
   // the lead: the first paragraph that says a sentence (a page may open with a list of links: that is no lead)
-  const prose = (t) => t.replace(/\]\([^)]*\)/g, ']').replace(/https?:\/\/\S+/g, '');
+  const prose = (t) => t.replace(/\]\([^()]{0,2048}\)/g, ']').replace(/https?:\/\/\S+/g, '');
   const li = idx.find((i) => blocks[i].kind === 'para' && prose(blocks[i].text).length >= 80 && /\p{L}[.!?](\s|$)/u.test(prose(blocks[i].text))), lead = li != null ? [li] : firsts.slice(0, 1);
   const without = (xs) => xs.filter((i) => !lead.includes(i));
   return { order: [...lead, ...heads, ...without(firsts), ...without(rest)], scores: null, matched: 0 };
@@ -198,7 +202,9 @@ function orderOf(blocks, q) {
 // its first ones, in their order; what it leaves out marked like a gap. null when too little fits to say anything
 const MAX_CUTS = 3;
 function cutTo(b, room, qs) {
-  const units = b.kind === 'para' ? b.text.match(/[^.!?]+(?:[.!?]+["')\]]*(?:\s+|$)|$)/g)?.filter((u) => u.trim()) || [b.text] : b.text.split('\n');
+  // sentences end at . ! or ? followed by white space: "3.50 EUR" stays one sentence (and the split runs in linear time)
+  const sentences = (t) => { const u = t.split(/(?<=[.!?]["')\]]*\s)/).filter((x) => x.trim()); return u.length ? u : [t]; };
+  const units = b.kind === 'para' ? sentences(b.text) : b.text.split('\n');
   if (units.length < 2 || room < 100) return null;
   const join = b.kind === 'para' ? '' : '\n', order = units.map((u, i) => i);
   if (qs?.size) { const hits = units.map((u) => termsOf(u).filter((w) => qs.has(w)).length); order.sort((x, y) => hits[y] - hits[x] || x - y); }
@@ -263,6 +269,10 @@ const FORM = { html: 'html', json: 'json', md: 'md', text: 'text' };
 // input: a text (or a JSON value); type: html | json | md | text (else found out); q, budget: the lossy steps, only when
 // named; url: the page an HTML text came from (its links stay whole)
 // → { out, form, type, steps: [{ step, lossless, before, after }], lossy, saving, parts: { lossless, lossy }, note }
+// squeeze for a helper beside the node (node/aside.mjs): an error of the input comes back as data, so its status survives
+export function squeezeAside(input, opts) {
+  try { return squeeze(input, opts); } catch (e) { if (e instanceof SqueezeError) return { error: { status: e.status, message: e.message } }; throw e; }
+}
 export function squeeze(input, { type, q, budget, url } = {}) {
   const given = kindOf(type), isValue = input !== null && typeof input === 'object';
   const src = isValue ? JSON.stringify(input) : String(input ?? '');
