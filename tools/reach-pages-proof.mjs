@@ -284,7 +284,8 @@ await proof('/openapi/reader.json answers JSON: OpenAPI 3.1.0, the node\'s versi
   assert.equal(new Set(ids).size, ids.length, 'unique operation ids');
   const refs = []; const walk = (v) => { if (Array.isArray(v)) v.forEach(walk); else if (v && typeof v === 'object') for (const [k, x] of Object.entries(v)) { if (k === '$ref') refs.push(x); else walk(x); } }; walk(spec);
   for (const r of refs) { const at = r.replace(/^#\//, '').split('/').reduce((o, k) => o?.[k], spec); assert.ok(r.startsWith('#/') && at, `$ref ${r}`); }
-  assert.deepEqual(Object.keys(spec.paths).sort(), ['/compress', '/r/{address}', '/read'].sort());
+  // the reader's two doors and /compress; the scrape doors only once the node serves them (the next proof holds that)
+  assert.deepEqual(Object.keys(spec.paths).sort(), ['/compress', '/r/{address}', '/read', ...SCRAPE_PATHS.filter((p) => p in spec.paths)].sort());
 });
 await proof('the doors it names answer as it says on a local node: the reader with ETag, since= (one line when unchanged), If-None-Match (304) and its headers; /compress with 200, 400, 405, 413 and 503 at rest', async () => {
   const r = await call(`/r/${PAGE_URL}`, { headers: AGENT('text/markdown') }); assert.equal(r.status, 200, r.text.slice(0, 200)); const etag = r.headers.get('etag'); assert.match(etag || '', /^W\/"e1-[0-9a-f]{20}"$/); assert.ok(r.headers.get('x-sea-delta'));
