@@ -116,6 +116,7 @@ export function memoryKv() {
   return {
     async get(k) { const x = m.get(k); if (!x) return null; if (x.e && x.e < Date.now()) { m.delete(k); return null; } return structuredClone(x.v); },
     async set(k, v, ttl) { m.set(k, { v: structuredClone(v), e: ttl ? Date.now() + ttl * 1000 : 0 }); },
+    keys(prefix = '') { const t = Date.now(), out = []; for (const [k, x] of m) if (k.startsWith(prefix) && !(x.e && x.e < t)) out.push(k); return out; },
   };
 }
 

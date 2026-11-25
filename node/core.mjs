@@ -60,6 +60,7 @@ import { toonAsked, jsonRequest, toonAnswer } from './toondoor.mjs';
 import { leanTools, leanSizes, leanSentence, leanInstructions, findTools, leanText, LEAN_DIRECT, LEAN_FORMAT } from './leanmcp.mjs';
 import { createToll, tollSwitch, tollSecret, tollRpc, tollRequired, tollFacts, TOLL, TOLL_EXPOSE, TOLL_META, TOLL_ID } from './toll.mjs';
 import { jinaAsk, jinaText, jinaJson, scrapeAsk, scrapeAnswer, scrapeError, readerDoc, readerDocPage } from './compat.mjs';
+import { createBooks, booksSwitch, booksRpc, booksStart, booksAnswer, BOOKS_PATHS } from './books.mjs';
 
 export const VERSION = '3.39.0';
 const UA = 'MareLiberum/1.0 (open agent index; pull-only; +/.well-known/ard.json)';
@@ -1604,6 +1605,13 @@ const tollActs = (cfg) => tollShown(cfg) && engineActs(cfg);
 const tollOf = (db, cfg) => (db.tollBook ||= createToll({ kv: cfg.kv || db.kv || memoryKv(), secret: tollSecret(), rpc: tollRpc(cfg), sweepMs: cfg.tollSweepMs ?? 60_000 }));
 // at the start of a node (serve.mjs): the toll's books are read and every payment an earlier run left on its way is checked
 export async function startToll(db, cfg = {}) { if (!tollSwitch(cfg) || !tollSecret()) return null; return tollOf(db, cfg).sweep(); }
+// The books from the chain (node/books.mjs, since 3.38): every incoming USDC transfer to the till's wallet on Base, read from the
+// chain into the node's own state (never the database), for the operator only (/operator/ledger.csv, .json, /operator/digest,
+// with the operator key); /status.json shows counts. A node reads the chain on its own timer while it keeps its state on disk
+// (serve.mjs starts it); MARE_BOOKS=off or MARE_BASE_RPC=off switch the reading off. No request ever waits for it.
+const booksOf = (db, cfg) => (db.chainBooks ||= createBooks({ kv: cfg.kv || db.kv || memoryKv(), ledger: ledgerOf(cfg), wallet: (cfg.pay || payConfig()).payTo, facilitator: (cfg.pay || payConfig()).facilitator, rpc: booksSwitch(cfg) ? booksRpc(cfg) : null, ...booksStart(), ...(cfg.booksOptions || {}), log: (t, m) => console.error(t, m) }));
+export function startBooks(db, cfg = {}) { if (!booksSwitch(cfg)) return null; return booksOf(db, cfg).start(); }
+export function stopBooks(db) { return db.chainBooks?.stop(); }
 const PAY_DOORS = /^\/(route|settle|fair|pay|via)(\/|$)/;
 const TOLL_ASK = /^\s*pay\s*$/i;
 // a request whose payment the toll took (or whose payment waited behind another): every answer it gets, an error too, says so
@@ -2298,7 +2306,8 @@ async function handleOne(req, db, cfg = {}) {
       const [c, works, atlasN, tides] = await Promise.all([sea.census().catch(() => null), sea.worksCount().catch(() => 0), sea.atlasStats().then((x) => x.mappedLive).catch(() => null), sea.tides ? sea.tides({ limit: 1 }).catch(() => null) : null]);
       const lastTide = typeof tides?.last === 'string' ? tides.last : tides?.last?.at || null;
       const st = { version: VERSION, at: new Date().toISOString(), tide: lastTide || null, tideOk: lastTide ? Date.now() - Date.parse(lastTide) < 30 * 60 * 1000 : undefined, db: typeof atlasN === 'number', atlas: atlasN, works, today: c ? Object.values(c.today.kinds || {}).reduce((a2, b2) => a2 + b2, 0) : null, use: c?.today?.use, immune: immune.mode };
-      if (path === '/status.json') return json(st, 200, { 'cache-control': 'no-store', ...CORS });
+      // (since 3.38 the status as data also counts the books and the payment path: numbers only, no address, no sum, node/books.mjs)
+      if (path === '/status.json') return json({ ...st, counts: await booksOf(db, cfg).counts({ declKv: declKv(db, cfg) }).catch(() => null) }, 200, { 'cache-control': 'no-store', ...CORS });
       return path === '/status' ? html(statusPage(base, st), 30) : html(transparencyPage(base, st), 300);
     }
     if (path === '/roadmap' || path === '/roadmap.json') { const r = await sea.roadmap(); return path === '/roadmap' && /text\/html/.test(accept) ? html(roadmapPage(base, r, ROADMAP_AREAS), 120) : json(r, 200, { 'cache-control': 'public, max-age=120', ...CORS }); }
@@ -2538,6 +2547,8 @@ async function handleOne(req, db, cfg = {}) {
     // sent stays in the node's own state, and only the operator reads it, with the moderation key
     if (Object.hasOwn(DECLARE, path)) return declareAnswer({ req, path, base, kv: declKv(db, cfg), ip, mail: cfg.mail ?? mailConfig(), get: cfg.mailFetch, save: cfg.stateSave, waitUntil: cfg.waitUntil, ...(cfg.declLog ? { log: cfg.declLog } : {}) });
     if (path === OPERATOR_PATH && req.method === 'GET') return operatorAnswer({ req, url, base, kv: declKv(db, cfg), ...(cfg.modKeySha ? { keySha: cfg.modKeySha } : {}) });
+    // the books from the chain and the operator's digest (node/books.mjs): with the same key, nobody else
+    if (BOOKS_PATHS.has(path) && req.method === 'GET') return booksAnswer({ req, url, path, books: booksOf(db, cfg), declKv: declKv(db, cfg), keySha: cfg.modKeySha });
     // a via address: the sea carries the request to the place it names (node/via.mjs); the walk is counted and
     // strengthens the path, behind the answer
     if (path.startsWith('/via/') && (req.method === 'GET' || req.method === 'POST')) {

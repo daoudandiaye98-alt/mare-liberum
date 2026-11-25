@@ -382,7 +382,7 @@ await proof('the package to take home starts empty on a machine of its own, and 
   assert.ok(!names.some((n) => /\.env|secret|\.git|node_modules|probe|data\//.test(n)), 'nothing that does not belong travels along');
   assert.equal(JSON.parse(readFileSync(join(dir, 'mare-liberum', 'package.json'), 'utf8')).dependencies, undefined);
   const home = join(dir, 'mare-liberum'), port = 18000 + Math.floor(Math.random() * 2000);
-  const node = spawn(process.execPath, ['serve.mjs', String(port)], { cwd: home, env: { PATH: process.env.PATH, MARE_STATE: './state', MARE_HARBOUR_ROOM: '10' }, stdio: ['ignore', 'pipe', 'pipe'] });
+  const node = spawn(process.execPath, ['serve.mjs', String(port)], { cwd: home, env: { PATH: process.env.PATH, MARE_STATE: './state', MARE_HARBOUR_ROOM: '10', MARE_BOOKS: 'off' }, stdio: ['ignore', 'pipe', 'pipe'] });
   let out = ''; node.stdout.on('data', (d) => { out += d; }); node.stderr.on('data', (d) => { out += d; });
   try {
     for (let i = 0; i < 60 && !/Mare Liberum on/.test(out); i++) await new Promise((r) => setTimeout(r, 100));
@@ -400,7 +400,7 @@ await proof('the package to take home starts empty on a machine of its own, and 
     // asked to stop, the node writes its state; started again, the harbour is still there
     node.kill('SIGTERM'); await new Promise((r) => node.on('exit', r));
     assert.ok(existsSync(join(home, 'state', 'sea.ndjson'))); assert.ok(readdirSync(join(home, 'state')).length >= 1);
-    const again = spawn(process.execPath, ['serve.mjs', String(port)], { cwd: home, env: { PATH: process.env.PATH, MARE_STATE: './state', MARE_HARBOUR_ROOM: '10' }, stdio: ['ignore', 'pipe', 'pipe'] });
+    const again = spawn(process.execPath, ['serve.mjs', String(port)], { cwd: home, env: { PATH: process.env.PATH, MARE_STATE: './state', MARE_HARBOUR_ROOM: '10', MARE_BOOKS: 'off' }, stdio: ['ignore', 'pipe', 'pipe'] });
     let out2 = ''; again.stdout.on('data', (d) => { out2 += d; }); again.stderr.on('data', (d) => { out2 += d; });
     try {
       for (let i = 0; i < 60 && !/Mare Liberum on/.test(out2); i++) await new Promise((r) => setTimeout(r, 100));

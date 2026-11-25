@@ -47,7 +47,8 @@
     "proof:leanmcp": "node tools/leanmcp-proof.mjs",
     "proof:pipes": "node tools/pipes-proof.mjs",
     "proof:toll": "node tools/toll-proof.mjs",
-    "proof:reader": "node tools/reader-compat-proof.mjs"
+    "proof:reader": "node tools/reader-compat-proof.mjs",
+    "proof:books": "node tools/books-proof.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.9.0",

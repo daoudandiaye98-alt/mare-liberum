@@ -162,12 +162,31 @@ export function checkPayment(pay, t) {
   return { ok: true, payer: WALLET.test(String(auth?.from || '')) ? String(auth.from) : null };
 }
 
+// what the facilitator answered, counted per UTC day in this node's memory (since 3.38): ok, refused (verify said invalid),
+// failed (settle said no), noverdict (an answer without one), down (5xx) or error (no answer). node/books.mjs folds the counts
+// into the node's state once a minute; the operator's digest shows them. Nothing about the payment or the payer is counted
+const watched = new Map(); let lastReached = null, lastMissed = null;
+export const payWatch = {
+  note(kind, outcome, at = new Date().toISOString()) {
+    const d = at.slice(0, 10), k = `${kind}_${outcome}`; let m = watched.get(d); if (!m) watched.set(d, (m = {})); m[k] = (m[k] || 0) + 1;
+    if (outcome === 'down' || outcome === 'error') lastMissed = at; else lastReached = at;
+  },
+  take() { const out = Object.fromEntries(watched); watched.clear(); return out; },
+  peek() { return structuredClone(Object.fromEntries(watched)); },
+  last: () => ({ reached: lastReached, missed: lastMissed }),
+};
 // one question to the facilitator: verify (the signature holds, nothing moves) or settle (the USDC moves on chain)
 export async function facilitate(cfg, kind, pay, t, ms, get = (...a) => fetch(...a)) {
-  const r = await get(`${cfg.facilitator}/${kind}`, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json', 'user-agent': UA },
-    body: JSON.stringify({ x402Version: pay.version, paymentPayload: pay.payload, paymentRequirements: pay.version === 2 ? t.v2 : t.v1 }), signal: AbortSignal.timeout(ms) });
-  const text = await r.text(); let body = null; try { body = JSON.parse(text); } catch {}
-  return { status: r.status, body: body && typeof body === 'object' ? body : null };
+  let r, text;
+  try {
+    r = await get(`${cfg.facilitator}/${kind}`, { method: 'POST', headers: { 'content-type': 'application/json', accept: 'application/json', 'user-agent': UA },
+      body: JSON.stringify({ x402Version: pay.version, paymentPayload: pay.payload, paymentRequirements: pay.version === 2 ? t.v2 : t.v1 }), signal: AbortSignal.timeout(ms) });
+    text = await r.text();
+  } catch (e) { payWatch.note(kind, 'error'); throw e; }
+  let body = null; try { body = JSON.parse(text); } catch {}
+  const b = body && typeof body === 'object' ? body : null;
+  payWatch.note(kind, r.status >= 500 ? 'down' : kind === 'verify' ? (b?.isValid === true ? 'ok' : b?.isValid === false ? 'refused' : 'noverdict') : (b?.success === true ? 'ok' : b?.success === false ? 'failed' : 'noverdict'));
+  return { status: r.status, body: b };
 }
 
 // take a payment and deliver: verify → the work → settle. work(sale) builds the answer; it must not throw.
