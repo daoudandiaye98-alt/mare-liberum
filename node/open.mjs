@@ -43,7 +43,8 @@ export const COSTS = [{ what: 'the server: one Hetzner CX23 (2 vCPU, 4 GB) behin
 // then the page says how long this node has run it. No day is written before it happened.
 const REPO = 'https://github.com/daoudandiaye98-alt/mare-liberum';
 export const RELEASES = [
-  ['3.36.0', null, null, 'the pipelines: the levers one step away in agent clients and gateways — the lean door beside the full one for every MCP client on /connect, a Claude Code and Cursor plugin for the lean door with a skill for since=, fields= and budget=, the Gemini extension on the lean door, the lean door in /.well-known/ard.json, copy-paste lines on /engine for ten clients and gateways, and /compress for a LiteLLM proxy and the Vercel AI SDK that keeps the original text on any error'],
+  ['3.37.0', null, null, 'the harbour toll: up to 100,000 tokens saved by the lossless levers stay free per network and day; above that an answer costs 20 % of what it saved (USD 2 per million tokens), settled over x402 in one payment from $0.05; without payment the lean answers pause and the normal answers continue, and unpaid tolls are not collected'],
+  ['3.36.0', '2026-11-25T19:03:27+01:00', 27, 'the pipelines: the levers one step away in agent clients and gateways — the lean door beside the full one for every MCP client on /connect, a Claude Code and Cursor plugin for the lean door with a skill for since=, fields= and budget=, the Gemini extension on the lean door, the lean door in /.well-known/ard.json, copy-paste lines on /engine for ten clients and gateways, and /compress for a LiteLLM proxy and the Vercel AI SDK that keeps the original text on any error'],
   ['3.35.0', '2026-11-25T17:36:55+01:00', 25, 'the engine room: six measured levers that spare agents tokens — fields= and fmt=toon on every JSON door, the lean MCP door /mcp/lean (four tools instead of 55, answers as text), POST /compress for programs, and on the reader since= (only what changed) and budget= (a page fitted to a token budget); /engine shows each lever live, with a tokenizer bench'],
   ['3.34.1', '2026-11-25T14:11:18+01:00', 24, 'the homepage carries the verification tag of the Internet Licensing Collective (ILC), so the sea can join it as a publisher'],
   ['3.34.0', '2026-11-25T13:31:13+01:00', 23, 'Fair Share: a receipt for every saving, a voluntary fair share settled over x402, the drop as a unit of account, commission-ready shop links, a second IndexNow path, and the journey homepage'],
@@ -240,11 +241,13 @@ export function createOpen(h) {
 // ------------------------------------------------------------------ every number, gathered once a minute
 // sea: the flow (node/flow.mjs); ledger: the till and the steps through the sea (node/ledger.mjs). A part that does not
 // answer is left out and says so; nothing is guessed in its place.
-export async function openOf({ sea, ledger, version, base, tools = [] }) {
+// toll (since 3.37): what the toll of the lossless levers brought in, from the node's record (node/toll.mjs totals); tollOn: it acts
+export async function openOf({ sea, ledger, version, base, tools = [], toll = null, tollOn = false }) {
   const safe = (f, fb = null) => Promise.resolve().then(f).catch(() => fb);
   const [work, visits, mcp, brain, areas, savings, pulse, treasury, flow, csvDays] = await Promise.all([safe(() => sea.workDays(OPEN.days), null),
     safe(() => sea.censusDays(OPEN.days), []), safe(() => sea.mcpTools(OPEN.days), null), safe(() => sea.brainStats(), null), safe(() => sea.areasLive(), null),
     safe(() => sea.savings(), null), safe(() => ledger?.pulse(), null), safe(() => ledger?.treasury(), null), safe(() => sea.pulse(), null), safe(() => sea.censusDays(OPEN.csvDays), [])]);
+  const tt = toll ? await safe(toll, null) : null;
   const at = new Date().toISOString(), today = at.slice(0, 10), known = new Set(tools);
   const days = visits.map((d) => ({ day: d.day, recorded: !!d.kinds, today: d.day === today, kinds: d.kinds ? Object.fromEntries(KIND_ORDER.map((k) => [k, Number(d.kinds[k]) || 0])) : null }));
   const firstRecord = csvDays.find((d) => d.kinds)?.day || null;
@@ -272,7 +275,8 @@ export async function openOf({ sea, ledger, version, base, tools = [] }) {
     market: areas?.market ? { checked: areas.market.checked || 0, verified: areas.market.verified || 0, proven: areas.market.proven || 0, waiting: areas.market.waiting || 0, page: `${base}/brain/market` } : null,
     savings: sv ? { ...sv, page: `${base}/savings`, csv: `${base}/savings.csv`, ratio: TOKEN_RATIO.assumption ? { bytesPerToken: TOKEN_RATIO.md, assumption: true } : { charsPerToken: { html: TOKEN_RATIO.html, markdown: TOKEN_RATIO.md }, bytesPerToken: { html: TOKEN_RATIO.bytes.html, markdown: TOKEN_RATIO.bytes.md }, assumption: false, tokenizer: TOKEN_RATIO.tokenizer, measured: TOKEN_RATIO.date, proof: `${base}/proof` }, price: { low: TOKEN_PRICE.low, mid: TOKEN_PRICE.mid, high: TOKEN_PRICE.high, unit: TOKEN_PRICE.unit, label: TOKEN_PRICE.label } } : null,
     money: { till: treasury ? { todayUsd: t.today_usd ?? 0, totalUsd: t.total_usd ?? 0, sales: t.total_count ?? 0, paidToday: t.today_paid ?? 0, freeSamplesToday: t.today_free ?? 0, totalUsdUnconfirmed: t.total_usd_unconfirmed ?? 0, source: t.source || null } : null,
-      what: 'Money the node itself counts: the paid route over x402 (POST /route, 0.02 USDC on Base). Money seen to arrive on chain counts; claims count apart as unconfirmed; tests and free samples never count as money', treasury: `${base}/treasury` },
+      ...(tt ? { toll: { on: !!tollOn, settledUsd: tt.settledMicro / 1e6, onItsWayUsd: tt.onItsWayMicro / 1e6, payments: tt.payments, todaySettledUsd: tt.todaySettledMicro / 1e6, what: 'the toll of the lossless levers above 100,000 saved tokens per network and day (20 % of the saving at USD 2 per million tokens), settled over x402; exact to the millionth from this node\'s record, apart from the paid route', rule: `${base}/engine#toll` } } : {}),
+      what: 'Money the node itself counts: the paid route over x402 (POST /route, 0.02 USDC on Base), and since 3.37 the toll of the lossless levers (toll), apart. Money seen to arrive on chain counts; claims count apart as unconfirmed; tests and free samples never count as money', treasury: `${base}/treasury` },
     costs: COSTS.map((c) => ({ what: c.what, eurPerMonth: c.eurPerMonth, vatIncluded: c.vatIncluded, statedBy: c.statedBy })),
     releases: RELEASES, current: { version, released: RELEASES.find((r) => r.version === version)?.at || null },
     endpoints: ENDPOINTS.flatMap(([group, list]) => list.map(([path, what, since]) => ({ group, path, url: `${base}${path}`, what, ...(since ? { since } : {}) }))),

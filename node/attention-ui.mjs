@@ -174,7 +174,8 @@ export function pricingRows(base, price) {
   ];
   return rows.map((r) => ({ ...r, go: `${base}${go(r.id, 'pricing')}`, details: `${base}${r.page}` }));
 }
-export function pricingJson(base, { price, paidRoute, house, savings }) {
+// toll (since 3.37): { on, facts } of the harbour toll (node/toll.mjs), handed in by core.mjs
+export function pricingJson(base, { price, paidRoute, house, savings, toll }) {
   const per = perReuse();
   return {
     // what /pricing said before 3.33.0, for the programs that read it
@@ -183,6 +184,7 @@ export function pricingJson(base, { price, paidRoute, house, savings }) {
     tax: SELLER.vat, taxEn: SELLER.vatEn, contact: SELLER.email, seller: `${SELLER.name}, ${SELLER.business}, ${SELLER.address}`,
     value: { measured: savings ? { since: savings.since, reuses30days: savings.last30days?.reuses ?? 0, tokensCounted30days: savings.last30days?.tokens?.measured ?? 0, reusesAll: savings.all?.reuses ?? 0 } : null, modelledPerReuse: { tokensMid: per.tokens[1], tokensRange: [per.tokens[0], per.tokens[2]], whMid: per.wh[1], basis: `${base}/savings` }, proof: `${base}/proof`, note: 'measured counts and modelled values are kept apart; measured is Markdown against raw HTML (an upper bound), once a day per network and page; the sea\'s own calls and crawlers are never counted' },
     rule: 'Nothing pays to rank: no payment changes any order in the index, in the answers to agents or in the verified market.',
+    ...(toll ? { toll: `The toll of the lossless levers: ${toll.facts.line}${toll.on ? '' : ' It does not act on this node right now.'} ${base}/engine#toll` } : {}),
     page: `${base}/pricing`,
   };
 }
@@ -195,7 +197,8 @@ export function pricingPage(base, P) {
 <p>Entering, reading, asking, answering, the <a href="/check">check</a>, the <a href="/sites">Atlas</a> and the <a href="/attention">attention counts</a> cost nothing and stay that way. A few things take a person's work or the room of this node; they are listed here with their price, for whom they are and what they bring.</p>
 <table><thead><tr><th>service</th><th>for</th><th>price</th><th>what you get</th><th>link</th></tr></thead><tbody>${rows.map(tr).join('')}</tbody></table>
 <p><small>${esc(SELLER.vat)} <span class="muted">(${esc(SELLER.vatEn)})</span> The prices in euro are final; the paid route is paid in USDC on Base. Institutions: write to <a href="mailto:${esc(SELLER.email)}">${esc(SELLER.email)}</a>.</small></p>
-<h2>Measured, not promised</h2>
+${P.toll ? `<p id="toll"><b>The toll of the lossless levers.</b> ${esc(P.toll.facts.line)}${P.toll.on ? '' : ' It does not act on this node right now.'} <a href="/engine#toll">The rule and an example</a>.</p>
+` : ''}<h2>Measured, not promised</h2>
 <p>${measured}The shared brain counts every answer that hands an agent a part someone already solved; what one reuse spares is modelled with every assumption sourced: about <b>${n(per.tokens[1])}</b> tokens (${n(per.tokens[0])}–${n(per.tokens[2])}) and ${per.wh[1]} Wh in the usual mix. Measured and modelled numbers stay apart. <a href="/savings">The ledger of what the brain saves</a> · <a href="/proof">how the sea proves its function</a>.</p>
 <section class="box"><h3>Nothing pays to rank</h3><p>No payment changes any order: not in search results, not in the answers to agents, not in the verified market, whose open checks run the same for every shop. An owner check is named as a paid check and adds no level of the verified market, and nothing here promises reads, ranking, traffic or revenue.</p></section>
 <h2>Who sells</h2><p>${esc(SELLER.name)}, ${esc(SELLER.business)}, ${esc(SELLER.address)} · <a href="mailto:${esc(SELLER.email)}">${esc(SELLER.email)}</a> · <a href="/impressum">Impressum</a></p>

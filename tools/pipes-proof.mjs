@@ -6,7 +6,9 @@
 // /.well-known/ard.json with a card of its own, the tests of both gateways (stand-ins, then a real node), the version,
 // and /mcp/app answering initialize and tools/list as the release before does, with two nodes running (serve.mjs).
 // Runs without the network (this machine and local git only): node tools/pipes-proof.mjs   (exit code 1 when a proof fails)
-//   MARE_PIPES_REF=<git ref>   the release to hold /mcp/app, the first options of /connect and ard.json to (default origin/main)
+//   MARE_PIPES_REF=<git ref>   the release to hold /mcp/app, the first options of /connect and ard.json to (default 49c19d5,
+//                              3.35.0, the release before the pipelines: since #27 merged, origin/main is 3.36.0 itself, and
+//                              "the box of the release before" would be the box with its lean block)
 import assert from 'node:assert/strict';
 import { readFileSync, writeFileSync, existsSync, mkdtempSync, mkdirSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
@@ -22,7 +24,7 @@ import { plugIn, PLUG_CHECKED, loadEngineBench } from '../node/engine-ui.mjs';
 
 const ROOT = fileURLToPath(new URL('..', import.meta.url));
 const rd = (p) => readFileSync(join(ROOT, p), 'utf8'), js = (p) => JSON.parse(rd(p));
-const BASE = 'https://mareliberum.dev', LEAN = `${BASE}/mcp/lean`, APP = `${BASE}/mcp/app`, REF = process.env.MARE_PIPES_REF || 'origin/main';
+const BASE = 'https://mareliberum.dev', LEAN = `${BASE}/mcp/lean`, APP = `${BASE}/mcp/app`, REF = process.env.MARE_PIPES_REF || '49c19d5';
 let passed = 0, failed = 0;
 const proof = async (name, fn) => { try { await fn(); passed++; console.log(`  ok   ${name}`); } catch (e) { failed++; console.log(`  FAIL ${name}\n       ${String(e?.stack || e).split('\n').slice(0, 5).join('\n       ')}`); } };
 // this process speaks only to nodes on this machine
@@ -311,12 +313,14 @@ await proof(`/mcp/app: tools/list byte for byte as ${REF} answers it, initialize
 });
 
 // ================================================================== the release
-console.log('the release names itself 3.36.0; the Gemini extension; llms.txt and the README');
-await proof('3.36.0 in VERSION, server.json, server-dev.json, server-lean.json and gemini-extension.json; RELEASES: 3.36.0 without day and pull request, 3.35.0 on 2026-11-25T17:36:55+01:00 with #25', () => {
-  assert.equal(VERSION, '3.36.0'); for (const f of ['server.json', 'server-dev.json', 'server-lean.json', 'gemini-extension.json']) assert.equal(js(f).version, VERSION, f);
+console.log('the release of the pipelines, 3.36.0, in the releases; the version files name the running version; the Gemini extension; llms.txt and the README');
+// (3.37.0 names itself in tools/toll-proof.mjs: here 3.36.0 keeps its day and pull request, and 3.35.0 its own)
+await proof('VERSION in server.json, server-dev.json, server-lean.json and gemini-extension.json; RELEASES: 3.36.0 on 2026-11-25T19:03:27+01:00 with #27, 3.35.0 on 2026-11-25T17:36:55+01:00 with #25', () => {
+  for (const f of ['server.json', 'server-dev.json', 'server-lean.json', 'gemini-extension.json']) assert.equal(js(f).version, VERSION, f);
   assert.equal(rd('server-dev.json'), rd('server.json')); assert.deepEqual(js('server-lean.json').remotes, [{ type: 'streamable-http', url: LEAN }]);
-  assert.deepEqual([RELEASES[0].version, RELEASES[0].at, RELEASES[0].pr], ['3.36.0', null, undefined]); assert.ok(RELEASES[0].what.length > 40 && !RELEASES[0].what.includes('\n'));
-  assert.deepEqual([RELEASES[1].version, RELEASES[1].at, RELEASES[1].pr], ['3.35.0', '2026-11-25T17:36:55+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/25']);
+  const r36 = RELEASES.findIndex((r) => r.version === '3.36.0'); assert.ok(r36 >= 0 && RELEASES[r36].what.length > 40 && !RELEASES[r36].what.includes('\n'));
+  assert.deepEqual([RELEASES[r36].version, RELEASES[r36].at, RELEASES[r36].pr], ['3.36.0', '2026-11-25T19:03:27+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/27']);
+  assert.deepEqual([RELEASES[r36 + 1].version, RELEASES[r36 + 1].at, RELEASES[r36 + 1].pr], ['3.35.0', '2026-11-25T17:36:55+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/25']);
 });
 await proof('the Gemini extension connects the lean door (Gemini CLI puts every tool definition into each turn), and GEMINI.md says how call_tool and find_tools reach the other tools', () => {
   assert.deepEqual(js('gemini-extension.json').mcpServers, { 'mare-liberum': { httpUrl: LEAN } });

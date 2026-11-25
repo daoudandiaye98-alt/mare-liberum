@@ -23,6 +23,9 @@ const short = (tx) => (typeof tx === 'string' && tx.length > 16 ? `${tx.slice(0,
 
 // a fair-share payment (since 3.34, node/fair.mjs): a voluntary contribution, never a sale of the paid move; counted apart
 export const isFair = (s) => s?.kind === 'fair' || /^fair-/.test(String(s?.method || ''));
+// a toll payment (since 3.37, node/toll.mjs): the toll of the lossless levers above the free quota, never a sale of the paid
+// move; counted apart under toll (in the database, until a migration knows the kind, by its method toll-x402-v1/v2)
+export const isToll = (s) => s?.kind === 'toll' || /^toll-/.test(String(s?.method || ''));
 const micro = (s) => (Number.isInteger(s.amount_micro) ? s.amount_micro : Math.round((Number(s.amount_cents) || 0) * 1e4));
 const usd6 = (m) => Math.round(m) / 1e6;
 function fairOf(list, today) {
@@ -31,8 +34,10 @@ function fairOf(list, today) {
     total_count: list.filter((s) => PAID.has(s.status)).length, total_usd: sum(list, ARRIVED), total_usd_unconfirmed: sum(list, OPEN),
     note: 'voluntary fair-share payments for receipts (/fair), counted apart: they are no sales of the paid move' };
 }
-// the same numbers the database gives (mare_treasury), from a list of sales, newest first; fair-share payments apart
-export function summarize(all, t = Date.now()) {
+// the same numbers the database gives (mare_treasury), from a list of sales, newest first; fair-share payments apart, and toll
+// payments (since 3.37) left out of the paid move: /treasury shows them apart, exact, from the node's record (node/toll.mjs)
+export function summarize(given, t = Date.now()) {
+  const all = given.filter((s) => !isToll(s));
   const sales = all.filter((s) => !isFair(s));
   const today = dayOf(t), real = sales.filter((s) => PAID.has(s.status)), now1 = real.filter((s) => dayOf(s.ts) === today);
   const sum = (list, set) => usd(list.filter((s) => set.has(s.status)).reduce((n, s) => n + (Number(s.amount_cents) || 0), 0));
@@ -146,8 +151,9 @@ export function createLedger({ url, key, secret, fetch: get = (...a) => fetch(..
     sale(row) {
       const r = { id: row.id || `s${now().toString(36)}${Math.random().toString(36).slice(2, 8)}`, ts: new Date(now()).toISOString(), q: row.q ?? null, amount_cents: Math.round(Number(row.amount_cents) || 0), status: String(row.status || 'unverified'),
         agent_ua_hash: row.agent_ua_hash ?? null, settled_at: row.settled_at ?? null, method: row.method ?? null, tx: row.tx ?? null, payer: row.payer ?? null, network: row.network ?? null,
-        // a fair share (since 3.34, node/fair.mjs): its exact amount in millionths of a dollar and its kind; other sales carry neither
-        ...(Number.isInteger(row.amount_micro) && row.amount_micro >= 0 ? { amount_micro: row.amount_micro } : {}), ...(row.kind === 'fair' ? { kind: 'fair' } : {}) };
+        // a fair share (since 3.34, node/fair.mjs) or a toll (since 3.37, node/toll.mjs): its exact amount in millionths of a dollar
+        // and its kind; other sales carry neither
+        ...(Number.isInteger(row.amount_micro) && row.amount_micro >= 0 ? { amount_micro: row.amount_micro } : {}), ...(row.kind === 'fair' || row.kind === 'toll' ? { kind: row.kind } : {}) };
       // a receipt handed in before is the same sale: handing it in again delivers again and counts nothing new
       if (r.tx) { const seen = mem.sales.find((x) => x.tx && x.tx.toLowerCase() === r.tx.toLowerCase()); if (seen) return { ...seen, again: true }; }
       mem.sales.unshift(r); if (mem.sales.length > keepSales) mem.sales.length = keepSales;

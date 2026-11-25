@@ -1,0 +1,11 @@
+{
+  "about": [
+    "The harbour toll of node/toll.mjs (since 3.37). Up to freeTokensPerNetworkPerDay tokens saved by the lossless levers (TOON, the text answers of /mcp/lean, a page read again with since= or If-None-Match, the lossless steps of POST /compress) stay free per network and UTC day. Above that an answer costs share of the tokens it saved, at usdPerMillion US dollars per million tokens (the mid price of the ledger of /savings), rounded down to the millionth of a dollar.",
+    "The open toll is settled over x402 in one payment once it reaches settleAtUsd (the smallest sum one settlement is worth, node/fair.mjs). Nobody is blocked: without payment the lever answers pause and the normal answers continue; unpaid tolls are not collected.",
+    "The operator switches a node off with MARE_TOLL=off, or pauses it without a release with \"toll\" in rest of immune:policy. Off or resting, every answer is what it was in 3.36. The values are checked when the node starts: a value out of its range falls back to the one written here by tools/toll-proof.mjs."
+  ],
+  "freeTokensPerNetworkPerDay": 100000,
+  "share": 0.2,
+  "settleAtUsd": 0.05,
+  "usdPerMillion": 2
+}
