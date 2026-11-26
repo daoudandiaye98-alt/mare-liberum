@@ -9,7 +9,11 @@
 //   (the key's hash handed in as cfg.modKeySha, as the books proof does); 30 wrong keys from one network in 10 minutes and its
 //   next tries wait (429, the right key too) while another network goes on, and after the 10 minutes it may try again;
 //   /moderate counts too; no log line, no stored value and no state of the immune system holds a key; /operator stands in no
-//   sitemap, in no llms.txt and in no link of a public page.
+//   sitemap, in no llms.txt and in no link of a public page. Hardening (verifier, 3c677c2): the script writes no markup from data
+//   (no innerHTML, outerHTML, insertAdjacentHTML, document.write, srcdoc) and a hostile declaration filed through the form is
+//   shown as text, no element of it on the page; the new key stands in a password field (autocomplete new-password), is copied
+//   without being shown and shown only on „Anzeigen“, under the line to switch browser assistants and screen sharing off; the
+//   page has its own CSP whose script hash is that of the script as served; over plain http it makes no key and sends none.
 // Negative controls at the end: each rule broken in a copy of the code, and this proof must fail there.
 // Runs without the network: node tools/operator-proof.mjs   (--no-controls: only the proofs)
 import assert from 'node:assert/strict';
@@ -68,34 +72,52 @@ await proof('GET /operator: 200, German, noindex, cache-control no-store, referr
   assert.match(page.text, /Passwort-Manager/); assert.match(page.text, /nur jetzt gezeigt und nirgendwohin gesendet/); assert.match(page.text, /Nur diese Prüfsumme geht an Claude/);
   assert.ok(!page.text.includes(KEY) && !page.text.includes(SHA) && !page.text.includes(MOD_KEY_SHA), 'no key, no checksum');
   assert.ok(!/[A-Za-z0-9_-]{40,}/.test(SCRIPT.replace(/'[^']*'|"[^"]*"/g, (s) => (s.length > 40 && /^['"][A-Za-z0-9_-]+['"]$/.test(s) ? s : ''))), 'no token in the script');
-  assert.match(page.text, /<input id="pw" type="password"/); assert.ok(!/<form/.test(page.text), 'no form that could send the key in an address');
+  assert.match(page.text, /<input id="pw" type="password" autocomplete="current-password"/); assert.ok(!/<form/.test(page.text), 'no form that could send the key in an address');
+  assert.match(page.text, /<input id="key" type="password" readonly size="48" autocomplete="new-password"/); assert.match(page.text, /<button type="button" id="show-key" aria-pressed="false">Anzeigen<\/button>/);
+  const warn = page.text.indexOf('<strong>Vorher Browser-Assistenten (z. B. Claude in Chrome) und Bildschirmfreigabe ausschalten.</strong>'); assert.ok(warn > 0 && warn < page.text.indexOf('id="make"'), 'the warning stands above the button');
 });
-await proof('the script: crypto.getRandomValues and crypto.subtle; no storage, no console, no address, no other way out; fetch only to the operator\'s own doors with x-mare-mod', () => {
+await proof('its own CSP: only its one inline script runs (the sha256 in the header is that of the script as served), it talks only to this site; no form, no frame, no base; no handler in the markup', () => {
+  const h = createHash('sha256').update(SCRIPT, 'utf8').digest('base64');
+  assert.equal(page.headers.get('content-security-policy'), `default-src 'none'; script-src 'sha256-${h}'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; form-action 'none'; frame-ancestors 'none'; base-uri 'none'`);
+  assert.equal(OP.OPERATOR_SCRIPT_SHA256, h, 'worked out from the exact script served');
+  assert.ok(!/\son[a-z]+\s*=/i.test(page.text.replace(/<script>[\s\S]*?<\/script>/, '')), 'no inline handler (the CSP would stop it)'); assert.ok(!/javascript:/i.test(page.text));
+});
+await proof('the script: crypto.getRandomValues and crypto.subtle; no storage, no console, no address, no other way out, no markup from data (innerHTML, outerHTML, insertAdjacentHTML, document.write, srcdoc); fetch only to the operator\'s own doors with x-mare-mod', () => {
   assert.ok(SCRIPT.includes('crypto.getRandomValues(raw)') && SCRIPT.includes("crypto.subtle.digest('SHA-256'"));
   for (const bad of ['localStorage', 'sessionStorage', 'indexedDB', 'document.cookie', 'console.', 'location', 'history.', 'XMLHttpRequest', 'sendBeacon', 'WebSocket', 'postMessage', 'window.open', 'caches', '?key', 'searchParams', 'import(']) assert.ok(!SCRIPT.includes(bad), bad);
+  // no markup made from data: whatever the doors answer goes onto the page as text only
+  for (const bad of ['innerHTML', 'outerHTML', 'insertAdjacentHTML', 'document.write', 'srcdoc']) assert.ok(!SCRIPT.includes(bad), `markup from data: ${bad}`);
   assert.equal((SCRIPT.match(/fetch\(/g) || []).length, 1, 'one fetch'); assert.match(SCRIPT, /fetch\(path, \{ method: 'GET', mode: 'same-origin'[^}]*cache: 'no-store'[^}]*headers: \{ 'x-mare-mod': key \} \}\)/);
   assert.match(SCRIPT, /if \(!READS\.includes\(path\)\) return null;/); assert.deepEqual(JSON.parse(/const READS = (\[[^\]]*\]);/.exec(SCRIPT)[1]), ['/operator/digest', '/operator/ledger.csv', '/operator/declarations']);
 });
 
 // ------------------------------------------------------------------ the script, run headless: node's webcrypto and a small DOM
-function runPage({ fill = null, ip = '198.51.100.30' } = {}) {
-  const els = new Map(), sent = [], touched = [], blobs = [];
-  const mk = (id) => ({ id, value: '', hidden: true, textContent: '', className: '', href: '', download: '', children: [], listeners: {}, addEventListener(t, f) { this.listeners[t] = f; }, select() {}, replaceChildren(...c) { this.children = c; }, append(...c) { this.children.push(...c); }, click() {}, remove() {} });
-  const document = { getElementById: (id) => { if (!els.has(id)) els.set(id, mk(id)); return els.get(id); }, createElement: (tag) => Object.assign(mk(tag), { tag }), body: mk('body') };
+function runPage({ fill = null, ip = '198.51.100.30', secure = true } = {}) {
+  const els = new Map(), sent = [], touched = [], blobs = [], written = [], clip = [];
+  const mk = (id) => ({ id, type: '', value: '', hidden: true, textContent: '', className: '', href: '', download: '', attrs: {}, html: '', children: [], listeners: {},
+    addEventListener(t, f) { this.listeners[t] = f; }, setAttribute(k, v) { this.attrs[k] = String(v); }, select() {}, replaceChildren(...c) { this.children = c; }, append(...c) { this.children.push(...c); }, click() {}, remove() {},
+    // markup handed over as markup is parsed the way a browser would: its tags become elements (what the proof looks for)
+    set innerHTML(v) { const t = String(v); this.html = t; this.children = [...t.matchAll(/<([a-zA-Z][\w-]*)/g)].map((m) => Object.assign(mk(m[1].toLowerCase()), { tag: m[1].toLowerCase(), fromMarkup: true })); this.textContent = t.replace(/<[^>]*>/g, ''); },
+    get innerHTML() { return this.html; }, set outerHTML(v) { this.innerHTML = v; }, insertAdjacentHTML(where, v) { const b = mk('x'); b.innerHTML = v; this.children.push(...b.children); } });
+  const document = { getElementById: (id) => { if (!els.has(id)) els.set(id, mk(id)); return els.get(id); }, createElement: (tag) => Object.assign(mk(tag), { tag }), body: mk('body'), write: (...a) => written.push(a.join('')), writeln: (...a) => written.push(a.join('')) };
   const spy = (name) => new Proxy({}, { get: (t, k) => { touched.push(`${name}.${String(k)}`); return () => null; } });
   const crypto = { getRandomValues: (a) => (fill ? fill(a) : webcrypto.getRandomValues(a)), subtle: webcrypto.subtle };
   const fetch = async (url, opts) => { sent.push({ url, opts }); const r = await core.handle(new Request(BASE + url, { method: opts.method, headers: { 'user-agent': 'Mozilla/5.0 (operator-proof)', 'x-forwarded-for': ip, ...opts.headers } }), db, cfg); return r; };
-  const sandbox = { document, crypto, fetch, TextEncoder, Uint8Array, btoa: (s) => Buffer.from(s, 'binary').toString('base64'), navigator: { clipboard: { writeText: async () => {} } },
+  const sandbox = { document, crypto, fetch, TextEncoder, Uint8Array, isSecureContext: secure, btoa: (s) => Buffer.from(s, 'binary').toString('base64'), navigator: { clipboard: { writeText: async (t) => { clip.push(t); } } },
     URL: { createObjectURL: (b) => { blobs.push(b); return 'blob:operator'; }, revokeObjectURL: () => {} }, setTimeout: () => 0, localStorage: spy('localStorage'), sessionStorage: spy('sessionStorage'), indexedDB: spy('indexedDB'), console: spy('console'), Date: D };
   vm.runInNewContext(SCRIPT, sandbox);
   const click = (id) => els.get(id).listeners.click();
-  return { els, sent, touched, blobs, click, el: (id) => document.getElementById(id) };
+  return { els, sent, touched, blobs, written, clip, click, el: (id) => document.getElementById(id) };
 }
-await proof('section A, headless: a key of 32 random bytes (base64url, 43 characters) and its SHA-256, which is node\'s createHash of it; a known key too; nothing sent, stored or logged', async () => {
+const walk = (e, all = []) => { for (const c of e.children || []) { all.push(c); walk(c, all); } return all; };
+await proof('section A, headless: a key of 32 random bytes (base64url, 43 characters) and its SHA-256, which is node\'s createHash of it; a known key too; the key in a password field, copied without being shown, shown only on „Anzeigen“; nothing sent, stored or logged', async () => {
   const p = runPage(); await p.click('make');
   const key = p.el('key').value, sum = p.el('sum').value;
   assert.match(key, /^[A-Za-z0-9_-]{43}$/); assert.equal(sum, createHash('sha256').update(key).digest('hex')); assert.equal(p.el('made').hidden, false);
-  assert.equal(p.sent.length, 0, 'nothing sent'); assert.deepEqual(p.touched, [], 'no storage, no console');
+  assert.equal(p.el('key').type, 'password', 'the new key as dots, not as text');
+  await p.click('copy-key'); assert.deepEqual(p.clip, [key], 'copied'); assert.equal(p.el('key').type, 'password', 'copied without being shown'); assert.equal(p.el('key-ok').textContent, 'kopiert');
+  p.click('show-key'); assert.equal(p.el('key').type, 'text'); assert.equal(p.el('show-key').textContent, 'Verbergen'); p.click('show-key'); assert.equal(p.el('key').type, 'password'); assert.equal(p.el('show-key').textContent, 'Anzeigen');
+  assert.equal(p.sent.length, 0, 'nothing sent'); assert.deepEqual(p.touched, [], 'no storage, no console'); assert.deepEqual(p.written, []);
   const known = runPage({ fill: (a) => { for (let i = 0; i < a.length; i++) a[i] = i; return a; } }); await known.click('make');
   const want = Buffer.from(Array.from({ length: 32 }, (_, i) => i)).toString('base64url');
   assert.equal(known.el('key').value, want); assert.equal(known.el('sum').value, createHash('sha256').update(want).digest('hex'));
@@ -111,6 +133,22 @@ await proof('section B, headless: the key goes only as x-mare-mod to /operator/d
   assert.deepEqual(p.touched, [], 'no storage, no console');
   const w = runPage({ ip: '198.51.100.31' }); w.el('pw').value = 'not the key'; await w.click('decl'); assert.match(w.el('msg').textContent, /^403: Der Schlüssel stimmt nicht/); assert.equal(w.el('out').children.length, 0);
   const e = runPage(); await e.click('digest'); assert.equal(e.sent.length, 0, 'no key: nothing sent');
+});
+await proof('over plain http (no secure context) the page makes no key and sends none: section A says so, section B says „Nur über https.“', async () => {
+  const p = runPage({ secure: false }); await p.click('make');
+  assert.equal(p.el('made').hidden, true); assert.equal(p.el('key').value, ''); assert.match(p.el('make-msg').textContent, /^Nur über https/);
+  p.el('pw').value = KEY; for (const b of ['digest', 'ledger', 'decl']) { await p.click(b); assert.equal(p.el('msg').textContent, 'Nur über https.', b); }
+  assert.equal(p.sent.length, 0, 'nothing sent'); assert.deepEqual(p.touched, []);
+});
+await proof('a hostile declaration (filed through the form, as anyone may) is shown as text: its cells hold the words as they came (textContent), and nothing of it becomes an element of the page', async () => {
+  const NAME = '<img src=x onerror=alert(1)> Erika <script>alert(2)</script>', CONTRACT = '"><svg onload=alert(3)></td><iframe srcdoc="<script>alert(4)</script>"></iframe>';
+  const f = await call('/de/vertrag-widerrufen', { method: 'POST', ip: '198.51.100.62', headers: { 'content-type': 'application/x-www-form-urlencoded', origin: BASE }, body: new URLSearchParams({ name: NAME, contract: CONTRACT, email: 'erika@example.org' }).toString() });
+  assert.equal(f.status, 200, 'filed');
+  const p = runPage({ ip: '198.51.100.63' }); p.el('pw').value = KEY; await p.click('decl'); assert.equal(p.el('msg').textContent, '');
+  const all = walk(p.el('out')), cells = all.filter((e) => e.tag === 'td');
+  assert.ok(cells.some((c) => c.textContent === NAME), 'the name, as text'); assert.ok(cells.some((c) => c.textContent === CONTRACT), 'the contract, as text');
+  assert.ok(!all.some((e) => e.fromMarkup), 'no element made from the declaration'); assert.deepEqual([...new Set(all.map((e) => e.tag))].sort(), ['h3', 'p', 'table', 'td', 'th', 'tr'], 'only the elements the page makes itself');
+  assert.deepEqual(p.written, []); assert.deepEqual(p.touched, []);
 });
 
 // ------------------------------------------------------------------ the doors and the brake
@@ -162,6 +200,10 @@ const BREAK = [
   ['the key sent to another door', 'node/operator.mjs', "export const OPERATOR_READS = Object.freeze(['/operator/digest', '/operator/ledger.csv', '/operator/declarations']);", "export const OPERATOR_READS = Object.freeze(['/operator/digest', '/operator/ledger.csv', '/operator/declarations', 'https://elsewhere.example/k']);"],
   ['/operator in llms.txt', 'site/llms.txt', '\n', '\nOperator: https://mareliberum.dev/operator\n'],
   ['the page counted (the census script on it)', 'node/core.mjs', 'd !== OPERATOR_PAGE && !d.startsWith(`${OPERATOR_PAGE}/`) && ', ''],
+  ['declaration cells rendered with innerHTML', 'node/operator.mjs', "for (const x of r) tr.append(el('td', x));", "for (const x of r) { const td = document.createElement('td'); td.innerHTML = String(x); tr.append(td); }"],
+  ['the new key shown in plain text', 'node/operator.mjs', '<input id="key" type="password" readonly size="48" autocomplete="new-password"', '<input id="key" type="text" readonly size="48" autocomplete="off"'],
+  ['the CSP hash of another script', 'node/operator.mjs', "update(OPERATOR_SCRIPT, 'utf8')", "update(OPERATOR_SCRIPT + '\\n', 'utf8')"],
+  ['a key sent over plain http', 'node/operator.mjs', "if (!isSecureContext) { say('Nur über https.'); return null; }", ''],
 ];
 let caught = 0;
 if (CONTROLS) {
