@@ -859,7 +859,9 @@ await proof('/engine (a section "The toll" with the example $0.003630), /engine.
   // since 3.40.0 the English /mcp-server and /web-to-markdown end their "More:" line with links to the developer guides and the
   // reader's OpenAPI (node/seo.mjs, the reach pages); those links are taken out on both sides, everything else stays byte for byte
   const guides = (s) => s.replace(/ · <a href="\/(guides\/[a-z0-9-]+|openapi\/reader\.json)">[^<]*<\/a>/g, '');
-  const tmask = (s, v) => guides(mask(s, v)).replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?Z?/g, '<T>');
+  // since 3.41.0 /mcp-server counts the tools of both doors from the code (it said 53 by hand); the counts are masked on both sides
+  const doors = (s) => s.replace(/(with all|mit allen) \d+ (tools|Werkzeugen), <code>\/mcp\/app<\/code> (with the|mit den) \d+ /g, '$1 <n> $2, <code>/mcp/app</code> $3 <n> ');
+  const tmask = (s, v) => doors(guides(mask(s, v))).replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?Z?/g, '<T>');
   for (const [path, accept] of [['/engine', 'text/html'], ['/engine.json', 'application/json'], ['/engine.md', 'text/markdown'], ['/fair', 'text/html'], ['/fair.json', 'application/json'], ['/pricing', 'text/html'], ['/pricing.json', 'application/json'], ['/treasury', 'application/json'], ['/open.json', 'application/json']]) {
     const r = await F.call(path, { ip: '192.0.2.200', accept }), o = await M.call(path, { ip: '192.0.2.200', accept }); assert.equal(r.status, 200, path); assert.ok(/toll/i.test(r.text) && !/toll/i.test(o.text), `${path}: its toll section`);
   }

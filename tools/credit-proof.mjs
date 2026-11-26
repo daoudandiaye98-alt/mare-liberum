@@ -113,7 +113,9 @@ const refDir = (() => {
   const r = spawnSync('sh', ['-c', 'git -C "$1" archive "$2" | tar -x -C "$3"', 'sh', ROOT, REF, dir], { encoding: 'utf8' });
   return r.status === 0 && existsSync(join(dir, 'node/core.mjs')) ? dir : null;
 })();
-const steady = (s) => String(s).replace(/\br\d{8}[a-z0-9]{8}\b/g, 'r<id>');
+// the version is the only thing a release changes on these answers (since 3.41.0: a release after the credit bumps it); it is masked
+const VERSIONS = new Set();
+const steady = (s) => { let t = String(s).replace(/\br\d{8}[a-z0-9]{8}\b/g, 'r<id>'); for (const v of VERSIONS) t = t.split(v).join('<version>'); return t; };
 const same = (a, b, what) => { assert.equal(a.status, b.status, `${what}: status`); assert.equal(steady(a.text), steady(b.text), `${what}: body`); assert.deepEqual(Object.fromEntries(Object.entries(a.h).map(([k, v]) => [k, steady(v)])), Object.fromEntries(Object.entries(b.h).map(([k, v]) => [k, steady(v)])), `${what}: headers`); };
 
 const node = await nodeOf(ROOT);
@@ -136,7 +138,7 @@ const settled = () => Promise.allSettled(waits.splice(0));
 const sha = (s) => createHash('sha256').update(s).digest('hex');
 
 console.log('without credit: every answer as on origin/main');
-await proof(`the reference tree is there (${REF.slice(0, 7)}), no version bump`, () => { assert.ok(ref, 'git archive of the reference failed: set MARE_CREDIT_REF_DIR'); assert.equal(ref.core.VERSION, node.core.VERSION); });
+await proof(`the reference tree is there (${REF.slice(0, 7)}); the version is the same or a release later, and masked in every comparison`, () => { assert.ok(ref, 'git archive of the reference failed: set MARE_CREDIT_REF_DIR'); const [a, b] = [ref.core.VERSION, node.core.VERSION].map((v) => v.split('.').map(Number)); assert.ok(b[0] > a[0] || (b[0] === a[0] && (b[1] > a[1] || (b[1] === a[1] && b[2] >= a[2]))), `${node.core.VERSION} is not ${ref.core.VERSION} or later`); VERSIONS.add(ref.core.VERSION); VERSIONS.add(node.core.VERSION); });
 await proof('/r/ under the free limit equals origin/main, also with an Authorization that is not credit and with a credit token (nothing spent before the free pages)', async () => {
   const ip = fresh(), url = `/r/${P}/pier`;
   for (const [p, o] of [[url, {}], [`${url}?format=json`, {}], [`${url}?format=full`, {}], [url, { headers: { authorization: 'Bearer fc-not-credit-123' } }], [url, { headers: { authorization: 'Basic dXNlcjpwYXNz' } }], ['/r/%20', {}], [`/r/${P}/t/0.txt`, {}]]) same(await node.call(p, { ip, ...o }), await ref.call(p, { ip, ...o }), `${p} ${JSON.stringify(o)}`);
