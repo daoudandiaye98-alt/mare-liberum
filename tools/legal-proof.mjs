@@ -407,6 +407,9 @@ await proof('the texts say it: AGB, terms and Preisverzeichnis restrict the offe
   for (const w of ['Die Angebote in Euro richten sich ausschließlich an Unternehmer im Sinne von § 14 BGB.', 'Bestellseite']) has(pages['/de/preise'].text, w, '/de/preise');
   for (const w of ['Widerruf und Kündigung über die Schaltflächen', 'nicht in der Datenbank', 'vier Jahre', '§§ 312k und 356a BGB']) has(pages['/de/datenschutz'].text, w, '/de/datenschutz');
   for (const w of ['Withdrawal and cancellation through the buttons', 'not in the database', 'four years', '§§ 312k and 356a BGB']) has(pages['/privacy'].text, w, '/privacy');
+  // reader credit (CR8): while a purchase's payment is not settled, wallet, nonce and expiry of the signed transfer in clear, and when they go
+  has(pages['/de/datenschutz'].text, 'Solange die Zahlung eines Kaufs nicht abgewickelt ist, bewahrt der Knoten außerdem die Adresse der zahlenden Wallet, die Nonce und das Ende der Gültigkeit der signierten Überweisung im Klartext auf, um in der öffentlichen Blockchain nachzusehen, ob das Geld angekommen ist. Diese Angaben werden gelöscht, sobald das entschieden ist (abgewickelt, zurückgenommen oder das Token abgelaufen), spätestens etwa zehn Minuten nach dem Ende der Gültigkeit der Überweisung, länger nur, solange die Blockchain nicht befragt werden kann.', '/de/datenschutz');
+  has(pages['/privacy'].text, 'While the payment of a purchase is not yet settled, the node also keeps the address of the paying wallet, the nonce and the expiry of the signed transfer in clear, so that it can ask the public blockchain whether the money arrived. These are deleted as soon as that is decided (settled, taken back, or the token expired), at the latest about ten minutes after the expiry of the transfer, longer only while the blockchain cannot be asked.', '/privacy');
   for (const p of ['/de/agb', '/de/datenschutz']) for (const q of [BUTTON_DE.withdraw, BUTTON_DE.cancel]) assert.ok(pages[p].html.text.includes(`href="${q}"`), `${p} → ${q}`);
 });
 
@@ -434,6 +437,7 @@ if (CONTROLS) {
     ['the Belehrung loses the online function', 'node/legal.mjs', '<p>Sie können Ihr Widerrufsrecht auch online unter', '<p>Sie können Ihr Widerrufsrecht nicht online unter'],
     ['the receipt is mailed although no key is set', 'node/declare.mjs', 'const on = !off && !!key && !!from', 'const on = !off'],
     ['the home page loses the buttons', 'node/core.mjs', 'b = homeButtons(b);', 'b = b;'],
+    ['the privacy notice loses the sentence on reader credit not yet settled (wallet, nonce, expiry in clear)', 'node/legal.mjs', ' Solange die Zahlung eines Kaufs nicht abgewickelt ist, bewahrt der Knoten außerdem die Adresse der zahlenden Wallet, die Nonce und das Ende der Gültigkeit der signierten Überweisung im Klartext auf, um in der öffentlichen Blockchain nachzusehen, ob das Geld angekommen ist. Diese Angaben werden gelöscht, sobald das entschieden ist (abgewickelt, zurückgenommen oder das Token abgelaufen), spätestens etwa zehn Minuten nach dem Ende der Gültigkeit der Überweisung, länger nur, solange die Blockchain nicht befragt werden kann.', ''],
   ];
   for (const [name, file, from, to] of C) {
     controls++;

@@ -360,6 +360,20 @@ await proof('the re-check runs on its own timer (once a minute in a node, here e
     assert.equal((await node.db.creditBook.peek(sha(b.token))).state, 'revoked', 'the timer took it back');
   } finally { node.db.creditBook?.close?.(); delete node.db.creditBook; }
 });
+await proof('credit:open is bounded: an entry whose chain answer stays unclear is kept and asked each run, and goes (counted) when its token expires, the chain check off as well; the till keeps the sale as it stands', async () => {
+  const u = await buyLost(); T0 += 60e3; const w = await buyLost(); T0 = Math.max(T0, w.at + 11 * 60e3);
+  const openNow = () => { const l = node.kv.sets.filter((x) => x.startsWith('["credit:open"')).at(-1); return l ? JSON.parse(l)[1].list.map((e) => e.nonce) : []; };
+  try {
+    chain.mode = 'down'; let x = await tick(); assert.equal(x.unclear, 2); assert.deepEqual(openNow().sort(), [u.nonce, w.nonce].sort());
+    T0 = Math.max(T0, u.at + 30 * 86400e3 - 1000); x = await tick(); assert.equal(x.expired, 0); assert.equal(x.unclear, 2, 'a second before the expiry: still kept, still asked');
+    const e0 = node.db.creditBook.state().expired;
+    T0 = Math.max(T0, u.at + 30 * 86400e3); x = await tick(); assert.equal(x.expired, 1); assert.equal(x.asked, 1, 'only the one still in its 30 days is asked');
+    assert.deepEqual(openNow(), [w.nonce], 'gone from the state'); assert.equal(node.db.creditBook.state().expired, e0 + 1, 'counted');
+    assert.equal(saleOf(u.sale).status, 'pending', 'the till keeps the sale as it stands'); assert.equal((await peek(u.token)).state, 'expired');
+    T0 = Math.max(T0, w.at + 30 * 86400e3); x = await restart({ chainRpc: 'off' }); assert.equal(x.off, true); assert.equal(x.asked, 0); assert.equal(x.expired, 1, 'the check off: it goes at the expiry too');
+    assert.deepEqual(openNow(), []);
+  } finally { chain.mode = 'up'; node.db.creditBook?.close?.(); delete node.db.creditBook; }
+});
 await proof('the open sales keep wallet, nonce and validBefore with the sale and its time: never the signature, never a token', async () => {
   const lines = node.kv.sets.filter((l) => l.startsWith('["credit:open"')); assert.ok(lines.length > 10);
   for (const l of lines) for (const e of JSON.parse(l)[1].list) assert.deepEqual(Object.keys(e).sort(), ['at', 'before', 'from', 'nonce', 'sale']);
@@ -397,7 +411,8 @@ const BREAK = [
   ['the app door changed', 'node/core.mjs', "read_page: 'Read a public web page as clean Markdown (title, description, main text, links), up to 100 pages a day per address.", "read_page: 'Read a public web page as clean Markdown (title, description, main text, links), up to 100 pages a day per network."],
   ['§ 5a without the refund rule', 'node/legal.mjs', 'Nicht genutzte Seiten werden nicht erstattet, soweit das Gesetz nichts anderes vorschreibt; ', ''],
   // CR8: a settlement whose answer never came back
-  ['the re-check removed (a sale whose settlement never answered keeps its credit)', 'node/credit.mjs', 'if (!rpc) return { asked: 0, off: true };', 'return { asked: 0, off: true };'],
+  ['the re-check removed (a sale whose settlement never answered keeps its credit)', 'node/credit.mjs', 'if (!rpc) return { asked: 0, off: true, expired, open: open.list.length };', 'return { asked: 0, off: true, expired, open: open.list.length };'],
+  ['credit:open kept past the token\'s expiry (an entry never clear stays for good)', 'node/credit.mjs', 'open.list.filter((x) => Date.parse(x.at) + CREDIT.days * DAY * 1000 <= t)', 'open.list.filter((x) => false)'],
   ['revoke on a chain error (no clear answer taken for "not used")', 'node/credit.mjs', 'else if (word === false) {', 'else if (word !== true) {'],
   ['revoke before validBefore (only the ten minutes waited for)', 'node/credit.mjs', 'const openDue = (e) => Math.max(e.before * 1000 + GRACE, Date.parse(e.at) + WAIT);', 'const openDue = (e) => Date.parse(e.at) + WAIT;'],
   ['a used authorization revoked anyway', 'node/credit.mjs', 'if (word === true) { await closeOpen(e.sale);', 'if (word === true) { await book.revokeSale(e.sale);'],

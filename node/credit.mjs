@@ -120,7 +120,7 @@ export function createCredit({ kv, now = () => Date.now(), ledger = null, rpc = 
   const state = (r) => (!r ? 'unknown' : r.revoked ? 'revoked' : Date.parse(r.until) <= now() ? 'expired' : !(r.left > 0) ? 'used up' : 'ok');
   // (CR8) the sales whose settlement has not answered, read once from the state and written at once on every change
   let open = null, openP = null, running = null;
-  const counts = { runs: 0, asked: 0, settled: 0, revoked: 0, unclear: 0 }, lastAsked = new Map();
+  const counts = { runs: 0, asked: 0, settled: 0, revoked: 0, unclear: 0, expired: 0 }, lastAsked = new Map();
   const loadOpen = () => (open ? Promise.resolve(open) : (openP ||= (async () => {
     let v = null; try { v = await kv.get(OPEN); } catch {}
     const list = v && v.v === 1 && Array.isArray(v.list) ? v.list.filter((e) => e && typeof e.sale === 'string' && HEX40.test(String(e.from)) && HEX64.test(String(e.nonce)) && Number.isSafeInteger(e.before) && Date.parse(e.at)) : [];
@@ -162,14 +162,18 @@ export function createCredit({ kv, now = () => Date.now(), ledger = null, rpc = 
     // (CR8) the sales whose settlement never answered, once their time is past: the chain says whether the signed transfer was
     // carried out. Used: the money arrived, the sale is settled in the till, the credit stays. Not used (and validBefore past):
     // it can never be, the sale is unsettled and the credit taken back. No clear answer: nothing changes, counted, asked again
-    // at the next run. At most ASK_MAX questions a run, the longest unasked first. Off (no rpc): nothing asked, nothing changed
+    // at the next run. At most ASK_MAX questions a run, the longest unasked first. Off (no rpc): nothing asked, nothing changed.
+    // A known limit, as for the toll: USDC's authorizationState reads "used" also after the payer's cancelAuthorization, so a
+    // transfer cancelled on chain whose settlement answer was lost as well counts as settled here
     async recheck() {
-      if (!rpc) return { asked: 0, off: true };
       if (running) return running;
       running = (async () => {
         await loadOpen(); counts.runs++;
-        const t = now(), stale = t - (CREDIT.days + 1) * DAY * 1000;
-        for (const e of open.list.filter((x) => Date.parse(x.at) < stale)) await closeOpen(e.sale);
+        const t = now();
+        // bounded: an entry still open when its token expires (a chain never clear, or the check off) goes then, counted; nothing
+        // is left to take back, the till keeps the sale as it stands, and credit:open never holds more than 30 days of sales
+        let expired = 0; for (const e of open.list.filter((x) => Date.parse(x.at) + CREDIT.days * DAY * 1000 <= t)) if (await closeOpen(e.sale)) { expired++; counts.expired++; }
+        if (!rpc) return { asked: 0, off: true, expired, open: open.list.length };
         const due = open.list.filter((e) => t > openDue(e)).sort((a, b) => (lastAsked.get(a.sale) || 0) - (lastAsked.get(b.sale) || 0) || Date.parse(a.at) - Date.parse(b.at)).slice(0, ASK_MAX);
         let asked = 0, settled = 0, revoked = 0, unclear = 0;
         for (const e of due) {
@@ -179,7 +183,7 @@ export function createCredit({ kv, now = () => Date.now(), ledger = null, rpc = 
           else if (word === false) { ledger?.saleSet?.(e.sale, { status: 'unsettled' }); await book.revokeSale(e.sale); revoked++; counts.revoked++; }
           else { unclear++; counts.unclear++; }
         }
-        return { asked, settled, revoked, unclear, open: open.list.length };
+        return { asked, settled, revoked, unclear, expired, open: open.list.length };
       })().finally(() => { running = null; });
       return running;
     },
