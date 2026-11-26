@@ -17,7 +17,7 @@ import { createMem } from '../node/mem.mjs';
 import { memoryKv } from '../node/flow.mjs';
 import { createLedger } from '../node/ledger.mjs';
 import { payConfig } from '../node/pay.mjs';
-import { CHECKOUT, CHECKOUT_DOOR, SESSION_RE, TILL, NODE, tillOffer, checkoutKey, checkoutToken, checkoutPaid } from '../node/checkout.mjs';
+import { CHECKOUT, CHECKOUT_DOOR, SESSION_RE, TILL, AGENT_TILL, NODE, tillOffer, checkoutKey, checkoutToken, checkoutPaid } from '../node/checkout.mjs';
 import { CREDIT_RE, tokenHash } from '../node/credit.mjs';
 import { OFFER } from '../node/seo.mjs';
 import { CTA, ctaTarget } from '../node/attention.mjs';
@@ -218,7 +218,41 @@ await proof('every order page of the ladder asks for the business box first and 
   }
 });
 
+console.log('\nthe agent packs (3.63)');
+const AP = Object.fromEntries(AGENT_TILL.map((o) => [o.id, o]));
+await proof('(3.63) the agent packs in USD: 10, 49 and 99 USD for 10,000, 100,000 and 250,000 pages (30 days), each with its own payment link next to its id; their order pages lead straight to Stripe, without the box of § 14 BGB', async () => {
+  const seo = readFileSync(new URL('../node/seo.mjs', import.meta.url), 'utf8');
+  assert.deepEqual(AGENT_TILL.map((o) => [o.id, o.cents, o.pages, o.days, o.currency]), [['agent10', 1000, 10000, 30, 'usd'], ['agent49', 4900, 100000, 30, 'usd'], ['agent99', 9900, 250000, 30, 'usd']]);
+  for (const o of AGENT_TILL) {
+    assert.ok(Object.hasOwn(CTA, o.id) && CTA[o.id].everyone === true, o.id); assert.equal(ctaTarget(o.id), OFFER[o.id], o.id); assert.ok(seo.includes(o.linkId), o.id); assert.equal(tillOffer(o.linkId), o, o.id);
+    const go = await call(`/c/${o.id}?from=agents`); assert.equal(go.status, 302, o.id); assert.equal(go.h.location, OFFER[o.id], o.id);
+  }
+});
+await proof('(3.63) an agent pack session gives its pages for 30 days and says its price in USD; paid in euro or at another price it gives nothing', async () => {
+  const now = Date.now(); let n = 90;
+  for (const o of AGENT_TILL) {
+    const s = sid(n++); SESSIONS.set(s, paidSession(s, { payment_link: o.linkId, amount_total: o.cents, currency: 'usd' }));
+    const r = await call(`${CHECKOUT_DOOR}?session=${s}`); assert.equal(r.status, 200, r.text);
+    assert.deepEqual([r.j.pages, r.j.left, r.j.plan, r.j.price_usd, r.j.paid.amount_usd], [o.pages, o.pages, o.name, (o.cents / 100).toFixed(2), (o.cents / 100).toFixed(2)]); assert.ok(!('price_eur' in r.j));
+    const days = (Date.parse(r.j.until) - now) / 86_400_000; assert.ok(days > 29.99 && days < 30.01, `${o.id}: ${days} days`);
+  }
+  for (const [o, amount, currency] of [[AP.agent10, 1000, 'eur'], [AP.agent49, 1000, 'usd']]) {
+    const s = sid(n++); SESSIONS.set(s, paidSession(s, { payment_link: o.linkId, amount_total: amount, currency }));
+    const r = await call(`${CHECKOUT_DOOR}?session=${s}`); assert.equal(r.status, 402); assert.match(r.j.error.message, new RegExp(`exactly USD ${(o.cents / 100).toFixed(2)}`)); assert.ok(!r.j.token);
+  }
+});
+await proof('(3.63) /for-agents.json: the value of a page, the free part, three packs with mpp pay and their checkout, how to use the token and a summary for the agent\'s person; /for-agents as a page; never a payment link', async () => {
+  const r = await call('/for-agents.json'); assert.equal(r.status, 200, r.text); assert.ok(Array.isArray(r.j?.packs), r.text.slice(0, 400));
+  assert.deepEqual(r.j.packs.map((p) => [p.pack, p.price_usd, p.pages, p.pay.link_wallet, p.pay.checkout]), [['10', '10.00', 10000, `mpp pay ${BASE}/reader/credit/stripe?pack=10`, `${BASE}/c/agent10?from=agents`], ['49', '49.00', 100000, `mpp pay ${BASE}/reader/credit/stripe?pack=49`, `${BASE}/c/agent49?from=agents`], ['99', '99.00', 250000, `mpp pay ${BASE}/reader/credit/stripe?pack=99`, `${BASE}/c/agent99?from=agents`]]);
+  assert.equal(r.j.free.pages_a_day, 100); assert.match(r.j.for_your_person, /pack 10: 10,000 pages for 10\.00 USD/); assert.ok('today' in r.j.value); assert.ok(!r.text.includes('buy.stripe.com'));
+  const h = await call('/for-agents', { accept: 'text/html' }); assert.equal(h.status, 200); assert.match(h.h['content-type'], /^text\/html/);
+  for (const n of ['10', '49', '99']) assert.ok(h.text.includes(`id="pack-${n}"`) && h.text.includes(`href="/c/agent${n}?from=agents"`), n);
+  assert.ok(!h.text.includes('buy.stripe.com'));
+});
+
 console.log('\nnegative controls');
+await negative('(3.63) a till that took an agent pack paid in euro is caught', () => assert.equal(checkoutPaid(paidSession(sid(1), { payment_link: AP.agent10.linkId, amount_total: 1000, currency: 'eur' })), null));
+await negative('(3.63) an agent pack behind the box of § 14 BGB is caught', async () => { const r = await call('/c/agent10?from=agents'); assert.equal(r.status, 200); });
 await negative('a till that took any payment link is caught', () => assert.equal(checkoutPaid(paidSession(sid(1), { payment_link: 'plink_Other' })), null));
 await negative('a till that took any amount is caught', () => assert.equal(checkoutPaid(paidSession(sid(1), { amount_total: 100 })), null));
 await negative('a token not bound to its session is caught', () => assert.equal(checkoutToken(KEY, sid(1)), checkoutToken(KEY, sid(2))));

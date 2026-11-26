@@ -79,6 +79,10 @@ export const CTA = {
   law: { name: 'Kanzlei harbour', price: '750 € setup + 990 € a year per office', to: () => OFFER.law },
   reader: { name: 'Reader credit for operators', price: '10 €, once, for 10,000 pages (30 days)', to: () => OFFER.reader },
   // the reader ladder and the Reederei (since 3.60, node/checkout.mjs TILL and NODE)
+  // (since 3.63) the agent packs in USD, for agents and the people they act for, consumers included: no box of § 14 BGB
+  agent10: { name: 'Reader credit for agents, pack 10', price: '10 USD, once, for 10,000 pages (30 days)', to: () => OFFER.agent10, everyone: true },
+  agent49: { name: 'Reader credit for agents, pack 49', price: '49 USD, once, for 100,000 pages (30 days)', to: () => OFFER.agent49, everyone: true },
+  agent99: { name: 'Reader credit for agents, pack 99', price: '99 USD, once, for 250,000 pages (30 days)', to: () => OFFER.agent99, everyone: true },
   kutter: { name: 'Reader pack Kutter for operators', price: '49 €, once, for 100,000 pages (30 days)', to: () => OFFER.kutter },
   kutterjahr: { name: 'Reader pack Kutter for operators, one year', price: '490 €, once, for 1,200,000 pages (365 days)', to: () => OFFER.kutterjahr },
   fregatte: { name: 'Reader pack Fregatte for operators', price: '199 €, once, for 500,000 pages (30 days)', to: () => OFFER.fregatte },
