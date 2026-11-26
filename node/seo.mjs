@@ -423,6 +423,9 @@ export const OFFER = {
   law: 'https://buy.stripe.com/9B6bIUbe02kIcJx5nfes00r',      // Kanzlei-Hafen: Einrichtung 750 € (ohne Einblick in Mandatsdaten) + Jahresbegleitung 990 € je Standort (plink_1Uev8h4IVkazyZLzsmA53lgQ)
   reader: 'https://buy.stripe.com/cNi6oA2HuaRe7pd9Dves00t',   // reader credit for operators, 10 € once for 10,000 pages, 30 days (plink_1Ug4VQ4IVkazyZLzBNhuF2wm; node/checkout.mjs)
   // the reader ladder (since 3.60, node/checkout.mjs TILL): one payment link per pack, each behind its order page /c/<id>
+  agent10: 'https://buy.stripe.com/8x27sEeqc7F238X4jbes00C',         // Agent pack 10, 10 USD once, 10,000 pages, 30 days, for everyone (plink_1Ug9FH4IVkazyZLzN99vL87I)
+  agent49: 'https://buy.stripe.com/9B6eV63Ly3oM6l916Zes00D',         // Agent pack 49, 49 USD once, 100,000 pages, 30 days, for everyone (plink_1Ug9FI4IVkazyZLzO4TDxrN7)
+  agent99: 'https://buy.stripe.com/8x2fZafug0cAdNBbLDes00E',         // Agent pack 99, 99 USD once, 250,000 pages, 30 days, for everyone (plink_1Ug9FJ4IVkazyZLzo8xRWbNc)
   kutter: 'https://buy.stripe.com/bJeeV6fug3oMfVJaHzes00u',          // Kutter, 49 € once, 100,000 pages, 30 days (plink_1Ug6ai4IVkazyZLzsS3UkFKX)
   kutterjahr: 'https://buy.stripe.com/4gMeV66XK9NacJx2b3es00v',      // Kutter, one year, 490 € once, 1,200,000 pages, 365 days (plink_1Ug6aj4IVkazyZLz39fIvFiV)
   fregatte: 'https://buy.stripe.com/aFa5kwdm82kI9xl2b3es00w',        // Fregatte, 199 € once, 500,000 pages, 30 days (plink_1Ug6ak4IVkazyZLz8nNglOqX)

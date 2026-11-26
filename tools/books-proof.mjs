@@ -813,6 +813,16 @@ await proof('/status.json gains counts: numbers only (and the day), no address, 
 const firstDiff = (x, y) => { let i = 0; while (i < x.length && x[i] === y[i]) i++; return `at ${i}: ${JSON.stringify(x.slice(Math.max(0, i - 120), i + 120))} <> ${JSON.stringify(y.slice(Math.max(0, i - 120), i + 120))}`; };
 // (the moment each tree's modules were first loaded, runningSince of /open.json, is the only thing told apart: this tree's came first)
 const since0 = (t) => t.replace(/"runningSince":"[^"]*"/g, '"runningSince":"<start>"')
+  // (and the agent packs for everyone of 3.63, proven by tools/checkout-proof.mjs and tools/legal-proof.mjs: the checkout of each
+  // pack and the page for agents in the card door's GET, the line of llms.txt, § 5a (8) in terms and AGB, its row of /de/preise,
+  // the sentence of /de/widerruf in both languages; cut first)
+  .replace(/,"checkout":"[^"]*\/c\/agent\d+\?from=agents"/g, '')
+  .replace(/,"for_agents":"[^"]*\/for-agents"/g, '')
+  .replace(/\n- \[For agents\]\(https:\/\/mareliberum\.dev\/for-agents\): [^\n]*/g, '')
+  .replace(/\n?(?:<p>)?\(8\) (?:Für Agenten und alle, für die sie handeln, mit Karte im Browser \(seit 3\.63\)|For agents and everyone they act for, by card in the browser \(since 3\.63\)):.*?(?:<\/p>|(?=\n)|$)/gm, '')
+  .replace(/<tr>(?:(?!<\/tr>)[\s\S])*?Leser-Guthaben für Agenten mit Karte im Browser[\s\S]*?<\/tr>/g, '')
+  .replace(/ Die Leser-Pakete in USD für Agenten und alle, für die sie handeln \(.*?\), können auch Verbraucher kaufen; für sie gilt diese Belehrung\./g, '')
+  .replace(/ The reader packs in USD for agents and the people they act for \(.*?\) can also be bought by consumers; these instructions apply to them\./g, '')
   // (and the packs for agents with a Link wallet of 3.62, proven by tools/mpp-proof.mjs: the clause of the limit answer and of
   // llms.txt, the card door's packs and value in its GET, § 5a (6) in terms and AGB and its row of /de/preise; cut first)
   .replace(/; for agents with a Link wallet also \?pack=10, \?pack=49 or \?pack=99: 10,000, 100,000 or 250,000 pages for 10, 49 or 99 USD, paid with mpp pay once their person approves; what a page saves, measured: \S+\/reader\/credit\/stripe\)/g, ')')

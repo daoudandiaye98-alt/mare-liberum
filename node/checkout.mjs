@@ -36,8 +36,18 @@ export const TILL = Object.freeze([
   pack('flotte', 'Flotte', 39_000, 1_000_000, 30, 'plink_1Ug6al4IVkazyZLzXK36l7ZK'),
   pack('flottejahr', 'Flotte, one year', 390_000, 12_000_000, 365, 'plink_1Ug6am4IVkazyZLzFdrqEbPB'),
 ]);
+// (since 3.63) the agent packs by card in the browser, in USD: for agents with a one-time card or a wallet (Grok, ChatGPT Wallet,
+// Gemini and others) and for the people they act for, consumers included (terms § 5a (8)); their order pages /c/agent10, agent49
+// and agent99 lead straight to the payment link (no box of § 14 BGB: they are not offers in euro). The same packs as the card
+// door's ?pack=10, 49 and 99 (node/mpp.mjs), here for whoever pays with a card in a checkout
+const usdPack = (id, name, cents, pages, days, linkId) => Object.freeze({ id, name, cents, currency: 'usd', pages, days, linkId, everyone: true });
+export const AGENT_TILL = Object.freeze([
+  usdPack('agent10', 'Agent pack 10', 1_000, 10_000, 30, 'plink_1Ug9FH4IVkazyZLzN99vL87I'),
+  usdPack('agent49', 'Agent pack 49', 4_900, 100_000, 30, 'plink_1Ug9FI4IVkazyZLzO4TDxrN7'),
+  usdPack('agent99', 'Agent pack 99', 9_900, 250_000, 30, 'plink_1Ug9FJ4IVkazyZLzo8xRWbNc'),
+]);
 // the pack a payment link sells (null: not one of the till's links), and the pack of a credit by its size (every size is one pack)
-export const tillOffer = (link) => TILL.find((o) => o.linkId === link) || null;
+export const tillOffer = (link) => TILL.find((o) => o.linkId === link) || AGENT_TILL.find((o) => o.linkId === link) || null;
 export const tillByPages = (pages) => TILL.find((o) => o.pages === pages) || null;
 const eur = (cents) => (cents / 100).toFixed(2);
 const perPage = (o) => (o.cents / 100 / o.pages).toFixed(6);
@@ -73,7 +83,7 @@ export function checkoutPaid(s, o = s && typeof s === 'object' ? tillOffer(s.pay
   if (!o || s.payment_link !== o.linkId) return 'this payment was not made through one of the reader credit offers';
   if (s.mode !== 'payment') return 'this is not a one-time payment';
   if (s.status !== 'complete' || s.payment_status !== 'paid') return 'this payment is not complete yet; if you have just paid, open the same link again in a minute';
-  if (s.amount_total !== o.cents || String(s.currency || '').toLowerCase() !== o.currency) return `this payment is not for exactly EUR ${(o.cents / 100).toFixed(2)}`;
+  if (s.amount_total !== o.cents || String(s.currency || '').toLowerCase() !== o.currency) return `this payment is not for exactly ${o.currency.toUpperCase()} ${(o.cents / 100).toFixed(2)}`;
   return null;
 }
 
@@ -90,10 +100,12 @@ export function checkoutAnswer(base, { token = null, credit = null, minted = nul
     customers: 'business customers only (Unternehmer within the meaning of § 14 BGB); the order page asks for this before the payment page', terms: `${b}/terms#s5a`, page: `${b}/reader#credit` };
   if (!token) return offer;
   const o = bought || tillByPages(credit?.pages), paidEur = session && Number.isFinite(session.amount_total) ? eur(session.amount_total) : o ? eur(o.cents) : null;
-  return { token, pages: credit.pages, left: credit.left, until: credit.until, ...(o ? { plan: o.name, price_eur: eur(o.cents), per_page_eur: perPage(o) } : {}), ...(minted != null ? { minted } : {}),
+  // (since 3.63) a pack in USD (AGENT_TILL) says its price in USD
+  const usd = o?.currency === 'usd', price = o ? (usd ? { plan: o.name, price_usd: eur(o.cents), per_page_usd: perPage(o) } : { plan: o.name, price_eur: eur(o.cents), per_page_eur: perPage(o) }) : {};
+  return { token, pages: credit.pages, left: credit.left, until: credit.until, ...price, ...(minted != null ? { minted } : {}),
     use: { header: 'x-sea-credit: <token>', firecrawl: 'Authorization: Bearer <token> (the api key of a Firecrawl SDK)', doors: [`${b}/r/<page address>`, `${b}/read?url=<page address>`, `POST ${b}/v1/scrape`, `POST ${b}/v2/scrape`], spent: 'one page per read that would count against the free limit, only after the network\'s 100 free pages of the UTC day' },
     again: 'This link shows the same token again. Keep the link and the token to yourself: whoever holds either can spend the credit.',
-    ...(session ? { paid: { status: 'paid', method: 'Stripe Checkout (card in the browser)', amount_eur: paidEur, reference: session.payment_intent || session.id } } : {}),
+    ...(session ? { paid: { status: 'paid', method: 'Stripe Checkout (card in the browser)', ...(usd ? { amount_usd: paidEur } : { amount_eur: paidEur }), reference: session.payment_intent || session.id } } : {}),
     terms: offer.terms, page: offer.page };
 }
 
@@ -113,7 +125,7 @@ export function checkoutPage(base, j, status = 200) {
 ${pre(`curl -H 'x-sea-credit: ${j.token}' ${b}/r/https://example.org/`)}
 ${pre(`app = Firecrawl(api_key="${j.token}", api_url="${b}")   # the token as the Firecrawl key`)}
 <p>Doors: ${j.use.doors.map((d) => `<code>${esc(d)}</code>`).join(', ')}. Every answer that spends a page says what is left (<code>x-sea-credit-left</code>).</p>
-${j.paid ? `<p><small>Paid: EUR ${esc(j.paid.amount_eur)} through Stripe; reference ${esc(j.paid.reference)}. Your invoice comes from Stripe by e-mail.</small></p>` : ''}
+${j.paid ? `<p><small>Paid: ${j.paid.amount_usd ? `USD ${esc(j.paid.amount_usd)}` : `EUR ${esc(j.paid.amount_eur)}`} through Stripe; reference ${esc(j.paid.reference)}. Your invoice comes from Stripe by e-mail.</small></p>` : ''}
 <p><small>Terms: <a href="/terms#s5a">§ 5a</a> (<a href="/de/agb#s5a">AGB § 5a</a>) · the reader: <a href="/reader">/reader</a> · questions: <a href="mailto:oroborosdesign@gmail.com">oroborosdesign@gmail.com</a></small></p>`;
   } else {
     h1 = err ? 'Nothing was given' : 'Reader credit for operators';
@@ -154,4 +166,52 @@ export function nodePage(base, paid = false) {
 <p lang="de">Ihr eigener Leser-Knoten: der Leser von Mare Liberum auf einem eigenen Server in der EU, mit eigener Adresse, ohne gemeinsames Tageslimit, eingerichtet binnen 48 Stunden nach Zahlung und für die gebuchte Laufzeit von uns betrieben: 90 Tage für ${fmt(t90.cents / 100)} € oder 12 Monate für ${fmt(t365.cents / 100)} €, nur für Unternehmer.</p>
 <p><small>Smaller needs: <a href="/reader/credit/paid">reader credit from EUR 10</a> · the reader: <a href="/reader">/reader</a> · terms: <a href="/terms#s4">§ 4</a> (<a href="/de/agb#s4">AGB § 4</a>) · questions: <a href="mailto:oroborosdesign@gmail.com">oroborosdesign@gmail.com</a></small></p>`;
   return page(b, NODE.door, 'Reederei: your own Mare Liberum reader node in the EU', 'Your own Mare Liberum reader node on a server in the EU: web page to Markdown, PDFs and the prompt-injection warden for your agents alone, set up within 48 hours.', body, null, '/og.png', paid ? { robots: 'noindex, nofollow' } : undefined);
+}
+
+// (since 3.63) the page for agents: what a page of the reader saves (measured on this node that day, an upper bound), the free
+// part, the packs and every way to pay them (mpp pay with a Link wallet; a checkout for one-time cards and wallets), how to use
+// the token, and a short, plain summary an agent can give its person. value: { pages, saved_tokens_per_page } or null
+export const FOR_AGENTS = '/for-agents';
+export function forAgents(base, value = null, { mppDoor = '/reader/credit/stripe' } = {}) {
+  const b = String(base || '').replace(/\/+$/, ''), usd3 = value ? +(value.saved_tokens_per_page * 3 / 1e6).toFixed(4) : null;
+  const packs = AGENT_TILL.map((o) => { const n = o.id.replace('agent', ''); return { pack: n, price_usd: eur(o.cents), pages: o.pages, days: o.days, per_page_usd: perPage(o),
+    pay: { link_wallet: `mpp pay ${b}${mppDoor}?pack=${n}`, checkout: `${b}/c/${o.id}?from=agents` } }; });
+  const first = packs[0];
+  return {
+    what: 'Mare Liberum for agents: any public web page or PDF as clean Markdown, robots.txt followed. 100 pages a day are free per network; past that, prepaid credit.',
+    value: { today: value, worth_usd_at_3_per_million_input_tokens: usd3, page_price_usd: (0.001).toFixed(6), page_price_usd_in_the_99_pack: packs[packs.length - 1].per_page_usd,
+      note: 'measured on this node today: the Markdown the reader hands over against the raw HTML of the same page, once a day per network and page; an upper bound, the price of a model\'s input decides what it is worth', how: `${b}/savings` },
+    free: { pages_a_day: 100, read: `${b}/r/<page address>` },
+    packs,
+    pay: {
+      link_wallet: 'An agent with a Link wallet (Claude, OpenAI agents, OpenClaw, Grok and others) runs mpp pay with the pack\'s door; Link asks its person to approve the spend, and the answer carries the token.',
+      checkout: 'An agent that pays on a normal checkout (ChatGPT Wallet, Grok with a Link card, Gemini with Google Pay and others) opens the checkout link; right after paying, the page shows the token.',
+      small: `The card door without ?pack sells 500 pages for 0.50 USD: POST ${b}${mppDoor}.`,
+    },
+    use: { header: 'x-sea-credit: <token>', firecrawl: 'Authorization: Bearer <token> (the api key of a Firecrawl SDK, api_url set to this node)', doors: [`${b}/r/<page address>`, `${b}/read?url=<page address>`, `POST ${b}/v1/scrape`, `POST ${b}/v2/scrape`],
+      spent: 'one page per read past the free 100 of the day, and only when the read brings Markdown back' },
+    for_your_person: `Mare Liberum reads web pages as Markdown for me. ${value ? `Measured today, a page saves about ${value.saved_tokens_per_page.toLocaleString('en-US')} tokens against its raw HTML (an upper bound, about ${usd3} USD at 3 USD per million input tokens), and costs 0.001 USD.` : 'A page costs 0.001 USD.'} I suggest pack ${first.pack}: ${first.pages.toLocaleString('en-US')} pages for ${first.price_usd} USD, valid ${first.days} days. Shall I buy it?`,
+    who: 'people and businesses; consumers have a 14-day right of withdrawal (terms § 13)',
+    terms: `${b}/terms#s5a`, withdrawal: `${b}/de/widerruf#en`,
+  };
+}
+export function forAgentsPage(base, j) {
+  const b = String(base || '').replace(/\/+$/, ''), v = j.value, pre = (t) => `<pre>${esc(t)}</pre>`;
+  const rows = j.packs.map((p) => `<tr id="pack-${esc(p.pack)}"><td><b>${esc(p.price_usd)} USD</b></td><td>${esc(fmt(p.pages))} pages</td><td>${esc(String(p.days))} days</td><td>USD ${esc(p.per_page_usd)}</td><td><code>${esc(p.pay.link_wallet)}</code></td><td><a class="tag" href="/c/agent${esc(p.pack)}?from=agents" rel="nofollow">Checkout</a></td></tr>`).join('');
+  const body = `<h1>For agents: the reader, its value and every way to pay</h1>
+<p class="pulse">${esc(j.what)}</p>
+${v.today ? `<div class="box"><p><b>Measured today:</b> a page saves about ${esc(fmt(v.today.saved_tokens_per_page))} tokens against its raw HTML (${esc(String(v.today.pages))} pages measured; an upper bound), about ${esc(String(v.worth_usd_at_3_per_million_input_tokens))} USD at 3 USD per million input tokens. A page costs ${esc(v.page_price_usd)} USD, in the 99 USD pack ${esc(v.page_price_usd_in_the_99_pack)} USD. <a href="/savings">How we count</a></p></div>` : ''}
+<h2>Free</h2>
+${pre(`curl ${b}/r/https://example.org/`)}
+<p>100 pages a day per network, no account, no key.</p>
+<h2>Packs</h2>
+<table><thead><tr><th>price</th><th>pages</th><th>term</th><th>a page</th><th>with a Link wallet</th><th>with a card or wallet</th></tr></thead><tbody>${rows}</tbody></table>
+<p>${esc(j.pay.link_wallet)}</p><p>${esc(j.pay.checkout)}</p><p><small>${esc(j.pay.small)}</small></p>
+<h2>Use the token</h2>
+${pre(`curl -H 'x-sea-credit: <token>' ${b}/r/https://example.org/`)}
+<p>${esc(j.use.spent)}.</p>
+<h2>For your person</h2>
+<blockquote>${esc(j.for_your_person)}</blockquote>
+<p><small>For ${esc(j.who)}: <a href="/de/widerruf#en">withdrawal</a> · terms: <a href="/terms#s5a">§ 5a</a> (<a href="/de/agb#s5a">AGB § 5a</a>) · as data: <a href="/for-agents.json">/for-agents.json</a> · questions: <a href="mailto:oroborosdesign@gmail.com">oroborosdesign@gmail.com</a></small></p>`;
+  return page(b, FOR_AGENTS, 'For agents · Mare Liberum', 'Mare Liberum for AI agents: web pages as Markdown, what a page saves, and packs from 10 USD paid with a Link wallet or a card.', body, null, '/og.png');
 }

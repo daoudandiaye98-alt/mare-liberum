@@ -230,13 +230,16 @@ const SALE = /^https:\/\/buy\.stripe\.com\//;
 // the payment links that sell, read from the code: the house offers (node/offers.mjs) and the harbours (node/seo.mjs)
 const SALE_LINKS = new Set([...Object.values(OFFERS).map((o) => o.link), ...Object.values(OFFER)].filter((u) => SALE.test(String(u || ''))));
 // the services of the counted door that lead to one of them
-const SALES = Object.keys(CTA).filter((id) => SALE.test(String(ctaTarget(id) || '')));
+// (since 3.63) the agent packs in USD are for everyone, consumers included (CTA.everyone): no box, their order page leads straight
+// to Stripe (tools/checkout-proof.mjs proves it); every other sale keeps the box of § 14 BGB
+const SALES = Object.keys(CTA).filter((id) => SALE.test(String(ctaTarget(id) || '')) && !CTA[id].everyone);
+const OPEN_SALES = Object.keys(CTA).filter((id) => SALE.test(String(ctaTarget(id) || '')) && CTA[id].everyone);
 const nodeFiles = readdirSync(join(ROOT, 'node')).filter((f) => f.endsWith('.mjs'));
 const linksIn = (t) => [...String(t).matchAll(/https:\/\/buy\.stripe\.com\/[A-Za-z0-9_]+/g)].map((m) => m[0]);
 await proof(`every payment link in the code is either a sale (${SALE_LINKS.size}, each reached only through its door /c/<service>) or the one voluntary support of the open atlas`, () => {
   assert.ok(SALE_LINKS.size >= 5 && SALES.length >= 5, `${SALE_LINKS.size} sale links, ${SALES.length} doors`);
-  for (const u of SALE_LINKS) assert.ok(SALES.some((id) => ctaTarget(id) === u), `${u}: a sale link without a door`);
-  for (const id of SALES) assert.ok(SALE_LINKS.has(ctaTarget(id)), `${id}: a door to a link the code does not sell through`);
+  for (const u of SALE_LINKS) assert.ok([...SALES, ...OPEN_SALES].some((id) => ctaTarget(id) === u), `${u}: a sale link without a door`);
+  for (const id of [...SALES, ...OPEN_SALES]) assert.ok(SALE_LINKS.has(ctaTarget(id)), `${id}: a door to a link the code does not sell through`);
   const donations = new Set();
   // (a copy of the code for a negative control holds node/, tools/ and site/; the sources of the home page stay with the repository)
   for (const f of [...nodeFiles.map((x) => `node/${x}`), 'site/index.html', 'homepage/src/page.html'].filter((x) => existsSync(join(ROOT, x)))) {
@@ -245,6 +248,10 @@ await proof(`every payment link in the code is either a sale (${SALE_LINKS.size}
   }
   assert.equal(donations.size, 1, 'one link for the voluntary support');
   for (const u of donations) assert.ok(!SALE_LINKS.has(u));
+});
+await proof('(3.63) the sales for everyone are exactly the agent packs in USD (agent10, agent49, agent99); their order pages lead straight to the payment link', async () => {
+  assert.deepEqual(OPEN_SALES, ['agent10', 'agent49', 'agent99']);
+  for (const id of OPEN_SALES) { assert.match(CTA[id].price, /USD/, id); const go = await node.call(`/c/${id}?from=pricing`, { accept: 'text/html', ...BROWSER }); assert.equal(go.status, 302, id); assert.equal(go.headers.get('location'), ctaTarget(id), id); }
 });
 for (const [from, lang] of [['pricing', 'en'], ['law', 'de']]) {
   await proof(`the order page (${lang}) stands before every sale (${SALES.join(', ')}): a notice for business customers, the price, a box that must be ticked, a plain form; ticked, the door leads to the payment link with its reference as before`, async () => {
