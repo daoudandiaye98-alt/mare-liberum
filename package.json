@@ -50,6 +50,7 @@
     "proof:toll": "node tools/toll-proof.mjs",
     "proof:reader": "node tools/reader-compat-proof.mjs",
     "proof:books": "node tools/books-proof.mjs",
+    "proof:operator": "node tools/operator-proof.mjs",
     "proof:credit": "node tools/credit-proof.mjs"
   },
   "dependencies": {

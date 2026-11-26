@@ -29,6 +29,9 @@ const costOf = (path) => (COST.find(([re]) => re.test(path)) || [0, 1])[1];
 const SEARCH_PACE = { perMinute: 150, burst: 50 };
 const KEEP = 100_000;      // names a pace list holds; the one not seen for longest makes room
 const STRIKES = 5, STRIKE_MS = 10 * 60_000, REST_MIN = 60, REST_MAX_MIN = 24 * 60;
+// the operator's doors (/operator/*, /moderate): 30 wrong keys from one network in 10 minutes and its next tries wait the rest of
+// those 10 minutes, the right key too (counted per network in memory only, like the strikes; the key itself is never kept)
+export const KEY_MISSES = 30, KEY_MISS_MS = 10 * 60_000;
 // asked for by nobody who came for the sea: files that hold secrets, and the doors of software the sea does not run
 const HOSTILE = /(^|\/)\.(?!well-known(\/|$))[^/]|\.(php\d?|phtml|aspx?|jspx?|cgi|bak|old|swp|ini|pem|key|sql|sqlite3?|log|tar|tgz|rar|7z)$|^\/(wp-admin|wp-login|wp-content|wp-includes|xmlrpc|phpmyadmin|pma|adminer|cgi-bin|vendor|_ignition|telescope|actuator|solr|boaform|hnap1|owa|ecp|server-status|backup|credentials|storage\/logs|_profiler)(\.|\/|$)|^\/(docker-compose|secrets?|credentials?|id_rsa|id_ed25519|phpinfo|dump|database|backup)\.[a-z0-9.]{2,12}$|etc\/passwd|\.\.\//i;
 // the same, for the census: only where the whole request is plainly such a probe (the sea's own doors carry free text)
@@ -84,7 +87,7 @@ export function createImmune({ now = () => Date.now() } = {}) {
   let policy = tidy(null), loaded = null, failed = null, store = null, kv = null, log = () => {}, timer = null, base = '';
   const since = new Date(now()).toISOString();
   const count = { met: 0, flooded: 0, turnedAway: 0, probes: 0, rested: 0, written: 0, cleaned: 0, secrets: 0, commands: 0, links: 0, calm: 0, doorsAtRest: 0, sitePace: 0, searchPace: 0, reports: 0 };
-  const buckets = new Map(), sites = new Map(), strikes = new Map(), resting = new Map(), again = new Map(), reporters = new Map();
+  const buckets = new Map(), sites = new Map(), strikes = new Map(), resting = new Map(), again = new Map(), reporters = new Map(), keyMisses = new Map();
 
   // ---- the policy: what the operator wrote into the database, made safe to act on
   function tidy(p) {
@@ -147,8 +150,12 @@ export function createImmune({ now = () => Date.now() } = {}) {
     for (const [k, r] of resting) if (r.until < t) resting.delete(k);
     for (const [k, r] of again) if (t - r.at > 24 * 3600_000) again.delete(k);
     for (const [k, r] of reporters) if (t - r.at > 3600_000) reporters.delete(k);
-    for (const m of [strikes, resting, again, reporters]) while (m.size > KEEP) m.delete(m.keys().next().value);
+    for (const [k, r] of keyMisses) if (t - r.at > KEY_MISS_MS) keyMisses.delete(k);
+    for (const m of [strikes, resting, again, reporters, keyMisses]) while (m.size > KEEP) m.delete(m.keys().next().value);
   }
+  // a wrong operator key: one more for the network; braked: the network's tries wait until its 10 minutes are over (seconds left)
+  function keyMiss(ip) { const k = netKey(ip), t = now(), r = keyMisses.get(k), fresh = r && t - r.at < KEY_MISS_MS; keyMisses.set(k, { n: fresh ? r.n + 1 : 1, at: fresh ? r.at : t }); }
+  function keyBraked(ip) { const r = keyMisses.get(netKey(ip)), t = now(); if (!r || t - r.at >= KEY_MISS_MS) return 0; return r.n >= KEY_MISSES ? Math.max(1, Math.ceil((r.at + KEY_MISS_MS - t) / 1000)) : 0; }
   function rest(key, reason, minutes) {
     const seen = again.get(key), n = (seen?.n || 0) + 1, mins = Math.min(minutes * 2 ** (n - 1), REST_MAX_MIN);
     again.set(key, { n, at: now() }); resting.set(key, { until: now() + mins * 60_000, why: reason });
@@ -339,7 +346,7 @@ export function createImmune({ now = () => Date.now() } = {}) {
       return load();
     },
     set(p) { policy = tidy(p); loaded = new Date(now()).toISOString(); return policy.mode; },          // for a node without a database, and for the proofs
-    load, meet, strike, hostile, shield, door, report, status, sweep, readText, spend, searching, forgetMindAddresses, atRest,
+    load, meet, strike, hostile, shield, door, report, status, sweep, readText, spend, searching, forgetMindAddresses, atRest, keyMiss, keyBraked,
     get mode() { return policy.mode; },
     get harbours() { return policy.harbours; },
   };

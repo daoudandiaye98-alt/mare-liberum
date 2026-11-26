@@ -828,9 +828,11 @@ await proof('/mcp/app byte for byte as on origin/main: initialize, tools/list an
 });
 await proof('every other public answer as on origin/main (the pages, the data, /mcp tools/list, the operator\'s declarations door); the privacy notice apart only by its new sentences', async () => {
   assert.ok(THEIRS, 'origin/main as a tree');
-  for (const p of ['/', '/llms.txt', '/status', '/transparency', '/treasury', '/pricing', '/terms', '/de/agb', '/de/preise', '/de/widerruf', '/engine', '/fair', '/open.json', '/job', '/operator/declarations', '/operator', '/operator/ledger']) {
+  for (const p of ['/', '/llms.txt', '/status', '/transparency', '/treasury', '/pricing', '/terms', '/de/agb', '/de/preise', '/de/widerruf', '/engine', '/fair', '/open.json', '/job', '/operator/declarations', '/operator/ledger']) {
     sameText(await MINE.call(p, { accept: p.endsWith('.json') ? 'application/json' : 'text/html' }), await THEIRS.call(p, { accept: p.endsWith('.json') ? 'application/json' : 'text/html' }), p);
   }
+  // (/operator itself is the operator's page since night/operator, proven by tools/operator-proof.mjs: new here, no door there)
+  { const a = await MINE.call('/operator', { accept: 'text/html' }), b = await THEIRS.call('/operator', { accept: 'text/html' }); assert.equal(b.status, 404, '/operator on origin/main'); assert.equal(a.status, 200, '/operator here'); assert.equal(a.headers.get('cache-control'), 'no-store'); assert.match(a.headers.get('x-robots-tag') || '', /noindex/); }
   sameText(await MINE.rpc('/mcp', 'tools/list'), await THEIRS.rpc('/mcp', 'tools/list'), '/mcp tools/list');
   const NEW = { '/de/datenschutz': [/\n<p>\(7\) Das Kassenbuch aus der Blockchain: [^<]*<\/p>/, /<tr><td>Kassenbuch aus der Blockchain[^\n]*<\/tr>\n/], '/privacy': [/\n<p>\(7\) The cash book from the blockchain: [^<]*<\/p>/, /<tr><td>Cash book from the blockchain[^\n]*<\/tr>\n/] };
   for (const [p, cut] of Object.entries(NEW)) {
