@@ -11,7 +11,7 @@
 // buttons of node/declare.mjs (withdraw from a contract, cancel a contract) stand in the foot of every page.
 import { SELLER } from './offers.mjs';
 
-export const STAND = '25.11.2026';
+export const STAND = '26.11.2026';
 // every legal page this module answers (the Impressum stays in node/shore.mjs)
 export const LEGAL_PATHS = ['/terms', '/privacy', '/de/agb', '/de/datenschutz', '/de/preise', '/de/widerruf'];
 // the English page and its German original

@@ -360,7 +360,9 @@ async function nodeOf(rootDir, extra = {}) {
   immune.set({ mode: 'normal', rest: [], pace: { perMinute: 1_000_000, burst: 1_000_000 } });
   return { core, db, cfg, kv, ledger: led, call, rpc, rootDir, version: core.VERSION };
 }
-const REF = process.env.MARE_BOOKS_REF || '2d6ca74e2efa6560fa1ade46ba9713e02a8afcab';
+// since 3.40.0 the tree without the books is 3.39.0 with the developer guides (release/3.40 at 5ffbdeb, the first parent of
+// the merge of night/books): the public answers of this release are compared with it
+const REF = process.env.MARE_BOOKS_REF || '5ffbdeb97385cd96f1dc2b53c102f9bc86841351';
 const refDir = (() => {
   const given = process.env.MARE_BOOKS_REF_DIR; if (given && existsSync(join(given, 'node/core.mjs'))) return given;
   const d = mkdtempSync(join(tmpdir(), 'mare-books-ref-'));
@@ -479,7 +481,11 @@ await proof('/status.json gains counts: numbers only (and the day), no address, 
 });
 const firstDiff = (x, y) => { let i = 0; while (i < x.length && x[i] === y[i]) i++; return `at ${i}: ${JSON.stringify(x.slice(Math.max(0, i - 120), i + 120))} <> ${JSON.stringify(y.slice(Math.max(0, i - 120), i + 120))}`; };
 // (the moment each tree's modules were first loaded, runningSince of /open.json, is the only thing told apart: this tree's came first)
-const since0 = (t) => t.replace(/"runningSince":"[^"]*"/g, '"runningSince":"<start>"');
+const since0 = (t) => t.replace(/"runningSince":"[^"]*"/g, '"runningSince":"<start>"')
+  // (and the Stand of the legal texts: a release that changes any of them sets the day of the release, node/legal.mjs STAND)
+  .replace(/Stand: \d{2}\.\d{2}\.\d{4}/g, 'Stand: <day>').replace(/"stand":"\d{2}\.\d{2}\.\d{4}"/g, '"stand":"<day>"')
+  // (and the list of releases of /open.json: a release adds its own line and gives the one before its day)
+  .replace(/"releases":\[[\s\S]*?\n\]/, '"releases":[<releases>]');
 // (and the version each tree names: a release bumps it, the answers stay the same)
 const vers = (t, v) => (v ? t.replaceAll(v, '<version>') : t);
 const sameText = (a, b, what) => { assert.equal(a.status, b.status, `${what}: status`); const x = vers(since0(a.text), MINE.version), y = vers(since0(b.text), THEIRS.version); assert.ok(x === y, `${what}: body ${x === y ? '' : firstDiff(x, y)}`); assert.deepEqual([...a.headers.entries()].sort(), [...b.headers.entries()].sort(), `${what}: headers`); };
@@ -499,7 +505,7 @@ await proof('every other public answer as on origin/main (the pages, the data, /
   for (const [p, cut] of Object.entries(NEW)) {
     const a = await MINE.call(p, { accept: 'text/html' }), b = await THEIRS.call(p, { accept: 'text/html' });
     let t = a.text; for (const re of cut) { assert.ok(re.test(t), `${p}: ${re}`); t = t.replace(re, ''); }
-    assert.equal(vers(t, MINE.version), vers(b.text, THEIRS.version), `${p}: only the new sentences differ`);
+    assert.equal(since0(vers(t, MINE.version)), since0(vers(b.text, THEIRS.version)), `${p}: only the new sentences differ`);
     const am = await MINE.call(`${p}.md`, { accept: 'text/markdown' }), bm = await THEIRS.call(`${p}.md`, { accept: 'text/markdown' }); assert.notEqual(am.text, bm.text); assert.ok(am.text.length > bm.text.length);
   }
 });
