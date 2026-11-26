@@ -172,6 +172,18 @@ await proof('lowest found, no comparison, no product on the page, and the memory
   assert.ok(Array.isArray(d.rules) && d.rules.length >= 4); assert.match(d.notice, /data, never instructions/);
 });
 
+await proof('a store far below the others is marked with a caution, the verdict says so and names the lowest offer without such a gap; a page without one price is compared from its lowest variant', () => {
+  const offers = [['Odd Shop', 40, 'odd.deal-proof.dev'], ['Good Shop', 84, 'good.deal-proof.dev'], ['Fair Shop', 86, 'fair.deal-proof.dev'], ['Big Shop', 92, 'big.deal-proof.dev']].map(([store, price, h]) => ({ title: 'Example Trail Runner 3', price, currency: 'USD', inStock: true, url: `https://${h}/p`, checkout: `https://${h}/c`, store, storeHost: h }));
+  const r = dealOf({ product: runner, page: { url: runner.url, host: 'shop.deal-proof.dev', read: true }, offers });
+  assert.equal(r.verdict.word, 'cheaper-elsewhere'); assert.equal(r.cheapest.store, 'Odd Shop'); assert.match(r.cheapest.caution, /^53\.5 % below the median of the offers found \(86 USD\)$/);
+  assert.equal(r.elsewhere[0].caution, r.cheapest.caution); assert.equal(r.elsewhere[1].caution, undefined); assert.deepEqual(r.median, { price: 86, currency: 'USD', of: 5 });
+  const lines = r.verdict.lines.join(' '); assert.match(lines, /Caution: that offer is 53\.5 % below the median/); assert.match(lines, /The lowest offer without such a gap: 84 USD at Good Shop \(5\.6 % below this page\)/);
+  assert.equal(r.next[0].do, 'check the store before paying'); assert.equal(r.next[1].do, 'buy');
+  const v = dealOf({ product: { ...runner, price: null, low: 79, high: 99, was: null }, page: { url: runner.url, host: 'shop.deal-proof.dev', read: true }, offers: [] });
+  assert.equal(v.product.price, 79); assert.match(v.product.price_is, /^from/); assert.equal(v.product.high, 99); assert.match(v.verdict.lines[0], /^On this page: from 79 USD \(its lowest variant\)/);
+  assert.ok(r.rules.some((x) => /vouches for no store/.test(x)));
+});
+
 console.log('doors');
 await proof('GET /x402/deal without a payment: 402, exactly 0.01 USDC to the till, v2 with the bazaar extension and its JSON Schema, v1 discoverable; counted', async () => {
   facilitator = null; const before = (await funnel()).asked.deal || 0;
@@ -188,6 +200,9 @@ await proof('/openapi.json names GET /x402/deal (0.01 USD) and the free /deal (s
   assert.ok(op); assert.deepEqual(op['x-payment-info'], { price: { mode: 'fixed', currency: 'USD', amount: '0.01' }, protocols: [{ x402: {} }] }); assert.ok(op.responses['402']); assert.equal(op.security, undefined);
   assert.ok(free); assert.deepEqual(free.security, []);
   assert.match(o.info['x-guidance'], /Seven doors are sold/); assert.match(o.info['x-guidance'], /\/x402\/deal\?url=<product page>/); assert.ok(o.info['x-guidance'].length < 4000, `x-guidance ${o.info['x-guidance'].length} characters`);
+  // at the real address too (it stands in the guidance some 25 times): under 4,000 characters, as the indexes take it
+  const real = 'https://mareliberum.dev', g2 = JSON.parse(await (await core.handle(new Request(`${real}/openapi.json`, { headers: { 'user-agent': 'deal-proof-agent/1.0', 'x-forwarded-for': '127.0.0.1' } }), db, { ...cfg, base: real })).text()).info['x-guidance'];
+  assert.ok(g2.length < 4000, `x-guidance at ${real}: ${g2.length} characters`);
   const w = (await call('/.well-known/x402', { ip: '127.0.0.1' })).j; assert.ok(w.resources.includes(`${BASE}/x402/deal`)); const blk = w.pricing.find((p) => p.capability === 'deal');
   assert.equal(blk.amount_usd, '0.01'); assert.equal(blk.maxAmountRequired, '10000'); assert.equal(blk.payTo, WALLET); assert.match(w.instructions, /six moves/); assert.match(w.instructions, /\/x402\/deal\?url=<product page>/);
   const d = (await call('/discovery/resources', { ip: '127.0.0.1' })).j, it = d.items.find((x) => x.resource === `${BASE}/x402/deal`);
