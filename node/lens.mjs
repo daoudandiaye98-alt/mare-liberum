@@ -82,11 +82,18 @@ export function createLens(h) {
         try { await allow(ctx, 'read', 100, 86400); } catch {
           // prepaid reader credit (node/credit.mjs, since 3.38): only where the free limit refuses, one page per such read
           const paid = ctx?.credit ? await ctx.credit.spend() : null;
-          if (!paid?.ok) { const e = new SeaError('RESOURCE_EXHAUSTED', `100 free reads a day from one address are used. Angel, a resident of the sea, reads on without a daily limit and also removes text hidden from people: ${ANGEL_READ} (free key with 500 reads at https://angel.oroboros-design.com/key, or 0.02 USDC per page over x402).`, 429); e.readLimit = paid?.why || true; throw e; }
+          // (since 3.61) the two parts of the words apart: the answers that add how to read on here (node/core.mjs, credit.mjs
+          // limitSaid) put that right after the first part, and the word on Angel after it
+          if (!paid?.ok) { const limit = '100 free reads a day from one address are used.', also = `Angel, a resident of the sea, reads on without a daily limit and also removes text hidden from people: ${ANGEL_READ} (free key with 500 reads at https://angel.oroboros-design.com/key, or 0.02 USDC per page over x402).`; const e = new SeaError('RESOURCE_EXHAUSTED', `${limit} ${also}`, 429); e.readLimit = paid?.why || true; e.limitLine = limit; e.alsoLine = also; throw e; }
           ctx.creditUsed = paid;
         }
       }
-      const r = hit || await readUrl(raw, { full, ...(shape ? { shape } : {}), robots: async (host) => { const k = `robots:${host}`, c = await kv.get(k); if (c) return c; const g = await grab(`https://${host}/robots.txt`, { max: 150_000, ms: 5000, ua: READER_UA }); const v = { status: g.status, body: g.status === 200 && !/<html/i.test(g.body || '') ? g.body : '' }; await kv.set(k, v, 3600); return v; } });
+      // (since 3.61) the acceptance test of reader credit: a credit page counts only when the read brings Markdown back; a page
+      // spent on a read that brings none (robots.txt, no answer, an error of the site, a kind of file it does not read, an empty
+      // page) is given back at once, and the answer states what is left as before
+      const giveBack = async () => { if (!ctx?.creditUsed || !ctx.credit?.back) return; const b = await ctx.credit.back().catch(() => null); if (b?.ok) ctx.creditUsed = b; };
+      const r = hit || await readUrl(raw, { full, ...(shape ? { shape } : {}), robots: async (host) => { const k = `robots:${host}`, c = await kv.get(k); if (c) return c; const g = await grab(`https://${host}/robots.txt`, { max: 150_000, ms: 5000, ua: READER_UA }); const v = { status: g.status, body: g.status === 200 && !/<html/i.test(g.body || '') ? g.body : '' }; await kv.set(k, v, 3600); return v; } }).catch(async (err) => { await giveBack(); throw err; });
+      if (!hit && !r.markdown) await giveBack();
       if (!hit && r.markdown) await kv.set(key, markup ? { ...r, html: undefined, rawHtml: undefined, type: r.type && r.htmlBytes ? undefined : r.type } : r, 3600);
       // the reading area spares what the page weighs as HTML against its Markdown (node/areas.mjs); the size stays out of the answer
       // (an answer that hands the page's markup over spared nothing against it: not counted)

@@ -71,6 +71,9 @@ globalThis.fetch = async (u, o = {}) => {
   const url = new URL(s);
   if (url.pathname === '/robots.txt') return new Response('User-agent: *\nAllow: /\n', { status: 200, headers: { 'content-type': 'text/plain' } });
   if (url.origin === P && url.pathname.startsWith('/t/')) return new Response(`note ${url.pathname} of the harbour`, { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+  // (3.61) a page the site no longer has, and an empty page: reads without Markdown
+  if (url.origin === P && url.pathname.startsWith('/gone/')) return new Response('not here', { status: 404, headers: { 'content-type': 'text/plain; charset=utf-8' } });
+  if (url.origin === P && url.pathname.startsWith('/empty/')) return new Response('', { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' } });
   if (s === `${P}/pier`) return new Response(PAGE, { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
   throw new Error(`the proof does not use the network: ${s.slice(0, 80)}`);
 };
@@ -159,7 +162,10 @@ await proof('a non-payer past the free limit: since 3.54 a 402 with the terms of
   const ip = fresh(); await useFree(node, ip); pageNo -= 100; await useFree(ref, ip);
   const p = `/r/${nextPage()}`, a = await node.call(p, { ip }), b = await ref.call(p, { ip });
   assert.equal(a.status, 402, 'since 3.54 the limit asks with 402'); assert.equal(b.status, 429); assert.equal(a.j.error.code, b.j.error.code); assert.equal(a.j.accepts[0].maxAmountRequired, '10000');
-  assert.ok(a.j.error.message.startsWith(`${b.j.error.message} Or read on with prepaid reader credit: POST ${BASE}/reader/credit`), a.j.error.message);
+  // (since 3.61) the sea's own ways first: this page over x402, then credit; the word on Angel (the reference's words after their first sentence) last
+  const LIMIT1 = '100 free reads a day from one address are used.'; assert.ok(b.j.error.message.startsWith(`${LIMIT1} Angel`), b.j.error.message);
+  assert.ok(a.j.error.message.startsWith(`${LIMIT1} Read on now: this answer is the x402 payment request for this page (0.01 USDC on Base, paid in the same request), or with prepaid reader credit: POST ${BASE}/reader/credit`), a.j.error.message);
+  assert.ok(a.j.error.message.endsWith(` A credit page counts only when the read brings Markdown back. ${b.j.error.message.slice(LIMIT1.length + 1)}`), a.j.error.message);
   assert.equal(a.h['x-sea-credit-buy'], `${BASE}/reader/credit`); assert.equal(a.h.link, `<${BASE}/reader#credit>; rel="payment"`);
   assert.equal(a.h['x-sea-credit-buy-card'], `${BASE}/reader/credit/stripe`); assert.ok(a.j.error.message.includes(`or by card or Link: POST ${BASE}/reader/credit/stripe over MPP (0.50 USD for 500 pages, 30 days)`), a.j.error.message);
   assert.equal(a.h['x-sea-credit-buy-business'], `${BASE}/c/reader?from=limit`); assert.ok(a.j.error.message.includes(`or as a business by card in the browser: ${BASE}/c/reader?from=limit (EUR 10 for 10,000 pages, 30 days)`), a.j.error.message);
@@ -238,6 +244,26 @@ await proof('past the free pages a read spends one page (x-sea-credit-left, x-se
   assert.equal(fcKey.status, 200); assert.equal(fcKey.j.success, true); assert.equal(fcKey.h['x-sea-credit-left'], '48', 'the token as a Firecrawl api key');
   const jn = await node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': tok, 'x-return-format': 'text' } }); assert.equal(jn.status, 200); assert.equal(jn.h['x-sea-credit-left'], '47');
   const g1 = await node.call('/reader/credit', { ip, accept: 'application/json', headers: { 'x-sea-credit': tok } }); assert.equal(g1.j.token.left, 47);
+});
+await proof('(3.61) the acceptance test of reader credit: a credit page counts only when the read brings Markdown back; a read without (the site answers 404, an empty page) gives its page back at once and says what is left', async () => {
+  facilitator = settles(); const b = await buy(payment()); await settled(); const tok = b.j.token, ip = fresh(); await useFree(node, ip);
+  const good = await node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': tok } }); assert.equal(good.status, 200); assert.equal(good.h['x-sea-credit-left'], '49');
+  const gone = await node.call(`/r/${P}/gone/${++pageNo}`, { ip, headers: { 'x-sea-credit': tok } }); assert.equal(gone.h['x-sea-credit-left'], '49', `a 404 of the site gives its page back: ${gone.status} ${gone.text.slice(0, 160)}`);
+  const empty = await node.call(`/r/${P}/empty/${++pageNo}.txt`, { ip, headers: { 'x-sea-credit': tok } }); assert.equal(empty.h['x-sea-credit-left'], '49', `an empty page gives its page back: ${empty.status} ${empty.text.slice(0, 160)}`);
+  const g = await node.call('/reader/credit', { ip, accept: 'application/json', headers: { 'x-sea-credit': tok } }); assert.equal(g.j.token.left, 49, 'the book agrees');
+  const next = await node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': tok } }); assert.equal(next.status, 200); assert.equal(next.h['x-sea-credit-left'], '48');
+});
+await proof('(3.61) a page given back never lifts a credit above the pages bought, and a credit taken back or run out stays as it is', async () => {
+  const { createCredit, tokenHash: th } = await import(pathToFileURL(join(ROOT, 'node/credit.mjs')).href);
+  const m = new Map(), kv = { get: async (k) => (m.has(k) ? m.get(k) : null), set: async (k, v) => { if (v == null) m.delete(k); else m.set(k, v); return true; } };
+  let t = Date.parse('2026-11-26T20:00:00Z'); const book = createCredit({ kv, now: () => t });
+  const s = await book.mint({ id: 'sale-back-1' }, null, 3, null, 30), h = th(s.token);
+  assert.deepEqual((await book.back(h)).left, 3, 'a full credit stays full');
+  assert.equal((await book.spend(h)).left, 2); assert.equal((await book.back(h)).left, 3); assert.equal((await book.back(h)).left, 3, 'never above the pages bought');
+  await book.spend(h); await book.spend(h); await book.spend(h); assert.equal((await book.peek(h)).left, 0); assert.equal((await book.back(h)).left, 1, 'a used-up credit takes its page back');
+  await book.revokeSale('sale-back-1'); const rv = await book.back(h); assert.equal(rv.ok, false); assert.equal((await book.peek(h)).left, 0, 'a credit taken back stays at 0');
+  const s2 = await book.mint({ id: 'sale-back-2' }, null, 3, null, 30), h2 = th(s2.token); await book.spend(h2); t += 31 * 86400 * 1000;
+  assert.equal((await book.back(h2)).ok, false, 'a credit run out of time stays as it is');
 });
 await proof('a malformed, unknown, used-up or expired token: today\'s limit answer and a word on why; nothing read', async () => {
   facilitator = settles(); const b = await buy(payment()); await settled(); const tok = b.j.token, ip = fresh(); await useFree(node, ip);
@@ -418,7 +444,11 @@ const BREAK = [
   ['credit not in the till\'s books', 'node/core.mjs', "q: `reader credit: ${CREDIT.pages} pages`, ledger: books,", "q: `reader credit: ${CREDIT.pages} pages`, ledger: { sale: (row) => ({ ...row, id: 'nobook' }), saleSet: () => {} },"],
   ['the line on credit added to every error (non-payers and others changed)', 'node/core.mjs', 'const more = e.readLimit ? creditHint(base, e.readLimit === true ? null : e.readLimit) : null;\n      return fin(', 'const more = creditHint(base, null);\n      return fin('],
   // (since 3.54 the reader's limit answers 402 from readLimit402, node/core.mjs: there the word on why must stay)
-  ['the limit answer without its word on why (used up, expired, unknown, taken back)', 'node/core.mjs', 'const more = creditHint(base, e.readLimit === true ? null : e.readLimit); return readLimitRequired(', 'const more = creditHint(base, null); return readLimitRequired('],
+  ['the limit answer without its word on why (used up, expired, unknown, taken back)', 'node/core.mjs', 'const more = creditHint(base, e.readLimit === true ? null : e.readLimit, { payNow: (READPAY.cents / 100).toFixed(2) }); return readLimitRequired(', 'const more = creditHint(base, null, { payNow: (READPAY.cents / 100).toFixed(2) }); return readLimitRequired('],
+  // (3.61) the sea's own ways first, and the acceptance test of reader credit
+  ['the limit answer with the word on Angel first again', 'node/credit.mjs', 'export const limitSaid = (e, more) => (e?.limitLine ?', 'export const limitSaid = (e, more) => (false ?'],
+  ['a read without Markdown keeps its credit page', 'node/lens.mjs', '      if (!hit && !r.markdown) await giveBack();', '      if (false) await giveBack();'],
+  ['a page given back above the pages bought', 'node/credit.mjs', 'r.left = Math.min(r.pages, r.left + 1);', 'r.left = r.left + 1;'],
   ['the app door changed', 'node/core.mjs', "read_page: 'Read a public web page as clean Markdown (title, description, main text, links), up to 100 pages a day per address.", "read_page: 'Read a public web page as clean Markdown (title, description, main text, links), up to 100 pages a day per network."],
   ['§ 5a without the refund rule', 'node/legal.mjs', 'Nicht genutzte Seiten werden nicht erstattet, soweit das Gesetz nichts anderes vorschreibt; ', ''],
   // CR8: a settlement whose answer never came back
