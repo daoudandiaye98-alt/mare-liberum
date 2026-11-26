@@ -156,6 +156,7 @@ export function readerOpenApi(base, version = '', { scrape = false } = {}) {
             413: err(`The body is larger than ${mb} MB.`),
             422: err(`The text could not be made smaller within ${SQUEEZE.timeMs / 1000} s.`),
             429: err('A calmer pace from this network, please (Retry-After).'),
+            500: err('An error inside the engine room; the text was not changed (send it to your model as it is).'),
             503: err('The engine room rests, or /compress works on another text (Retry-After).'),
           },
         },

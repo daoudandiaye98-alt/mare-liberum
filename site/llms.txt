@@ -128,7 +128,7 @@ One task a page, each with what to type, what it was measured to spare and where
 - [Read a web page again for 51 tokens](https://mareliberum.dev/guides/read-a-page-again): since=<etag> or If-None-Match on /r/<address>: unchanged in one line, only the lines that changed, or a 304
 - [Only the fields you need](https://mareliberum.dev/guides/only-the-fields-you-need): fields=<a,b.c> on any JSON door; lossy, and said so in a header
 - [/compress in a LiteLLM proxy or the Vercel AI SDK](https://mareliberum.dev/guides/compress-litellm-vercel-ai-sdk): long tool results made smaller before they reach the model, the original kept on any error
-- [The reader and /compress as OpenAPI 3.1](https://mareliberum.dev/openapi/reader.json): GET /r/{address}, GET /read?url=, POST /compress, with since=, If-None-Match, budget= and every status they answer
+- [The reader, /compress and the scrape doors as OpenAPI 3.1](https://mareliberum.dev/openapi/reader.json): GET /r/{address}, GET /read?url=, POST /compress, POST /v1/scrape and /v2/scrape, with since=, If-None-Match, budget= and the statuses they answer
 
 ## Check a website for agents
 
