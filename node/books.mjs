@@ -345,10 +345,19 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
 
   // ---- one pass: read what is new, look again at the last days, fold the counts
   // the seconds per block: the head against a block 100,000 before it (fewer near the start), every hour; 2 s until measured
+  // A value outside 0.05–5 s is refused; one more than 4× away from the current value is taken only when the next measurement
+  // agrees with it (within a quarter); a refused or failed measurement is tried again on the next pass, an accepted one an hour on
+  let spbPending = null;
   const measure = async (head) => {
     if (now() - spbAt < 3600e3) return;
-    spbAt = now();
-    try { const n = Math.min(100_000, head - 1); if (n < 100) return; const v = ((await blockTime(head)) - (await blockTime(head - n))) / n; if (v > 0 && v < 60) spb = v; } catch {}
+    try {
+      const n = Math.min(100_000, head - 1); if (n < 100) return;
+      const v = ((await blockTime(head)) - (await blockTime(head - n))) / n;
+      if (!(v >= 0.05 && v <= 5)) { count('chain_block_time_refused'); spbPending = null; return; }
+      const far = v > spb * 4 || v < spb / 4;
+      if (far && !(spbPending != null && Math.abs(v - spbPending) <= spbPending * 0.25)) { spbPending = v; count('chain_block_time_refused'); return; }
+      spb = v; spbPending = null; spbAt = now();
+    } catch { count('chain_block_time_refused'); }
   };
   async function passOnce() {
     st = await readState();
@@ -368,6 +377,8 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
       await measure(head);
       maxStep = Math.max(maxStep0, blocksFor(stepS)); // ten minutes of chain time (never less than the width set)
       const safe = Math.max(0, head - Math.max(confirmations, blocksFor(confirmS))); st.head = head; st.safe = safe;
+      // a cursor above the safe head (a provider behind the one before, a block time gone wrong): nothing is read, and that is said
+      if (st.next != null && st.next > safe + 1) count('chain_cursor_above_safe');
       if (st.next == null) { st.start = Number.isSafeInteger(fromBlock) ? fromBlock : await firstBlockAt(Math.floor(Date.parse(`${since}T00:00:00Z`) / 1000) - 3600, safe); st.next = st.start; if (!(await put(KEYS.state(W), st, far()))) throw new Error('the state could not be written'); }
       let ranges = 0, found = 0;
       // four fifths of the narrowest width the RPC refused for its width (forward, and the re-reads apart): the most asked, for an hour
@@ -456,7 +467,7 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
   }
   async function sync() {
     const s = await readState(); // what the disk holds (a cursor that could not be written is not told as read)
-    return { on, provider: RPCS.length ? new URL(RPCS[cur] || RPCS[0]).host : null, providers: RPCS.map((u) => new URL(u).host), seconds_per_block: spb, start_block: s.start, next_block: s.next, safe_head: s.safe, behind_blocks: s.next != null && s.safe != null ? Math.max(0, s.safe - s.next + 1) : null, last_pass: s.lastPass, last_ok: s.lastOk, last_error: s.lastError, errors_in_a_row: s.errors || 0, zero_value_transfers_skipped: s.zero || 0, step, since };
+    return { on, provider: RPCS.length ? new URL(RPCS[cur] || RPCS[0]).host : null, providers: RPCS.map((u) => new URL(u).host), seconds_per_block: spb, start_block: s.start, next_block: s.next, safe_head: s.safe, cursor_above_safe_blocks: s.next != null && s.safe != null && s.next > s.safe + 1 ? s.next - s.safe - 1 : 0, behind_blocks: s.next != null && s.safe != null ? (s.next > s.safe + 1 ? null : Math.max(0, s.safe - s.next + 1)) : null, last_pass: s.lastPass, last_ok: s.lastOk, last_error: s.lastError, errors_in_a_row: s.errors || 0, zero_value_transfers_skipped: s.zero || 0, step, since };
   }
   async function about() {
     return { version: BOOKS_VERSION, chain: 'Base (eip155:8453)', asset: 'USDC', token: T, wallet: W, retention: { ...BOOKS_RETAIN }, sync: await sync(), totals: await summary(),
@@ -472,7 +483,7 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
       till: { sales: 0, by_status: {}, settled_usd: '0.00', unconfirmed_usd: '0.00' },
       fair: { payments: 0, by_status: {}, settled_usd: '0.000000', unconfirmed_usd: '0.000000' },
       ledger: { transfers: 0, usd: '0.000000', by_door: {}, unmatched: 0, flagged: 0 },
-      errors: { facilitator_no_answer: 0, facilitator_down: 0, facilitator_no_verdict: 0, settlement_failed: 0, chain_reads_failed: 0, chain_rereads_failed: 0, chain_day_rereads_given_up: 0, chain_day_rereads_dropped: 0 },
+      errors: { facilitator_no_answer: 0, facilitator_down: 0, facilitator_no_verdict: 0, settlement_failed: 0, chain_reads_failed: 0, chain_rereads_failed: 0, chain_day_rereads_given_up: 0, chain_day_rereads_dropped: 0, chain_cursor_above_safe: 0 },
       facilitator: { reached: 0, missed: 0, payments_refused: 0 },
     });
     const out = Object.fromEntries(list.map((d) => [d, blank()]));
@@ -531,7 +542,7 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
       for (const m of [now1[d], mine[d]]) for (const [k, v] of Object.entries(m || {})) c[k] = (c[k] || 0) + v;
       const g = (k) => c[k] || 0, e = out[d].errors, f = out[d].facilitator;
       e.facilitator_no_answer = g('verify_error') + g('settle_error'); e.facilitator_down = g('verify_down') + g('settle_down'); e.facilitator_no_verdict = g('verify_noverdict') + g('settle_noverdict');
-      e.settlement_failed = g('settle_failed'); e.chain_reads_failed = g('chain_errors'); e.chain_rereads_failed = g('chain_reread_failed'); e.chain_day_rereads_given_up = g('chain_day_reread_given_up'); e.chain_day_rereads_dropped = g('chain_day_reread_dropped');
+      e.settlement_failed = g('settle_failed'); e.chain_reads_failed = g('chain_errors'); e.chain_rereads_failed = g('chain_reread_failed'); e.chain_day_rereads_given_up = g('chain_day_reread_given_up'); e.chain_day_rereads_dropped = g('chain_day_reread_dropped'); e.chain_cursor_above_safe = g('chain_cursor_above_safe');
       f.reached = g('verify_ok') + g('verify_refused') + g('verify_noverdict') + g('settle_ok') + g('settle_failed') + g('settle_noverdict') + g('probe_ok');
       f.missed = g('verify_error') + g('verify_down') + g('settle_error') + g('settle_down') + g('probe_failed'); f.payments_refused = g('verify_refused');
     }
@@ -549,7 +560,7 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
         const g = await digest({ days: 14, declKv }), today = g.days[0], s = g.now.ledger, b = g.now.books;
         const c = { day: today.day, ledger_transfers: s.transfers, ledger_transfers_today: today.ledger.transfers, ledger_unmatched: s.unmatched, ledger_flagged: s.flagged, ledger_behind_blocks: b.behind_blocks,
           tolled_answers_today: today.toll.tolled_answers, toll_payments_settled_today: today.toll.settled.payments, toll_payments_on_their_way: g.days.reduce((x, d) => x + d.toll.on_its_way.payments, 0),
-          till_sales_today: today.till.sales, fair_payments_today: today.fair.payments, payment_path_errors_today: Object.entries(today.errors).filter(([k]) => !/^chain_day_rereads_(given_up|dropped)$/.test(k)).reduce((x, [, v]) => x + v, 0),
+          till_sales_today: today.till.sales, fair_payments_today: today.fair.payments, payment_path_errors_today: Object.entries(today.errors).filter(([k]) => !/^chain_(day_rereads_(given_up|dropped)|cursor_above_safe)$/.test(k)).reduce((x, [, v]) => x + v, 0),
           facilitator_reached_today: today.facilitator.reached, facilitator_missed_today: today.facilitator.missed,
           declarations_today: today.declarations.withdrawals + today.declarations.cancellations, declarations_without_receipt: g.days.reduce((x, d) => x + d.declarations.open_without_receipt, 0) };
         cnt = c; cntAt = now(); return c;
