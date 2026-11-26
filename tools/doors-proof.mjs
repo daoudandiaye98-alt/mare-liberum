@@ -318,6 +318,9 @@ await proof('OpenAPI names the two paid doors for the x402 indexes (x-payment-in
     const r = await call(m, p === '/route' ? '/route?q=find+usdc+price' : p); assert.equal(r.status, 402, `${m} ${p} without a payment`);
   }
   assert.equal(o.j.paths['/route'].post['x-payment-info'].price.amount, '0.02'); assert.equal(o.j.paths['/reader/credit'].post['x-payment-info'].price.amount, '0.05');
+  // since 3.47: every free operation says security: [] (the indexes leave it out of their probe), and the credit door has an input schema
+  for (const [p, ops] of Object.entries(o.j.paths)) for (const [m, op] of Object.entries(ops)) if (!op['x-payment-info']) assert.deepEqual(op.security, [], `${m} ${p}: security []`); else assert.equal(op.security, undefined, `${m} ${p}: a paid door has no security override`);
+  assert.equal(o.j.paths['/reader/credit'].post.requestBody.content['application/json'].schema.type, 'object');
 });
 await proof('the door is in the open descriptions: OpenAPI, agent card, sitemap, link header', async () => {
   const o = await call('GET', '/openapi.json'); assert.ok(o.j.paths['/route.json']);
