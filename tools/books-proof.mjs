@@ -594,7 +594,8 @@ async function nodeOf(rootDir, extra = {}) {
 }
 // since 3.40.0 the tree without the books is 3.39.0 with the developer guides (release/3.40 at 5ffbdeb, the first parent of
 // the merge of night/books): the public answers of this release are compared with it
-const REF = process.env.MARE_BOOKS_REF || '5ffbdeb97385cd96f1dc2b53c102f9bc86841351';
+// since the reader credit came into 3.40.0 too, the tree without the books is 5ffbdeb with the credit merged (branch ref/3.40-no-books)
+const REF = process.env.MARE_BOOKS_REF || '387fd38364403917fe5003946b1370ffad1702a7';
 const refDir = (() => {
   const given = process.env.MARE_BOOKS_REF_DIR; if (given && existsSync(join(given, 'node/core.mjs'))) return given;
   const d = mkdtempSync(join(tmpdir(), 'mare-books-ref-'));
