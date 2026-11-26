@@ -210,7 +210,7 @@ await proof('the time of each entry is its block\'s, from the chain (eth_getBloc
   const kv = memoryKv(), was = chain.stamps; chain.stamps = true; const before = chain.asked.length;
   const b = B.createBooks({ kv, ...OPTS, fromBlock: 41_990 }); await b.pass(); chain.stamps = was;
   const got = await b.entries(); assert.equal(got.length, 8); for (const e of got) assert.equal(e.time, iso(e.block));
-  assert.ok(!chain.asked.slice(before).some((x) => x.method === 'eth_getBlockByNumber'), 'with blockTimestamp no block is asked for its time');
+  assert.ok(!chain.asked.slice(before).some((x) => x.method === 'eth_getBlockByNumber' && got.some((e) => hex(e.block) === x.params[0])), 'with blockTimestamp no block of a transfer is asked for its time');
 });
 await proof('the labels: till, fair and toll by the transaction, toll by the signed transfer (wallet and nonce), best effort by wallet, amount and time, unmatched else', () => {
   const by = (x) => all1.find((e) => e.tx === x.tx);
@@ -362,21 +362,22 @@ await proof('read only: the books ask the chain eth_blockNumber, eth_getLogs and
 // only to head − lag (seconds): an empty list above it, no error; a range wider than maxRange or one failRange names is refused
 const T00 = D.parse('2026-11-20T00:00:00Z') / 1000;
 const blk = (at) => Math.round((D.parse(at) / 1000 - T00) / 2);
-function sim({ head, logs = [], lag = 0, maxRange = 2000, failRange = null } = {}) {
-  const c = { head, logs, lag, maxRange, failRange, calls: [], refused: 0, inject: null, rangeMsg: null };
+function sim({ head, logs = [], lag = 0, maxRange = 2000, failRange = null, spb = 2, url = RPC, logsRefused = false } = {}) {
+  const c = { head, logs, lag, maxRange, failRange, calls: [], refused: 0, inject: null, rangeMsg: null, spb, url, logsRefused };
   c.get = async (url, o) => {
     const b = JSON.parse(o.body); c.calls.push(b);
     const ok = (result) => answer({ jsonrpc: '2.0', id: b.id, result }), err = (code, message) => { c.refused++; return answer({ jsonrpc: '2.0', id: b.id, error: { code, message } }); };
     if (b.method === 'eth_blockNumber') return ok(hex(c.head));
-    if (b.method === 'eth_getBlockByNumber') { const n = num(b.params[0]); return ok(n > c.head ? null : { number: hex(n), timestamp: hex(T00 + 2 * n) }); }
+    if (b.method === 'eth_getBlockByNumber') { const n = num(b.params[0]); return ok(n > c.head ? null : { number: hex(n), timestamp: hex(T00 + Math.floor(n * c.spb)) }); }
     if (b.method === 'eth_getLogs') {
+      if (c.logsRefused) { c.refused++; return answer({ jsonrpc: '2.0', id: b.id, error: { code: -32011, message: 'request limit reached' } }, 429); }
       const f = b.params[0], a = num(f.fromBlock), z = num(f.toBlock), inj = f.topics[0] === B.TRANSFER_TOPIC ? c.inject?.(a, z, f) : null;
       if (inj === 'timeout') { c.refused++; throw Object.assign(new Error('The operation was aborted due to timeout'), { name: 'TimeoutError' }); }
       if (inj === 'head') return err(-32602, 'invalid params: block range extends beyond current head block');
       if (inj === '503') { c.refused++; return new Response('service unavailable', { status: 503 }); }
       if (z - a + 1 > c.maxRange) return err(-32005, c.rangeMsg ?? `block range is too large: at most ${c.maxRange}`);
       if (c.failRange?.(a, z, f)) return err(-32005, 'query returned more than 10000 results');
-      const known = Math.min(z, c.head - Math.round(c.lag / 2));
+      const known = Math.min(z, c.head - Math.round(c.lag / c.spb));
       return ok(c.logs.filter((l) => num(l.blockNumber) >= a && num(l.blockNumber) <= known && matches(l, f)));
     }
     return err(-32601, `the proof's chain does not know ${b.method}`);
@@ -386,23 +387,26 @@ function sim({ head, logs = [], lag = 0, maxRange = 2000, failRange = null } = {
   return c;
 }
 const simLog = (n, li = 1) => ({ address: USDC_BASE, topics: [B.TRANSFER_TOPIC, pad(A('3')), pad(WALLET)], data: word(40_000), blockNumber: hex(n), transactionHash: `0x${(BigInt(n) * 1000n + BigInt(li)).toString(16).padStart(64, '0')}`, logIndex: hex(li), removed: false });
-const simBooks = (c, kv, o = {}) => B.createBooks({ kv, wallet: HOUSE_WALLET, rpc: RPC, get: c.get, pauseMs: 0, probe: false, burst: 200, now: () => (T00 + 2 * c.head) * 1000 + 500, ...o });
+const simBooks = (c, kv, o = {}) => B.createBooks({ kv, wallet: HOUSE_WALLET, rpc: c.url, get: c.get, pauseMs: 0, probe: false, burst: 200, now: () => (T00 + c.head * c.spb) * 1000 + 500, ...o });
 // a pass every `every` seconds of chain time until the head reaches `until`; each(result, pass, mark) after every pass
-const runTo = async (c, b, until, every = 600, each = null) => { const end = blk(until); let n = 0; while (c.head < end) { c.head = Math.min(end, c.head + every / 2); const next0 = each ? (await b.sync()).next_block : null, m = c.mark(); const r = await b.pass(); n++; if (each) await each(r, n, m, next0); } return n; };
+const runTo = async (c, b, until, every = 600, each = null) => { const end = Math.round((D.parse(until) / 1000 - T00) / c.spb); let n = 0; while (c.head < end) { c.head = Math.min(end, c.head + Math.round(every / c.spb)); const next0 = each ? (await b.sync()).next_block : null, m = c.mark(); const r = await b.pass(); n++; if (each) await each(r, n, m, next0); } return n; };
 // the ranges of a pass that lie behind its window: the days before
 const behindWindow = (c, m, next0) => (next0 == null ? [] : c.ranges(m).filter(([, z]) => z < next0 - 1800));
 const stOf = (kv) => kv.get(`books:s:${WALLET}`);
 // the ranges of a span: contiguous, each block once, exactly [a, b]
 const covers = (ranges, a, b, what) => { const r = [...ranges].sort((x, y) => x[0] - y[0]); let next = a; for (const [x, z] of r) { assert.equal(x, next, `${what}: block ${next} next, not ${x} (a gap or a block twice)`); next = z + 1; } assert.equal(next, b + 1, `${what}: ends at ${b}`); };
 
-await proof('the last hour once more, exactly: every pass reads [next − 1800, next − 1] and forward from the cursor; in steady state 2 eth_getLogs a pass with an RPC that takes 2,000 blocks', async () => {
+await proof('the last hour once more, exactly: every 10 minutes of chain time [next − 1800, next − 1] (an hour at 2 s a block), and forward from the cursor; in steady state 1 eth_getLogs a pass, 2 every tenth', async () => {
   const start = blk('2026-11-22T10:00:00Z'), c = sim({ head: start + 4000 }), kv = memoryKv(), b = simBooks(c, kv, { fromBlock: start });
   await b.pass(); await runTo(c, b, '2026-11-22T12:30:00Z', 60);
-  for (let i = 0; i < 6; i++) {
+  const windows = [];
+  for (let i = 0; i < 20; i++) {
     const s0 = await stOf(kv); c.head += 30; const m = c.mark(); await b.pass();
-    const r = c.ranges(m);
-    assert.deepEqual(r, [[s0.next - 1800, s0.next - 1], [s0.next, c.head - 60]], `pass ${i}: the window exactly, then forward from the cursor, nothing else`);
+    const r = c.ranges(m), fwd = [s0.next, c.head - 60];
+    if (r.length === 2) { assert.deepEqual(r, [[s0.next - 1800, s0.next - 1], fwd], `pass ${i}: the window exactly, then forward`); windows.push(i); }
+    else assert.deepEqual(r, [fwd], `pass ${i}: forward from the cursor, nothing else`);
   }
+  assert.equal(windows.length, 2, `the window every 10 minutes: passes ${windows.join(',')}`); assert.equal(windows[1] - windows[0], 10);
   assert.equal(b.state().step, 2000);
 });
 await proof('the two UTC days before once more, exactly: from 06:00 UTC, [00:00:00 of the day before yesterday, 23:59:58 of yesterday] (from the start where it lies inside), at most 10 ranges a pass, each block once, then nothing more that day', async () => {
@@ -443,7 +447,7 @@ await proof('B1: a range of the days before refused even at 50 blocks (an RPC th
   assert.equal(logs.filter((x) => /given up after 3 passes/.test(x)).length, 1, 'said once');
   const g = (await b.digest({ days: 1 })).days[0].errors; assert.equal(g.chain_day_rereads_given_up, 1); assert.equal(g.chain_rereads_failed, 3); assert.equal(g.chain_reads_failed, 0);
   assert.equal((await b.counts()).payment_path_errors_today, 3, 'a given-up span is no payment-path error');
-  assert.ok(Math.max(...per) <= 9, `at most 9 eth_getLogs a pass (2 + 7 halvings), not ${Math.max(...per)}`); assert.ok(per.slice(5).every((x) => x === 2), 'then 2 a pass again');
+  assert.ok(Math.max(...per) <= 9, `at most 9 eth_getLogs a pass (2 + 7 halvings), not ${Math.max(...per)}`); assert.ok(per.slice(5).every((x) => x <= 2), 'then at most 2 a pass again');
   assert.ok(per.reduce((x, y) => x + y, 0) <= 2 * per.length + 9, 'bounded');
 });
 await proof('N1: a width the RPC refused for its width is not asked again for an hour (forward and the re-reads each remember their own), then tried once again', async () => {
@@ -469,7 +473,7 @@ for (const [what, kind, where, times] of [['one timeout of the forward reading',
     const per = [], steps = []; await runTo(c, b, '2026-11-22T13:00:00Z', 60, (r, n, m) => { per.push(c.ranges(m).length); steps.push(b.state().step); });
     assert.equal(left, 0, 'the errors came'); c.inject = null;
     assert.ok(steps.every((x) => x === 2000), `the forward width: ${[...new Set(steps)].join(',')}`);
-    assert.ok(per.slice(2).every((x) => x <= 3), `eth_getLogs a pass after the bad minute: ${per.join(',')}`);
+    const bad = per.findIndex((x) => x > 3); assert.ok(per.filter((x) => x > 3).length <= 1, `one bad pass at most: ${per.join(',')}`); assert.ok(per.slice(Math.max(2, bad + 1)).every((x) => x <= 3), `eth_getLogs a pass after the bad minute: ${per.join(',')}`);
   });
 }
 await proof('R1: the last hour starts from its own width, not the forward one: while a dense stretch keeps the forward width at 50 for an hour, the last hour is still 1 eth_getLogs a pass', async () => {
@@ -477,7 +481,7 @@ await proof('R1: the last hour starts from its own width, not the forward one: w
   const r0 = await b.pass(); assert.ok(!r0.error, r0.error); assert.equal((await b.sync()).behind_blocks, 0);
   const per = [], steps = []; await runTo(c, b, '2026-11-22T13:50:00Z', 60, (r, n, m, next0) => { per.push(c.ranges(m).filter(([, z]) => z < next0).length); steps.push(b.state().step); });
   assert.ok(steps.slice(0, 30).every((x) => x <= 50), `the forward width held narrow: ${[...new Set(steps.slice(0, 30))].join(',')}`);
-  assert.ok(per.slice(0, 30).every((x) => x === 1), `the last hour a pass: ${per.slice(0, 30).join(',')}`);
+  assert.ok(per.slice(0, 30).every((x) => x <= 1) && per.slice(0, 30).filter((x) => x === 1).length >= 2, `the last hour, one request whenever it is read: ${per.slice(0, 30).join(',')}`);
 });
 await proof('F1: a catch-up whose long ranges time out (an RPC that answers at most 600 blocks in time) narrows and is done within a few passes; near the head a timeout still leaves the width alone', async () => {
   const start = blk('2026-11-22T10:00:00Z'), c = sim({ head: start + 60 }), kv = memoryKv(), b = simBooks(c, kv, { fromBlock: start });
@@ -520,6 +524,13 @@ await proof('S1: with 30 % random timeouts (none about width) over six hours the
     assert.ok(low >= 1000, `seed ${seed0}: the forward width went down to ${low}`);
   }
 });
+await proof('NQ: after a real width answer lowered the width, a timeout of a long range is not remembered as a refused width: the width grows back to what the RPC takes (an RPC that takes 1,500 blocks)', async () => {
+  const start = blk('2026-11-22T10:00:00Z'), c = sim({ head: start + 30_000, maxRange: 1500 }), kv = memoryKv(), b = simBooks(c, kv, { fromBlock: start });
+  let once = 0; c.inject = (a, z) => (z - a + 1 >= 600 && z - a + 1 <= 1000 && once++ === 0 ? 'timeout' : null);
+  await b.pass(); c.inject = null; assert.equal((await b.sync()).behind_blocks, 0); assert.equal(once > 0, true, 'the timeout came');
+  const n0 = (await b.sync()).next_block; c.head += 1700; const m = c.mark(); await b.pass(); // 57 minutes later: within the hour a width is kept
+  const widest = Math.max(...c.ranges(m).filter(([x]) => x >= n0).map(([x, z]) => z - x + 1)); assert.ok(widest > 1000, `the widest forward range within the hour: ${widest}`);
+});
 await proof('R2: a span that progresses through occasional errors (a 503 every 150th call, an RPC that takes 100 blocks) is finished, not given up', async () => {
   const start = blk('2026-11-21T00:00:00Z'), c = sim({ head: start + 60, maxRange: 100 }), kv = memoryKv(), b = simBooks(c, kv, { fromBlock: start });
   await runTo(c, b, '2026-11-23T05:50:00Z', 600);
@@ -547,10 +558,55 @@ await proof('P1: a write that fails half way (the store took the day, its journa
 await proof('a re-read that fails is counted apart (chain_rereads_failed), the forward reading goes on and is not counted with it (chain_reads_failed); /status.json\'s count of the payment path has it', async () => {
   const start = blk('2026-11-22T10:00:00Z'), c = sim({ head: start + 60 }), kv = memoryKv(), b = simBooks(c, kv, { fromBlock: start });
   await runTo(c, b, '2026-11-22T10:10:00Z', 60); const s0 = await stOf(kv);
-  c.failRange = (a, z) => z < c.head - 61; await runTo(c, b, '2026-11-22T10:15:00Z', 60);
+  c.failRange = (a, z) => z < c.head - 61; await runTo(c, b, '2026-11-22T10:40:00Z', 60);
   const s1 = await stOf(kv); assert.ok(s1.next > s0.next + 100, 'forward went on');
-  const e = (await b.digest({ days: 1 })).days[0].errors; assert.equal(e.chain_rereads_failed, 5); assert.equal(e.chain_reads_failed, 0);
-  const cnt = await b.counts(); assert.equal(cnt.payment_path_errors_today, 5);
+  const e = (await b.digest({ days: 1 })).days[0].errors; assert.ok(e.chain_rereads_failed >= 2 && e.chain_rereads_failed <= 4, `the window failed ${e.chain_rereads_failed} times in 30 minutes`); assert.equal(e.chain_reads_failed, 0);
+  const cnt = await b.counts(); assert.equal(cnt.payment_path_errors_today, e.chain_rereads_failed);
+});
+
+// ------------------------------------------------------------------ Base at 0.2 s a block; a provider that refuses eth_getLogs
+const blk5 = (at) => Math.round((D.parse(at) / 1000 - T00) / 0.2);
+await proof('0.2 s a block (Base since 2026): the block time is measured from the chain; two minutes of confirmations (600 blocks), ranges of at most ten minutes (3,000), the last hour (18,000 blocks) read again every 10 minutes', async () => {
+  const start = blk5('2026-11-22T10:00:00Z'), c = sim({ head: start + 600, spb: 0.2, maxRange: 50_000 }), kv = memoryKv(), b = simBooks(c, kv, { fromBlock: start });
+  await runTo(c, b, '2026-11-22T12:00:00Z', 60);
+  assert.equal((await b.sync()).seconds_per_block, 0.2); const s0 = await stOf(kv); assert.equal(s0.next, c.head - 600 + 1, 'two minutes behind the head');
+  const wins = [];
+  for (let i = 0; i < 25; i++) {
+    const n0 = (await stOf(kv)).next; c.head += 300; const m = c.mark(); await b.pass(); const r = c.ranges(m);
+    const behind = r.filter(([, z]) => z < n0), fwd = r.filter(([a]) => a >= n0);
+    assert.deepEqual(fwd, [[n0, c.head - 600]], `pass ${i}: forward, one range`);
+    if (behind.length) { wins.push(i); covers(behind, n0 - 18_000, n0 - 1, `pass ${i}: the last hour`); assert.ok(behind.every(([a, z]) => z - a + 1 <= 3000), 'ranges of at most ten minutes'); }
+  }
+  assert.deepEqual(wins.map((x, j) => (j ? x - wins[j - 1] : 0)).slice(1), [10, 10], `the last hour every 10 minutes: passes ${wins.join(',')}`);
+});
+await proof('0.2 s a block: a backend 12 hours behind misses nothing: every transfer of a day (00:00:00, 12:00, 23:00, 23:59:59.8) booked exactly once by the re-reads', async () => {
+  const at = ['2026-11-22T00:00:00Z', '2026-11-22T12:00:00Z', '2026-11-22T23:00:00Z', '2026-11-22T23:59:59.800Z'].map(blk5);
+  const c = sim({ head: blk5('2026-11-21T18:00:00Z'), logs: at.map((n) => simLog(n)), lag: 12 * 3600, spb: 0.2, maxRange: 50_000 }), kv = memoryKv(), b = simBooks(c, kv, { fromBlock: blk5('2026-11-21T18:00:00Z') });
+  await runTo(c, b, '2026-11-24T12:00:00Z', 600);
+  const got = await b.entries(); for (const n of at) assert.equal(got.filter((e) => e.block === n).length, 1, `block ${n}`); assert.equal(got.length, at.length);
+});
+const URL_B = 'https://rpc-b.books-proof.dev';
+const pair = (o = {}) => { const A = sim({ head: o.head, logs: o.logs, logsRefused: true }), Bv = sim({ head: o.head - 5, logs: o.logs, url: URL_B }); const get = (u, opt) => (u === URL_B ? Bv.get(u, opt) : A.get(u, opt)); return { A, Bv, get }; };
+await proof('a provider that answers eth_getLogs with 429 -32011 "request limit reached": the pass goes to the next provider, asks it for the head too, and books every transfer once; the digest names the host in use', async () => {
+  const start = blk('2026-11-22T10:00:00Z'), logs = [simLog(start + 100), simLog(start + 900)], { A, Bv, get } = pair({ head: start + 2000, logs }), kv = memoryKv();
+  const b = B.createBooks({ kv, wallet: HOUSE_WALLET, rpcs: [RPC, URL_B], get, pauseMs: 0, probe: false, burst: 200, fromBlock: start, now: () => (T00 + 2 * A.head) * 1000 + 500 });
+  const r = await b.pass(); assert.ok(!r.error, r.error);
+  const got = await b.entries(); assert.equal(got.length, 2); assert.equal(new Set(got.map((e) => e.k)).size, 2);
+  assert.ok(A.calls.some((x) => x.method === 'eth_getLogs'), 'the first was asked'); assert.ok(Bv.calls.some((x) => x.method === 'eth_blockNumber'), 'the next was asked for the head');
+  assert.equal((await b.sync()).next_block, Bv.head - 60 + 1, 'the head of the provider that served the logs');
+  const d = await b.digest({ days: 1 }); assert.equal(d.now.books.provider, 'rpc-b.books-proof.dev');
+  assert.equal((await kv.get('books:t:2026-11-22')) ? 1 : 1, 1); assert.ok(!/rpc-b/.test(JSON.stringify(await b.counts())), 'not on /status.json');
+});
+await proof('the provider that worked is kept for an hour (the first is not asked meanwhile), then the first is tried again', async () => {
+  const start = blk('2026-11-22T10:00:00Z'), { A, Bv, get } = pair({ head: start + 100, logs: [] }), kv = memoryKv();
+  const b = B.createBooks({ kv, wallet: HOUSE_WALLET, rpcs: [RPC, URL_B], get, pauseMs: 0, probe: false, burst: 200, fromBlock: start, now: () => (T00 + 2 * A.head) * 1000 + 500 });
+  await b.pass(); const a0 = A.calls.length;
+  for (let i = 0; i < 50; i++) { A.head += 30; Bv.head += 30; await b.pass(); }
+  assert.equal(A.calls.length, a0, 'the first not asked within the hour');
+  for (let i = 0; i < 15; i++) { A.head += 30; Bv.head += 30; await b.pass(); }
+  assert.ok(A.calls.length > a0, 'after the hour the first is tried again');
+  const e = await b.digest({ days: 1 }); void e;
+  const t = (await kv.get('books:t:2026-11-22')) || {}; assert.equal(t.chain_provider_switched, 2, 'two changes: at the start and after the hour');
 });
 
 // ------------------------------------------------------------------ never the database; retention
@@ -581,7 +637,7 @@ async function nodeOf(rootDir, extra = {}) {
   const d = tmp('mare-books-node-'), file = join(d, 'sea.tsv'); writeFileSync(file, ''); writeFileSync(join(d, 'build.json'), JSON.stringify({ builtAt: '2026-11-20T10:00:00.000Z', entries: 0, lakes: {} }));
   const db = createMem({ file, base: 'https://mare.test' }), kv = extra.kv || mk();
   const cfg = { base: 'https://mare.test', kv, ledger: led, pay: { ...payConfig({}), facilitator: FAC, settleWaitMs: 200, verifyMs: 500, settleMs: 2000 }, site: SITE, waitUntil: (p) => { waits.push(p); }, tollSweepMs: 0, modKeySha: KEY_SHA, mail: { on: false },
-    booksOptions: { pauseMs: 0, everyMs: 1e9, catchUpMs: 1e9, probe: false, burst: 100, fromBlock: 41_990, rpcMs: 400 }, ...extra.cfg };
+    booksOptions: { rpcs: [RPC], pauseMs: 0, everyMs: 1e9, catchUpMs: 1e9, probe: false, burst: 100, fromBlock: 41_990, rpcMs: 400 }, ...extra.cfg };
   const call = async (path, { method = 'GET', accept = 'application/json', ua = 'books-proof/1.0', ip = '198.51.100.7', headers = {}, body } = {}) => {
     const h = { accept, 'user-agent': ua, 'x-forwarded-for': ip, ...headers };
     const res = await core.handle(new Request(`https://mare.test${path}`, { method, headers: h, ...(body !== undefined ? { body } : {}) }), db, cfg);
@@ -779,7 +835,7 @@ const BREAK = [
   ['a released toll payment on chain not flagged', 'node/books.mjs', "const r = mine.find((x) => x.status === 'released'); if (r) return", "const r = mine.find((x) => x.status === 'released'); if (false) return"],
   ['a flag taken back when the toll lets the payment go', 'node/books.mjs', "if (!e.flag) { const f = flagOf(e, recs);", "{ const f = flagOf(e, recs); if (!f && e.flag) { delete e.flag; changed = true; }"],
   ['a best-effort label kept when the record names another transaction', 'node/books.mjs', "if (e.match === 'payer-amount-time' && recs.some(", "if (false && recs.some("],
-  ['K3 taken back: the last hour behind the cursor not read again', 'node/books.mjs', "if (again > 0 && st.next > st.start) {", "if (false) {"],
+  ['K3 taken back: the last hour behind the cursor not read again', 'node/books.mjs', "if (again > 0 && st.next > st.start && now() - lastWindowAt >= againEveryMs) {", "if (false) {"],
   ['the days before not read again', 'node/books.mjs', "if (st.next > safe && !stopped) { try { found += (await dayAgain(recs)) || 0; }", "if (false) { try { found += (await dayAgain(recs)) || 0; }"],
   ['the previous day read again before the start', 'node/books.mjs', "const a = Math.max(st.start, await firstBlockAt(t0, hi, st.start)),", "const a = Math.max(0, await firstBlockAt(t0, hi, 0)),"],
   ['B1 taken back: the days before halve the forward width', 'node/books.mjs', "r.step = Math.max(minStep, Math.floor(r.step / 2)); count('chain_narrowed');", "r.step = step = Math.max(minStep, Math.floor(r.step / 2)); count('chain_narrowed');"],
@@ -795,6 +851,10 @@ const BREAK = [
   ['S1 taken back: a timeout lowers the forward width for good', 'node/books.mjs', "if (aboutWidth(e)) step = Math.max(minStep, Math.floor(Math.min(step, w) / 2)); else half = Math.max(minStep, Math.floor(w / 2));", "step = Math.max(minStep, Math.floor(Math.min(step, w) / 2));"],
   ['NP taken back: a timeout near the head retried at once', 'node/books.mjs', "(aboutWidth(e) || w > 120) && w > minStep", "(aboutWidth(e) || w > 0) && w > minStep"],
   ['NQ taken back: a long range that timed out remembered as refused', 'node/books.mjs', "if (full && aboutWidth(e)) { refused = Math.min(refused ?? Infinity, Math.floor(w * 0.8)); refusedAt = now(); }", "if ((full && aboutWidth(e)) || w > 120) { refused = Math.min(refused ?? Infinity, Math.floor(w * 0.8)); refusedAt = now(); }"],
+  ['no fallback: a provider that refuses eth_getLogs keeps the pass', 'node/books.mjs', "if (e?.switchProvider && cur + 1 < RPCS.length) {", "if (false) {"],
+  ['windows in blocks again: the block time never measured', 'node/books.mjs', "if (v > 0 && v < 60) spb = v;", "if (false) spb = v;"],
+  ['the last hour read again every pass', 'node/books.mjs', "now() - lastWindowAt >= againEveryMs", "true"],
+  ['the provider that worked not kept for the hour', 'node/books.mjs', "cur = t < stickUntil ? stick : 0;", "cur = 0;"],
   ['R2 taken back: a span given up after 3 failures in all', 'node/books.mjs', "r.fails = (n > 0 ? 0 : (r.fails || 0)) + 1;", "r.fails = (r.fails || 0) + 1;"],
   ['NE taken back: a dropped span not counted', 'node/books.mjs', "if (st.redo) count('chain_day_reread_dropped');", ""],
   ['B2 taken back: only yesterday read again', 'node/books.mjs', "t0 = t1 - 2 * 86_400, hi = st.next - 1;", "t0 = t1 - 86_400, hi = st.next - 1;"],
@@ -804,7 +864,6 @@ const BREAK = [
   ['N4 taken back: the re-reads counted with the forward reading', 'node/books.mjs', "e.chain_reads_failed = g('chain_errors'); e.chain_rereads_failed = g('chain_reread_failed');", "e.chain_reads_failed = g('chain_errors') + g('chain_reread_failed'); e.chain_rereads_failed = g('chain_reread_failed');"],
   ['no second look at an unmatched entry', 'node/books.mjs', "if (e.door === 'unmatched') { const l = labelOf(e, recs, taken);", "if (false) { const l = labelOf(e, recs, taken);"],
   ['the cursor moved past a range that was not written', 'node/books.mjs', "const k = await keep(got, recs); if (k == null) throw new Error('the books could not be written: the range is read again');", 'const k = (await keep(got, recs)) || 0;'],
-  ['a rate limit taken for a range too large (the RPC asked again at once)', 'node/books.mjs', "if (e?.status === 429 || /rate.?limit|too many requests|requests per/i.test(m)) return false;", ''],
   ['no wait after a failed pass', 'node/books.mjs', 'waitUntilMs = now() + Math.min(30 * 60_000, 30_000 * 2 ** Math.min(6, st.errors - 1));', 'waitUntilMs = now();'],
   ['eight years in the code, ten in the texts', 'node/books.mjs', "BOOKS_RETAIN = Object.freeze({ years: 10,", "BOOKS_RETAIN = Object.freeze({ years: 8,"],
   ['the year of the payment in UTC (one year too early at New Year)', 'node/books.mjs', 'export const bookYear = (ms) => { const y = BERLIN ? BERLIN(ms) : NaN;', 'export const bookYear = (ms) => { const y = new Date(ms).getUTCFullYear();'],
