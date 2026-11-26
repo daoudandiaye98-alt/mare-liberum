@@ -233,9 +233,9 @@ await proof('/pack makes three packs an hour per network for free (8 pages each)
 await proof('/openapi.json names GET /x402/pack (0.05 USD) and the free /pack (security: []), six sold doors; /.well-known/x402, /discovery/resources and /funnel.json name the pilot', async () => {
   const o = (await call('/openapi.json', { ip: '127.0.0.1' })).j, op = o.paths['/x402/pack']?.get;
   assert.ok(op); assert.deepEqual(op['x-payment-info'], { price: { mode: 'fixed', currency: 'USD', amount: '0.05' }, protocols: [{ x402: {} }] }); assert.deepEqual(o.paths['/pack']?.get?.security, []);
-  assert.match(o.info['x-guidance'], /Six doors are sold/); assert.match(o.info['x-guidance'], /\/x402\/pack\?url=/);
+  assert.match(o.info['x-guidance'], /Seven doors are sold/); assert.match(o.info['x-guidance'], /\/x402\/pack\?url=/);
   const w = (await call('/.well-known/x402', { ip: '127.0.0.1' })).j, blk = w.pricing.find((p) => p.capability === 'pack');
-  assert.ok(w.resources.includes(`${BASE}/x402/pack`)); assert.equal(blk.amount_usd, '0.05'); assert.equal(blk.maxAmountRequired, '50000'); assert.match(w.instructions, /five moves/);
+  assert.ok(w.resources.includes(`${BASE}/x402/pack`)); assert.equal(blk.amount_usd, '0.05'); assert.equal(blk.maxAmountRequired, '50000'); assert.match(w.instructions, /six moves/);
   const d = (await call('/discovery/resources', { ip: '127.0.0.1' })).j, it = d.items.find((x) => x.resource === `${BASE}/x402/pack`);
   assert.ok(it); assert.equal(it.accepts[0].amount, '50000'); assert.ok(it.extensions.bazaar.info.output.example.passages);
   assert.equal((await funnel()).doors.pack, `GET ${BASE}/x402/pack?url=<site>&q=<question>`);

@@ -312,7 +312,7 @@ await proof('A2A: plain words go to the doors unless they are a purchase', async
 await proof('OpenAPI names the four paid doors in the canonical shapes (price and protocol objects for the AgentCash indexes, offers[] for the MPP draft), each answers 402 without a payment, and no free door carries a price; info.contact has the e-mail', async () => {
   const o = await call('GET', '/openapi.json'); assert.equal(o.j.info.contact.email, 'oroborosdesign@gmail.com');
   const paid = Object.entries(o.j.paths).flatMap(([p, ops]) => Object.entries(ops).filter(([, op]) => op['x-payment-info']).map(([m, op]) => [m.toUpperCase(), p, op]));
-  assert.deepEqual(paid.map(([m, p]) => `${m} ${p}`).sort(), ['GET /x402/check', 'GET /x402/pack', 'GET /x402/read', 'POST /reader/credit', 'POST /reader/credit/stripe', 'POST /route'] /* GET /x402/read since 3.50, GET /x402/check since 3.56, GET /x402/pack since 3.59 */);
+  assert.deepEqual(paid.map(([m, p]) => `${m} ${p}`).sort(), ['GET /x402/check', 'GET /x402/deal', 'GET /x402/pack', 'GET /x402/read', 'POST /reader/credit', 'POST /reader/credit/stripe', 'POST /route'] /* GET /x402/read since 3.50, GET /x402/check since 3.56, GET /x402/pack since 3.59, GET /x402/deal since 3.64 */);
   for (const [m, p, op] of paid) {
     const x = op['x-payment-info']; assert.ok(op.responses['402'], `${p}: a 402 response`);
     assert.equal(x.price.mode, 'fixed'); assert.equal(x.price.currency, 'USD'); assert.match(x.price.amount, /^\d+\.\d{2}$/);

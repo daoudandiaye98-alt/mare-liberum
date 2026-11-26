@@ -6,12 +6,14 @@ import { checkSite, safeHost, grab } from './check.mjs';
 import { readUrl, READER_UA } from './reader.mjs';
 import { packOf, packTarget, PACK } from './pack.mjs';
 import { PACKPAY } from './packpay.mjs';
+import { productOf } from './lean.mjs';
+import { DEAL, dealTarget, dealQuery, dealKey, remembered, dealOf, wordsOf } from './deal.mjs';
 
 const FEED = new Set(['read', 'whale', 'brevet', 'seal', 'buoy', 'path', 'knock', 'enter', 'answer', 'ask', 'tide', 'job', 'job_done', 'note', 'mark', 'reflex', 'learn', 'course', 'outcome']);
 export const TAG = /^[a-z0-9]{4,12}$/;
 
 export function createLens(h) {
-  const { kv, update, api, living, SeaError, allow, clean, strip, now, https, sha, emit, DAY } = h;
+  const { kv, update, api, living, SeaError, allow, clean, strip, now, https, sha, emit, DAY, shopAll } = h;
   const ANGEL_READ = 'https://angel.oroboros-design.com/stealth-read';
   const hostOf = (u) => { try { return new URL(/^https?:\/\//.test(u) ? u : `https://${u}`).hostname.replace(/^www\./, '').toLowerCase(); } catch { return null; } };
   const lens = {
@@ -66,6 +68,41 @@ export function createLens(h) {
       const read = (u) => lens.read({ url: u }, { ...ctx, packRead: true });
       return packOf({ url: target, q: clean(a.q, 500) || '', budget: a.tokens, limits: paid ? PACK.paid : PACK.free, read, fetchText });
     },
+    // the deal check (node/deal.mjs, since 3.64): one product page read with its price, list price and stock, the same item at
+    // other stores (Shopify Global Catalog, live, with checkout links) and the prices agents saw for it through the sea, with a
+    // verdict whose rules are stated. Free: 10 checks an hour per network; the limit says it is the limit (dealLimit), so the doors
+    // can answer it with the terms of a paid check (node/deal.mjs: 0.01 USDC, 12 offers, the whole memory), which is none of the
+    // free checks. The page is read fresh through the reader below (robots.txt), none of the free reads of the day. The memory
+    // keeps per product the prices pages showed (time, price, currency), never who asked
+    async deal(a = {}, ctx) {
+      if (ctx?.readOnly) return { note: 'crawlers read the sea itself; the deal check reads product pages for agents', how: `GET ${DEAL.free}?url=<product page>` };
+      const url = a.url != null && String(a.url).trim() !== '' ? dealTarget(a.url) : null, q = dealQuery(a.q ?? a.query ?? a.name);
+      if (!url && !q) throw new SeaError('INVALID_ARGUMENT', `give a product page: ${DEAL.free}?url=https://shop.example.com/products/… (or a product name or GTIN: ${DEAL.free}?q=…)`);
+      const paid = !!ctx?.paidDeal;
+      if (!paid) { try { await allow(ctx, 'deal', DEAL.perHour, 3600); } catch (e) { if (e instanceof SeaError) e.dealLimit = true; throw e; } }
+      let page = null, product = null;
+      if (url) {
+        const r = await lens.read({ url, shape: { raw: true } }, { ...ctx, dealRead: true }).catch((e) => ({ error: String(e?.message || e) }));
+        const final = r.final || r.url || url;
+        page = { url: final, asked: url, host: hostOf(final), read: !!(r.rawHtml || r.markdown), blocked: r.blocked ? true : undefined,
+          error: r.blocked ? 'robots.txt of this site does not let the reader in' : r.error ? String(r.error).slice(0, 200) : !r.rawHtml && !r.markdown ? String(r.note || 'no text').slice(0, 200) : undefined };
+        if (r.rawHtml) { try { product = productOf(r.rawHtml, final, { heading: r.title }); } catch { product = null; } }
+      }
+      // the catalog is asked for the brand and the name (the brand only when the name does not carry it already), else the words asked
+      const bw = wordsOf(product?.brand || ''), nw = wordsOf(product?.name || '');
+      const search = product?.name ? [bw.length && !bw.every((w) => nw.includes(w)) ? product.brand : null, product.name].filter(Boolean).join(' ') : q;
+      const cur = product?.currency || (/^[A-Za-z]{3}$/.test(String(a.currency || '').trim()) ? String(a.currency).trim().toUpperCase() : undefined);
+      const offers = search && shopAll ? await shopAll(search.slice(0, 160), { currency: cur, region: clean(a.country ?? a.region, 40), limit: paid ? 30 : 15 }).catch(() => []) : [];
+      // the memory: what agents saw before this check is compared; this check's price is kept for the next one
+      const key = dealKey({ product, page, q }), price = Number.isFinite(product?.price) && product.price > 0 ? product.price : null;
+      let before = [];
+      if (key) {
+        const k = `deal:seen:${(await sha(key)).slice(0, 32)}`; before = (await kv.get(k)) || [];
+        if (price != null && product?.currency && !ctx?.uncounted) await kv.set(k, remembered(before, { t: now(), p: price, c: product.currency }), DEAL.seen.keepDays * DAY);
+      }
+      if (!ctx?.uncounted) { const day = now().slice(0, 10); await kv.set(`deal:count:${day}`, (Number(await kv.get(`deal:count:${day}`)) || 0) + 1, 3 * DAY); }
+      return dealOf({ product, page, q, offers, seen: before, paid, base: a.base || '' });
+    },
     // the reader: any public page as Markdown — free for every agent up to a fair daily amount, then Angel reads on
     async read(a = {}, ctx) {
       if (ctx?.readOnly) return { note: 'crawlers read the sea itself; the reader reads other pages for agents', how: 'GET /r/<page address>' };
@@ -78,7 +115,8 @@ export function createLens(h) {
       const key = `read:${full ? 'full:' : ''}${shape?.key ? `${shape.key}:` : ''}${(await sha(raw)).slice(0, 24)}`, hit = a.fresh === true || markup ? null : await kv.get(key);
       // a paid read (node/readpay.mjs, since 3.48: one cent a page over x402) is not one of the free reads of the day
       // (since 3.59) the pages the pilot reads (node/pack.mjs) are none either: its own limit counts packs, not pages
-      if (!hit && !ctx?.paidRead && !ctx?.packRead) {
+      // (since 3.64) nor the product page of a deal check (node/deal.mjs): its own limit counts deal checks
+      if (!hit && !ctx?.paidRead && !ctx?.packRead && !ctx?.dealRead) {
         try { await allow(ctx, 'read', 100, 86400); } catch {
           // prepaid reader credit (node/credit.mjs, since 3.38): only where the free limit refuses, one page per such read
           const paid = ctx?.credit ? await ctx.credit.spend() : null;

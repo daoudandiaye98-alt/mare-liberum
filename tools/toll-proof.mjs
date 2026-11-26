@@ -878,13 +878,13 @@ await proof('/engine (a section "The toll" with the example $0.003630), /engine.
     assert.equal(a.status, b.status, path); assert.equal(tmask(norm(a.text), F.version), tmask(norm(b.text), M.version), `${path}: as ${REF}`);
   }
 });
-await proof('3.63.0 in VERSION, server.json, server-dev.json, server-lean.json and gemini-extension.json; RELEASES: 3.63.0 without day and pull request, 3.62.0 on 2026-11-26T21:01:38+01:00 with #55, 3.61.0 on 2026-11-26T20:39:11+01:00 with #54, 3.60.1 on 2026-11-26T19:53:59+01:00 with #53, 3.60.0 on 2026-11-26T19:32:55+01:00 with #52; proof:toll in package.json', async () => {
-  assert.equal(ON.version, '3.63.0'); for (const f of ['server.json', 'server-dev.json', 'server-lean.json', 'gemini-extension.json']) assert.equal(JSON.parse(readFileSync(join(ROOT, f), 'utf8')).version, '3.63.0', f);
-  assert.deepEqual([RELEASES[0].version, RELEASES[0].at, RELEASES[0].pr], ['3.63.0', null, undefined]); assert.ok(RELEASES[0].what.length > 40 && !RELEASES[0].what.includes('\n'));
-  assert.deepEqual([RELEASES[1].version, RELEASES[1].at, RELEASES[1].pr], ['3.62.0', '2026-11-26T21:01:38+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/55']);
-  assert.deepEqual([RELEASES[2].version, RELEASES[2].at, RELEASES[2].pr], ['3.61.0', '2026-11-26T20:39:11+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/54']);
-  assert.deepEqual([RELEASES[3].version, RELEASES[3].at, RELEASES[3].pr], ['3.60.1', '2026-11-26T19:53:59+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/53']);
-  assert.deepEqual([RELEASES[4].version, RELEASES[4].at, RELEASES[4].pr], ['3.60.0', '2026-11-26T19:32:55+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/52']);
+await proof('3.64.0 in VERSION, server.json, server-dev.json, server-lean.json and gemini-extension.json; RELEASES: 3.64.0 without day and pull request, 3.63.0 on 2026-11-26T22:00:32+01:00 with #56, 3.62.0 on 2026-11-26T21:01:38+01:00 with #55, 3.61.0 on 2026-11-26T20:39:11+01:00 with #54, 3.60.1 on 2026-11-26T19:53:59+01:00 with #53; proof:toll in package.json', async () => {
+  assert.equal(ON.version, '3.64.0'); for (const f of ['server.json', 'server-dev.json', 'server-lean.json', 'gemini-extension.json']) assert.equal(JSON.parse(readFileSync(join(ROOT, f), 'utf8')).version, '3.64.0', f);
+  assert.deepEqual([RELEASES[0].version, RELEASES[0].at, RELEASES[0].pr], ['3.64.0', null, undefined]); assert.ok(RELEASES[0].what.length > 40 && !RELEASES[0].what.includes('\n'));
+  assert.deepEqual([RELEASES[1].version, RELEASES[1].at, RELEASES[1].pr], ['3.63.0', '2026-11-26T22:00:32+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/56']);
+  assert.deepEqual([RELEASES[2].version, RELEASES[2].at, RELEASES[2].pr], ['3.62.0', '2026-11-26T21:01:38+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/55']);
+  assert.deepEqual([RELEASES[3].version, RELEASES[3].at, RELEASES[3].pr], ['3.61.0', '2026-11-26T20:39:11+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/54']);
+  assert.deepEqual([RELEASES[4].version, RELEASES[4].at, RELEASES[4].pr], ['3.60.1', '2026-11-26T19:53:59+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/53']);
 assert.equal(JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).scripts['proof:toll'], 'node tools/toll-proof.mjs');
 });
 
