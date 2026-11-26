@@ -59,6 +59,23 @@ await proof('a credential that echoes the challenge with a Shared Payment Token 
 await proof('the credit is real: the reader credit door reports 500 pages left for the token', async () => {
   const r = await call('GET', '/reader/credit', { 'x-sea-credit': token }); assert.equal(r.status, 200); assert.ok(JSON.stringify(r.j).includes('"left":500'), r.text.slice(0, 300));
 });
+await proof('(3.62) the packs for agents with a Link wallet: GET ?pack=10 names 10,000 pages for 10.00 USD; the plain GET lists the four packs, how mpp pay buys and the value of a page; an unknown pack: 400, nothing charged', async () => {
+  const p = await call('GET', `${MPP_DOOR}?pack=10`); assert.equal(p.status, 200); assert.deepEqual([p.j.pages, p.j.price_usd, p.j.per_page_usd], [10000, '10.00', '0.001000']);
+  const g = await call('GET', MPP_DOOR); assert.deepEqual([g.j.pages, g.j.price_usd], [500, '0.50'], 'the plain door as before');
+  assert.deepEqual(g.j.packs.map((x) => [x.pack, x.price_usd, x.pages, x.days]), [['0.50', '0.50', 500, 30], ['10', '10.00', 10000, 30], ['49', '49.00', 100000, 30], ['99', '99.00', 250000, 30]]);
+  assert.match(g.j.link_agent_wallet, /mpp pay https:\/\/mare\.test\/reader\/credit\/stripe\?pack=10/); assert.ok(g.j.value && 'today' in g.j.value && g.j.value.page_price_usd === '0.001000', JSON.stringify(g.j.value));
+  const n = charges.length, bad = await call('POST', `${MPP_DOOR}?pack=7`); assert.equal(bad.status, 400); assert.equal(charges.length, n, 'nothing charged');
+});
+await proof('(3.62) a pack is bought for the amount its challenge names: POST ?pack=49 asks 4900 cents; its credential buys 100,000 pages, also when sent to the door without ?pack, and the Edge Function charges 4900 cents', async () => {
+  answer = () => ({ status: 200, body: { ok: true, status: 'succeeded', id: `pi_PackIntent${charges.length}` } });
+  const r = await call('POST', `${MPP_DOOR}?pack=49`); assert.equal(r.status, 402); assert.match(r.j.detail, /100000 pages of reader credit cost 49\.00 USD/);
+  const c = parse(r.h['www-authenticate']); assert.equal(JSON.parse(Buffer.from(c.request, 'base64url').toString('utf8')).amount, '4900');
+  const n = charges.length, ok = await call('POST', MPP_DOOR, { authorization: credential(c, 'spt_PackToken4900') }); assert.equal(ok.status, 200, ok.text);
+  assert.deepEqual([ok.j.pages, ok.j.left, ok.j.price_usd, ok.j.per_page_usd, ok.j.paid.amount_usd], [100000, 100000, '49.00', '0.000490', '49.00']);
+  assert.equal(charges.length, n + 1); assert.equal(charges[n].b.amount, 4900);
+  const left = await call('GET', '/reader/credit', { 'x-sea-credit': ok.j.token }); assert.ok(JSON.stringify(left.j).includes('"left":100000'), left.text.slice(0, 300));
+  answer = () => ({ status: 200, body: { ok: true, status: 'succeeded', id: `pi_${'A'.repeat(10)}${charges.length}` } });
+});
 await proof('the same challenge again: 402 invalid-challenge with a fresh challenge, nothing charged', async () => {
   const n = charges.length; const c = await fresh(); assert.equal((await call('POST', MPP_DOOR, { authorization: credential(c) })).status, 200);
   const again = await call('POST', MPP_DOOR, { authorization: credential(c, 'spt_OtherToken999') }); assert.equal(again.status, 402); assert.equal(again.j.type, 'https://paymentauth.org/problems/invalid-challenge'); assert.ok(again.h['www-authenticate']); assert.equal(charges.length, n + 1);
@@ -99,6 +116,7 @@ console.log('negative controls');
 const KEY = mppKey(SECRET);
 await negative('a verifier that skips the id check takes a cheaper request', () => { const c = mppChallenge({ realm: 'mare.test', key: KEY, now: T0, request: mppRequest({ description: 'x', cents: 5 }) }).challenge; const v = mppVerify({ challenge: c, payload: { spt: 'spt_TestToken123' } }, { key: KEY, now: T0, realm: 'mare.test' }); assert.ok(v.ok, 'the cheap challenge must not pass'); });
 await negative('a forged id is caught', () => { const c = { ...mppChallenge({ realm: 'mare.test', key: KEY, now: T0, request: mppRequest({ description: 'x' }) }).challenge, id: 'A'.repeat(32) }; assert.ok(mppVerify({ challenge: c, payload: { spt: 'spt_TestToken123' } }, { key: KEY, now: T0, realm: 'mare.test' }).ok); });
+await negative('(3.62) a 49 USD challenge checked against the plain amount is caught', () => { const c = mppChallenge({ realm: 'mare.test', key: KEY, now: T0, request: mppRequest({ description: 'x', cents: 4900 }) }).challenge; assert.ok(mppVerify({ challenge: c, payload: { spt: 'spt_TestToken123' } }, { key: KEY, now: T0, realm: 'mare.test', cents: 50 }).ok); });
 await negative('an expired challenge is caught', () => { const c = mppChallenge({ realm: 'mare.test', key: KEY, now: T0, request: mppRequest({ description: 'x' }) }).challenge; assert.ok(mppVerify({ challenge: c, payload: { spt: 'spt_TestToken123' } }, { key: KEY, now: T0 + 3600e3, realm: 'mare.test' }).ok); });
 
 console.log(`\n${passed} passed, ${failed} failed; negative controls: ${negOk} failed as they must, ${negBad} did not`);

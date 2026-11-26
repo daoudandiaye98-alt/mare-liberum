@@ -16,6 +16,20 @@ export const MPP = Object.freeze({ cents: 50, pages: 500, days: 30, ttlSec: 300,
   // the sea's Stripe profile (Oroboros Design, stripe.com/@oroborosdesign): a public id, the networkId agents grant tokens to
   networkId: 'profile_61VpOwtbbnN0nr1o8A6VpOwsCgBCz2vlvGPUO19TcUmu' });
 export const MPP_DOOR = '/reader/credit/stripe';
+// (since 3.62) bigger packs for agents with a Link wallet (Claude, OpenAI agents, OpenClaw, Grok and others pay a Shared Payment
+// Token once their person approves the spend in Link): ?pack=10, 49 or 99 (USD). The pack without ?pack stays the first one; the
+// Edge Function mare-mpp charges 0.50 to 100.00 USD. The amount a credential pays is the amount of the challenge it echoes (bound
+// by the challenge's HMAC), and the pages follow from that amount alone
+const pack = (id, cents, pages) => Object.freeze({ id, cents, pages, days: 30 });
+export const MPP_PACKS = Object.freeze([pack('0.50', MPP.cents, MPP.pages), pack('10', 1_000, 10_000), pack('49', 4_900, 100_000), pack('99', 9_900, 250_000)]);
+export const mppPack = (q) => (q == null || q === '' ? MPP_PACKS[0] : MPP_PACKS.find((p) => p.id === String(q)) || null);
+// the amount a credential's challenge names, before it is checked (to know which pack to check it against; mppVerify then
+// proves the challenge with that amount was issued here)
+export function mppPackOf(cred) {
+  const r = String(cred?.challenge?.request || ''); if (!B64U.test(r) || r.length > 4096) return null;
+  let j = null; try { j = JSON.parse(unb64u(r)); } catch { return null; }
+  return MPP_PACKS.find((p) => String(p.cents) === j?.amount) || null;
+}
 
 const b64u = (s) => Buffer.from(String(s), 'utf8').toString('base64url');
 const unb64u = (s) => Buffer.from(String(s), 'base64url').toString('utf8');

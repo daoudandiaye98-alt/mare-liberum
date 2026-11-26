@@ -813,6 +813,16 @@ await proof('/status.json gains counts: numbers only (and the day), no address, 
 const firstDiff = (x, y) => { let i = 0; while (i < x.length && x[i] === y[i]) i++; return `at ${i}: ${JSON.stringify(x.slice(Math.max(0, i - 120), i + 120))} <> ${JSON.stringify(y.slice(Math.max(0, i - 120), i + 120))}`; };
 // (the moment each tree's modules were first loaded, runningSince of /open.json, is the only thing told apart: this tree's came first)
 const since0 = (t) => t.replace(/"runningSince":"[^"]*"/g, '"runningSince":"<start>"')
+  // (and the packs for agents with a Link wallet of 3.62, proven by tools/mpp-proof.mjs: the clause of the limit answer and of
+  // llms.txt, the card door's packs and value in its GET, § 5a (6) in terms and AGB and its row of /de/preise; cut first)
+  .replace(/; for agents with a Link wallet also \?pack=10, \?pack=49 or \?pack=99: 10,000, 100,000 or 250,000 pages for 10, 49 or 99 USD, paid with mpp pay once their person approves; what a page saves, measured: \S+\/reader\/credit\/stripe\)/g, ')')
+  .replace(/, and for agents with a Link wallet \(Claude, OpenAI agents, OpenClaw, Grok\) packs with mpp pay once their person approves: \?pack=10, \?pack=49 or \?pack=99 for 10,000, 100,000 or 250,000 pages \(10, 49 or 99 USD; what a page saves, measured: \S+\/reader\/credit\/stripe\)/g, '')
+  .replace(/,"packs":\[[^\]]*\],"link_agent_wallet":"[^"]*","value":\{.*?"how":"[^"]*"\}/g, '')
+  .replace(/; außerdem als Pakete für Agenten mit .*?, je 30 Tage gültig\./g, '.')
+  .replace(/ist ein Angebot auf das Guthaben des gewählten Pakets;/g, 'ist ein Angebot auf 500 Seiten Guthaben;')
+  .replace(/; also as packs for agents with .*?, each valid 30 days\./g, '.')
+  .replace(/is an offer for the credit of the pack chosen;/g, 'is an offer for 500 pages of credit;')
+  .replace(/; Pakete für Agenten: 10 USD für 10\.000, 49 USD für 100\.000 und 99 USD für 250\.000 Seiten/g, '')
   // (and the limit that sells and the acceptance test of reader credit of 3.61, proven by tools/credit-proof.mjs: the order of the
   // limit answer, the sea's own ways first and the word on Angel after them, the sentence of § 5a on use in terms and AGB, the
   // credit's word in the docs of the compatible doors; turned back first, so that the masks of 3.60 below find their words)
