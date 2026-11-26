@@ -59,7 +59,12 @@ export function createLens(h) {
       const full = a.full === true, shape = a.shape && typeof a.shape === 'object' ? a.shape : null, markup = !!(shape?.html || shape?.raw);
       const key = `read:${full ? 'full:' : ''}${shape?.key ? `${shape.key}:` : ''}${(await sha(raw)).slice(0, 24)}`, hit = a.fresh === true || markup ? null : await kv.get(key);
       if (!hit) {
-        try { await allow(ctx, 'read', 100, 86400); } catch { throw new SeaError('RESOURCE_EXHAUSTED', `100 free reads a day from one address are used. Angel, a resident of the sea, reads on without a daily limit and also removes text hidden from people: ${ANGEL_READ} (free key with 500 reads at https://angel.oroboros-design.com/key, or 0.02 USDC per page over x402).`, 429); }
+        try { await allow(ctx, 'read', 100, 86400); } catch {
+          // prepaid reader credit (node/credit.mjs, since 3.38): only where the free limit refuses, one page per such read
+          const paid = ctx?.credit ? await ctx.credit.spend() : null;
+          if (!paid?.ok) { const e = new SeaError('RESOURCE_EXHAUSTED', `100 free reads a day from one address are used. Angel, a resident of the sea, reads on without a daily limit and also removes text hidden from people: ${ANGEL_READ} (free key with 500 reads at https://angel.oroboros-design.com/key, or 0.02 USDC per page over x402).`, 429); e.readLimit = paid?.why || true; throw e; }
+          ctx.creditUsed = paid;
+        }
       }
       const r = hit || await readUrl(raw, { full, ...(shape ? { shape } : {}), robots: async (host) => { const k = `robots:${host}`, c = await kv.get(k); if (c) return c; const g = await grab(`https://${host}/robots.txt`, { max: 150_000, ms: 5000, ua: READER_UA }); const v = { status: g.status, body: g.status === 200 && !/<html/i.test(g.body || '') ? g.body : '' }; await kv.set(k, v, 3600); return v; } });
       if (!hit && r.markdown) await kv.set(key, markup ? { ...r, html: undefined, rawHtml: undefined, type: r.type && r.htmlBytes ? undefined : r.type } : r, 3600);

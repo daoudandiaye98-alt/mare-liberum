@@ -113,6 +113,8 @@ export function durableKv(kv, store, { waitUntil, log = () => {}, missTtl = 2160
     },
     // at once on the disk (node/disk.mjs setNow, since 3.37), for names the database does not keep
     ...(typeof kv.setNow === 'function' ? { setNow: (k, v, ttl) => (KEPT.test(k) ? false : kv.setNow(k, v, ttl)) } : {}),
+    // the names of the cache that start with a prefix (since 3.38, node/books.mjs): read only, never the database's
+    ...(typeof kv.keys === 'function' ? { keys: (prefix) => kv.keys(prefix) } : {}),
     // copy keys the cache holds into the database (for what was written before the long memory existed)
     async keep(keys) {
       const ks = [...new Set(keys)].filter((k) => KEPT.test(k)), items = [];

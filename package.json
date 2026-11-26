@@ -34,6 +34,7 @@
     "proof:attention": "node --expose-gc tools/attention-proof.mjs",
     "proof:connect": "node tools/connect-proof.mjs",
     "proof:reach": "node tools/reach-proof.mjs",
+    "proof:reach-pages": "node tools/reach-pages-proof.mjs",
     "proof:offers": "node tools/offers-proof.mjs",
     "proof:lean": "node tools/lean-proof.mjs",
     "proof:fixes": "node tools/fixes-proof.mjs",
@@ -46,7 +47,9 @@
     "proof:leanmcp": "node tools/leanmcp-proof.mjs",
     "proof:pipes": "node tools/pipes-proof.mjs",
     "proof:toll": "node tools/toll-proof.mjs",
-    "proof:reader": "node tools/reader-compat-proof.mjs"
+    "proof:reader": "node tools/reader-compat-proof.mjs",
+    "proof:books": "node tools/books-proof.mjs",
+    "proof:credit": "node tools/credit-proof.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.9.0",

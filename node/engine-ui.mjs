@@ -212,6 +212,7 @@ ${M ? `<p><small>The MCP list: the open door's <code>tools/list</code> as one JS
 <h2>Spare tokens: six levers</h2>
 <div class="levers">${v.levers.map(lever).join('')}</div>
 <p><small>Live from the ledger${L.since ? `, counting since ${esc(L.since)}` : ''}: ${n(L.today.lossless.saved)} tokens spared without loss today, ${n(L.last30days.lossless.saved)} in the last 30 days. Lossless, they are worth about $${(v.live.usd.mid).toFixed(2)} at $${TOKEN_PRICE.mid.toFixed(2)} a million input tokens: ${esc(CACHING)}. Every answer the engine shaped says so in its headers: <code>x-sea-engine</code>, <code>x-sea-engine-tokens</code> (before-&gt;after), <code>x-sea-engine-saved</code>, and <code>x-sea-engine-lossy</code> when it lost something.</small></p>
+<p>Step by step, one task a page, every number with its source: <a href="/guides">guides for developers</a>.</p>
 ${plugHtml ? `<h2 id="plug">Plug it in</h2>\n${plugHtml}\n` : ''}<h2>The bench</h2>
 ${benchHtml}
 <h2>One measuring rule</h2>
