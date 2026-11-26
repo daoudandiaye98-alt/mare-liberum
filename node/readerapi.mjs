@@ -138,7 +138,7 @@ export function readerOpenApi(base, version = '', { scrape = false } = {}) {
           parameters: [
             { name: 'q', in: 'query', required: false, description: 'With a raw body: a question; keeps the parts that answer it (lossy).', schema: { type: 'string', maxLength: 500 } },
             { name: 'budget', in: 'query', required: false, description: 'With a raw body: fit the text into this many tokens (lossy).', schema: { type: 'integer', minimum: 1, maximum: 9999999 } },
-            { name: 'type', in: 'query', required: false, description: 'With a raw body: what it is, else it is found out.', schema: { type: 'string', enum: ['html', 'json', 'md', 'text'] } },
+            { name: 'type', in: 'query', required: false, description: 'With a raw body: what it is, else it is found out.', schema: { type: 'string', enum: ['html', 'json', 'md', 'text', 'code'] } },
           ],
           requestBody: {
             required: true, description: `At most ${mb} MB; JSON nested at most ${SQUEEZE.jsonDepth} levels.`,

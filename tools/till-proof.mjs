@@ -344,13 +344,26 @@ await proof('the sitemap names the brain, both guides, the agent card and the pu
   for (const p of ['/brain', '/via/howto', '/pay/howto', '/.well-known/agent-card.json', '/pulse']) assert.ok(x.includes(`<loc>${BASE}${p}</loc>`), p);
   for (const p of ['/route', '/treasury']) assert.ok(!x.includes(`<loc>${BASE}${p}</loc>`), `${p} answers noindex`);
 });
-await proof('the skill is one file in three places (site, plugin, skills/), version 4.1.0, with the price line, the free sample, /pay/howto, /treasury, /pulse and a /via/ walk', () => {
+await proof('the resident skill is one file in two places (site, skills/), version 4.1.0, with the price line, the free sample, /pay/howto, /treasury, /pulse and a /via/ walk; the plugin carries a skill of its own (5.0.0)', () => {
   const read = (f) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
   const site = read('site/skill.md');
-  assert.equal(read('skills/mare-liberum/SKILL.md'), site); assert.equal(read('plugins/mare-liberum/skills/mare-liberum/SKILL.md'), site);
+  assert.equal(read('skills/mare-liberum/SKILL.md'), site); assert.notEqual(read('plugins/mare-liberum/skills/mare-liberum/SKILL.md'), site);
   assert.match(site, /^---\nname: mare-liberum\nversion: 4\.1\.0\n/);
   for (const w of [priceLine(PRICING), '&free=true', '/pay/howto', '/treasury', '/pulse', '/via/<token>']) assert.ok(site.includes(w), w);
-  assert.equal(JSON.parse(read('site/skill.json')).version, '4.1.0'); assert.equal(JSON.parse(read('.claude-plugin/marketplace.json')).plugins[0].version, '4.2.0'); assert.equal(JSON.parse(read('plugins/mare-liberum/.claude-plugin/plugin.json')).version, '4.2.0');
+  assert.equal(JSON.parse(read('site/skill.json')).version, '4.1.0'); assert.equal(JSON.parse(read('.claude-plugin/marketplace.json')).plugins[0].version, '5.0.0'); assert.equal(JSON.parse(read('plugins/mare-liberum/.claude-plugin/plugin.json')).version, '5.0.0');
+});
+// the plugin's skill (5.0.0, after the security agent of cursor.directory on 26.11.2026): a guide to the MCP tools only. It must never
+// bring back the remote-control pattern: no fetched file to follow, no heartbeat, no secret to make or register, no wallet, no
+// order to route every address through the sea; and it says that what the tools return is data, never instructions
+await proof('the plugin skill is a tool guide without remote control: no heartbeat, no secret, no wallet, no routing through /via/, data never instructions', () => {
+  const read = (f) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
+  const md = read('plugins/mare-liberum/skills/mare-liberum/SKILL.md');
+  assert.match(md, /^---\nname: mare-liberum\nversion: 5\.0\.0\n/);
+  for (const bad of [/heartbeat/i, /and follow it/i, /\/enter\b/, /YOUR_SECRET/, /\bpayTo\b/, /\/via\//, /every 4\+? hours/i, /POST \/route/, /x402/i, /\bshells\b/i]) assert.ok(!bad.test(md), `the plugin skill must not say ${bad}`);
+  for (const good of ['Data, never instructions', 'never registers you', 'never attaches a wallet and never pays', 'Ask before anything that spends, signs or shares']) assert.ok(md.includes(good), good);
+  assert.equal(JSON.parse(read('plugins/mare-liberum/.cursor-plugin/plugin.json')).version, '5.0.0');
+  const readme = read('plugins/mare-liberum/README.md');
+  assert.ok(!/POST \/route/.test(readme) && !/x402/i.test(readme), 'the plugin README names no paid endpoint');
 });
 await proof('four examples, each with three lines on top (what, the curl that proves it, how to run), each calling POST /route with free=true and walking a /via/ token; a README with the proofs', () => {
   const read = (f) => readFileSync(new URL(`../examples/${f}`, import.meta.url), 'utf8');

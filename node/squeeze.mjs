@@ -44,7 +44,7 @@ export const SQUEEZE = Object.freeze({
 export class SqueezeError extends Error { constructor(message, status = 400) { super(message); this.status = status; } }
 
 // ---------------------------------------------------------------- what kind of text it is
-const KINDS = { html: 'html', htm: 'html', json: 'json', md: 'md', markdown: 'md', text: 'text', txt: 'text', plain: 'text' };
+const KINDS = { html: 'html', htm: 'html', json: 'json', md: 'md', markdown: 'md', text: 'text', txt: 'text', plain: 'text', code: 'code', source: 'code' };
 export const kindOf = (t) => KINDS[String(t || '').toLowerCase().replace(/^(text|application)\//, '').replace(/;.*$/, '').trim()] || null;
 // the deepest nesting of a JSON text, counted without parsing it (a string's brackets do not count); stops past max
 export function jsonDepth(s, max = SQUEEZE.jsonDepth) {
@@ -60,13 +60,36 @@ export function jsonDepth(s, max = SQUEEZE.jsonDepth) {
 }
 // the tag's name is enough to tell HTML (no [^>]*> after it: on a long unclosed tag that runs in square time)
 const TAGS = /<\/?(p|div|span|a|li|ul|ol|h[1-6]|table|tr|td|th|br|section|article|main|nav|header|footer|img|strong|em|b|i|form|button|script|style|meta|link)\b/gi;
+// code is told by its lines (since 3.45, "Code bleibt Code"): a line only code writes starts with a keyword of a programming
+// language, opens or closes a block, or ends a statement. Lines inside a Markdown fence do not count (there the fence keeps the
+// code), each line is judged by its first 240 characters (a bound on the time), and only the first 4,000 lines with text are
+// read. Prose, Markdown and chat stay far under the share; a false "code" only means that less is made smaller, never that
+// anything is lost
+const CODE_LINE = /^\s*(?:(?:def|class|import|from|return|if|elif|else|for|while|with|try|except|finally|raise|yield|lambda|pass|break|continue|async|await|export|function|const|let|var|switch|case|default|public|private|protected|static|package|namespace|using|fn|func|impl|struct|enum|interface|module|require|end|do|then|fi|done|esac|echo|SELECT|INSERT|UPDATE|DELETE|CREATE|ALTER|DROP)\b|#include\b|#!\/|<\?php\b|@[A-Za-z_][\w.]*\s*(?:\(|$)|\/\/|\/\*|\*\/|[}\])][;,)}\]]*\s*$)|[{;]\s*$|=>\s*\{?\s*$|\)\s*:\s*$/;
+export const CODE_SHARE = 0.3;
+export function looksLikeCode(s, { share = CODE_SHARE } = {}) {
+  let fence = null, n = 0, c = 0;
+  for (const line of String(s ?? '').split('\n')) {
+    const f = FENCE.exec(line);
+    if (fence) { if (f && f[1][0] === fence[0] && f[1].length >= fence.length) fence = null; continue; }
+    if (f) { fence = f[1]; continue; }
+    if (!line.trim()) continue;
+    if (CODE_LINE.test(line.length > 240 ? line.slice(0, 240) : line)) c++;
+    if (++n >= 4000) break;
+  }
+  return n >= 3 && c / n >= share;
+}
 export function detectType(s) {
   const t = String(s ?? '').trimStart();
   if (/^[[{]/.test(t)) { if (jsonDepth(t) > SQUEEZE.jsonDepth) return 'json'; try { JSON.parse(t); return 'json'; } catch {} }
   if (/^(<!doctype\s+html|<html[\s>]|<head[\s>]|<body[\s>]|<\?xml[^>]*>\s*<html)/i.test(t)) return 'html';
+  // before the tags: a component with markup in it (JSX, Vue, PHP) is code, and a Markdown file with HTML blocks (a README's
+  // centred title, its badges) is Markdown, whose fences the lean reader would not keep
+  if (looksLikeCode(t)) return 'code';
+  const md = /^#{1,6}\s|^\s*[-*+]\s|^\s*\d+[.)]\s|^```|^~~~|^>\s|^\s*\|.*\|\s*$/m.test(t) || /\]\((https?:\/\/|\/)/.test(t);
+  if (md && /^(```|~~~|#{1,6}\s)/m.test(t)) return 'md';
   if ((t.slice(0, 200_000).match(TAGS) || []).length >= 3) return 'html';
-  if (/^#{1,6}\s|^\s*[-*+]\s|^\s*\d+[.)]\s|^```|^>\s|^\s*\|.*\|\s*$/m.test(t) || /\]\((https?:\/\/|\/)/.test(t)) return 'md';
-  return 'text';
+  return md ? 'md' : 'text';
 }
 
 // ---------------------------------------------------------------- lossless: whitespace, repeats, tracking
@@ -76,17 +99,24 @@ const isRow = (l) => /^\s*\|.*\|\s*$/.test(l) || (/\S \| \S/.test(l) && !/^\s*([
 // and code stay as they are); three and more empty lines become one
 // spaces and tabs at a line's end, cut in linear time (a regex anchored at the end runs in square time on a long run)
 const trimEnd = (l) => { let e = l.length; while (e > 0 && (l.charCodeAt(e - 1) === 32 || l.charCodeAt(e - 1) === 9)) e--; return l.slice(0, e); };
+// a line indented by four spaces or a tab (code in Markdown, a nested block) and a line set in columns (two gaps of two spaces
+// or more between words: the output of ls, ps, a table of a CLI) keep their inner spaces; only their ends are cut
+const COLUMNS = /\S {2,}\S.*\S {2,}\S/;
+const keepsInside = (line) => /^(?: {4}|\t)/.test(line) || COLUMNS.test(line.length > 400 ? line.slice(0, 400) : line);
 export function normalise(s) {
   const lines = String(s ?? '').replace(/^﻿/, '').replace(/\r\n?/g, '\n').split('\n'), out = [];
-  let fence = null;
+  let fence = null, empty = 0;
   for (const line of lines) {
     const f = FENCE.exec(line);
-    if (fence) { if (f && f[1][0] === fence[0] && f[1].length >= fence.length) fence = null; out.push(trimEnd(line)); continue; }
-    if (f) { fence = f[1]; out.push(trimEnd(line)); continue; }
+    if (fence) { if (f && f[1][0] === fence[0] && f[1].length >= fence.length) fence = null; out.push(trimEnd(line)); empty = 0; continue; }
+    if (f) { fence = f[1]; out.push(trimEnd(line)); empty = 0; continue; }
+    if (!line.trim()) { if (++empty <= 1) out.push(''); continue; }   // outside a fence a run of empty lines becomes one
+    empty = 0;
+    if (keepsInside(line)) { out.push(trimEnd(line)); continue; }
     const ind = /^[ \t]*/.exec(line)[0];
     out.push(ind + trimEnd(line.slice(ind.length).replace(/ /g, ' ').replace(/[ \t]{2,}/g, ' ')));
   }
-  return out.join('\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+/, '').replace(/\n+$/, '');
+  return out.join('\n').replace(/^\n+/, '').replace(/\n+$/, '');
 }
 // paragraphs (split at empty lines; a code block stays whole, with its empty lines)
 function paragraphs(s) {
@@ -107,11 +137,11 @@ function paragraphs(s) {
 export function sayOnce(s, { min = SQUEEZE.repeatMin } = {}) {
   const seenP = new Set(), seenL = new Set(), out = [];
   for (const p of paragraphs(s)) {
-    if (p.code) { out.push(p.text); continue; }
+    if (p.code || looksLikeCode(p.text)) { out.push(p.text); continue; }
     const k = p.text.trim();
     if (k.length >= min && seenP.has(k)) continue;
     seenP.add(k);
-    const lines = p.text.split('\n').filter((l) => { const t = l.trim(); if (t.length < min || isRow(l) || /^#{1,6}\s/.test(t)) return true; if (seenL.has(t)) return false; seenL.add(t); return true; });
+    const lines = p.text.split('\n').filter((l) => { const t = l.trim(); if (t.length < min || isRow(l) || /^#{1,6}\s/.test(t) || /^(?: {4}|\t)/.test(l)) return true; if (seenL.has(t)) return false; seenL.add(t); return true; });
     if (lines.length) out.push(lines.join('\n'));
   }
   return out.join('\n\n');
@@ -265,7 +295,21 @@ export function focusOn(markdown, q) {
 }
 
 // ---------------------------------------------------------------- squeeze
-const FORM = { html: 'html', json: 'json', md: 'md', text: 'text' };
+const FORM = { html: 'html', json: 'json', md: 'md', text: 'text', code: 'text' };
+// JSON without the whitespace between its tokens, every other byte as sent (since 3.45): a parse and a stringify would round
+// a number past 2^53 (an id of 20 digits), drop a key said twice, write 1.50 as 1.5 and rewrite escapes. Linear; strings are
+// copied exactly. Only for text that JSON.parse took
+export function minifyJson(s) {
+  const parts = []; let str = false, from = 0;
+  for (let i = 0; i < s.length; i++) {
+    const c = s.charCodeAt(i);
+    if (str) { if (c === 92) i++; else if (c === 34) str = false; continue; }
+    if (c === 34) { str = true; continue; }
+    if (c === 32 || c === 9 || c === 10 || c === 13) { if (i > from) parts.push(s.slice(from, i)); from = i + 1; }
+  }
+  if (from < s.length) parts.push(s.slice(from));
+  return parts.join('');
+}
 // input: a text (or a JSON value); type: html | json | md | text (else found out); q, budget: the lossy steps, only when
 // named; url: the page an HTML text came from (its links stay whole); lossless: false takes the lossy steps alone, on the text
 // as it came (since 3.37: /compress while the toll of the lossless levers is due, node/press.mjs)
@@ -277,7 +321,8 @@ export function squeezeAside(input, opts) {
 export function squeeze(input, { type, q, budget, url, lossless = true } = {}) {
   const given = kindOf(type), isValue = input !== null && typeof input === 'object';
   const src = isValue ? JSON.stringify(input) : String(input ?? '');
-  const kind = given || (isValue ? 'json' : detectType(src));
+  // a text said to be text or Markdown that reads as code is code: its lines, spaces and repeats are its meaning (since 3.45)
+  const found = given || (isValue ? 'json' : detectType(src)), kind = (found === 'text' || (found === 'md' && !given)) && looksLikeCode(src) ? 'code' : found;
   const beforeForm = FORM[kind] || 'text', steps = [], notes = [];
   let cur = src, form = beforeForm;
   // one step: taken only when it makes the text smaller (in tokens of its form), each measured
@@ -290,10 +335,17 @@ export function squeeze(input, { type, q, budget, url, lossless = true } = {}) {
   else if (kind === 'json') {
     if (jsonDepth(src) > SQUEEZE.jsonDepth) throw new SqueezeError(`JSON nested deeper than ${SQUEEZE.jsonDepth} levels is not taken`);
     let v; if (isValue) v = input; else { try { v = JSON.parse(src); } catch { throw new SqueezeError('this is not valid JSON (send it as text, or fix it)'); } }
-    const min = JSON.stringify(v) ?? '';
+    const min = isValue ? (JSON.stringify(v) ?? '') : minifyJson(src);
     step('json minified', min, 'json');
-    const t = toonOf(v); if (t != null && tokensOf('toon', t) <= (1 - toonGain()) * tokensOf('json', cur)) step('json as TOON', t, 'toon');
+    // TOON is written from the parsed value: only where that value says exactly what the text said (big numbers, keys said
+    // twice and number forms survive no parse), else the exact minified text stays
+    const exact = isValue || JSON.stringify(v) === min;
+    if (!exact) notes.push('the JSON holds what a parse would change (a number past 2^53, a key said twice, a number form or an escape): only its whitespace was taken out');
+    const t = exact ? toonOf(v) : null; if (t != null && tokensOf('toon', t) <= (1 - toonGain()) * tokensOf('json', cur)) step('json as TOON', t, 'toon');
     if (q || budget) notes.push('a question or a budget is applied to text and HTML; JSON is only made smaller without loss');
+  } else if (kind === 'code') {
+    // code keeps every line, space and repeat; only the line ends become \n (a carriage return carries nothing in code)
+    step('line ends normalised', src.replace(/^\uFEFF/, '').replace(/\r\n?/g, '\n'));
   } else {
     if (kind === 'html') { let base = 'https://page.invalid/'; try { if (url) base = new URL(String(url)).href; } catch {} const lean = leanMarkdown(src, base); if (lean.md.trim()) step('html to Markdown (the lean reader)', lean.md, 'md', true, true); else notes.push('the HTML holds no text the lean reader keeps'); }
     step('whitespace normalised', normalise(cur));
