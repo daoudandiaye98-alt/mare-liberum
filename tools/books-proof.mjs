@@ -449,9 +449,10 @@ await proof('B1: a range of the days before refused even at 50 blocks (an RPC th
 await proof('N1: a width the RPC refused for its width is not asked again for an hour (forward and the re-reads each remember their own), then tried once again', async () => {
   const start = blk('2026-11-22T10:00:00Z'), c = sim({ head: start + 40_000, maxRange: 1500 }), kv = memoryKv(), b = simBooks(c, kv, { fromBlock: start });
   await b.pass(); assert.ok(c.refused >= 1 && c.refused <= 3, `catching up 40,000 blocks and the days before: refused ${c.refused} times (once forward, twice for the span's own width), not again and again`); assert.equal((await b.sync()).behind_blocks, 0);
-  const r0 = c.refused; await runTo(c, b, '2026-11-22T14:00:00Z', 60); assert.ok(c.refused - r0 <= 6, `four steady hours: refused ${c.refused - r0} times (about once an hour)`);
+  const isoOf = (n) => new D((T00 + 2 * n) * 1000).toISOString();
+  const r0 = c.refused; await runTo(c, b, isoOf(c.head + 7200), 60); assert.ok(c.refused - r0 <= 8, `four steady hours: refused ${c.refused - r0} times (the last hour about once an hour, the span of the days before twice)`);
   // the forward width is remembered an hour, not a day: a catch-up now (the node was down) asks wider ranges again
-  c.head += 6000; const m1 = c.mark(); await b.pass(); const widest = Math.max(...c.ranges(m1).map(([x, z]) => z - x + 1));
+  const n0 = (await b.sync()).next_block; c.head += 6000; const m1 = c.mark(); await b.pass(); const widest = Math.max(...c.ranges(m1).filter(([x]) => x >= n0).map(([x, z]) => z - x + 1));
   assert.ok(widest > 1250, `after the hour the forward reading asks wider again: widest ${widest}`);
   // the forward reading never refused (its ranges are small), the last hour (1,800 blocks) is: it remembers that apart
   const s2 = blk('2026-11-22T10:00:00Z'), c2 = sim({ head: s2 + 60, maxRange: 1500 }), b2 = simBooks(c2, memoryKv(), { fromBlock: s2 });
@@ -482,7 +483,7 @@ await proof('F1: a catch-up whose long ranges time out (an RPC that answers at m
   const start = blk('2026-11-22T10:00:00Z'), c = sim({ head: start + 60 }), kv = memoryKv(), b = simBooks(c, kv, { fromBlock: start });
   await runTo(c, b, '2026-11-22T11:00:00Z', 60); assert.equal(b.state().step, 2000);
   c.inject = (a, z) => (z - a + 1 > 600 ? 'timeout' : null);
-  c.head += 1200; let passes = 0; for (; passes < 10 && (await b.sync()).behind_blocks !== 0; passes++) { c.head += 30; await b.pass(); }
+  c.head += 1200; let passes = 0; do { c.head += 30; await b.pass(); passes++; } while (passes < 10 && (await b.sync()).behind_blocks !== 0);
   assert.ok(passes <= 3, `caught up the 1,200 blocks in ${passes} passes`); assert.equal((await b.sync()).behind_blocks, 0);
   c.inject = null;
 });
@@ -740,7 +741,7 @@ const BREAK = [
   ['a zero transfer booked', 'node/books.mjs', 'if (value <= 0n) {', 'if (value < 0n) {'],
   ['another token booked (the RPC trusted)', 'node/books.mjs', "lc(g.address) !== T || ", ''],
   ['the amount as a floating point number', 'node/books.mjs', "value: value.toString(), usd: usdOf(value)", "value: String(Number(value)), usd: usdOf(value)"],
-  ['a range too large not halved', 'node/books.mjs', "if (tooWide(e) && (full ? step > minStep : aboutWidth(e) && w > minStep)) {", "if (false) {"],
+  ['a range too large not halved', 'node/books.mjs', "if (tooWide(e) && (full ? step > minStep : (aboutWidth(e) || w > 120) && w > minStep)) {", "if (false) {"],
   ['the time of the log\'s neighbour block', 'node/books.mjs', "e.time = iso((await blockTime(e.block, e.hint)) * 1000);", "e.time = iso((await blockTime(e.block + 1, e.hint)) * 1000);"],
   ['the signed transfer not matched (toll by nonce)', 'node/books.mjs', "if (e.nonce) { const r = recs.find((x) => x.door === 'toll'", "if (false) { const r = recs.find((x) => x.door === 'toll'"],
   ['no best effort by wallet, amount and time', 'node/books.mjs', "if (near.length && !near.some(", "if (false && !near.some("],
@@ -754,7 +755,7 @@ const BREAK = [
   ['B1 taken back: a stuck day never given up', 'node/books.mjs', "if (r.fails >= 3) {", "if (false) {"],
   ['B1 taken back: the last hour halves the forward width', 'node/books.mjs', "s = Math.max(minStep, Math.floor(s / 2)); count('chain_narrowed');", "s = step = Math.max(minStep, Math.floor(s / 2)); count('chain_narrowed');"],
   ['R1 taken back: the last hour remembers a timeout as a width', 'node/books.mjs', "if (z - x + 1 >= s && aboutWidth(e)) {", "if (true) {"],
-  ['R1 taken back: a timeout of a short forward range narrows the forward width', 'node/books.mjs', "if (tooWide(e) && (full ? step > minStep : aboutWidth(e) && w > minStep)) {", "if (tooWide(e) && step > minStep) {"],
+  ['R1 taken back: a timeout of a short forward range narrows the forward width', 'node/books.mjs', "if (tooWide(e) && (full ? step > minStep : (aboutWidth(e) || w > 120) && w > minStep)) {", "if (tooWide(e) && step > minStep) {"],
   ['R1 taken back: the last hour starts from the forward width', 'node/books.mjs', "let x = a, s = Math.max(minStep, Math.min(maxStep, b - a + 1, refusedAgain ?? maxStep));", "let x = a, s = Math.max(minStep, Math.min(step, b - a + 1, refusedAgain ?? maxStep));"],
   ['R1 taken back: a refused width never forgotten', 'node/books.mjs', "if (refusedAgain != null && t - refusedAgainAt >= 3600e3) refusedAgain = null;", ""],
   ['F1 taken back: a long catch-up range that times out fails the pass', 'node/books.mjs', "(full ? step > minStep : (aboutWidth(e) || w > 120) && w > minStep)", "(full ? step > minStep : aboutWidth(e) && w > minStep)"],
