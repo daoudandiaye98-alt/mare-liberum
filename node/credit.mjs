@@ -48,12 +48,19 @@ export function creditOf(headers) {
 }
 
 // what the limit answer adds for every caller: one line and two headers on how to buy credit (nothing else changes)
-export function creditHint(base, why = null) {
+export function creditHint(base, why = null, { payNow = null } = {}) {
   const b = String(base || '').replace(/\/+$/, '');
   const said = why === 'expired' ? 'This credit has expired. ' : why === 'used up' ? 'This credit is used up. ' : why === 'unknown' || why === 'bad' ? 'This credit token is not known here. ' : why === 'revoked' ? 'This credit was taken back: its payment did not settle. ' : '';
-  return { line: `${said}Or read on with prepaid reader credit: POST ${b}/reader/credit over x402 (0.05 USDC on Base for 50 pages above the free limit, 30 days), or by card or Link: POST ${b}/reader/credit/stripe over MPP (0.50 USD for 500 pages, 30 days), or as a business by card in the browser: ${b}/c/reader?from=limit (EUR 10 for 10,000 pages, 30 days), with bigger packs up to 12,000,000 pages at ${b}/reader/credit/paid#plans; then send x-sea-credit: <token> (${b}/reader#credit).`,
+  // (since 3.61) the sea's own ways come first in the limit answer (limitSaid below); at a 402 (payNow) the first way is to pay
+  // this very page in the same request; a credit page counts only when the read brings Markdown back
+  const first = payNow ? `Read on now: this answer is the x402 payment request for this page (${payNow} USDC on Base, paid in the same request), or with prepaid reader credit` : 'Read on with prepaid reader credit';
+  return { line: `${said}${first}: POST ${b}/reader/credit over x402 (0.05 USDC on Base for 50 pages above the free limit, 30 days), or by card or Link: POST ${b}/reader/credit/stripe over MPP (0.50 USD for 500 pages, 30 days), or as a business by card in the browser: ${b}/c/reader?from=limit (EUR 10 for 10,000 pages, 30 days), with bigger packs up to 12,000,000 pages at ${b}/reader/credit/paid#plans; then send x-sea-credit: <token> (${b}/reader#credit). A credit page counts only when the read brings Markdown back.`,
     headers: { 'x-sea-credit-buy': `${b}/reader/credit`, 'x-sea-credit-buy-card': `${b}/reader/credit/stripe`, 'x-sea-credit-buy-business': `${b}/c/reader?from=limit`, link: `<${b}/reader#credit>; rel="payment"` } };
 }
+
+// (since 3.61) the words of the limit answer: its first part, then how to read on here, then the word on Angel (node/lens.mjs
+// keeps the parts apart); an error without the parts keeps its words with the line after them
+export const limitSaid = (e, more) => (e?.limitLine ? `${e.limitLine} ${more.line}${e.alsoLine ? ` ${e.alsoLine}` : ''}` : `${e?.message} ${more.line}`);
 
 // the terms of one purchase, in both shapes x402 knows (as the paid route's, node/pay.mjs termsFor)
 export function creditTerms(cfg, { base }) {
@@ -173,6 +180,14 @@ export function createCredit({ kv, now = () => Date.now(), ledger = null, rpc = 
       return serial(h, async () => {
         const r = await kv.get(T(h)), s = state(r); if (s !== 'ok') return { ok: false, why: s, until: r?.until };
         r.left -= 1; await put(T(h), r, ttlOf(r.until)); return { ok: true, left: r.left, until: r.until };
+      });
+    },
+    // (since 3.61) one page back, for a read that brought no Markdown (node/lens.mjs, the acceptance test of reader credit):
+    // never above the pages bought, never for a credit that was taken back or has run out of time
+    back(h) {
+      return serial(h, async () => {
+        const r = await kv.get(T(h)); if (!r || r.revoked || Date.parse(r.until) <= now()) return { ok: false, why: state(r) };
+        r.left = Math.min(r.pages, r.left + 1); await put(T(h), r, ttlOf(r.until)); return { ok: true, left: r.left, until: r.until };
       });
     },
     async peek(h) { const r = await kv.get(T(h)); return { state: state(r), ...(r ? { pages: r.pages, left: r.revoked ? 0 : r.left, until: r.until } : {}) }; },
