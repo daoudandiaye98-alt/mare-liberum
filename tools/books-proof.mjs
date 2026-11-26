@@ -449,6 +449,10 @@ await proof('N1: a width the RPC refused is not asked again that UTC day (forwar
   assert.ok(b.state().step < 1500);
   await runTo(c, b, '2026-11-22T23:55:00Z', 600); assert.ok(b.state().step < 1500, 'all day below the refused width'); assert.ok(c.refused - r0 <= 1);
   await runTo(c, b, '2026-11-23T00:20:00Z', 600); const r1 = c.refused; c.head += 3000; await b.pass(); assert.ok(c.refused > r1, 'a new UTC day: wider ranges are tried again');
+  // the forward reading never refused (its ranges are small), the last hour (1,800 blocks) is: it remembers that apart
+  const s2 = blk('2026-11-22T10:00:00Z'), c2 = sim({ head: s2 + 60, maxRange: 1500 }), b2 = simBooks(c2, memoryKv(), { fromBlock: s2 });
+  await runTo(c2, b2, '2026-11-22T11:00:00Z', 60);
+  assert.equal(b2.state().step, 2000, 'the forward width grew to 2,000'); assert.equal(c2.refused, 1, `the last hour refused once, not ${c2.refused} times`);
 });
 await proof('P1: a write that fails half way (the store took the day, its journal line did not): the next pass puts the day back into the index, and its entry is there once', async () => {
   const n = blk('2026-11-22T00:20:00Z'), c = sim({ head: blk('2026-11-22T00:00:00Z') + 60, logs: [simLog(n)], lag: 1200 }), m = new Map(); let failNext = null;
@@ -675,7 +679,7 @@ console.log(`\n${passed} proofs held, ${failed} failed`);
 
 // ------------------------------------------------------------------ negative controls: break one rule in a copy, the proof must fail there
 const BREAK = [
-  ['the cursor not written: a restart reads from the start again', 'node/books.mjs', "if (!(await put(KEYS.state(W), st, far()))) throw new Error('the state could not be written');\n        if (step < maxStep)", "if (step < maxStep)"],
+  ['the cursor not written: a restart reads from the start again', 'node/books.mjs', "if (!(await put(KEYS.state(W), st, far()))) throw new Error('the state could not be written');\n        // wider again", "// wider again"],
   ['nothing kept at once (the cursor and the entries wait for the next copy)', 'node/books.mjs', "if (typeof kv.setNow === 'function') return kv.setNow(k, v, ttl) !== false; ", ''],
   ['an entry counted twice', 'node/books.mjs', 'if (have.has(e.k)) continue;', ''],
   ['a removed log booked', 'node/books.mjs', "if (!g || g.removed === true || lc(g.address)", "if (!g || lc(g.address)"],
@@ -694,14 +698,14 @@ const BREAK = [
   ['the previous day read again before the start', 'node/books.mjs', "const a = Math.max(st.start, await firstBlockAt(t0, hi, st.start)),", "const a = Math.max(0, await firstBlockAt(t0, hi, 0)),"],
   ['B1 taken back: the days before halve the forward width', 'node/books.mjs', "r.step = Math.max(minStep, Math.floor(r.step / 2)); count('chain_narrowed');", "r.step = step = Math.max(minStep, Math.floor(r.step / 2)); count('chain_narrowed');"],
   ['B1 taken back: a stuck day never given up', 'node/books.mjs', "if (r.fails >= 3) {", "if (false) {"],
-  ['B1 taken back: the last hour halves the forward width', 'node/books.mjs', "refusedAgain = Math.min(refusedAgain ?? Infinity, z - x + 1); s = Math.max(minStep, Math.floor(s / 2));", "refusedAgain = Math.min(refusedAgain ?? Infinity, z - x + 1); s = step = Math.max(minStep, Math.floor(s / 2));"],
+  ['B1 taken back: the last hour halves the forward width', 'node/books.mjs', "refusedAgain = Math.min(refusedAgain ?? Infinity, Math.floor((z - x + 1) * 0.8)); s = Math.max(minStep, Math.floor(s / 2));", "refusedAgain = Math.min(refusedAgain ?? Infinity, Math.floor((z - x + 1) * 0.8)); s = step = Math.max(minStep, Math.floor(s / 2));"],
   ['B2 taken back: only yesterday read again', 'node/books.mjs', "t0 = t1 - 2 * 86_400, hi = st.next - 1;", "t0 = t1 - 86_400, hi = st.next - 1;"],
   ['P1 taken back: a day the index lost stays lost', 'node/books.mjs', "if (!added) { if (cur.length && !days.includes(d)) { days.push(d); days.sort(); daysChanged = true; } continue; }", "if (!added) continue;"],
   ['N1 taken back: a refused width asked again', 'node/books.mjs', "Math.ceil(step * 1.25), refused ?? maxStep));", "Math.ceil(step * 1.25)));"],
   ['N1 taken back: the last hour asks a refused width again', 'node/books.mjs', "s = Math.max(minStep, Math.min(step, refusedAgain ?? step));", "s = step;"],
   ['N4 taken back: the re-reads counted with the forward reading', 'node/books.mjs', "e.chain_reads_failed = g('chain_errors'); e.chain_rereads_failed = g('chain_reread_failed');", "e.chain_reads_failed = g('chain_errors') + g('chain_reread_failed'); e.chain_rereads_failed = g('chain_reread_failed');"],
   ['no second look at an unmatched entry', 'node/books.mjs', "if (e.door === 'unmatched') { const l = labelOf(e, recs, taken);", "if (false) { const l = labelOf(e, recs, taken);"],
-  ['the cursor moved past a range that was not written', 'node/books.mjs', "if (!(await keep(got, recs))) throw new Error('the books could not be written: the range is read again');", 'await keep(got, recs);'],
+  ['the cursor moved past a range that was not written', 'node/books.mjs', "const k = await keep(got, recs); if (k == null) throw new Error('the books could not be written: the range is read again');", 'const k = (await keep(got, recs)) || 0;'],
   ['a rate limit taken for a range too large (the RPC asked again at once)', 'node/books.mjs', "if (e?.status === 429 || /rate.?limit|too many requests|requests per/i.test(m)) return false;", ''],
   ['no wait after a failed pass', 'node/books.mjs', 'waitUntilMs = now() + Math.min(30 * 60_000, 30_000 * 2 ** Math.min(6, st.errors - 1));', 'waitUntilMs = now();'],
   ['eight years in the code, ten in the texts', 'node/books.mjs', "BOOKS_RETAIN = Object.freeze({ years: 10,", "BOOKS_RETAIN = Object.freeze({ years: 8,"],
