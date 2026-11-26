@@ -2487,7 +2487,7 @@ async function handleOne(req, db, cfg = {}) {
         const sold = await sellDeal({ a, pay, t }); if (sold.res) return sold.res;
         return json({ ...sold.answer, paid: sold.paid }, 200, { ...paidHdr, ...sold.headers });
       }
-      if (!a.url && !a.q) return json(dealHow(base), 200, { 'cache-control': 'public, max-age=3600', ...CORS });
+      if (!a.url && !a.q) return json({ ...dealHow(base), today: await sea.dealToday?.().catch(() => null) }, 200, { 'cache-control': 'public, max-age=60', ...CORS });
       const dlRes = `${base}${path}${url.search}`;
       if (req.method !== 'HEAD') { const p0 = paymentOf(req.headers, {}); if (p0 && !p0.bad) { const t0 = dealTerms(payCfg, { base, resource: dlRes }); if (!dealExact(p0, t0)) { const sold = await sellDeal({ a, pay: p0, t: t0 }); if (sold.res) return sold.res; return json({ ...sold.answer, paid: sold.paid }, 200, { ...paidHdr, ...sold.headers }); } } }
       let r; try { r = await sea.deal({ ...a, base }, ctx); } catch (e) {

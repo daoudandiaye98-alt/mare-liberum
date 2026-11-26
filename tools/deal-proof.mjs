@@ -248,7 +248,7 @@ await proof('a paid check: the product, cheaper elsewhere, 12 offers and the who
 
 console.log('the free door');
 await proof('/deal without a page or a name says what it is; with a name it compares the catalog\'s offers', async () => {
-  const h = await call('/deal', { ip: fresh() }); assert.equal(h.status, 200); assert.match(h.j.use, /\/deal\?url=<product page>/);
+  const h = await call('/deal', { ip: fresh() }); assert.equal(h.status, 200); assert.match(h.j.use, /\/deal\?url=<product page>/); assert.ok(Number.isInteger(h.j.today.checks) && h.j.today.checks > 0, `today: ${JSON.stringify(h.j.today)}`); assert.equal(h.j.today.day, new Date(T0).toISOString().slice(0, 10));
   const q = await call('/deal?q=Example+Trail+Runner+3&currency=USD', { ip: fresh() }); assert.equal(q.status, 200, q.text.slice(0, 200));
   assert.equal(q.j.found, true); assert.equal(q.j.verdict.word, 'offers-found'); assert.equal(q.j.cheapest.price, 70, 'without a page every store counts'); assert.equal(q.j.cheapest.store, 'shop.deal-proof.dev'); assert.equal(q.j.elsewhere.length, DEAL.offers.free);
 });
