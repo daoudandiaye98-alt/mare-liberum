@@ -19,7 +19,7 @@ import { usd6, b64, exactFor } from './readpay.mjs';
 import { packTarget } from './pack.mjs';
 
 export const DEAL = Object.freeze({ cents: 1, micro: 10_000, path: '/x402/deal', free: '/deal', perHour: 10,
-  offers: Object.freeze({ free: 5, paid: 12 }), seen: Object.freeze({ keepDays: 120, max: 60, calmMin: 10 }), match: 0.6 });
+  offers: Object.freeze({ free: 5, paid: 12 }), seen: Object.freeze({ keepDays: 120, max: 60, calmMin: 10 }), match: 0.6, caution: 30 });
 
 const WHAT = 'Mare Liberum, the deal check for shopping agents: one product page read (robots.txt respected) with the price, list price and stock its own structured data states, the same item at other stores live from the Shopify Global Catalog (each with its checkout link, cheapest first), and the prices other agents saw for it through the sea, with a verdict whose rules are stated; 0.01 USDC per check, no account, no key';
 
@@ -79,6 +79,8 @@ export const DEAL_RULES = Object.freeze([
   'The page\'s price, list price and stock are what its own structured data states (schema.org Product, Shopify\'s product data); nothing is guessed, and a list price is the seller\'s own claim, not a market price.',
   `Other offers come live from the Shopify Global Catalog (Shopify merchants; marketplaces outside it are not compared). An offer counts as the same item when its title carries the product's name (likeness of at least ${DEAL.match}; every word of the name with a digit, such as a model number, must be there; accessories do not count), it is in stock and in the same currency; one offer per store, the cheapest.`,
   `Seen: the prices the page showed when agents checked it through the sea, newest first, at most ${DEAL.seen.max}, kept ${DEAL.seen.keepDays} days.`,
+  `Mare Liberum vouches for no store. An offer ${DEAL.caution} % or more below the median of the offers found (the page's price among them) is marked with a caution: prices that far below the others often come from resellers or fake shops.`,
+  'A page whose variants have different prices and names none is compared by its lowest variant price ("from").',
   'The verdict compares only these numbers. It is not advice. Mare Liberum never pays and never holds money; every link leads to the merchant itself.',
 ]);
 
@@ -86,7 +88,8 @@ export const DEAL_RULES = Object.freeze([
 // asked for, the catalog's offers (node/core.mjs shopGlobal) and the memory → the answer; found: something to compare was there
 export function dealOf({ product = null, page = null, q = null, offers = [], seen = [], paid = false, base = '' } = {}) {
   const b = String(base || '').replace(/\/+$/, '');
-  const price = Number.isFinite(product?.price) && product.price > 0 ? product.price : null, cur = product?.currency || null;
+  const from = !(Number.isFinite(product?.price) && product.price > 0) && Number.isFinite(product?.low) && product.low > 0;
+  const price = Number.isFinite(product?.price) && product.price > 0 ? product.price : from ? product.low : null, cur = product?.currency || null;
   const name = product?.name || q || '', here = page?.host || hostOf(page?.url) || hostOf(product?.url);
   const pageStock = inStockWord(product?.availability);
   const rows = (Array.isArray(offers) ? offers : []).map((o) => ({ store: o?.store || o?.storeHost || null, host: o?.storeHost || hostOf(o?.storeUrl) || hostOf(o?.url), title: o?.title || '', price: Number(o?.price), currency: o?.currency || null, in_stock: o?.inStock !== false, url: o?.url || undefined, checkout: o?.checkout || undefined, promoted: o?.promoted ? true : undefined, match: likeness(name, o?.title) }))
@@ -96,6 +99,10 @@ export function dealOf({ product = null, page = null, q = null, offers = [], see
   const want = cur || Object.entries(count).sort((x, y) => y[1] - x[1])[0]?.[0] || null;
   const byStore = new Map(); for (const o of rows.filter((x) => x.currency === want).sort((x, y) => x.price - y.price)) if (!byStore.has(o.host || o.store)) byStore.set(o.host || o.store, o);
   const same = [...byStore.values()], lowest = same[0] || null;
+  const all = [...same.map((o) => o.price), ...(price != null && cur === want ? [price] : [])].sort((x, y) => x - y);
+  const median = all.length >= 3 ? (all.length % 2 ? all[(all.length - 1) / 2] : (all[all.length / 2 - 1] + all[all.length / 2]) / 2) : null;
+  for (const o of same) if (median && o.price <= median * (1 - DEAL.caution / 100)) o.caution = `${pct(o.price, median)} % below the median of the offers found (${money(median, want)})`;
+  const plain = same.find((o) => !o.caution) || null;
   const shown = same.slice(0, paid ? DEAL.offers.paid : DEAL.offers.free).map(({ host, ...o }) => ({ ...o, below_page_pct: price != null && o.currency === cur ? pct(o.price, price) : undefined }));
   const memory = seenOf(seen, { currency: want, full: paid });
   const was = Number.isFinite(product?.was) && price != null && product.was > price ? product.was : null;
@@ -104,11 +111,11 @@ export function dealOf({ product = null, page = null, q = null, offers = [], see
   const lines = [], said = (s) => lines.push(s);
   if (!product && page && !page.read) said(`The page could not be read (${page.error || 'no answer'}), so only other stores were compared.`);
   else if (page && !product) said('The page holds no product data (no schema.org Product, no Shopify product): there is no price on it to compare.');
-  if (price != null) said(`On this page: ${money(price, cur || '')}${pageStock === false ? ', out of stock' : pageStock ? ', in stock' : ''}.`);
+  if (price != null) said(`On this page: ${from ? 'from ' : ''}${money(price, cur || '')}${from ? ' (its lowest variant)' : ''}${pageStock === false ? ', out of stock' : pageStock ? ', in stock' : ''}.`);
   if (was != null) said(`The page states a list price of ${money(was, cur || '')}: ${pct(price, was)} % off by its own words.`);
   let word = 'nothing-to-compare', cheapest = null;
   if (price != null && lowest && lowest.price < price) {
-    word = 'cheaper-elsewhere'; cheapest = { where: 'another store', store: lowest.store, title: lowest.title, price: lowest.price, currency: want, url: lowest.url, checkout: lowest.checkout, below_page_pct: pct(lowest.price, price) };
+    word = 'cheaper-elsewhere'; cheapest = { where: 'another store', store: lowest.store, title: lowest.title, price: lowest.price, currency: want, url: lowest.url, checkout: lowest.checkout, below_page_pct: pct(lowest.price, price), ...(lowest.caution ? { caution: lowest.caution } : {}) };
     said(`${same.filter((o) => o.price < price).length} other store${same.filter((o) => o.price < price).length === 1 ? '' : 's'} list the same item for less: the lowest is ${money(lowest.price, want)} at ${lowest.store} (${pct(lowest.price, price)} % below this page).`);
   } else if (price != null && same.length) {
     word = 'lowest-found'; cheapest = { where: 'this page', price, currency: cur, url: product?.url || page?.url };
@@ -117,27 +124,33 @@ export function dealOf({ product = null, page = null, q = null, offers = [], see
     word = 'no-comparison'; cheapest = { where: 'this page', price, currency: cur, url: product?.url || page?.url };
     said(`No matching offer in stock at another Shopify store was found${want ? ` in ${want}` : ''}.`);
   } else if (lowest) {
-    word = 'offers-found'; cheapest = { where: 'another store', store: lowest.store, title: lowest.title, price: lowest.price, currency: want, url: lowest.url, checkout: lowest.checkout };
+    word = 'offers-found'; cheapest = { where: 'another store', store: lowest.store, title: lowest.title, price: lowest.price, currency: want, url: lowest.url, checkout: lowest.checkout, ...(lowest.caution ? { caution: lowest.caution } : {}) };
     said(`${same.length} store${same.length === 1 ? '' : 's'} list${same.length === 1 ? 's' : ''} a matching item in stock; the lowest is ${money(lowest.price, want)} at ${lowest.store}.`);
   } else said('No matching offer in stock was found in the catalog either.');
+  if (cheapest?.where === 'another store' && lowest?.caution) {
+    said(`Caution: that offer is ${lowest.caution}; prices that far below the others often come from resellers or fake shops. Check the store before paying: its address, reviews, returns and payment page.`);
+    if (plain && plain !== lowest) said(`The lowest offer without such a gap: ${money(plain.price, want)} at ${plain.store}${price != null && cur === want ? (plain.price < price ? ` (${pct(plain.price, price)} % below this page)` : ' (not below this page)') : ''}.`);
+  }
   if (memory.checks && price != null) {
     if (memory.low.price < price) said(`Agents saw a lower price for it through the sea: ${money(memory.low.price, memory.low.currency)} on ${memory.low.at.slice(0, 10)} (${memory.checks} check${memory.checks === 1 ? '' : 's'} since ${memory.since.slice(0, 10)}).`);
     else said(`This is the lowest price agents saw for it through the sea (${memory.checks} check${memory.checks === 1 ? '' : 's'} since ${memory.since.slice(0, 10)}).`);
   } else if (price != null) said('This is the first check of this product through the sea: its price is kept, so the next agent sees it.');
   const ask = page?.asked || product?.url || null;
   const next = [];
-  if (cheapest?.checkout || (cheapest?.where === 'another store' && cheapest?.url)) next.push({ do: 'buy', at: cheapest.checkout || cheapest.url, note: 'at the merchant\'s own checkout; read its terms, shipping and returns first. Mare Liberum never pays.' });
+  if (cheapest?.where === 'another store') next.push({ do: 'check the store before paying', note: 'Mare Liberum vouches for no store: look at its address, reviews, returns and payment page, or ask an agent that verifies stores (the brain names some)', at: `${b}/brain?q=${encodeURIComponent('verify an online store before paying')}` });
+  if (cheapest?.checkout || (cheapest?.where === 'another store' && cheapest?.url)) next.push({ do: 'buy', at: cheapest.checkout || cheapest.url, note: 'at the merchant\'s own checkout, once your person agrees; read its terms, shipping and returns first. Mare Liberum never pays.' });
   if (ask) next.push({ do: 'check again later', at: `${b}${DEAL.free}?url=${encodeURIComponent(ask)}`, note: 'every check adds to the price memory of this product' });
   if (ask) next.push({ do: 'read the whole page', at: `${b}/r/${ask}` });
   return {
     found,
-    product: product ? { name: product.name || null, brand: product.brand || null, gtin: product.gtin || null, price, list_price: was, currency: cur, availability: product.availability || null, in_stock: pageStock, variants: product.variants ? { n: product.variants.n, in_stock: product.variants.inStock } : null, rating: product.rating || null, url: product.url || page?.url || null } : null,
+    product: product ? { name: product.name || null, brand: product.brand || null, gtin: product.gtin || null, price, ...(from ? { price_is: 'from: the lowest of its variants', high: Number.isFinite(product.high) ? product.high : null } : {}), list_price: was, currency: cur, availability: product.availability || null, in_stock: pageStock, variants: product.variants ? { n: product.variants.n, in_stock: product.variants.inStock } : null, rating: product.rating || null, url: product.url || page?.url || null } : null,
     page: page ? { url: page.url || null, host: here || null, read: !!page.read, ...(page.blocked ? { blocked: true } : {}), ...(page.error ? { error: page.error } : {}) } : null,
     ...(q ? { q } : {}),
     verdict: { word, lines },
     cheapest,
     elsewhere: shown,
     elsewhere_found: same.length,
+    median: median != null ? { price: Math.round(median * 100) / 100, currency: want, of: all.length } : null,
     seen: memory,
     rules: DEAL_RULES,
     coverage: 'other stores: Shopify merchants, live from the Shopify Global Catalog; marketplaces outside it are not compared',

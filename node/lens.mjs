@@ -103,6 +103,8 @@ export function createLens(h) {
       if (!ctx?.uncounted) { const day = now().slice(0, 10); await kv.set(`deal:count:${day}`, (Number(await kv.get(`deal:count:${day}`)) || 0) + 1, 3 * DAY); }
       return dealOf({ product, page, q, offers, seen: before, paid, base: a.base || '' });
     },
+    // how many deal checks this node made today (UTC), free and paid: the number GET /deal shows beside how to call it
+    async dealToday() { const day = now().slice(0, 10); return { day, checks: Number(await kv.get(`deal:count:${day}`)) || 0 }; },
     // the reader: any public page as Markdown — free for every agent up to a fair daily amount, then Angel reads on
     async read(a = {}, ctx) {
       if (ctx?.readOnly) return { note: 'crawlers read the sea itself; the reader reads other pages for agents', how: 'GET /r/<page address>' };
