@@ -18,31 +18,22 @@ const codeLines = (s, keepEdges = false) => {
   let a = 0, b = ls.length; if (!keepEdges) { while (a < b && !ls[a]) a++; while (b > a && !ls[b - 1]) b--; }
   return ls.slice(a, b).join('\n');
 };
-// a fence written in a page's own text: ``` or ~~~ (three or more), an info string or none (a backtick fence's info has
-// no backtick); it closes with a line of the same sign, at least as long, and nothing after it
-const FENCE_OPEN = /^([ \t]*)(`{3,}|~{3,})(.*)$/;
-// a line that can close a fence: its length, positive for backticks and negative for tildes, else 0 (one look at the line)
-const closerOf = (l) => {
-  let a = 0, b = l.length; while (a < b && (l[a] === ' ' || l[a] === '\t')) a++; while (b > a && (l[b - 1] === ' ' || l[b - 1] === '\t')) b--;
-  const c = l[a]; if (b - a < 3 || (c !== '`' && c !== '~')) return 0;
-  for (let k = a + 1; k < b; k++) if (l[k] !== c) return 0;
-  return c === '`' ? b - a : a - b;
-};
 
 // HTML to Markdown, plainly: the main part of the page, headings, paragraphs, lists, links, code; no scripts, no menus.
 // menus: false keeps runs of links (a page whose main part holds no menu, like the pages of the sea itself)
-// Code keeps its lines (since the fix of 26.11.2026): a <pre> block, and a fenced block written in the page's text that
-// closes, is held aside whole while the lines around it are made tidy (spaces run together, each line trimmed, menus out,
-// blank lines at most one), and set back as it stands. Everything outside code is written as before, byte for byte.
+// Code keeps its lines (since the fix of 26.11.2026): a <pre> block is held aside whole while the lines around it are made
+// tidy (spaces run together, each line trimmed, menus out, blank lines at most one), and set back as it stands. Fences
+// written in a page's own text stay text, as before (verify-3.40 B1: a "~~~" scene break is no code). Everything outside
+// code is written as before, byte for byte; a NUL in the page is dropped first, so that no page can forge a mark.
 export function toMarkdown(html, base, { menus = true } = {}) {
-  let h = String(html || '').replace(/<!--[\s\S]*?-->/g, ' ');
+  let h = String(html || '').replace(/\u0000/g, '').replace(/<!--[\s\S]*?-->/g, ' ');
   const pick = (tag) => { let best = ''; for (const m of h.matchAll(new RegExp(`<${tag}\\b[^>]*>([\\s\\S]*?)<\\/${tag}>`, 'gi'))) if (m[1].length > best.length) best = m[1]; return best; };
   const main = pick('main') || pick('article'), region = main && main.replace(/<[^>]+>/g, '').trim().length > 200 ? main : (/<body\b[^>]*>([\s\S]*)<\/body>/i.exec(h)?.[1] || h);
   h = region.replace(/<(script|style|noscript|svg|template|iframe|canvas|select|button|object|embed)\b[\s\S]*?<\/\1>/gi, ' ');
   if (!main) h = h.replace(/<(nav|header|footer|aside|form)\b[\s\S]*?<\/\1>/gi, ' ');
   const keep = []; const hold = (t) => `\u0000${keep.push(t) - 1}\u0000`;
   // a code block, held aside until the end: one mark on a line of its own (\u0000c<n>\u0000), its fences inside it
-  const codes = []; const aside = (t) => `\u0000c${codes.push(t) - 1}\u0000`, back = (s) => s.replace(/\u0000c(\d+)\u0000/g, (m, k) => codes[k]);
+  const codes = []; const aside = (t) => `\u0000c${codes.push(t) - 1}\u0000`, back = (s) => String(s).replace(/\u0000c(\d+)\u0000/g, (m, k) => back(codes[k] ?? ''));
   h = h.replace(/<pre\b[^>]*>([\s\S]*?)<\/pre>/gi, (_, c) => hold(`\n\n${aside(`\`\`\`\n${codeLines(entities(c.replace(/<[^>]+>/g, '')))}\n\`\`\``)}\n\n`));
   h = h.replace(/<code\b[^>]*>([\s\S]*?)<\/code>/gi, (_, c) => hold(`\`${inline(c)}\``));
   h = h.replace(/<a\b[^>]*?href\s*=\s*("([^"]*)"|'([^']*)')[^>]*>([\s\S]*?)<\/a>/gi, (_, __, d, s2, t) => { const u = abs(d ?? s2, base), x = inline(t); return x ? (u ? hold(`[${x.replace(/[[\]]/g, '')}](${u})`) : x) : ''; });
@@ -52,24 +43,7 @@ export function toMarkdown(html, base, { menus = true } = {}) {
   h = h.replace(/<li\b[^>]*>/gi, '\n- ').replace(/<br\s*\/?>/gi, '\n').replace(/<(td|th)\b[^>]*>/gi, ' | ').replace(/<\/tr>/gi, '\n').replace(/<blockquote\b[^>]*>/gi, '\n\n> ')
     .replace(/<\/?(p|div|section|article|main|ul|ol|table|tbody|thead|tr|blockquote|figure|figcaption|dl|dt|dd|header|footer|nav|aside|form|fieldset|details|summary)\b[^>]*>/gi, '\n\n').replace(/<[^>]+>/g, ' ');
   let md = entities(h).replace(/\u0000(\d+)\u0000/g, (m, i) => keep[i]).replace(/\u0000(\d+)\u0000/g, (m, i) => keep[i]);
-  // a fenced block in the page's own text that closes: its fences are lines like any other, its lines are held aside (without
-  // the indentation of the opening fence, as CommonMark reads them); a fence that never closes is no code block.
-  // Linear (verify-3.40 F2): the lines that can close are known in one pass; an opener that finds no close spares every later
-  // opener of its sign as long or longer (none of them can close either); and the search costs at most 4 lines per line of
-  // the page and 10,000 more in all: once that is spent, no fence is read any more and the rest stays text, as before
-  const raw = md.split('\n'), lines = [], closes = raw.map(closerOf), failed = { '`': Infinity, '~': Infinity };
-  let budget = 4 * raw.length + 10_000;
-  for (let i = 0; i < raw.length; i++) {
-    const o = budget > 0 ? FENCE_OPEN.exec(raw[i]) : null;
-    if (o && !(o[2][0] === '`' && o[3].includes('`')) && o[2].length < failed[o[2][0]]) {
-      const sign = o[2][0] === '`' ? 1 : -1; let j = i + 1, found = false;
-      for (; j < raw.length; j++) { if (--budget < 0) break; if (closes[j] * sign >= o[2].length) { found = true; break; } }
-      if (!found && j >= raw.length) failed[o[2][0]] = o[2].length;
-      if (found) { const cut = new RegExp(`^[ \\t]{0,${o[1].length}}`); lines.push(raw[i]); if (j > i + 1) lines.push(aside(codeLines(raw.slice(i + 1, j).map((l) => l.replace(cut, '')).join('\n'), true))); lines.push(raw[j]); i = j; continue; }
-    }
-    lines.push(raw[i]);
-  }
-  let ls = lines.map((l) => l.replace(/[ \t ]+/g, ' ').trim());
+  let ls = md.split('\n').map((l) => l.replace(/[ \t ]+/g, ' ').trim());
   // menus: runs of three or more short link-only items (blank lines between them do not break a run) are navigation, not content
   const navItem = (l) => /^(- )?\[[^\]]{1,40}\]\([^)]+\)$/.test(l) || /^-$/.test(l);
   const drop = new Set();

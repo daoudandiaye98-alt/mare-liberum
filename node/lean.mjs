@@ -440,17 +440,21 @@ function writer(page, base) {
     return out;
   };
   const list = (el, st, ordered) => {
-    // (since 26.11.2026) every line of an item goes two spaces in, a fence and its code alike: so CommonMark nests a fenced
-    // block in a list item. The fences are marked (LIST_FENCE) so that tidy and the last pass leave them where the item set
-    // them; before, tidy set them at the margin and left their code two spaces in per level
-    const shift = (l) => `  ${/^\s*\u0000?```/.test(l) ? l.replace(/^(\s*)\u0000?/, `$1${LIST_FENCE}`) : l}`;
+    // (since 26.11.2026) the lines of an item go two spaces in, as before; a code block in it (its fences and its lines) goes
+    // in by the width of the item's marker (2 for "-", 3 for "1.", 4 for "10."), which is where CommonMark reads the item's
+    // content, so the block nests in the item and its code comes back exactly. Its fences are marked (LIST_FENCE) so that
+    // tidy and the last pass leave them there; before, tidy set them at the margin and left their code in per level
+    const shifter = (w) => { let code = false; const pad = ' '.repeat(w); return (l) => {
+      if (/^\s*\u0000?```/.test(l)) { code = !code; return pad + l.replace(/^(\s*)\u0000?/, `$1${LIST_FENCE}`); }
+      return code ? pad + l : `  ${l}`; }; };
+    const width = (k) => (ordered ? String(k).length + 2 : 2);
     const items = []; let n = 0;
     const item = (k) => {
       const body = tidy(md(k, { ...st, depth: (st.depth || 0) + 1 })); if (!body || !/[\p{L}\p{N}]/u.test(body)) return;
       n++; const [head, ...rest] = body.split('\n').filter((l) => l.trim());
-      items.push(`${ordered ? `${n}.` : '-'} ${head}${rest.length ? `\n${rest.map(shift).join('\n')}` : ''}`);
+      const sh = shifter(width(n)); if (/^\s*\u0000?```/.test(head)) sh(head); items.push(`${ordered ? `${n}.` : '-'} ${head}${rest.length ? `\n${rest.map(sh).join('\n')}` : ''}`);
     };
-    for (const k of el.kids) { if (!isEl(k)) { if (k.trim()) items.push(one(entities(k))); continue; } if (k.tag === 'li') item(k); else if (k.tag === 'ul' || k.tag === 'ol') { const l = list(k, st, k.tag === 'ol'); if (l) items.push(l.split('\n').map(shift).join('\n')); } else item(k); }
+    for (const k of el.kids) { if (!isEl(k)) { if (k.trim()) items.push(one(entities(k))); continue; } if (k.tag === 'li') item(k); else if (k.tag === 'ul' || k.tag === 'ol') { const l = list(k, st, k.tag === 'ol'); if (l) items.push(l.split('\n').map(shifter(width(Math.max(n, 1)))).join('\n')); } else item(k); }
     return items.join('\n');
   };
   const table = (el, st) => {
@@ -478,8 +482,9 @@ function writer(page, base) {
   };
   return { md, links };
 }
-// the mark of a fence a list item set in (writer, list): it stays where it stands, and the mark goes before the answer
-const LIST_FENCE = '\u0000', LIST_FENCE_AT = /^( *)\u0000(?=```)/gm;
+// the mark of a fence a list item set in (writer, list): it stays where it stands. No page can forge it (leanMarkdown drops
+// every NUL of the page first), and every mark goes before the answer, wherever a list's lines ended up (verify-3.40 B2)
+const LIST_FENCE = '\u0000';
 // lines: trimmed, one blank line at most, list indentation and code kept; a fence a list item set in stays there
 function tidy(s) {
   const out = []; let code = false;
@@ -569,6 +574,7 @@ function lastPass(md, { product, seen = new Set(), menus = true } = {}) {
 // on a hostile page the reader takes about 0.5 s a megabyte, so it stays well inside its helper's 3 s
 export const LEAN_MAX = 1_500_000;
 export function leanMarkdown(html, base, { product: wantProduct = true, max = LEAN_MAX } = {}) {
+  html = String(html ?? '').replace(/\u0000/g, '');
   let page; try { page = new URL(base); } catch { page = null; }
   const root = parseHtml(html, { max }), order = measure(root);
   const body = order.find((n) => n.tag === 'body') || root, h1 = headingOf(root);
@@ -640,7 +646,7 @@ export function leanMarkdown(html, base, { product: wantProduct = true, max = LE
   if (h1 && !inRegion(h1)) { const x = one(entities(textOfEl(h1))); if (x) md = `# ${x}\n\n${md}`; }
   // the essentials, under the page's own heading; what the page says after them is said once, without the shop's chatter
   const head = product ? essentialsMd(product, { heading: h1 ? one(entities(textOfEl(h1))).slice(0, 200) : null }) : '';
-  const rest = lastPass(md, { product, seen: new Set(head.split('\n').map(keyOf).filter(Boolean)), menus: region === body }).replace(LIST_FENCE_AT, '$1');
+  const rest = lastPass(md, { product, seen: new Set(head.split('\n').map(keyOf).filter(Boolean)), menus: region === body }).replace(/\u0000/g, '');
   const md2 = [head, rest].filter(Boolean).join('\n\n');
   // the links the Markdown still carries (a menu left out takes its links with it), each as a full address
   // (one walk over the Markdown: after each "](" the address runs to a ")" before the next space)
@@ -649,5 +655,5 @@ export function leanMarkdown(html, base, { product: wantProduct = true, max = LE
     word.lastIndex = i + 2; const tail = word.exec(md2)[0];
     for (let j = tail.indexOf(')'); j >= 0; j = tail.indexOf(')', j + 1)) { const c = tail.slice(0, j); if (shorts.has(c)) kept.add(c); }
   }
-  return { md: md2, links: w.links.filter((l) => kept.has(l.short)).map(({ text, url }) => ({ text, url })), product, cut: root.cut || undefined };
+  return { md: md2, links: w.links.filter((l) => kept.has(l.short)).map(({ text, url }) => ({ text: text.replace(/\u0000/g, ''), url })), product, cut: root.cut || undefined };
 }
