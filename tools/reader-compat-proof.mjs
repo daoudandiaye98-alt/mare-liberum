@@ -119,7 +119,11 @@ const refDir = (() => {
 // the version is the only thing a release changes on these answers: it is masked (a release bumps it, a builder branch does not)
 const VERSIONS = new Set();
 const steady = (s) => { let t = String(s).replace(/\br\d{8}[a-z0-9]{8}\b/g, 'r<id>'); for (const v of VERSIONS) t = t.split(v).join('<version>'); return t; };
-const same = (a, b, what) => { assert.equal(a.status, b.status, `${what}: status`); assert.equal(steady(a.text), steady(b.text), `${what}: body`); assert.deepEqual(Object.fromEntries(Object.entries(a.h).map(([k, v]) => [k, steady(v)])), Object.fromEntries(Object.entries(b.h).map(([k, v]) => [k, steady(v)])), `${what}: headers`); };
+// (since 26.11.2026, tools/reader-code-proof.mjs) code keeps its lines: inside a fenced code block of an answer only the
+// whitespace may differ from the reference (it is read here as the reference wrote it: each line run together and trimmed,
+// blank lines at most one); everything around the code stays byte for byte
+const codeAsBefore = (s) => { const out = []; let fence = null, buf = []; for (const l of String(s).split('\n')) { if (!fence) { const o = /^(`{3,}|~{3,})/.exec(l); out.push(l); if (o) { fence = o[1]; buf = []; } continue; } if (new RegExp(`^${fence[0] === '`' ? '`' : '~'}{${fence.length},}\\s*$`).test(l)) { out.push(buf.map((x) => x.replace(/[ \t\u00a0]+/g, ' ').trim()).join('\n').replace(/\n(- )?\n(?=- )/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+|\n+$/g, '')); out.push(l); fence = null; continue; } buf.push(l); } if (fence) out.push(...buf); return out.join('\n'); };
+const same = (a, b, what) => { assert.equal(a.status, b.status, `${what}: status`); assert.equal(steady(codeAsBefore(a.text)), steady(codeAsBefore(b.text)), `${what}: body`); assert.deepEqual(Object.fromEntries(Object.entries(a.h).map(([k, v]) => [k, steady(v)])), Object.fromEntries(Object.entries(b.h).map(([k, v]) => [k, steady(v)])), `${what}: headers`); };
 const savingsOf = async (n) => { const v = await n.sea().savings(); return { reads: v?.today?.counts?.reads || 0, readBytes: v?.today?.counts?.readBytes || 0 }; };
 
 const node = await nodeOf(ROOT);
