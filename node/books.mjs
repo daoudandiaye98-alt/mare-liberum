@@ -150,7 +150,7 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
   const RPCS = [...new Set((Array.isArray(rpcs) && rpcs.length ? rpcs : rpc ? [rpc] : []).filter((u) => /^https:\/\/[^\s]+$/.test(String(u || ''))))];
   const W = lc(wallet), T = lc(token), on = HEX40.test(W) && HEX40.test(T) && RPCS.length > 0;
   // the provider of this pass (cur), the one kept for an hour after it worked where the first did not (stick, stickUntil)
-  let cur = 0, stick = 0, stickUntil = 0, lastWindowAt = -Infinity;
+  let cur = 0, stick = 0, stickUntil = 0, lastWindowAt = -Infinity, refusal = null;
   // seconds per block, from the chain's own times, measured every hour; widths and windows follow it (chain time, not blocks)
   let spb = 2, spbAt = -Infinity, maxStep = maxStep0;
   const blocksFor = (sec) => Math.max(1, Math.ceil(sec / spb));
@@ -236,7 +236,7 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
     while (x <= b && !stopped) {
       const z = Math.min(x + s - 1, b);
       try { out.push(...(await transfersIn(x, z))); x = z + 1; s = Math.max(minStep, Math.min(maxStep, refusedAgain ?? maxStep, Math.ceil(s * 1.25))); }
-      catch (e) { if (e?.switchProvider) throw e; if (tooWide(e) && s > minStep) { if (z - x + 1 >= s && aboutWidth(e)) { refusedAgain = Math.min(refusedAgain ?? Infinity, Math.floor((z - x + 1) * 0.8)); refusedAgainAt = now(); } s = Math.max(minStep, Math.floor(s / 2)); count('chain_narrowed'); await sleep(pauseMs); continue; } throw e; }
+      catch (e) { if (e?.switchProvider) { refusal = e; return out; } if (tooWide(e) && s > minStep) { if (z - x + 1 >= s && aboutWidth(e)) { refusedAgain = Math.min(refusedAgain ?? Infinity, Math.floor((z - x + 1) * 0.8)); refusedAgainAt = now(); } s = Math.max(minStep, Math.floor(s / 2)); count('chain_narrowed'); await sleep(pauseMs); continue; } throw e; }
       if (x <= b) await sleep(pauseMs);
     }
     return out;
@@ -382,8 +382,9 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
         lastWindowAt = now();
         const back = Math.max(st.start, st.next - again);
         try { const got = await readSpan(back, st.next - 1); const k = await keep(got, recs); if (k == null) throw new Error('the books could not be written'); found += k; count('chain_reread'); }
-        catch (e) { if (e?.switchProvider) throw e; count('chain_reread_failed'); log('mare_books', `the last hour once more: ${String(e?.message || e).slice(0, 160)}`); }
+        catch (e) { count('chain_reread_failed'); log('mare_books', `the last hour once more: ${String(e?.message || e).slice(0, 160)}`); }
       }
+      if (refusal) { const e = refusal; refusal = null; throw e; } // the provider refused the last hour: the next one takes the pass
       let half = null; // the retry of a range that timed out, in halves; the width itself stays
       while (st.next <= safe && ranges < burst && !stopped) {
         const a = st.next, b = Math.min(a + Math.min(step, half ?? step) - 1, safe);

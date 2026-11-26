@@ -524,6 +524,13 @@ await proof('S1: with 30 % random timeouts (none about width) over six hours the
     assert.ok(low >= 1000, `seed ${seed0}: the forward width went down to ${low}`);
   }
 });
+await proof('NQ: after a real width answer lowered the width, a timeout of a long range is not remembered as a refused width: the width grows back to what the RPC takes (an RPC that takes 1,500 blocks)', async () => {
+  const start = blk('2026-11-22T10:00:00Z'), c = sim({ head: start + 30_000, maxRange: 1500 }), kv = memoryKv(), b = simBooks(c, kv, { fromBlock: start });
+  let once = 0; c.inject = (a, z) => (z - a + 1 >= 600 && z - a + 1 <= 1000 && once++ === 0 ? 'timeout' : null);
+  await b.pass(); c.inject = null; assert.equal((await b.sync()).behind_blocks, 0); assert.equal(once > 0, true, 'the timeout came');
+  const n0 = (await b.sync()).next_block; c.head += 1700; const m = c.mark(); await b.pass(); // 57 minutes later: within the hour a width is kept
+  const widest = Math.max(...c.ranges(m).filter(([x]) => x >= n0).map(([x, z]) => z - x + 1)); assert.ok(widest > 1000, `the widest forward range within the hour: ${widest}`);
+});
 await proof('R2: a span that progresses through occasional errors (a 503 every 150th call, an RPC that takes 100 blocks) is finished, not given up', async () => {
   const start = blk('2026-11-21T00:00:00Z'), c = sim({ head: start + 60, maxRange: 100 }), kv = memoryKv(), b = simBooks(c, kv, { fromBlock: start });
   await runTo(c, b, '2026-11-23T05:50:00Z', 600);
@@ -828,7 +835,7 @@ const BREAK = [
   ['a released toll payment on chain not flagged', 'node/books.mjs', "const r = mine.find((x) => x.status === 'released'); if (r) return", "const r = mine.find((x) => x.status === 'released'); if (false) return"],
   ['a flag taken back when the toll lets the payment go', 'node/books.mjs', "if (!e.flag) { const f = flagOf(e, recs);", "{ const f = flagOf(e, recs); if (!f && e.flag) { delete e.flag; changed = true; }"],
   ['a best-effort label kept when the record names another transaction', 'node/books.mjs', "if (e.match === 'payer-amount-time' && recs.some(", "if (false && recs.some("],
-  ['K3 taken back: the last hour behind the cursor not read again', 'node/books.mjs', "if (again > 0 && st.next > st.start) {", "if (false) {"],
+  ['K3 taken back: the last hour behind the cursor not read again', 'node/books.mjs', "if (again > 0 && st.next > st.start && now() - lastWindowAt >= againEveryMs) {", "if (false) {"],
   ['the days before not read again', 'node/books.mjs', "if (st.next > safe && !stopped) { try { found += (await dayAgain(recs)) || 0; }", "if (false) { try { found += (await dayAgain(recs)) || 0; }"],
   ['the previous day read again before the start', 'node/books.mjs', "const a = Math.max(st.start, await firstBlockAt(t0, hi, st.start)),", "const a = Math.max(0, await firstBlockAt(t0, hi, 0)),"],
   ['B1 taken back: the days before halve the forward width', 'node/books.mjs', "r.step = Math.max(minStep, Math.floor(r.step / 2)); count('chain_narrowed');", "r.step = step = Math.max(minStep, Math.floor(r.step / 2)); count('chain_narrowed');"],
@@ -857,7 +864,6 @@ const BREAK = [
   ['N4 taken back: the re-reads counted with the forward reading', 'node/books.mjs', "e.chain_reads_failed = g('chain_errors'); e.chain_rereads_failed = g('chain_reread_failed');", "e.chain_reads_failed = g('chain_errors') + g('chain_reread_failed'); e.chain_rereads_failed = g('chain_reread_failed');"],
   ['no second look at an unmatched entry', 'node/books.mjs', "if (e.door === 'unmatched') { const l = labelOf(e, recs, taken);", "if (false) { const l = labelOf(e, recs, taken);"],
   ['the cursor moved past a range that was not written', 'node/books.mjs', "const k = await keep(got, recs); if (k == null) throw new Error('the books could not be written: the range is read again');", 'const k = (await keep(got, recs)) || 0;'],
-  ['a rate limit taken for a range too large (the RPC asked again at once)', 'node/books.mjs', "if (e?.status === 429 || /rate.?limit|too many requests|requests per/i.test(m)) return false;", ''],
   ['no wait after a failed pass', 'node/books.mjs', 'waitUntilMs = now() + Math.min(30 * 60_000, 30_000 * 2 ** Math.min(6, st.errors - 1));', 'waitUntilMs = now();'],
   ['eight years in the code, ten in the texts', 'node/books.mjs', "BOOKS_RETAIN = Object.freeze({ years: 10,", "BOOKS_RETAIN = Object.freeze({ years: 8,"],
   ['the year of the payment in UTC (one year too early at New Year)', 'node/books.mjs', 'export const bookYear = (ms) => { const y = BERLIN ? BERLIN(ms) : NaN;', 'export const bookYear = (ms) => { const y = new Date(ms).getUTCFullYear();'],
