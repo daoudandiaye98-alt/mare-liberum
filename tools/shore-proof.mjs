@@ -80,9 +80,10 @@ await proof('/.well-known/agents.json maps the agent to its card; /a2a/health is
 });
 await proof('x402 discovery of this origin in the Bazaar shape: the paid move with its v2 terms and how it is called', async () => {
   const d = await j(await call('/discovery/resources'));
-  assert.equal(d.x402Version, 2); assert.equal(d.items.length, 1); const it = d.items[0];
+  assert.equal(d.x402Version, 2); assert.equal(d.items.length, 2); const it = d.items[0]; // since 3.48 the paid read stands second
   assert.equal(it.resource, `${BASE}/route`); assert.equal(it.type, 'http'); assert.equal(it.accepts[0].amount, '20000'); assert.equal(it.accepts[0].network, 'eip155:8453'); assert.equal(it.accepts[0].payTo, HOUSE_WALLET);
-  assert.equal(it.extensions.bazaar.info.input.method, 'POST'); assert.equal(it.extensions.bazaar.info.output.type, 'json'); assert.deepEqual(d.pagination, { limit: 1, offset: 0, total: 1 });
+  assert.equal(it.extensions.bazaar.info.input.method, 'POST'); assert.equal(it.extensions.bazaar.info.output.type, 'json'); assert.deepEqual(d.pagination, { limit: 2, offset: 0, total: 2 });
+  const rd = d.items[1]; assert.equal(rd.resource, `${BASE}/x402/read`); assert.equal(rd.accepts[0].amount, '10000'); assert.equal(rd.accepts[0].payTo, HOUSE_WALLET); assert.equal(rd.extensions.bazaar.info.input.method, 'GET');
 });
 await proof('the 402 lets x402 catalogs list the move: the bazaar extension in PAYMENT-REQUIRED (v2) and outputSchema with discoverable in the v1 terms', async () => {
   const r = await call('/route?q=find+usdc+price', { method: 'POST' }); assert.equal(r.status, 402);

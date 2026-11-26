@@ -309,10 +309,10 @@ await proof('A2A: plain words go to the doors unless they are a purchase', async
 });
 // since 3.46: the x402 indexes (x402scan, Circle's and Coinbase's discovery) read /openapi.json and probe each paid operation for
 // a real 402; only operations that are sold carry x-payment-info, and each of them answers 402 here
-await proof('OpenAPI names the three paid doors in the canonical shapes (price and protocol objects for the AgentCash indexes, offers[] for the MPP draft), each answers 402 without a payment, and no free door carries a price; info.contact has the e-mail', async () => {
+await proof('OpenAPI names the four paid doors in the canonical shapes (price and protocol objects for the AgentCash indexes, offers[] for the MPP draft), each answers 402 without a payment, and no free door carries a price; info.contact has the e-mail', async () => {
   const o = await call('GET', '/openapi.json'); assert.equal(o.j.info.contact.email, 'oroborosdesign@gmail.com');
   const paid = Object.entries(o.j.paths).flatMap(([p, ops]) => Object.entries(ops).filter(([, op]) => op['x-payment-info']).map(([m, op]) => [m.toUpperCase(), p, op]));
-  assert.deepEqual(paid.map(([m, p]) => `${m} ${p}`).sort(), ['POST /reader/credit', 'POST /reader/credit/stripe', 'POST /route']);
+  assert.deepEqual(paid.map(([m, p]) => `${m} ${p}`).sort(), ['GET /x402/read', 'POST /reader/credit', 'POST /reader/credit/stripe', 'POST /route'] /* GET /x402/read since 3.50 */);
   for (const [m, p, op] of paid) {
     const x = op['x-payment-info']; assert.ok(op.responses['402'], `${p}: a 402 response`);
     assert.equal(x.price.mode, 'fixed'); assert.equal(x.price.currency, 'USD'); assert.match(x.price.amount, /^\d+\.\d{2}$/);
@@ -325,7 +325,7 @@ await proof('OpenAPI names the three paid doors in the canonical shapes (price a
     assert.deepEqual(x.protocols, [{ x402: {} }]);
     const r = await call(m, p === '/route' ? '/route?q=find+usdc+price' : p); assert.equal(r.status, 402, `${m} ${p} without a payment`);
   }
-  assert.equal(o.j.paths['/route'].post['x-payment-info'].price.amount, '0.02'); assert.equal(o.j.paths['/reader/credit'].post['x-payment-info'].price.amount, '0.05');
+  assert.equal(o.j.paths['/route'].post['x-payment-info'].price.amount, '0.02'); assert.equal(o.j.paths['/reader/credit'].post['x-payment-info'].price.amount, '0.05'); assert.equal(o.j.paths['/x402/read'].get['x-payment-info'].price.amount, '0.01');
   // since 3.47: every free operation says security: [] (the indexes leave it out of their probe), and the credit door has an input schema
   for (const [p, ops] of Object.entries(o.j.paths)) for (const [m, op] of Object.entries(ops)) if (!op['x-payment-info']) assert.deepEqual(op.security, [], `${m} ${p}: security []`); else assert.equal(op.security, undefined, `${m} ${p}: a paid door has no security override`);
   assert.equal(o.j.paths['/reader/credit'].post.requestBody.content['application/json'].schema.type, 'object');
