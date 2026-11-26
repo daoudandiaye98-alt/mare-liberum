@@ -307,6 +307,18 @@ await proof('A2A: plain words go to the doors unless they are a purchase', async
   const b = await call('POST', '/a2a', { jsonrpc: '2.0', id: 2, method: 'message/send', params: { message: { role: 'user', parts: [{ kind: 'data', data: { skill: 'route', q: 'weather in Lyon' } }] } } });
   assert.equal(b.j.result.parts.find((p) => p.kind === 'data').data.doors[0].id, 'wttr');
 });
+// since 3.46: the x402 indexes (x402scan, Circle's and Coinbase's discovery) read /openapi.json and probe each paid operation for
+// a real 402; only operations that are sold carry x-payment-info, and each of them answers 402 here
+await proof('OpenAPI names the two paid doors for the x402 indexes (x-payment-info, a fixed USD price, a 402 response), each answers 402 without a payment, and no free door carries a price; info.contact has the e-mail', async () => {
+  const o = await call('GET', '/openapi.json'); assert.equal(o.j.info.contact.email, 'oroborosdesign@gmail.com');
+  const paid = Object.entries(o.j.paths).flatMap(([p, ops]) => Object.entries(ops).filter(([, op]) => op['x-payment-info']).map(([m, op]) => [m.toUpperCase(), p, op]));
+  assert.deepEqual(paid.map(([m, p]) => `${m} ${p}`).sort(), ['POST /reader/credit', 'POST /route']);
+  for (const [m, p, op] of paid) {
+    const x = op['x-payment-info']; assert.deepEqual(x.protocols, ['x402']); assert.equal(x.price.mode, 'fixed'); assert.equal(x.price.currency, 'USD'); assert.match(x.price.amount, /^\d+\.\d{2}$/); assert.ok(op.responses['402'], `${p}: a 402 response`);
+    const r = await call(m, p === '/route' ? '/route?q=find+usdc+price' : p); assert.equal(r.status, 402, `${m} ${p} without a payment`);
+  }
+  assert.equal(o.j.paths['/route'].post['x-payment-info'].price.amount, '0.02'); assert.equal(o.j.paths['/reader/credit'].post['x-payment-info'].price.amount, '0.05');
+});
 await proof('the door is in the open descriptions: OpenAPI, agent card, sitemap, link header', async () => {
   const o = await call('GET', '/openapi.json'); assert.ok(o.j.paths['/route.json']);
   const c = await call('GET', '/.well-known/agent-card.json'); assert.ok(c.j.skills.some((s) => s.id === 'route'));
