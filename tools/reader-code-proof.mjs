@@ -280,7 +280,7 @@ await proof('no answer of any shape carries a NUL: a list holding code in a quot
   }
   assert.ok(n >= 70, `${n} answers`);
   // a page cannot forge a mark: its own NULs go first, so a page with them reads as the same page without them
-  const forged = `<html><body><main><h1>Forged</h1><p>${WORDS}</p><p>\u0000c0\u0000</p><p>\u0000\u00000\u0000</p><ul><li>x<pre>a\n  b</pre></li></ul><p>\u0000\`\`\`python</p><p>y</p><p>\u0000\`\`\`</p><pre>real\n  code</pre></main></body></html>`;
+  const forged = `<html><body><main><h1>Forged</h1><p>${WORDS}</p><p>\u0000c0\u0000</p><p>\u0000\u00000\u0000</p><ul><li>x<pre>a\n  b</pre></li></ul><p>\u0000\`\`\`python</p><p>y</p><p>\u0000\`\`\`</p><pre>real\n  code</pre><pre>a\n  \u0000\`\`\`\n  b</pre></main></body></html>`;
   for (const html of [forged, PAGES.get(`${P}/wrapped/NULs-in-the-page`)]) {
     const clean = html.replace(/\u0000/g, '');
     assert.equal(node.lean.leanMarkdown(html, `${P}/f`).md, node.lean.leanMarkdown(clean, `${P}/f`).md, 'lean: the same as the page without its NULs');
@@ -368,7 +368,8 @@ const BREAK = [
   ['the fence of a list item\'s code at the margin, its code two spaces in (fbf500e)', 'node/lean.mjs', 'out.push(raw.includes(LIST_FENCE) ? raw.trimEnd() : raw.trim());', 'out.push(raw.trim());'],
   ['the fixed two-space shift for the code of ordered items (B3)', 'node/lean.mjs', 'const width = (k) => (ordered ? String(k).length + 2 : 2);', 'const width = () => 2;'],
   ['the final NUL sweep of the lean reader removed (B2)', 'node/lean.mjs', "menus: region === body }).replace(/\\u0000/g, '');", 'menus: region === body });'],
-  ['a page\'s own NULs let in (B2)', 'node/lean.mjs', "  html = String(html ?? '').replace(/\\u0000/g, '');\n", "  html = String(html ?? '');\n"],
+  ['a page\'s own NULs let into toMarkdown (B2)', 'node/reader.mjs', "  let h = String(html || '').replace(/\\u0000/g, '').replace(", "  let h = String(html || '').replace("],
+  ['a page\'s own NULs let into the lean reader (B2)', 'node/lean.mjs', "  html = String(html ?? '').replace(/\\u0000/g, '');\n", "  html = String(html ?? '');\n"],
   ['marker slices held as fences, back() not recursive (5bef5ae, B1)', 'node/reader.mjs', "  let ls = md.split('\\n').map((l) =>", "  { const raw = md.split('\\n'), o2 = []; for (let i = 0; i < raw.length; i++) { if (/^[ \\t]*(```|~~~)/.test(raw[i])) { let j = i + 1; while (j < raw.length && raw[j].trim() !== raw[i].trim()) j++; if (j < raw.length) { o2.push(raw[i], `\\u0000c${codes.push(raw.slice(i + 1, j).join('\\n').replace(/\\u0000c/g, '\\u0000C')) - 1}\\u0000`, raw[j]); i = j; continue; } } o2.push(raw[i]); } md = o2.join('\\n'); }\n  let ls = md.split('\\n').map((l) =>"],
   ['a tab of a Makefile written as spaces', 'node/reader.mjs', ".replace(/\\u00a0/g, ' ').split('\\n')", ".replace(/\\u00a0/g, ' ').replace(/\\t/g, '    ').split('\\n')"],
   ['outside code, spaces no longer run together', 'node/reader.mjs', "  let ls = md.split('\\n').map((l) => l.replace(", "  let ls = md.split('\\n').map((l) => l.trim() || l.replace("],
