@@ -610,13 +610,16 @@ await proof('the provider that worked is kept for an hour (the first is not aske
   const t = (await kv.get('books:t:2026-11-22')) || {}; assert.equal(t.chain_provider_switched, 2, 'two changes: at the start and after the hour');
 });
 
-await proof('PF: a measured block time outside 0.05–5 s is refused (a wrong head time giving 0.00001 s, or 60 s): the reading goes on at the block time it had; refused measurements are counted and tried again on the next pass', async () => {
-  for (const [what, v] of [['0.00001 s', 1e-5], ['60 s', 60]]) {
+await proof('PF: a measured block time outside 0.05–5 s is refused (a wrong head time giving 0.00001 s, or 30 s): the reading goes on at the block time it had; refused measurements are counted and tried again on the next pass', async () => {
+  for (const [what, v] of [['0.00001 s', 1e-5], ['30 s', 30]]) {
     const start = blk('2026-11-22T10:00:00Z'), c = sim({ head: start + 3000, logs: [simLog(start + 2500)] }), kv = memoryKv(), b = simBooks(c, kv, { fromBlock: start });
     c.badTime = (n) => (n === c.head ? T00 + 2 * (c.head - Math.min(100_000, c.head - 1)) + Math.round(v * Math.min(100_000, c.head - 1)) : null);
     const r = await b.pass(); assert.ok(!r.error, r.error); assert.equal((await b.sync()).seconds_per_block, 2, `${what} refused`);
     assert.equal((await b.entries()).length, 1, `${what}: the reading went on`); assert.equal((await b.sync()).behind_blocks, 0);
     const m = c.mark(); c.head += 30; await b.pass(); assert.ok(c.calls.slice(m).some((x) => x.method === 'eth_getBlockByNumber'), `${what}: measured again on the next pass`);
+    // the same wrong value twice in a row (it would agree with itself): still refused, and the reading goes on
+    c.logs.push(simLog(c.head + 5)); c.head += 90; await b.pass(); c.head += 30; await b.pass(); // a transfer ahead of the cursor
+    assert.equal((await b.sync()).seconds_per_block, 2, `${what}: refused however often it comes`); assert.equal((await b.entries()).length, 2, `${what}: the next transfer booked`);
     assert.ok(((await b.digest({ days: 1 })).days[0], true)); const t = (await kv.get('books:t:2026-11-22')) || {}; void t;
   }
 });
@@ -891,7 +894,7 @@ const BREAK = [
   ['NP taken back: a timeout near the head retried at once', 'node/books.mjs', "(aboutWidth(e) || w > 120) && w > minStep", "(aboutWidth(e) || w > 0) && w > minStep"],
   ['NQ taken back: a long range that timed out remembered as refused', 'node/books.mjs', "if (full && aboutWidth(e)) { refused = Math.min(refused ?? Infinity, Math.floor(w * 0.8)); refusedAt = now(); }", "if ((full && aboutWidth(e)) || w > 120) { refused = Math.min(refused ?? Infinity, Math.floor(w * 0.8)); refusedAt = now(); }"],
   ['no fallback: a provider that refuses eth_getLogs keeps the pass', 'node/books.mjs', "if (e?.switchProvider && cur + 1 < RPCS.length) {", "if (false) {"],
-  ['windows in blocks again: the block time never measured', 'node/books.mjs', "if (v > 0 && v < 60) spb = v;", "if (false) spb = v;"],
+  ['windows in blocks again: the block time never measured', 'node/books.mjs', "spb = v; spbPending = null; spbAt = now();", "spbPending = null; spbAt = now();"],
   ['the last hour read again every pass', 'node/books.mjs', "now() - lastWindowAt >= againEveryMs", "true"],
   ['the provider that worked not kept for the hour', 'node/books.mjs', "cur = t < stickUntil ? stick : 0;", "cur = 0;"],
   ['PF taken back: no lower bound on the block time', 'node/books.mjs', "if (!(v >= 0.05 && v <= 5)) {", "if (!(v > 0 && v <= 5)) {"],
