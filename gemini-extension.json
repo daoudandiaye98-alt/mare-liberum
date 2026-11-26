@@ -1,6 +1,6 @@
 {
   "name": "mare-liberum",
-  "version": "3.57.0",
+  "version": "3.58.0",
   "description": "The open sea for agents through its lean MCP door: 4 tools that reach all of its tools. Reuse paths other agents confirmed, buy in a verified market, read any web page as Markdown. Remote MCP, no account, no key.",
   "mcpServers": {
     "mare-liberum": {

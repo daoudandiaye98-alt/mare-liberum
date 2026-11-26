@@ -16,7 +16,8 @@
 import { USDC_BASE } from './pricing.mjs';
 import { TOKEN_RATIO, tokensOf } from './proof.mjs';
 
-export const READPAY = Object.freeze({ cents: 1, micro: 10_000, path: '/x402/read' });
+// pages: how many pages one payment reads at the paid read's own door (since 3.57: one cent for up to ten pages)
+export const READPAY = Object.freeze({ cents: 1, micro: 10_000, path: '/x402/read', pages: 10 });
 export const usd6 = (micro) => (Number(micro) / 1e6).toFixed(6);
 export const b64 = (s) => Buffer.from(s, 'utf8').toString('base64');
 const DAY = 86400;
@@ -26,17 +27,17 @@ export function readBazaar(base) {
   const b = String(base || '').replace(/\/+$/, '');
   return { info: {
     input: { type: 'http', method: 'GET', queryParams: { url: 'https://example.com/' } },
-    output: { type: 'json', example: { url: 'https://example.com/', title: 'Example Domain', lang: 'en', markdown: '# Example Domain\n\nThis domain is for use in documentation examples…', tokens: { html: 160, markdown: 43, saved: 117, saved_pct: 73 }, paid: { amount_usd: '0.010000', status: 'settled', treasury: `${b}/treasury` } } },
+    output: { type: 'json', example: { url: 'https://example.com/', title: 'Example Domain', lang: 'en', markdown: '# Example Domain\n\nThis domain is for use in documentation examples…', tokens: { html: 160, markdown: 43, saved: 117, saved_pct: 73 }, warden: { checked: true, flagged: false, hits: [] }, paid: { amount_usd: '0.010000', status: 'settled', treasury: `${b}/treasury` } } },
   },
   // the same as JSON Schema (since 3.54): the indexes that build the call from the 402 itself (AgentCash, x402scan) read the
   // query parameters and the answer from here (schema.properties.input.properties.queryParams, …output.properties.example)
   schema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object', required: ['input'], properties: {
     input: { type: 'object', required: ['type', 'method', 'queryParams'], properties: {
       type: { type: 'string', const: 'http' }, method: { type: 'string', enum: ['GET'] },
-      queryParams: { type: 'object', required: ['url'], additionalProperties: false, properties: { url: { type: 'string', format: 'uri', description: 'the public page to read (http or https)' } } } } },
+      queryParams: { type: 'object', required: ['url'], additionalProperties: false, properties: { url: { type: 'string', format: 'uri', description: 'the public page to read (http or https); repeat url= for up to 10 pages in one call, one payment' } } } } },
     output: { type: 'object', properties: {
       type: { type: 'string', const: 'json' },
-      example: { type: 'object', required: ['url', 'markdown', 'tokens', 'paid'], properties: { url: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' }, lang: { type: 'string' }, words: { type: 'number' }, markdown: { type: 'string', description: 'the page as Markdown' }, tokens: { type: 'object', properties: { html: { type: ['number', 'null'] }, markdown: { type: ['number', 'null'] }, saved: { type: ['number', 'null'] }, saved_pct: { type: ['number', 'null'] } } }, paid: { type: 'object', properties: { status: { type: 'string' }, amount_usd: { type: 'string' }, sale: { type: 'string' }, tx: { type: 'string' }, treasury: { type: 'string' } } } } } } } } } };
+      example: { type: 'object', required: ['paid'], properties: { pages: { type: 'array', description: 'with more than one url=: each page with its markdown, tokens and warden, or its error' }, warden: { type: 'object', description: 'lines that read like instructions to an AI (prompt injection)' }, url: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' }, lang: { type: 'string' }, words: { type: 'number' }, markdown: { type: 'string', description: 'the page as Markdown' }, tokens: { type: 'object', properties: { html: { type: ['number', 'null'] }, markdown: { type: ['number', 'null'] }, saved: { type: ['number', 'null'] }, saved_pct: { type: ['number', 'null'] } } }, paid: { type: 'object', properties: { status: { type: 'string' }, amount_usd: { type: 'string' }, sale: { type: 'string' }, tx: { type: 'string' }, treasury: { type: 'string' } } } } } } } } } };
 }
 
 // the terms of one paid read, in both shapes x402 knows (as the paid route's, node/pay.mjs termsFor)
@@ -45,11 +46,11 @@ export function readTerms(cfg, { base, resource: at = null, method = 'GET' }) {
   // where it was); by default the paid read's door. Only that door is listed in the x402 indexes (discoverable, the bazaar
   // extension): a page bought at /r/ or at a scrape door is the same sale, and an index must not list every page as a service
   const b = String(base || '').replace(/\/+$/, ''), resource = at || `${b}${READPAY.path}`, atomic = String(READPAY.micro), listed = !at;
-  const description = 'Mare Liberum: one public web page as clean, token-lean Markdown (robots.txt respected), with its token count against the raw HTML; 0.01 USDC per page, no account, no key';
+  const description = 'Mare Liberum: up to 10 public web pages per call as clean, token-lean Markdown (robots.txt respected), each with its token count against the raw HTML and a prompt-injection warden; 0.01 USDC per call, so 0.001 USDC a page, no account, no key';
   const extra = { name: 'USD Coin', version: '2' };
   const outputSchema = {
-    input: listed ? { type: 'http', method: 'GET', discoverable: true, queryParams: { url: { type: 'string', required: true, description: 'the public page to read (http or https)' } } } : { type: 'http', method, discoverable: false },
-    output: { type: 'object', properties: { url: { type: 'string' }, title: { type: 'string' }, markdown: { type: 'string', description: 'the page as Markdown' }, tokens: { type: 'object', description: 'html, markdown, saved, saved_pct (estimated with the calibrated ratio of /proof)' }, paid: { type: 'object' } } },
+    input: listed ? { type: 'http', method: 'GET', discoverable: true, queryParams: { url: { type: 'string', required: true, description: 'the public page to read (http or https); repeat url= for up to 10 pages in one call' } } } : { type: 'http', method, discoverable: false },
+    output: { type: 'object', properties: { url: { type: 'string' }, title: { type: 'string' }, markdown: { type: 'string', description: 'the page as Markdown' }, tokens: { type: 'object', description: 'html, markdown, saved, saved_pct (estimated with the calibrated ratio of /proof)' }, warden: { type: 'object', description: 'lines that read like instructions to an AI (prompt injection), by kind and line' }, pages: { type: 'array', description: 'with more than one url=: each page as above, or its error' }, paid: { type: 'object' } } },
   };
   const v1 = { scheme: 'exact', network: 'base', maxAmountRequired: atomic, resource, description, mimeType: 'application/json', outputSchema, payTo: cfg.payTo, maxTimeoutSeconds: cfg.window, asset: USDC_BASE, extra };
   const v2 = { scheme: 'exact', network: 'eip155:8453', amount: atomic, asset: USDC_BASE, payTo: cfg.payTo, maxTimeoutSeconds: cfg.window, extra };
@@ -62,9 +63,9 @@ export function readRequired(t, { base, error, cors = {} }) {
   const v2 = { x402Version: 2, error: error || 'PAYMENT-SIGNATURE header is required', resource: { url: t.resource, description: t.description, mimeType: 'application/json' }, accepts: [t.v2], ...(t.listed === false ? {} : { extensions: { bazaar: readBazaar(b) } }) };
   const body = { x402Version: 1, error: error || 'X-PAYMENT header is required', accepts: [t.v1],
     amount_usd: usd6(t.micro), unit: 'USDC on Base, 6 decimals (maxAmountRequired is in millionths of a dollar)', what: t.description,
-    call: `GET ${b}${READPAY.path}?url=<the page> (or POST {"url": "<the page>"}); an x402 client pays this 402 by itself and gets the page in the same exchange`,
+    call: `GET ${b}${READPAY.path}?url=<the page> (repeat url= for up to ${READPAY.pages} pages, or POST {"urls": ["<page>", …]}); one payment reads them all; an x402 client pays this 402 by itself and gets the pages in the same exchange`,
     pay: ['x402 v2: call again with the header PAYMENT-SIGNATURE (the PAYMENT-REQUIRED header holds the terms, base64 JSON)', 'x402 v1: call again with the header X-PAYMENT (the terms are in "accepts" of this body)'],
-    exact: 'a payment of exactly this amount; any other is not taken. A page that cannot be read (robots.txt, an error) is not charged',
+    exact: 'a payment of exactly this amount; any other is not taken. A call whose pages cannot be read (robots.txt, an error) is not charged; with several pages, one read page is enough for the payment and the others are named', warden: 'every paid page names the lines that read like instructions to an AI (prompt injection); the text itself is not changed',
     pay_to: t.payTo, network: 'Base (eip155:8453)', asset: 'USDC', window_seconds: t.window, terms: `${b}/terms#s4`, page: `${b}/reader`,
     note: 'No account, no key. The USDC goes from your wallet straight to the address above; the sea never holds anyone\'s money.' };
   const short = { scheme: 'exact', network: 'base', to: t.payTo, payTo: t.payTo, amount_usd: usd6(t.micro), decimals: 6, asset: 'USDC', maxTimeoutSeconds: t.window, read: `${b}${READPAY.path}` };
@@ -110,6 +111,14 @@ export function readTarget(x) {
   const s = String(x ?? '').trim();
   if (!s || s.length > 2000 || !/^https?:\/\/[^\s/?#]+\.[^\s/?#]+/i.test(s)) return null;
   try { const u = new URL(s); return /^https?:$/.test(u.protocol) ? u.toString() : null; } catch { return null; }
+}
+
+// the pages one call asks for (since 3.57): the addresses the reader takes, without repeats, at most READPAY.pages
+// → { targets, asked, tooMany }; an address the reader does not take is left out (no target at all: the door says so)
+export function readTargets(list) {
+  const asked = (Array.isArray(list) ? list : []).filter((x) => x != null && String(x).trim() !== '');
+  const targets = [...new Set(asked.map(readTarget).filter(Boolean))];
+  return { targets: targets.slice(0, READPAY.pages), asked: asked.length, tooMany: asked.length > READPAY.pages };
 }
 
 // what a page weighs for a model: its HTML and its Markdown in tokens, estimated with the calibrated ratio of /proof
