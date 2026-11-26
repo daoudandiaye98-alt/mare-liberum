@@ -15,6 +15,7 @@ import { paidRoute } from '../node/paid.mjs';
 import { setViaKey, decodeVia } from '../node/via.mjs';
 import { pricingOf, priceLine, withPrice, PRICING, DEFAULT_CENTS } from '../node/pricing.mjs';
 import { readFileSync } from 'node:fs';
+import { createHash } from 'node:crypto';
 
 let passed = 0, failed = 0;
 const proof = async (name, fn) => { try { await fn(); passed++; console.log(`  ok   ${name}`); } catch (e) { failed++; console.log(`  FAIL ${name}\n       ${String(e?.stack || e).split('\n').slice(0, 4).join('\n       ')}`); } };
@@ -351,6 +352,24 @@ await proof('the resident skill is one file in two places (site, skills/), versi
   assert.match(site, /^---\nname: mare-liberum\nversion: 4\.1\.0\n/);
   for (const w of [priceLine(PRICING), '&free=true', '/pay/howto', '/treasury', '/pulse', '/via/<token>']) assert.ok(site.includes(w), w);
   assert.equal(JSON.parse(read('site/skill.json')).version, '4.1.0'); assert.equal(JSON.parse(read('.claude-plugin/marketplace.json')).plugins[0].version, '5.0.0'); assert.equal(JSON.parse(read('plugins/mare-liberum/.claude-plugin/plugin.json')).version, '5.0.0');
+});
+// the reading skill (since 3.51 in the index of /.well-known/agent-skills): one file in two places, skills/ for installers that
+// read the repository and site/ for the node, which names it beside the resident skill with the digest of the bytes it serves
+await proof('the reading skill lean-web-reading is one file in two places (skills/, site/); /.well-known/agent-skills names it after the resident skill, each with the sha256 of the bytes served', async () => {
+  const read = (f) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
+  const lean = read('skills/lean-web-reading/SKILL.md'); assert.equal(read('site/lean-web-reading.md'), lean); assert.match(lean, /^---\nname: lean-web-reading\ndescription: /);
+  for (const bad of [/heartbeat/i, /and follow it/i, /YOUR_SECRET/, /\bpayTo\b/, /\/via\//, /x402/i, /wallet/i]) assert.ok(!bad.test(lean), `the reading skill must not carry ${bad}`);
+  const site = { '/skill.md': { body: read('site/skill.md'), type: 'text/markdown; charset=utf-8' }, '/lean-web-reading.md': { body: lean, type: 'text/markdown; charset=utf-8' } };
+  const get = async (p) => handle(new Request(`${BASE}${p}`, { headers: { 'user-agent': 'proof-agent/1.0' } }), db, { base: BASE, pay: PAY, site, ledger: createLedger({}), waitUntil: () => {} });
+  const idx = await (await get('/.well-known/agent-skills/index.json')).json(); assert.deepEqual(idx.skills.map((s) => s.name), ['mare-liberum', 'lean-web-reading']);
+  for (const s of idx.skills) {
+    const r = await get(new URL(s.url).pathname); assert.equal(r.status, 200, s.name); assert.match(r.headers.get('content-type'), /^text\/markdown/);
+    const body = await r.text(); assert.equal(s.digest, `sha256:${createHash('sha256').update(body).digest('hex')}`, `${s.name}: the digest of the bytes served`); assert.equal(s.type, 'skill-md');
+  }
+  assert.equal(await (await get('/.well-known/agent-skills/lean-web-reading/SKILL.md')).text(), lean); assert.ok(idx.skills[1].description.startsWith('Read public web pages with far fewer tokens.'));
+  assert.equal((await get('/.well-known/agent-skills/nothing/SKILL.md')).status, 404, 'a skill it does not have');
+  const one = await (await handle(new Request(`${BASE}/.well-known/agent-skills/index.json`, { headers: { 'user-agent': 'proof-agent/1.0' } }), db, { base: BASE, pay: PAY, site: { '/skill.md': site['/skill.md'] }, ledger: createLedger({}), waitUntil: () => {} })).json();
+  assert.deepEqual(one.skills.map((s) => s.name), ['mare-liberum'], 'a node without the reading skill names the resident skill alone, as before');
 });
 // the plugin's skill (5.0.0, after the security agent of cursor.directory on 26.11.2026): a guide to the MCP tools only. It must never
 // bring back the remote-control pattern: no fetched file to follow, no heartbeat, no secret to make or register, no wallet, no

@@ -45,7 +45,8 @@ export const COSTS = [{ what: 'the server: one Hetzner CX23 (2 vCPU, 4 GB) behin
 // then the page says how long this node has run it. No day is written before it happened.
 const REPO = 'https://github.com/daoudandiaye98-alt/mare-liberum';
 export const RELEASES = [
-  ['3.50.0', null, null, 'the sold doors in the words of a catalog search: in /openapi.json the two credit doors are titled "Web page to Markdown: reader credit" and say what they sell (any public web page as clean Markdown, robots.txt followed, a drop-in for Jina Reader and Firecrawl, 0.001 USD a page, the token as x-sea-credit or a Firecrawl api key), with tags; the paid route says it is the shared brain sold in full for one task'],
+  ['3.51.0', null, null, 'the reading skill where installers look: /.well-known/agent-skills/index.json names lean-web-reading after the resident skill, each with the sha256 of the bytes served, so that an installer reading this domain finds it; the skill is one file in two places (skills/ in the repository, site/ for the node)'],
+  ['3.50.0', '2026-11-26T14:34:33+01:00', 42, 'the sold doors in the words of a catalog search: in /openapi.json the two credit doors are titled "Web page to Markdown: reader credit" and say what they sell (any public web page as clean Markdown, robots.txt followed, a drop-in for Jina Reader and Firecrawl, 0.001 USD a page, the token as x-sea-credit or a Firecrawl api key), with tags; the paid route says it is the shared brain sold in full for one task'],
   ['3.49.0', '2026-11-26T14:12:33+01:00', 41, 'the card till is findable and in the terms: every paid door in /openapi.json has the canonical shapes of the AgentCash discovery spec (price and protocol objects, read by x402scan and MppScan) and of the MPP discovery draft (offers[] on the card door, read by mpp.dev), /route takes its task as JSON too, and info.x-guidance and x-service-info say in short what is sold; the MPP challenge names its recipient (the Stripe profile) and the 402 says x-payment-protocol: mpp; the limit answer, /reader, /pricing, llms.txt, AGB and terms § 5a, the privacy notice (section 10) and the price list name the card door: 0.50 USD for 500 pages by card or Link'],
   ['3.48.0', '2026-11-26T13:40:41+01:00', 40, 'the card till: agents pay with a card or Link over MPP (the Machine Payments Protocol, method stripe), not only with USDC over x402. POST /reader/credit/stripe answers 402 with a Payment challenge and sells 500 pages of reader credit for 0.50 USD to a Stripe Shared Payment Token granted to the sea’s Stripe profile; the charge is made by the Edge Function mare-mpp, which alone holds the restricted key; one challenge buys once, one PaymentIntent mints once, and the answer carries a Payment-Receipt'],
   ['3.47.0', '2026-11-26T11:43:28+01:00', 39, 'the x402 indexes probe only what is sold: every free operation of /openapi.json says security: [], and the credit door has an input schema (nothing to send but the payment); POST /route stands in x402scan since 26.11.2026'],
@@ -143,7 +144,7 @@ export const ENDPOINTS = [
     ['/.well-known/agent-card.json', 'the A2A agent card'],
     ['/.well-known/mcp/server-card.json', 'the MCP server card'],
     ['/.well-known/ard.json', 'the ARD manifest of the open index'],
-    ['/.well-known/agent-skills/index.json', 'the agent skill, with the digest of its bytes'],
+    ['/.well-known/agent-skills/index.json', 'the agent skills (the resident skill and lean-web-reading), each with the digest of its bytes'],
     ['/.well-known/x402', 'the paid route over x402: price, wallet and how to pay'],
     ['/discovery/resources', 'the x402 resources of this address, in the shape of the Bazaar catalogs'],
     ['/.well-known/did.json', 'the DID document of the sea'],
