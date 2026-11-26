@@ -813,6 +813,18 @@ await proof('/status.json gains counts: numbers only (and the day), no address, 
 const firstDiff = (x, y) => { let i = 0; while (i < x.length && x[i] === y[i]) i++; return `at ${i}: ${JSON.stringify(x.slice(Math.max(0, i - 120), i + 120))} <> ${JSON.stringify(y.slice(Math.max(0, i - 120), i + 120))}`; };
 // (the moment each tree's modules were first loaded, runningSince of /open.json, is the only thing told apart: this tree's came first)
 const since0 = (t) => t.replace(/"runningSince":"[^"]*"/g, '"runningSince":"<start>"')
+  // (and the operators' till of 3.55 where it is sold, proven by tools/checkout-proof.mjs, tools/attention-proof.mjs and tools/legal-proof.mjs:
+  // a row and a sentence of /pricing, a clause of llms.txt, AGB and terms § 2, § 4 (3) f and § 5a (7), a row of /de/preise;
+  // the privacy notice's new paragraph is cut below)
+  .replace(/<tr id="reader">[\s\S]*?<\/tr>\n?/g, '')
+  .replace(/,\{"@type":"Offer","name":"Reader credit for operators","url":"[^"]*","price":10,"priceCurrency":"EUR","seller":\{[^{}]*\}\}/g, '')
+  .replace(/ For operators \(business customers only\): <a href="\/c\/reader\?from=pricing">10,000 pages for 10 € by card<\/a>, the token right after paying\./g, '')
+  .replace(/ For operators \(business customers only\): 10,000 pages for 10 € by card in the browser at \S+\/c\/reader\?from=pricing, the token right after paying\./g, '')
+  .replace(/; for operators \(businesses\) by card in the browser: \S+\/c\/reader, 10 EUR for 10,000 pages/g, '')
+  .replace(/, <a href="\/reader">\/reader<\/a>\) (ist kein bindendes|are not binding)/g, ') $1')
+  .replace(/<br>f\) (?:Leser-Guthaben für Betreiber|Reader credit for operators) \([\s\S]*?<br>g\) (Institution)/g, '<br>f) $1')
+  .replace(/\n<p>\(\d+\) (?:Für Betreiber, mit Karte im Browser|For operators, by card in the browser): [\s\S]*?<\/p>/g, '')
+  .replace(/<tr><td[^>]*>Leser-Guthaben für Betreiber \([\s\S]*?<\/tr>\n?/g, '')
   // (and the Stand of the legal texts: a release that changes any of them sets the day of the release, node/legal.mjs STAND)
   .replace(/Stand: \d{2}\.\d{2}\.\d{4}/g, 'Stand: <day>').replace(/"stand":"\d{2}\.\d{2}\.\d{4}"/g, '"stand":"<day>"')
   // (and the list of releases of /open.json: a release adds its own line and gives the one before its day)
@@ -856,7 +868,7 @@ await proof('every other public answer as on origin/main (the pages, the data, /
   // (/operator itself is the operator's page since night/operator, proven by tools/operator-proof.mjs: new here, no door there)
   { const a = await MINE.call('/operator', { accept: 'text/html' }), b = await THEIRS.call('/operator', { accept: 'text/html' }); assert.equal(b.status, 404, '/operator on origin/main'); assert.equal(a.status, 200, '/operator here'); assert.equal(a.headers.get('cache-control'), 'no-store'); assert.match(a.headers.get('x-robots-tag') || '', /noindex/); }
   sameText(await MINE.rpc('/mcp', 'tools/list'), await THEIRS.rpc('/mcp', 'tools/list'), '/mcp tools/list');
-  const NEW = { '/de/datenschutz': [/\n<p>\(7\) Das Kassenbuch aus der Blockchain: [^<]*<\/p>/, /<tr><td>Kassenbuch aus der Blockchain[^\n]*<\/tr>\n/, /\n<p>\(4\) Leser-Guthaben mit Karte oder Link [\s\S]*?<\/p>/], '/privacy': [/\n<p>\(7\) The cash book from the blockchain: [^<]*<\/p>/, /<tr><td>Cash book from the blockchain[^\n]*<\/tr>\n/, /\n<p>\(4\) Reader credit by card or Link [\s\S]*?<\/p>/] };
+  const NEW = { '/de/datenschutz': [/\n<p>\(7\) Das Kassenbuch aus der Blockchain: [^<]*<\/p>/, /<tr><td>Kassenbuch aus der Blockchain[^\n]*<\/tr>\n/, /\n<p>\(4\) Leser-Guthaben mit Karte oder Link [\s\S]*?<\/p>/, /\n<p>\(5\) Leser-Guthaben für Betreiber [\s\S]*?<\/p>/], '/privacy': [/\n<p>\(7\) The cash book from the blockchain: [^<]*<\/p>/, /<tr><td>Cash book from the blockchain[^\n]*<\/tr>\n/, /\n<p>\(4\) Reader credit by card or Link [\s\S]*?<\/p>/, /\n<p>\(5\) Reader credit for operators [\s\S]*?<\/p>/] };
   for (const [p, cut] of Object.entries(NEW)) {
     const a = await MINE.call(p, { accept: 'text/html' }), b = await THEIRS.call(p, { accept: 'text/html' });
     let t = a.text; for (const re of cut) { assert.ok(re.test(t), `${p}: ${re}`); t = t.replace(re, ''); }

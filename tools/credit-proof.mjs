@@ -155,14 +155,15 @@ await proof('/mcp/app equals origin/main (GET, initialize, tools/list, tools/cal
   same(await node.call('/mcp/app', { ip, accept: 'application/json' }), await ref.call('/mcp/app', { ip, accept: 'application/json' }), 'GET /mcp/app');
   for (const [m, p] of [['initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'credit-proof', version: '1' } }], ['tools/list', null], ['tools/call', { name: 'read_page', arguments: { url: `${P}/pier` } }]]) same(await node.call('/mcp/app', rpc(m, p)), await ref.call('/mcp/app', rpc(m, p)), `/mcp/app ${m}`);
 });
-await proof('a non-payer past the free limit: since 3.54 a 402 with the terms of the page, the same words plus one line (x402 and, since 3.49, the card door), three headers more (x-sea-credit-buy, x-sea-credit-buy-card, link)', async () => {
+await proof('a non-payer past the free limit: since 3.54 a 402 with the terms of the page, the same words plus one line (x402 and, since 3.49, the card door; since 3.55 the operators\' till), four headers more (x-sea-credit-buy, x-sea-credit-buy-card, x-sea-credit-buy-business, link)', async () => {
   const ip = fresh(); await useFree(node, ip); pageNo -= 100; await useFree(ref, ip);
   const p = `/r/${nextPage()}`, a = await node.call(p, { ip }), b = await ref.call(p, { ip });
   assert.equal(a.status, 402, 'since 3.54 the limit asks with 402'); assert.equal(b.status, 429); assert.equal(a.j.error.code, b.j.error.code); assert.equal(a.j.accepts[0].maxAmountRequired, '10000');
   assert.ok(a.j.error.message.startsWith(`${b.j.error.message} Or read on with prepaid reader credit: POST ${BASE}/reader/credit`), a.j.error.message);
   assert.equal(a.h['x-sea-credit-buy'], `${BASE}/reader/credit`); assert.equal(a.h.link, `<${BASE}/reader#credit>; rel="payment"`);
   assert.equal(a.h['x-sea-credit-buy-card'], `${BASE}/reader/credit/stripe`); assert.ok(a.j.error.message.includes(`or by card or Link: POST ${BASE}/reader/credit/stripe over MPP (0.50 USD for 500 pages, 30 days)`), a.j.error.message);
-  const extra = new Set(['x-sea-credit-buy', 'x-sea-credit-buy-card', 'link', 'access-control-expose-headers', 'content-length', 'payment-required', 'x402-payment-required', 'x-pay-to', 'x-settle-window', 'cache-control', 'x-robots-tag']);
+  assert.equal(a.h['x-sea-credit-buy-business'], `${BASE}/c/reader?from=limit`); assert.ok(a.j.error.message.includes(`or as a business by card in the browser: ${BASE}/c/reader?from=limit (EUR 10 for 10,000 pages, 30 days)`), a.j.error.message);
+  const extra = new Set(['x-sea-credit-buy', 'x-sea-credit-buy-card', 'x-sea-credit-buy-business', 'link', 'access-control-expose-headers', 'content-length', 'payment-required', 'x402-payment-required', 'x-pay-to', 'x-settle-window', 'cache-control', 'x-robots-tag']);
   for (const k of new Set([...Object.keys(a.h), ...Object.keys(b.h)])) if (!extra.has(k)) assert.equal(a.h[k], b.h[k], k);
   const s = await node.call('/v2/scrape', { method: 'POST', accept: 'application/json', ip, body: { url: nextPage() } }); assert.equal(s.status, 402); assert.match(s.j.error, /reader\/credit/); assert.equal(s.h['x-sea-credit-buy'], `${BASE}/reader/credit`);
   const fc = await node.call(`/r/${nextPage()}`, { ip, headers: { authorization: 'Bearer fc-not-credit-123' } }); assert.equal(fc.j.error.message, a.j.error.message, 'an Authorization without mlc_ is not read');
@@ -407,7 +408,7 @@ await proof('terms § 5a (DE, EN), the price lists, the privacy notice, /reader,
 const BREAK = [
   ['delivery without a verified payment (strict off)', 'node/core.mjs', "work: (sale) => book.mint(sale, claim), callerHash: caller(), waitUntil: cfg.waitUntil, base, label: 'credit', strict: true });", "work: (sale) => book.mint(sale, claim), callerHash: caller(), waitUntil: cfg.waitUntil, base, label: 'credit', strict: false });"],
   ['any amount above the price taken', 'node/credit.mjs', 'if (v !== BigInt(t.atomic)) return', 'if (v < BigInt(t.atomic)) return'],
-  ['the token kept in clear', 'node/credit.mjs', 'await serial(h, async () => { await put(T(h), rec, ttlOf(rec.until), true);', 'await serial(h, async () => { await put(T(h), { ...rec, token }, ttlOf(rec.until), true);'],
+  ['the token kept in clear', 'node/credit.mjs', 'await put(T(h), rec, ttlOf(rec.until), true); if (sale?.id)', 'await put(T(h), { ...rec, token }, ttlOf(rec.until), true); if (sale?.id)'],
   ['any Authorization read as credit', 'node/credit.mjs', "if (a == null || !/^\\s*bearer\\s+mlc_/i.test(a)) return null;", 'if (a == null) return null;'],
   ['credit spent before the free pages', 'node/lens.mjs', "try { await allow(ctx, 'read', 100, 86400); } catch {\n          // prepaid", "if (ctx?.credit) await ctx.credit.spend(); try { await allow(ctx, 'read', 100, 86400); } catch {\n          // prepaid"],
   ['expiry ignored', 'node/credit.mjs', "r.revoked ? 'revoked' : Date.parse(r.until) <= now() ? 'expired' :", "r.revoked ? 'revoked' :"],

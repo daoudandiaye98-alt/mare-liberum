@@ -77,9 +77,11 @@ const facts = (lang) => {
     euros: EUROS.map((e) => `${group(e, de ? '.' : ',')} €`),
     route: [`${usd2(route.price_usd, lang)} USDC`, usd2(range[0], lang), usd2(range[1], lang)],
     fair: [`${usd2(fairMin, lang)} USDC`, pct(FAIR.rate.lower), pct(FAIR.rate.modelled), de ? `${dec(TOKEN_PRICE.mid, 'de')} USD je Million` : `USD ${dec(TOKEN_PRICE.mid, 'en')} per million`],
+    // the free quota with its unit (since 3.55 the texts also sell 10,000 pages, so the bare number would not be the toll's)
+    quota: de ? new RegExp(`${group(TOLL.free, '.').replaceAll('.', '\\.')} [^<.;]{0,40}?eingesparte Tokens`) : new RegExp(`${group(TOLL.free, ',')} tokens saved`),
     toll: de
-      ? [`${group(TOLL.free, '.')} `, pct(TOLL.share), `${usd2(TOLL.settle, 'de')} USD`, `${dec(TOLL.perMillion, 'de')} USD je Million`]
-      : [`${group(TOLL.free, ',')} `, pct(TOLL.share), `USD ${usd2(TOLL.settle, 'en')}`, `USD ${dec(TOLL.perMillion, 'en')} per million`],
+      ? [pct(TOLL.share), `${usd2(TOLL.settle, 'de')} USD`, `${dec(TOLL.perMillion, 'de')} USD je Million`]
+      : [pct(TOLL.share), `USD ${usd2(TOLL.settle, 'en')}`, `USD ${dec(TOLL.perMillion, 'en')} per million`],
     vat: '§ 19 UStG',
   };
 };
@@ -87,7 +89,7 @@ const PRICED = new Set(['/terms', '/de/agb', '/de/preise']);
 const ALL = [...LEGAL_PATHS, '/impressum'];
 const langOf = (p) => (p.startsWith('/de/') || p === '/impressum' ? 'de' : 'en');
 const textOf = (html) => String(html).replace(/<(script|style)\b[\s\S]*?<\/\1>/gi, ' ').replace(/<[^>]+>/g, ' ').replace(/&nbsp;/g, ' ').replace(/&lt;/g, '<').replace(/&gt;/g, '>').replace(/&quot;/g, '"').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ');
-const has = (t, w, where) => assert.ok(t.includes(w), `${where}: missing "${w}"`);
+const has = (t, w, where) => assert.ok(w instanceof RegExp ? w.test(t) : t.includes(w), `${where}: missing "${w}"`);
 
 console.log(`the legal texts, Stand ${STAND}; prices from the code: route ${route.amount_usd} USDC (${range[0]}–${range[1]}), euros ${EUROS.join(', ')}, fair share from ${fairMin} USDC; the toll from ${TOLL.from}: ${TOLL.free} free, ${pct(TOLL.share)}, USD ${TOLL.perMillion} per million, settled from USD ${TOLL.settle}`);
 
@@ -153,8 +155,8 @@ await proof(`the pages of node/legal.mjs end with the operator, the Stand and a 
 for (const p of PRICED) {
   await proof(`${p} states every price of the code in ${langOf(p) === 'de' ? 'German' : 'English'} form: the paid route and its range, ${EUROS.length} prices in euro, the smallest fair share and the harbour toll`, async () => {
     const f = facts(langOf(p)), t = pages[p].text;
-    for (const w of [...f.euros, ...f.route, ...f.fair, ...f.toll, f.vat]) has(t, w, p);
-    has(pages[p].twin.text, f.toll[0].trim(), `${p}.md`); has(pages[p].twin.text, f.euros[f.euros.length - 1], `${p}.md`);
+    for (const w of [...f.euros, ...f.route, ...f.fair, f.quota, ...f.toll, f.vat]) has(t, w, p);
+    has(pages[p].twin.text, f.quota, `${p}.md`); has(pages[p].twin.text, f.euros[f.euros.length - 1], `${p}.md`);
   });
 }
 await proof('/de/preise names no price in euro the code does not have, and works the toll out with an example from the code\'s numbers', async () => {
