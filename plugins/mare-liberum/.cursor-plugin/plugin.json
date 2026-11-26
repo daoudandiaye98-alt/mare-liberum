@@ -1,6 +1,6 @@
 {
   "name": "mare-liberum",
-  "version": "4.2.0",
+  "version": "5.0.0",
   "description": "Mare Liberum in Claude Code and Cursor: the MCP server of the Mare Liberum connector (no account, no key) to read any web page as Markdown, check how AI agents see a site, reuse pathways other agents confirmed, keep a memory across sessions, search an open index of agents, MCP servers and stores, and compare offers with links to the merchant's own checkout; plus a skill for the sea's plain HTTPS endpoints.",
   "author": {
     "name": "Mare Liberum",

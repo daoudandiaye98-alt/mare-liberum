@@ -23,7 +23,7 @@ import { payConfig } from '../node/pay.mjs';
 import { setViaKey } from '../node/via.mjs';
 import { immune } from '../node/immune.mjs';
 import { leanMarkdown, cleanUrl } from '../node/lean.mjs';
-import { squeeze, fitBudget, focusOn, diffLines, detectType, jsonDepth, toonHook, toonReady, SQUEEZE, TOON_MIN_GAIN } from '../node/squeeze.mjs';
+import { squeeze, fitBudget, focusOn, diffLines, detectType, jsonDepth, toonHook, toonReady, SQUEEZE, TOON_MIN_GAIN, minifyJson, looksLikeCode, normalise } from '../node/squeeze.mjs';
 import { createVersions, sinceOf, readerParams, counter } from '../node/press.mjs';
 import { tokensOf, bytesOf } from '../node/engine.mjs';
 
@@ -456,6 +456,54 @@ for (const p of ['/', '/read', '/savings', '/fair', '/proof', '/open', '/connect
   shown++;
 }
 await proof('at least 10 of the sea\'s own pages measured', () => assert.ok(shown >= 10, `${shown} pages`));
+
+
+// ---------------------------------------------------------------- 3.45 "Code bleibt Code": what the lossless steps never touch
+// Found on 26.11.2026: a Python file came back from /compress unable to run (a repeated line said once inside a string), a
+// README with an HTML head went through the lean reader and lost 31 of its 42 fence lines, and JSON went through a parse
+// (an id of 20 digits rounded). All three were counted as lossless savings, and above the free quota tolled.
+const PY = ['#!/usr/bin/env python3', 'import os', '', '', 'TEMPLATE = """', 'value:    {x}', '', '', 'value:    {x}', '"""', '',
+  'def handle(request, response, logger_for_this_request):', '    if request is None:', '        return response.write("nothing here, please send a request body")',
+  '    if request is None:', '        return response.write("nothing here, please send a request body")', '    x  =  1   # aligned', '    return x', ''].join('\n');
+const JSX = ['import React from "react";', '', 'export function Card({ title, items }) {', '  return (', '    <div className="card">',
+  '      <h2>{title}</h2>', '      <ul>{items.map((i) => <li key={i}>{i}</li>)}</ul>', '      <p>   spaced   text   </p>', '    </div>', '  );', '}', ''].join('\n');
+const GO = 'package main\n\nimport "fmt"\n\nfunc main() {\n\tfmt.Println("a  b")\n\tfmt.Println("a  b")\n}\n';
+const SQL = 'SELECT id,  name\nFROM users\nWHERE name = \'a  b  c  d  e  f  g  h  i  j  k  l  m\';\nSELECT id,  name\nFROM users\nWHERE name = \'a  b  c  d  e  f  g  h  i  j  k  l  m\';\n';
+const README = ['<h1 align="center">', '  <img src="logo.png" alt="logo">', '</h1>', '<p align="center"><a href="https://x.dev/docs">Docs</a> | <a href="https://x.dev/blog">Blog</a></p>', '',
+  '# Quick start', '', 'Install it:', '', '```bash', 'pip install example', '', '', 'example --run', '```', '', 'Or as code inside a list:', '',
+  '    for i in range(3):', '        print("same line printed in a loop, long enough to count")', '        print("same line printed in a loop, long enough to count")', '',
+  'Read   the   docs.', ''].join('\n');
+const PS = 'USER       PID %CPU %MEM    VSZ   RSS TTY      STAT START   TIME COMMAND\nroot         1  0.0  0.1 167840 11264 ?        Ss   08:00   0:02 /sbin/init\nroot         2  0.0  0.0      0     0 ?        S    08:00   0:00 [kthreadd]';
+const BIG = '{\n  "id": 12345678901234567890,\n  "price": 1.50,\n  "name": "caf\\u00e9",\n  "tag": "a",\n  "tag": "b"\n}';
+const sameCode = (src, out) => assert.equal(out, src.replace(/\r\n?/g, '\n'), 'code changed');
+const keepsFences = (src, out) => { const f = (t) => t.split('\n').filter((l) => /^\s*(```|~~~)/.test(l)); assert.deepEqual(f(out), f(src), 'fence lines changed'); for (const l of src.split('\n').filter((l) => /^(?: {4}|\t)/.test(l))) assert.ok(out.split('\n').includes(l), `indented line lost: ${l}`); assert.ok(out.includes('```bash\npip install example\n\n\nexample --run\n```'), 'the fenced block changed'); };
+const exactJson = (out) => { for (const w of ['12345678901234567890', '1.50', 'caf\\u00e9', '"tag":"a"', '"tag":"b"']) assert.ok(out.includes(w), `JSON lost ${w}`); };
+await proof('code stays code: Python, JSX, Go and SQL come back from the lossless steps as sent (found as code, also when sent as text), saving nothing they cannot', () => {
+  for (const [name, src] of [['python', PY], ['jsx', JSX], ['go', GO], ['sql', SQL], ['python crlf', PY.replace(/\n/g, '\r\n')]]) {
+    assert.equal(detectType(src), 'code', `${name} is code`); assert.ok(looksLikeCode(src), name);
+    const r = squeeze(src); sameCode(src, r.out); assert.equal(r.lossy, false); assert.equal(r.type, 'code', name);
+    const t = squeeze(src, { type: 'text' }); sameCode(src, t.out); assert.equal(t.type, 'code', `${name} sent as text`);
+  }
+  assert.ok(squeeze(PY.replace(/\n/g, '\r\n')).steps.length === 1, 'only the line ends, said so');
+});
+await proof('a README with an HTML head is Markdown: every fence line, the fenced block with its empty lines and every indented code line stay', () => {
+  assert.equal(detectType(README), 'md'); const r = squeeze(README); keepsFences(README, r.out); assert.equal(r.lossy, false); assert.ok(r.saving.saved >= 0);
+  const n = normalise('a\n\n\n\nb\n```\nx\n\n\ny\n```'); assert.equal(n, 'a\n\nb\n```\nx\n\n\ny\n```', 'empty lines collapse outside fences only');
+});
+await proof('columns stay columns: a line set in columns (ps, ls, a CLI table) keeps its inner spaces', () => { const r = squeeze(PS, { type: 'text' }); assert.equal(r.out, PS); });
+await proof('JSON keeps every byte but its whitespace: a 20-digit id, 1.50, an escape and a key said twice survive; no TOON then, and a note says why', () => {
+  const r = squeeze(BIG); assert.equal(r.type, 'json'); exactJson(r.out); assert.equal(r.form, 'json'); assert.match(r.note || '', /past 2\^53/);
+  assert.equal(minifyJson('{ "a" : [ 1 , "x  y\\"  z" ] }'), '{"a":[1,"x  y\\"  z"]}');
+  const plain = '{\n  "rows": [\n    {"a": 1, "b": "x"},\n    {"a": 2, "b": "y"}\n  ]\n}'; assert.deepEqual(JSON.parse(squeeze(plain).out.startsWith('{') ? squeeze(plain).out : JSON.stringify(JSON.parse(plain))), JSON.parse(plain));
+});
+await proof('prose still gets its lossless savings: spaces, a paragraph said twice, tracking parameters', () => {
+  const t = 'This paragraph is long enough to be said once and only once here.\n\nThis paragraph is long enough to be said once and only once here.\n\nSee https://x.dev/a?utm_source=y&id=1   now.';
+  const r = squeeze(t); assert.equal(r.type, 'text'); assert.ok(r.saving.saved > 0); assert.equal(r.out.split('This paragraph').length - 1, 1); assert.ok(r.out.includes('https://x.dev/a?id=1') && !r.out.includes('utm_source'));
+});
+await negative('a squeeze that says a repeated code line once (3.44) is caught by the code check', () => { const lines = PY.split('\n'), seen = new Set(); sameCode(PY, lines.filter((l) => { const t = l.trim(); if (t.length < 40) return true; if (seen.has(t)) return false; seen.add(t); return true; }).join('\n')); });
+await negative('a type detection that counts tags before Markdown (3.44) is caught: the lean reader loses the fences', () => keepsFences(README, leanMarkdown(README, 'https://page.invalid/').md));
+await negative('a JSON minify by parse and stringify (3.44) is caught: the 20-digit id is rounded', () => exactJson(JSON.stringify(JSON.parse(BIG))));
+await negative('a normalise that squeezes the spaces of indented lines is caught', () => keepsFences(README, README.replace(/^( {4,})(.*)$/gm, (m, i, r) => i + r.replace(/ {2,}/g, ' ')).replace('pip install example\n\n\nexample', 'pip install example\n\nexample')));
 
 console.log(`\n${passed} passed, ${failed} failed; negative controls: ${negOk} failed as they must, ${negBad} did not`);
 process.exit(failed || negBad ? 1 : 0);
