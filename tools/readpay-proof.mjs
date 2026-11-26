@@ -10,6 +10,10 @@
 //   delivering: the page as Markdown with tokens (html > markdown > 0), the sale in the till's books (method read-x402-v2,
 //   1 cent, the host and not the address), the funnel counts the sale and its millionths; a paid read is not one of the 100
 //   free reads of the day (a network past its free reads still buys a page)
+//   the reader past its free reads (3.54): /r/, /read, Jina's form and the scrape doors answer 402 with the terms of the page
+//   where it was asked (its words of before, the credit headers, counted in the funnel; not listed in the indexes: no bazaar,
+//   not discoverable); one cent there buys the page in that door's own shape (the reader's Markdown or JSON, the scrape
+//   shape); another sum on the reader (a toll's) is no paid read and the facilitator is not asked
 // Negative controls at the end: each rule broken in a copy of the code, and this proof must fail there.
 // Runs without the network: node tools/readpay-proof.mjs   (exit code 1 when a proof fails or a control is not caught)
 //   --no-controls   only the proofs (the controls run this file that way in each broken copy)
@@ -86,12 +90,13 @@ const payment = ({ value = '10000', to = WALLET, version = 2, nonce = `0x${rando
 const funnel = async () => (await call('/funnel.json', { ip: '127.0.0.1' })).j;
 
 console.log('asking');
-await proof('GET /x402/read without a payment: 402, exactly 0.01 USDC to the till, v2 with the bazaar extension, v1 discoverable', async () => {
+await proof('GET /x402/read without a payment: 402, exactly 0.01 USDC to the till, v2 with the bazaar extension (its input and answer as JSON Schema), v1 discoverable', async () => {
   facilitator = null; const r = await call('/x402/read?url=' + encodeURIComponent(`${P}/pier`), { ip: fresh() });
   assert.equal(r.status, 402);
   const v2 = JSON.parse(Buffer.from(r.h['payment-required'], 'base64').toString('utf8'));
   assert.equal(v2.x402Version, 2); assert.equal(v2.accepts[0].amount, '10000'); assert.equal(v2.accepts[0].payTo, WALLET); assert.equal(v2.accepts[0].network, 'eip155:8453');
   assert.equal(v2.resource.url, `${BASE}/x402/read`); assert.equal(v2.extensions.bazaar.info.input.method, 'GET'); assert.ok(v2.extensions.bazaar.info.input.queryParams.url);
+  const sch = v2.extensions.bazaar.schema?.properties; assert.equal(sch?.input?.properties?.queryParams?.properties?.url?.type, 'string', 'the input as JSON Schema (AgentCash and x402scan build the call from it)'); assert.deepEqual(sch.input.properties.queryParams.required, ['url']); assert.equal(sch.output.properties.example.type, 'object');
   assert.equal(r.j.accepts[0].maxAmountRequired, '10000'); assert.equal(r.j.accepts[0].outputSchema.input.discoverable, true); assert.equal(r.j.amount_usd, '0.010000');
 });
 await proof('POST /x402/read without a payment: 402 as well; a GET without the page too (the indexes probe it bare)', async () => {
@@ -176,8 +181,58 @@ await proof('x402 v1 (X-PAYMENT) buys a page as v2 does', async () => {
 await proof('a paid read is not one of the 100 free reads: a network past its free reads still buys a page', async () => {
   facilitator = settles(); const ip = fresh();
   for (let i = 0; i < 100; i++) { T0 += 700; const r = await call(`/r/${P}/t/${ip}-${i}.txt`, { ip, accept: 'text/markdown' }); assert.equal(r.status, 200, `free read ${i + 1}: ${r.text.slice(0, 100)}`); }
-  T0 += 700; const over = await call(`/r/${P}/t/${ip}-over.txt`, { ip, accept: 'text/markdown' }); assert.equal(over.status, 429);
+  T0 += 700; const over = await call(`/r/${P}/t/${ip}-over.txt`, { ip, accept: 'text/markdown' }); assert.equal(over.status, 402, 'since 3.54 the limit asks with 402');
   const paid = await call('/x402/read?url=' + encodeURIComponent(`${P}/pier?free=no`), { ip, headers: payment() }); assert.equal(paid.status, 200, paid.text.slice(0, 200));
+});
+
+console.log('the reader past its free reads (3.54)');
+const spend = async (ip) => { for (let i = 0; i < 100; i++) { T0 += 700; const r = await call(`/r/${P}/t/${ip}-s${i}.txt`, { ip, accept: 'text/markdown' }); assert.equal(r.status, 200, `free read ${i + 1}: ${r.text.slice(0, 100)}`); } };
+const required = (r) => JSON.parse(Buffer.from(r.h['payment-required'], 'base64').toString('utf8'));
+await proof('/r/ past the free reads: 402 with the terms of this page where it was asked, the words of before, the credit headers; counted; not listed', async () => {
+  facilitator = null; asked.length = 0; const ip = fresh(); await spend(ip);
+  const before = (await funnel()).asked.read || 0, path = `/r/${P}/pier?past=1`;
+  const r = await call(path, { ip, accept: 'text/markdown' });
+  assert.equal(r.status, 402, r.text.slice(0, 200));
+  const v2 = required(r); assert.equal(v2.resource.url, BASE + path); assert.equal(v2.accepts[0].amount, '10000'); assert.equal(v2.accepts[0].payTo, WALLET); assert.equal(v2.extensions, undefined, 'a page is not listed as a service');
+  assert.equal(r.j.accepts[0].maxAmountRequired, '10000'); assert.equal(r.j.accepts[0].resource, BASE + path); assert.equal(r.j.accepts[0].outputSchema.input.discoverable, false);
+  assert.equal(r.j.error.code, 'RESOURCE_EXHAUSTED'); assert.match(r.j.error.message, /100 free reads a day/); assert.match(r.j.error.message, /reader\/credit/); assert.match(r.j.door, /\/x402\/read\?url=/);
+  assert.equal(r.h['x-sea-credit-buy'], `${BASE}/reader/credit`); assert.match(r.h['access-control-expose-headers'], /payment-required/); assert.match(r.h['access-control-expose-headers'], /x-sea-credit-buy/);
+  assert.equal((await funnel()).asked.read, before + 1); assert.equal(asked.length, 0);
+});
+await proof('paying that 402 at /r/: one cent gets the page as the reader gives it (Markdown, or its JSON with paid), settled, in the books, counted', async () => {
+  facilitator = settles(); asked.length = 0; const ip = fresh(); await spend(ip);
+  const t0 = await ledger.treasury(), f0 = await funnel();
+  const md = await call(`/r/${P}/pier?paid=md`, { ip, accept: 'text/markdown', headers: payment() });
+  assert.equal(md.status, 200, md.text.slice(0, 200)); assert.match(md.h['content-type'], /text\/markdown/); assert.match(md.text, /night train/); assert.ok(md.h['payment-response']); assert.match(md.h['x-sea-paid'], /^settled 0\.010000 USD/);
+  const js = await call(`/r/${P}/pier?paid=json&format=json`, { ip, headers: payment({ version: 1 }) });
+  assert.equal(js.status, 200, js.text.slice(0, 200)); assert.equal(js.j.paid.status, 'settled'); assert.match(js.j.markdown, /night train/);
+  assert.deepEqual(asked.map((x) => x.kind), ['verify', 'settle', 'verify', 'settle']);
+  const t1 = await ledger.treasury(); assert.equal(t1.total_count, (t0.total_count || 0) + 2);
+  const f1 = await funnel(); assert.equal(f1.paid.read, (f0.paid.read || 0) + 2);
+});
+await proof('the scrape doors past the free reads: 402 in their own shape with the terms of the door (POST); paid, the page in their shape', async () => {
+  facilitator = settles(); const ip = fresh(); await spend(ip);
+  const s = await call('/v2/scrape', { method: 'POST', ip, body: { url: `${P}/pier?scrape=1` } });
+  assert.equal(s.status, 402, s.text.slice(0, 200)); assert.equal(s.j.success, false); assert.equal(s.j.code, 'RATE_LIMIT_EXCEEDED'); assert.match(s.j.error, /100 free reads a day/);
+  assert.equal(s.j.accepts[0].maxAmountRequired, '10000'); assert.equal(s.j.accepts[0].outputSchema.input.method, 'POST'); assert.equal(required(s).resource.url, `${BASE}/v2/scrape`);
+  const p = await call('/v2/scrape', { method: 'POST', ip, body: { url: `${P}/pier?scrape=2` }, headers: payment() });
+  assert.equal(p.status, 200, p.text.slice(0, 200)); assert.equal(p.j.success, true); assert.match(JSON.stringify(p.j.data), /night train/); assert.ok(p.h['payment-response']);
+  const v1 = await call('/v1/scrape', { method: 'POST', ip, body: { url: `${P}/pier?scrape=3` }, headers: payment({ version: 1 }) });
+  assert.equal(v1.status, 200, v1.text.slice(0, 200)); assert.equal(v1.j.success, true);
+});
+await proof('/read?url= and Jina\'s form past the free reads: 402 too; another sum on /r/ (a toll\'s) is no paid read, the facilitator not asked; /read sells', async () => {
+  facilitator = null; asked.length = 0; const ip = fresh(); await spend(ip);
+  const q = '/read?url=' + encodeURIComponent(`${P}/pier?read=1`), a = await call(q, { ip });
+  assert.equal(a.status, 402, a.text.slice(0, 200)); assert.equal(required(a).resource.url, BASE + q);
+  const j = await call(`/r/${P}/pier?jina=1`, { ip, headers: { 'x-return-format': 'markdown' } }); assert.equal(j.status, 402, j.text.slice(0, 200)); assert.equal(j.j.accepts[0].maxAmountRequired, '10000');
+  const o = await call(`/r/${P}/pier?other=1`, { ip, accept: 'text/markdown', headers: payment({ value: '50000' }) }); assert.equal(o.status, 402); assert.equal(asked.length, 0);
+  facilitator = settles();
+  const b = await call(q, { ip, headers: payment() }); assert.equal(b.status, 200, b.text.slice(0, 200)); assert.match(b.text, /night train/);
+});
+await proof('an unknown credit token past the free reads: the limit answer with its word on why, now with the terms; nothing taken', async () => {
+  facilitator = null; asked.length = 0; const ip = fresh(); await spend(ip);
+  const r = await call(`/r/${P}/pier?credit=1`, { ip, accept: 'text/markdown', headers: { 'x-sea-credit': 'mlc_unknown-token-of-the-proof' } });
+  assert.equal(r.status, 402, 'an unknown credit token: the limit answer, now with the terms'); assert.match(r.j.error.message, /not known here/); assert.equal(asked.length, 0);
 });
 await Promise.allSettled(waits.splice(0));
 console.log(`\n${passed} proofs held, ${failed} failed`);
@@ -190,7 +245,11 @@ if (!process.argv.includes('--no-controls')) {
     ['another amount taken', 'node/readpay.mjs', "if (v !== BigInt(t.atomic)) return", "if (false) return"],
     ['an unreadable page charged (the claim not given back, the payment taken)', 'node/core.mjs', "      if (!page?.markdown || page.blocked || page.error) {\n        await book.release(claim);", "      if (false) {\n        await book.release(claim);"],
     ['a paid read counted against the free reads', 'node/lens.mjs', "      if (!hit && !ctx?.paidRead) {", "      if (!hit) {"],
-    ['no 402 without a payment (the door gives the page away)', 'node/core.mjs', "      if (!pay) { funnel.asked('read'); return readRequired(t, { base, cors: CORS }); }", "      if (!pay) { funnel.asked('read'); return json({ markdown: 'free' }); }"],
+    ['no 402 without a payment (the door gives the page away)', 'node/core.mjs', "      if (!pay) { funnelOf(db, cfg).asked('read'); return readRequired(t, { base, cors: CORS }); }", "      if (!pay) { funnelOf(db, cfg).asked('read'); return json({ markdown: 'free' }); }"],
+    ['the reader past its free reads answers without terms (429 as before 3.54)', 'node/core.mjs', "if (e instanceof SeaError && e.readLimit) return { res: readLimit402(e, readRes) };", "if (false) return { res: readLimit402(e, readRes) };"],
+    ['a payment of one cent at the reader is not taken (the reader ignores it)', 'node/core.mjs', "rp = req.method === 'HEAD' ? null : readPayOf(readRes);", "rp = null;"],
+    ['the scrape doors past their free reads answer without terms', 'node/core.mjs', "if (e.readLimit) return readLimit402(e, `${base}${path}`, 'scrape', 'RATE_LIMIT_EXCEEDED'); ", ""],
+    ['every page bought at the reader listed in the x402 indexes', 'node/readpay.mjs', "listed = !at;", "listed = true;"],
     ['delivered without a verdict (strict off)', 'node/core.mjs', "label: 'read', strict: true });", "label: 'read', strict: false });"],
   ];
   for (const [name, file, from, to] of CONTROLS) {

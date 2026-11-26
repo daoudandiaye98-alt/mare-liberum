@@ -27,36 +27,64 @@ export function readBazaar(base) {
   return { info: {
     input: { type: 'http', method: 'GET', queryParams: { url: 'https://example.com/' } },
     output: { type: 'json', example: { url: 'https://example.com/', title: 'Example Domain', lang: 'en', markdown: '# Example Domain\n\nThis domain is for use in documentation examples…', tokens: { html: 160, markdown: 43, saved: 117, saved_pct: 73 }, paid: { amount_usd: '0.010000', status: 'settled', treasury: `${b}/treasury` } } },
-  } };
+  },
+  // the same as JSON Schema (since 3.54): the indexes that build the call from the 402 itself (AgentCash, x402scan) read the
+  // query parameters and the answer from here (schema.properties.input.properties.queryParams, …output.properties.example)
+  schema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object', required: ['input'], properties: {
+    input: { type: 'object', required: ['type', 'method', 'queryParams'], properties: {
+      type: { type: 'string', const: 'http' }, method: { type: 'string', enum: ['GET'] },
+      queryParams: { type: 'object', required: ['url'], additionalProperties: false, properties: { url: { type: 'string', format: 'uri', description: 'the public page to read (http or https)' } } } } },
+    output: { type: 'object', properties: {
+      type: { type: 'string', const: 'json' },
+      example: { type: 'object', required: ['url', 'markdown', 'tokens', 'paid'], properties: { url: { type: 'string' }, title: { type: 'string' }, description: { type: 'string' }, lang: { type: 'string' }, words: { type: 'number' }, markdown: { type: 'string', description: 'the page as Markdown' }, tokens: { type: 'object', properties: { html: { type: ['number', 'null'] }, markdown: { type: ['number', 'null'] }, saved: { type: ['number', 'null'] }, saved_pct: { type: ['number', 'null'] } } }, paid: { type: 'object', properties: { status: { type: 'string' }, amount_usd: { type: 'string' }, sale: { type: 'string' }, tx: { type: 'string' }, treasury: { type: 'string' } } } } } } } } } };
 }
 
 // the terms of one paid read, in both shapes x402 knows (as the paid route's, node/pay.mjs termsFor)
-export function readTerms(cfg, { base }) {
-  const b = String(base || '').replace(/\/+$/, ''), resource = `${b}${READPAY.path}`, atomic = String(READPAY.micro);
+export function readTerms(cfg, { base, resource: at = null, method = 'GET' }) {
+  // resource: the address the 402 stands on (since 3.54 the reader's own doors sell a page too, so a client pays and asks again
+  // where it was); by default the paid read's door. Only that door is listed in the x402 indexes (discoverable, the bazaar
+  // extension): a page bought at /r/ or at a scrape door is the same sale, and an index must not list every page as a service
+  const b = String(base || '').replace(/\/+$/, ''), resource = at || `${b}${READPAY.path}`, atomic = String(READPAY.micro), listed = !at;
   const description = 'Mare Liberum: one public web page as clean, token-lean Markdown (robots.txt respected), with its token count against the raw HTML; 0.01 USDC per page, no account, no key';
   const extra = { name: 'USD Coin', version: '2' };
   const outputSchema = {
-    input: { type: 'http', method: 'GET', discoverable: true, queryParams: { url: { type: 'string', required: true, description: 'the public page to read (http or https)' } } },
+    input: listed ? { type: 'http', method: 'GET', discoverable: true, queryParams: { url: { type: 'string', required: true, description: 'the public page to read (http or https)' } } } : { type: 'http', method, discoverable: false },
     output: { type: 'object', properties: { url: { type: 'string' }, title: { type: 'string' }, markdown: { type: 'string', description: 'the page as Markdown' }, tokens: { type: 'object', description: 'html, markdown, saved, saved_pct (estimated with the calibrated ratio of /proof)' }, paid: { type: 'object' } } },
   };
   const v1 = { scheme: 'exact', network: 'base', maxAmountRequired: atomic, resource, description, mimeType: 'application/json', outputSchema, payTo: cfg.payTo, maxTimeoutSeconds: cfg.window, asset: USDC_BASE, extra };
   const v2 = { scheme: 'exact', network: 'eip155:8453', amount: atomic, asset: USDC_BASE, payTo: cfg.payTo, maxTimeoutSeconds: cfg.window, extra };
-  return { cents: READPAY.cents, usd: READPAY.micro / 1e6, atomic, micro: READPAY.micro, resource, description, v1, v2, payTo: cfg.payTo, window: cfg.window };
+  return { cents: READPAY.cents, usd: READPAY.micro / 1e6, atomic, micro: READPAY.micro, resource, description, v1, v2, payTo: cfg.payTo, window: cfg.window, listed };
 }
 
 // the 402: the terms where every x402 client looks for them, and in words
 export function readRequired(t, { base, error, cors = {} }) {
   const b = String(base || '').replace(/\/+$/, '');
-  const v2 = { x402Version: 2, error: error || 'PAYMENT-SIGNATURE header is required', resource: { url: t.resource, description: t.description, mimeType: 'application/json' }, accepts: [t.v2], extensions: { bazaar: readBazaar(b) } };
+  const v2 = { x402Version: 2, error: error || 'PAYMENT-SIGNATURE header is required', resource: { url: t.resource, description: t.description, mimeType: 'application/json' }, accepts: [t.v2], ...(t.listed === false ? {} : { extensions: { bazaar: readBazaar(b) } }) };
   const body = { x402Version: 1, error: error || 'X-PAYMENT header is required', accepts: [t.v1],
     amount_usd: usd6(t.micro), unit: 'USDC on Base, 6 decimals (maxAmountRequired is in millionths of a dollar)', what: t.description,
     call: `GET ${b}${READPAY.path}?url=<the page> (or POST {"url": "<the page>"}); an x402 client pays this 402 by itself and gets the page in the same exchange`,
     pay: ['x402 v2: call again with the header PAYMENT-SIGNATURE (the PAYMENT-REQUIRED header holds the terms, base64 JSON)', 'x402 v1: call again with the header X-PAYMENT (the terms are in "accepts" of this body)'],
     exact: 'a payment of exactly this amount; any other is not taken. A page that cannot be read (robots.txt, an error) is not charged',
-    pay_to: t.payTo, network: 'Base (eip155:8453)', asset: 'USDC', window_seconds: t.window, terms: `${b}/terms#s5a`, page: `${b}/reader`,
+    pay_to: t.payTo, network: 'Base (eip155:8453)', asset: 'USDC', window_seconds: t.window, terms: `${b}/terms#s4`, page: `${b}/reader`,
     note: 'No account, no key. The USDC goes from your wallet straight to the address above; the sea never holds anyone\'s money.' };
   const short = { scheme: 'exact', network: 'base', to: t.payTo, payTo: t.payTo, amount_usd: usd6(t.micro), decimals: 6, asset: 'USDC', maxTimeoutSeconds: t.window, read: `${b}${READPAY.path}` };
   return new Response(JSON.stringify(body), { status: 402, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex', 'payment-required': b64(JSON.stringify(v2)), 'x402-payment-required': JSON.stringify(short), 'x-pay-to': t.payTo, 'x-settle-window': String(t.window), link: `<${b}/reader>; rel="describedby"`, ...cors } });
+}
+
+// the reader's free limit as a 402 (since 3.54): the answer of before (its error, its words, the credit headers) with the terms of
+// this one page beside it, so a client with x402 pays by itself and asks again; shape 'scrape' keeps the Firecrawl form
+// ({success: false, code, error}), shape 'reader' the sea's ({error: {code, message}})
+export function readLimitRequired(t, { base, shape = 'reader', code = 'RESOURCE_EXHAUSTED', message = '', headers = {}, cors = {} }) {
+  const b = String(base || '').replace(/\/+$/, '');
+  const v2 = { x402Version: 2, error: 'PAYMENT-SIGNATURE header is required', resource: { url: t.resource, description: t.description, mimeType: 'application/json' }, accepts: [t.v2], ...(t.listed === false ? {} : { extensions: { bazaar: readBazaar(b) } }) };
+  const terms = { x402Version: 1, accepts: [t.v1], amount_usd: usd6(t.micro), unit: 'USDC on Base, 6 decimals (maxAmountRequired is in millionths of a dollar)',
+    read_on: `this page for ${usd6(t.micro)} USDC in one step: an x402 client pays this 402 by itself and asks again (header X-PAYMENT, or PAYMENT-SIGNATURE with the PAYMENT-REQUIRED header); a page that cannot be read is not charged`,
+    pay_to: t.payTo, network: 'Base (eip155:8453)', asset: 'USDC', window_seconds: t.window, terms: `${b}/terms#s4`,
+    door: `GET ${b}${READPAY.path}?url=<the page>: the same page for the same cent, any time (the door listed in the x402 indexes)` };
+  const body = shape === 'scrape' ? { success: false, code, error: message, ...terms } : { error: { code, message }, ...terms };
+  const short = { scheme: 'exact', network: 'base', to: t.payTo, payTo: t.payTo, amount_usd: usd6(t.micro), decimals: 6, asset: 'USDC', maxTimeoutSeconds: t.window, read: t.resource };
+  const expose = ['payment-required', 'x402-payment-required', ...Object.keys(headers).filter((k) => k !== 'link')].join(',');
+  return new Response(JSON.stringify(body), { status: 402, headers: { 'content-type': 'application/json; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex', 'payment-required': b64(JSON.stringify(v2)), 'x402-payment-required': JSON.stringify(short), 'x-pay-to': t.payTo, 'x-settle-window': String(t.window), ...headers, ...cors, 'access-control-expose-headers': [cors['access-control-expose-headers'], expose].filter(Boolean).join(',') } });
 }
 
 // a payment for exactly the price: a signed USDC transfer (x402 "exact", EIP-3009) to the till's wallet of exactly 0.01 USDC,

@@ -9,11 +9,12 @@
 //   spending: never before the network's 100 free pages of the day, one page per read that counts against the limit, nothing
 //   for the copy of the last hour, what is left on every answer that spent a page, used up, expired, unknown and malformed
 //   tokens refused with today's limit answer, no double spend under concurrency, the scrape doors and Jina's form alike;
-//   non-payers: today's limit answer, one line and two headers more; every other answer byte for byte origin/main (/r/ and
+//   non-payers: today's limit answer, one line and two headers more, since 3.54 as a 402 with the terms of the page (one cent,
+//   node/readpay.mjs); every other answer byte for byte origin/main (/r/ and
 //   /mcp/app as before); the terms (§ 5a DE and EN), the price lists, the privacy notice, /reader and llms.txt say it.
 //   CR8, a settlement whose answer never came back (lost, or a restart between verify and settle), with a stubbed Base RPC:
 //   on its own timer and at the start (never in a request), once validBefore and a minute are past and the claim is ten
-//   minutes old, the chain is asked: used, settled in the till and the credit kept; not used, taken back (429 "taken back");
+//   minutes old, the chain is asked: used, settled in the till and the credit kept; not used, taken back (402 "taken back");
 //   no clear answer, nothing changed and counted; at most 20 questions a run; the chain check off, nothing asked or taken
 //   back; a transfer valid beyond the terms' maxTimeoutSeconds and a minute not taken; wallet, nonce and validBefore kept,
 //   never the signature.
@@ -139,6 +140,9 @@ const sha = (s) => createHash('sha256').update(s).digest('hex');
 
 console.log('without credit: every answer as on origin/main');
 await proof(`the reference tree is there (${REF.slice(0, 7)}); the version is the same or a release later, and masked in every comparison`, () => { assert.ok(ref, 'git archive of the reference failed: set MARE_CREDIT_REF_DIR'); const [a, b] = [ref.core.VERSION, node.core.VERSION].map((v) => v.split('.').map(Number)); assert.ok(b[0] > a[0] || (b[0] === a[0] && (b[1] > a[1] || (b[1] === a[1] && b[2] >= a[2]))), `${node.core.VERSION} is not ${ref.core.VERSION} or later`); VERSIONS.add(ref.core.VERSION); VERSIONS.add(node.core.VERSION); });
+await proof('an error of another door (GET /lay without a target, an error of the sea) equals origin/main: the line on credit stands only in the reader\'s limit answer', async () => {
+  const ip = fresh(); for (const p of ['/lay', '/lay?to=http://insecure.example/']) same(await node.call(p, { ip }), await ref.call(p, { ip }), p);
+});
 await proof('/r/ under the free limit equals origin/main, also with an Authorization that is not credit and with a credit token (nothing spent before the free pages)', async () => {
   const ip = fresh(), url = `/r/${P}/pier`;
   for (const [p, o] of [[url, {}], [`${url}?format=json`, {}], [`${url}?format=full`, {}], [url, { headers: { authorization: 'Bearer fc-not-credit-123' } }], [url, { headers: { authorization: 'Basic dXNlcjpwYXNz' } }], ['/r/%20', {}], [`/r/${P}/t/0.txt`, {}]]) same(await node.call(p, { ip, ...o }), await ref.call(p, { ip, ...o }), `${p} ${JSON.stringify(o)}`);
@@ -151,16 +155,16 @@ await proof('/mcp/app equals origin/main (GET, initialize, tools/list, tools/cal
   same(await node.call('/mcp/app', { ip, accept: 'application/json' }), await ref.call('/mcp/app', { ip, accept: 'application/json' }), 'GET /mcp/app');
   for (const [m, p] of [['initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'credit-proof', version: '1' } }], ['tools/list', null], ['tools/call', { name: 'read_page', arguments: { url: `${P}/pier` } }]]) same(await node.call('/mcp/app', rpc(m, p)), await ref.call('/mcp/app', rpc(m, p)), `/mcp/app ${m}`);
 });
-await proof('a non-payer past the free limit: today\'s 429, the same words plus one line (x402 and, since 3.49, the card door), three headers more (x-sea-credit-buy, x-sea-credit-buy-card, link)', async () => {
+await proof('a non-payer past the free limit: since 3.54 a 402 with the terms of the page, the same words plus one line (x402 and, since 3.49, the card door), three headers more (x-sea-credit-buy, x-sea-credit-buy-card, link)', async () => {
   const ip = fresh(); await useFree(node, ip); pageNo -= 100; await useFree(ref, ip);
   const p = `/r/${nextPage()}`, a = await node.call(p, { ip }), b = await ref.call(p, { ip });
-  assert.equal(a.status, 429); assert.equal(b.status, 429); assert.equal(a.j.error.code, b.j.error.code);
+  assert.equal(a.status, 402, 'since 3.54 the limit asks with 402'); assert.equal(b.status, 429); assert.equal(a.j.error.code, b.j.error.code); assert.equal(a.j.accepts[0].maxAmountRequired, '10000');
   assert.ok(a.j.error.message.startsWith(`${b.j.error.message} Or read on with prepaid reader credit: POST ${BASE}/reader/credit`), a.j.error.message);
   assert.equal(a.h['x-sea-credit-buy'], `${BASE}/reader/credit`); assert.equal(a.h.link, `<${BASE}/reader#credit>; rel="payment"`);
   assert.equal(a.h['x-sea-credit-buy-card'], `${BASE}/reader/credit/stripe`); assert.ok(a.j.error.message.includes(`or by card or Link: POST ${BASE}/reader/credit/stripe over MPP (0.50 USD for 500 pages, 30 days)`), a.j.error.message);
-  const extra = new Set(['x-sea-credit-buy', 'x-sea-credit-buy-card', 'link', 'access-control-expose-headers', 'content-length']);
+  const extra = new Set(['x-sea-credit-buy', 'x-sea-credit-buy-card', 'link', 'access-control-expose-headers', 'content-length', 'payment-required', 'x402-payment-required', 'x-pay-to', 'x-settle-window', 'cache-control', 'x-robots-tag']);
   for (const k of new Set([...Object.keys(a.h), ...Object.keys(b.h)])) if (!extra.has(k)) assert.equal(a.h[k], b.h[k], k);
-  const s = await node.call('/v2/scrape', { method: 'POST', accept: 'application/json', ip, body: { url: nextPage() } }); assert.equal(s.status, 429); assert.match(s.j.error, /reader\/credit/); assert.equal(s.h['x-sea-credit-buy'], `${BASE}/reader/credit`);
+  const s = await node.call('/v2/scrape', { method: 'POST', accept: 'application/json', ip, body: { url: nextPage() } }); assert.equal(s.status, 402); assert.match(s.j.error, /reader\/credit/); assert.equal(s.h['x-sea-credit-buy'], `${BASE}/reader/credit`);
   const fc = await node.call(`/r/${nextPage()}`, { ip, headers: { authorization: 'Bearer fc-not-credit-123' } }); assert.equal(fc.j.error.message, a.j.error.message, 'an Authorization without mlc_ is not read');
 });
 
@@ -216,7 +220,7 @@ await proof('a settlement that fails takes the credit back: at once (402, no tok
   const late = await buy(payment()); assert.equal(late.status, 200, 'handed out while the settlement is on its way'); assert.equal(late.j.paid.status, 'pending');
   await settled();
   const ip = fresh(); await useFree(node, ip);
-  const x = await node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': late.j.token } }); assert.equal(x.status, 429); assert.match(x.j.error.message, /taken back/);
+  const x = await node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': late.j.token } }); assert.equal(x.status, 402); assert.match(x.j.error.message, /taken back/);
   facilitator = settles();
 });
 
@@ -228,7 +232,7 @@ await proof('past the free pages a read spends one page (x-sea-credit-left, x-se
   const page1 = nextPage(), r = await node.call(`/r/${page1}`, { ip, headers: { 'x-sea-credit': tok } });
   assert.equal(r.status, 200); assert.equal(r.h['x-sea-credit-left'], '49'); assert.equal(r.h['x-sea-credit-until'], b.j.until); assert.match(r.h['cache-control'], /private, no-store/); assert.match(r.h['access-control-expose-headers'], /x-sea-credit-left/);
   const hit = await node.call(`/r/${page1}`, { ip, headers: { 'x-sea-credit': tok } }); assert.equal(hit.status, 200); assert.equal(hit.h['x-sea-credit-left'], undefined, 'the copy of the last hour is free');
-  assert.equal((await node.call(`/r/${nextPage()}`, { ip })).status, 429, 'without the token: the limit');
+  assert.equal((await node.call(`/r/${nextPage()}`, { ip })).status, 402, 'without the token: the limit');
   const fcKey = await node.call('/v2/scrape', { method: 'POST', accept: 'application/json', ip, headers: { authorization: `Bearer ${tok}` }, body: { url: nextPage() } });
   assert.equal(fcKey.status, 200); assert.equal(fcKey.j.success, true); assert.equal(fcKey.h['x-sea-credit-left'], '48', 'the token as a Firecrawl api key');
   const jn = await node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': tok, 'x-return-format': 'text' } }); assert.equal(jn.status, 200); assert.equal(jn.h['x-sea-credit-left'], '47');
@@ -237,21 +241,21 @@ await proof('past the free pages a read spends one page (x-sea-credit-left, x-se
 await proof('a malformed, unknown, used-up or expired token: today\'s limit answer and a word on why; nothing read', async () => {
   facilitator = settles(); const b = await buy(payment()); await settled(); const tok = b.j.token, ip = fresh(); await useFree(node, ip);
   const o0 = outgoing.length;
-  const bad = await node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': 'mlc_short' } }); assert.equal(bad.status, 429); assert.match(bad.j.error.message, /not known/);
-  const unknown = await node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': `mlc_${randomBytes(24).toString('base64url')}` } }); assert.equal(unknown.status, 429); assert.match(unknown.j.error.message, /not known/);
+  const bad = await node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': 'mlc_short' } }); assert.equal(bad.status, 402); assert.match(bad.j.error.message, /not known/);
+  const unknown = await node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': `mlc_${randomBytes(24).toString('base64url')}` } }); assert.equal(unknown.status, 402); assert.match(unknown.j.error.message, /not known/);
   assert.equal(outgoing.filter((x) => !/robots\.txt$/.test(x.url)).length, outgoing.slice(0, o0).filter((x) => !/robots\.txt$/.test(x.url)).length, 'nothing read for them');
   for (let i = 0; i < 50; i++) { T0 += 600; const r = await node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': tok } }); assert.equal(r.status, 200, `page ${i + 1}`); assert.equal(r.h['x-sea-credit-left'], String(49 - i)); }
-  const up = await node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': tok } }); assert.equal(up.status, 429); assert.match(up.j.error.message, /used up/);
+  const up = await node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': tok } }); assert.equal(up.status, 402); assert.match(up.j.error.message, /used up/);
   // another token, 30 days and a second later: expired (a new UTC day: its free pages first)
   const c = await buy(payment()); await settled(); T0 += 30 * 86400e3 + 1000; const ip2 = fresh(); await useFree(node, ip2);
-  const ex = await node.call(`/r/${nextPage()}`, { ip: ip2, headers: { 'x-sea-credit': c.j.token } }); assert.equal(ex.status, 429); assert.match(ex.j.error.message, /expired/);
+  const ex = await node.call(`/r/${nextPage()}`, { ip: ip2, headers: { 'x-sea-credit': c.j.token } }); assert.equal(ex.status, 402); assert.match(ex.j.error.message, /expired/);
   // (the clock only moves on: the sea's pace per site counts forward)
 });
 await proof('no double spend: ten reads at once with three pages left spend three, the other seven get the limit', async () => {
   facilitator = settles(); const b = await buy(payment()); await settled(); const tok = b.j.token, ip = fresh(); await useFree(node, ip);
   for (let i = 0; i < 47; i++) { T0 += 600; assert.equal((await node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': tok } })).status, 200); }
   const rs = await Promise.all(Array.from({ length: 10 }, () => node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': tok } })));
-  assert.equal(rs.filter((r) => r.status === 200).length, 3, `statuses ${rs.map((r) => r.status)}`); assert.equal(rs.filter((r) => r.status === 429).length, 7);
+  assert.equal(rs.filter((r) => r.status === 200).length, 3, `statuses ${rs.map((r) => r.status)}`); assert.equal(rs.filter((r) => r.status === 402).length, 7);
   assert.deepEqual(rs.filter((r) => r.status === 200).map((r) => r.h['x-sea-credit-left']).sort(), ['0', '1', '2']);
   const g = await node.call('/reader/credit', { ip, accept: 'application/json', headers: { 'x-sea-credit': tok } }); assert.equal(g.j.token.left, 0);
 });
@@ -274,7 +278,7 @@ const tick = () => node.core.startCredit(node.db, node.cfg);
 const restart = (c = {}) => { node.db.creditBook?.close?.(); delete node.db.creditBook; return node.core.startCredit(node.db, { ...node.cfg, ...c }); };
 let freeNet = null;
 const pastFree = async () => { const day = new Date(T0).toISOString().slice(0, 10); if (freeNet?.day !== day) { freeNet = { ip: fresh(), day }; await useFree(node, freeNet.ip); } return freeNet.ip; };
-await proof('settle answer lost, the authorization unused on Base: nothing decided before its time or in a request; then taken back (429 "taken back"), the sale unsettled in the till', async () => {
+await proof('settle answer lost, the authorization unused on Base: nothing decided before its time or in a request; then taken back (402 "taken back"), the sale unsettled in the till', async () => {
   const b = await buyLost(), ip = await pastFree();
   const r1 = await node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': b.token } }); assert.equal(r1.status, 200); assert.equal(r1.h['x-sea-credit-left'], '49', 'a credit whose settlement is on its way reads');
   assert.equal(saleOf(b.sale).status, 'pending'); const a0 = chain.asked.length;
@@ -283,7 +287,7 @@ await proof('settle answer lost, the authorization unused on Base: nothing decid
   const r2 = await node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': b.token } }); assert.equal(r2.status, 200, 'a request decides nothing'); assert.equal(chain.asked.length, a0, 'a request asks no chain');
   x = await tick(); assert.equal(x.asked, 1); assert.equal(x.revoked, 1); assert.equal(x.settled, 0);
   const q = chain.asked.at(-1); assert.equal(q.nonce, b.nonce); assert.equal(q.from, PAYER.toLowerCase()); assert.equal(q.selector, '0xe94a0102'); assert.equal(q.to, USDC);
-  const r3 = await node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': b.token } }); assert.equal(r3.status, 429); assert.match(r3.j.error.message, /taken back/);
+  const r3 = await node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': b.token } }); assert.equal(r3.status, 402); assert.match(r3.j.error.message, /taken back/);
   assert.equal(saleOf(b.sale).status, 'unsettled', 'the till shows it did not settle'); assert.equal((await peek(b.token)).state, 'revoked');
   assert.equal((await tick()).asked, 0, 'decided once');
 });
@@ -412,6 +416,8 @@ const BREAK = [
   ['a failed settlement keeps its credit', 'node/core.mjs', "if (patch?.status && patch.status !== 'settled' && patch.status !== 'pending') book.revokeSale(id).catch(() => {});", ''],
   ['credit not in the till\'s books', 'node/core.mjs', "q: `reader credit: ${CREDIT.pages} pages`, ledger: books,", "q: `reader credit: ${CREDIT.pages} pages`, ledger: { sale: (row) => ({ ...row, id: 'nobook' }), saleSet: () => {} },"],
   ['the line on credit added to every error (non-payers and others changed)', 'node/core.mjs', 'const more = e.readLimit ? creditHint(base, e.readLimit === true ? null : e.readLimit) : null;\n      return fin(', 'const more = creditHint(base, null);\n      return fin('],
+  // (since 3.54 the reader's limit answers 402 from readLimit402, node/core.mjs: there the word on why must stay)
+  ['the limit answer without its word on why (used up, expired, unknown, taken back)', 'node/core.mjs', 'const more = creditHint(base, e.readLimit === true ? null : e.readLimit); return readLimitRequired(', 'const more = creditHint(base, null); return readLimitRequired('],
   ['the app door changed', 'node/core.mjs', "read_page: 'Read a public web page as clean Markdown (title, description, main text, links), up to 100 pages a day per address.", "read_page: 'Read a public web page as clean Markdown (title, description, main text, links), up to 100 pages a day per network."],
   ['§ 5a without the refund rule', 'node/legal.mjs', 'Nicht genutzte Seiten werden nicht erstattet, soweit das Gesetz nichts anderes vorschreibt; ', ''],
   // CR8: a settlement whose answer never came back
