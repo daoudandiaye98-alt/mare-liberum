@@ -6,14 +6,16 @@
 // cookie, no address) and sends it only as the header x-mare-mod to this site's own doors /operator/digest,
 // /operator/ledger.csv and /operator/declarations (same-origin fetch, no-store). Wrong keys: 403; 30 of them from one network in
 // 10 minutes and its next tries wait (node/immune.mjs keyBraked). The page is noindex, no-store, no-referrer, in no sitemap
-// and in no llms.txt, and no public page links to it.
+// and in no llms.txt, and no public page links to it. Its own CSP lets only its one inline script run (by the SHA-256 of
+// that script, worked out below from the exact text served) and lets it talk only to this site. The new key stands in a
+// password field (shown only on „Anzeigen“), so a screenshot or a screen share does not catch it; over plain http the page
+// neither makes nor sends a key.
+import { createHash } from 'node:crypto';
 import { shell } from './legal.mjs';
 
 export const OPERATOR_PAGE = '/operator';
 // the doors the page reads, the only places its key goes
 export const OPERATOR_READS = Object.freeze(['/operator/digest', '/operator/ledger.csv', '/operator/declarations']);
-export const OPERATOR_HEADERS = Object.freeze({ 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow', 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff' });
-
 // the script of the page: in a closure, no global, no console, no storage, no address
 export const OPERATOR_SCRIPT = `(() => {
   'use strict';
@@ -22,18 +24,26 @@ export const OPERATOR_SCRIPT = `(() => {
   const hex = (buf) => Array.from(new Uint8Array(buf), (x) => x.toString(16).padStart(2, '0')).join('');
   const b64url = (bytes) => btoa(String.fromCharCode(...bytes)).replace(/\\+/g, '-').replace(/\\//g, '_').replace(/=+$/, '');
   const say = (text) => { $('out').replaceChildren(); $('msg').textContent = text; };
-  const copy = (id) => async () => { const el = $(id); try { await navigator.clipboard.writeText(el.value); $(id + '-ok').textContent = 'kopiert'; } catch { el.select(); } };
-  // A: a new key, made here and shown once; nothing is sent and nothing is kept
+  // copied without being shown: the field of the key stays a password field; where the clipboard refuses, it says so
+  const copy = (id) => async () => { const el = $(id); try { await navigator.clipboard.writeText(el.value); $(id + '-ok').textContent = 'kopiert'; } catch { if (el.type === 'password') $(id + '-ok').textContent = 'nicht kopiert: bitte „Anzeigen“ wählen und von Hand kopieren'; else { $(id + '-ok').textContent = 'nicht kopiert: bitte von Hand kopieren'; el.select(); } } };
+  const sayA = (text) => { $('make-msg').textContent = text; };
+  // A: a new key, made here and shown once (as dots until „Anzeigen“); nothing is sent and nothing is kept. Only over https
   $('make').addEventListener('click', async () => {
-    const raw = new Uint8Array(32); crypto.getRandomValues(raw);
-    const key = b64url(raw), sum = hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key)));
-    $('key').value = key; $('sum').value = sum; $('made').hidden = false;
+    if (!isSecureContext || !crypto.subtle) { $('made').hidden = true; sayA('Nur über https: Ohne sichere Verbindung gibt der Browser die Funktionen für Zufall und Prüfsumme nicht frei. Es wurde kein Schlüssel erzeugt.'); return; }
+    try {
+      const raw = new Uint8Array(32); crypto.getRandomValues(raw);
+      const key = b64url(raw), sum = hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(key)));
+      $('key').type = 'password'; $('show-key').textContent = 'Anzeigen'; $('show-key').setAttribute('aria-pressed', 'false'); $('key-ok').textContent = ''; $('sum-ok').textContent = '';
+      $('key').value = key; $('sum').value = sum; $('made').hidden = false; sayA('');
+    } catch { $('made').hidden = true; sayA('Der Browser konnte keinen Schlüssel erzeugen. Es wurde nichts gesendet.'); }
   });
+  $('show-key').addEventListener('click', () => { const k = $('key'), shown = k.type === 'text'; k.type = shown ? 'password' : 'text'; $('show-key').textContent = shown ? 'Anzeigen' : 'Verbergen'; $('show-key').setAttribute('aria-pressed', shown ? 'false' : 'true'); });
   $('copy-key').addEventListener('click', copy('key'));
   $('copy-sum').addEventListener('click', copy('sum'));
   // B: the key in this page's memory only, sent only as x-mare-mod to this site's own operator doors
   const ask = async (path) => {
     if (!READS.includes(path)) return null;
+    if (!isSecureContext) { say('Nur über https.'); return null; }
     const key = $('pw').value.trim();
     if (!key) { say('Bitte zuerst den Betreiber-Schlüssel eingeben.'); return null; }
     let r;
@@ -72,13 +82,21 @@ export const OPERATOR_SCRIPT = `(() => {
   });
 })();`;
 
+// the page's own policy: only this one inline script runs (its SHA-256, from the exact text served), it talks only to this site,
+// no form, no frame, no base, nothing loaded from elsewhere (styles inline, as on the legal pages)
+export const OPERATOR_SCRIPT_SHA256 = createHash('sha256').update(OPERATOR_SCRIPT, 'utf8').digest('base64');
+export const OPERATOR_CSP = `default-src 'none'; script-src 'sha256-${OPERATOR_SCRIPT_SHA256}'; style-src 'unsafe-inline'; connect-src 'self'; img-src 'self' data:; form-action 'none'; frame-ancestors 'none'; base-uri 'none'`;
+export const OPERATOR_HEADERS = Object.freeze({ 'content-type': 'text/html; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow', 'referrer-policy': 'no-referrer', 'x-content-type-options': 'nosniff', 'content-security-policy': OPERATOR_CSP });
+
 export function operatorPage(base) {
   const body = `<h2>A. Neuen Betreiber-Schlüssel erzeugen</h2>
 <p>Der Schlüssel entsteht hier in diesem Browser aus 32 Zufallsbytes. Er wird nirgendwohin gesendet und nirgends gespeichert.</p>
+<p><strong>Vorher Browser-Assistenten (z. B. Claude in Chrome) und Bildschirmfreigabe ausschalten.</strong></p>
 <p><button type="button" id="make">Neuen Schlüssel erzeugen</button></p>
+<p id="make-msg" role="status"></p>
 <div id="made" hidden>
-<p><label for="key"><b>Betreiber-Schlüssel</b></label><br><input id="key" type="text" readonly size="48" autocomplete="off" spellcheck="false"> <button type="button" id="copy-key">Kopieren</button> <small id="key-ok"></small></p>
-<div class="box"><p style="margin:0">Speichern Sie den Schlüssel jetzt in einem Passwort-Manager. Er wird nur jetzt gezeigt und nirgendwohin gesendet.</p></div>
+<p><label for="key"><b>Betreiber-Schlüssel</b></label><br><input id="key" type="password" readonly size="48" autocomplete="new-password" spellcheck="false"> <button type="button" id="show-key" aria-pressed="false">Anzeigen</button> <button type="button" id="copy-key">Kopieren</button> <small id="key-ok"></small></p>
+<div class="box"><p style="margin:0">Speichern Sie den Schlüssel jetzt in einem Passwort-Manager. Er wird nur jetzt gezeigt und nirgendwohin gesendet. „Kopieren“ legt ihn in die Zwischenablage, ohne ihn anzuzeigen.</p></div>
 <p><label for="sum"><b>Prüfsumme (SHA-256)</b></label><br><input id="sum" type="text" readonly size="70" autocomplete="off" spellcheck="false"> <button type="button" id="copy-sum">Kopieren</button> <small id="sum-ok"></small></p>
 <p>Nur diese Prüfsumme geht an Claude. Sie ist kein Geheimnis: Aus ihr lässt sich der Schlüssel nicht zurückgewinnen.</p>
 </div>
