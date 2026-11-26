@@ -192,15 +192,15 @@ await proof('the app door /mcp/app answers byte for byte the same with fair shar
 });
 
 console.log('on by default, off when asked');
-await proof('on with nothing set; a node switched off answers as before 3.34: no headers, no field, the same answer object; /fair/pay rests; /.well-known/x402 lists only /route', async () => {
+await proof('on with nothing set; a node switched off answers as before 3.34: no headers, no field, the same answer object; /fair/pay rests; /.well-known/x402 lists the doors sold without /fair/pay (since 3.55 the paid read and the reader credit beside the route)', async () => {
   assert.equal(fairSwitch({}, {}), true, 'on by default'); assert.equal(fairSwitch({}, { MARE_FAIR: 'off' }), false); assert.equal(fairSwitch({ fair: 'off' }, {}), false); assert.equal(fairSwitch({}, { MARE_FAIR: 'on' }), true);
   assert.ok((await call('/about', { accept: MD })).h.get('x-sea-receipt'), 'nothing set: the answer names its receipt');
   noReceipt(await call('/about', { accept: MD, cfg: OFF }), 'off: Markdown'); noReceipt(await call('/brain/thinking.json?q=fact%20check%20a%20claim%20about%20zinc', { cfg: OFF }), 'off: JSON');
   const res = new Response('{"a":1}', { headers: { 'content-type': 'application/json' } });
   assert.equal(await sealFair(res, [], { path: '/x', base: BASE, fair: fairL() }), res, 'nothing counted: the very same answer object');
   const p = await call('/fair/pay?r=r20261125aaaaaaaa', { method: 'POST', cfg: OFF }); assert.equal(p.status, 503); assert.match(p.j.error.message, /nothing is charged/);
-  assert.deepEqual((await call('/.well-known/x402', { cfg: OFF })).j.resources, [`${BASE}/route`]); assert.equal((await call('/.well-known/x402', { cfg: OFF })).j.fair, undefined);
-  assert.deepEqual((await call('/.well-known/x402')).j.resources, [`${BASE}/route`, `${BASE}/fair/pay`]);
+  assert.deepEqual((await call('/.well-known/x402', { cfg: OFF })).j.resources, [`${BASE}/route`, `${BASE}/x402/read`, `${BASE}/reader/credit`]); assert.equal((await call('/.well-known/x402', { cfg: OFF })).j.fair, undefined);
+  assert.deepEqual((await call('/.well-known/x402')).j.resources, [`${BASE}/route`, `${BASE}/x402/read`, `${BASE}/reader/credit`, `${BASE}/fair/pay`]);
   assert.equal((await call('/fair.json', { cfg: OFF })).j.on, false);
 });
 await proof('the rest switch "fair" pauses receipts and settlement without a release; the rest of the sea answers as always', async () => {
@@ -305,7 +305,7 @@ await proof('schema-valid x402 v2, as the till: the 402 of /fair/pay (with recei
   assert.equal(c.accepts[0].amount, String(rs.reduce((s2, x) => s2 + x.shareMicro.mid, 0))); assert.equal(r.j.accepts[0].outputSchema.input.method, 'POST'); assert.equal(r.j.accepts[0].outputSchema.input.discoverable, true);
   const probe = await call('/fair/pay', { method: 'POST' }); assert.equal(probe.status, 402, 'a catalog that names no receipt meets the 402, not a 400'); const pc = x402Valid(probe.h, '/fair/pay probe');
   assert.equal(pc.accepts[0].amount, String(FAIR.minMicro)); assert.equal(pc.resource.url, `${BASE}/fair/pay`); assert.match(pc.resource.description, /without receipts nothing is due/);
-  const wk = (await call('/.well-known/x402')).j; assert.equal(wk.version, 1); assert.deepEqual(wk.resources, [`${BASE}/route`, `${BASE}/fair/pay`]);
+  const wk = (await call('/.well-known/x402')).j; assert.equal(wk.version, 1); assert.deepEqual(wk.resources, [`${BASE}/route`, `${BASE}/x402/read`, `${BASE}/reader/credit`, `${BASE}/fair/pay`]);
   for (const u of wk.resources) { const pr = await call(u.slice(BASE.length), { method: 'POST' }); assert.equal(pr.status, 402, u); x402Valid(pr.h, u); }
 });
 await proof('a payment that names no receipt settles nothing: refused before any facilitator is asked, no sale, nothing charged', async () => {

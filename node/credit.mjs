@@ -67,9 +67,23 @@ export function creditTerms(cfg, { base }) {
 }
 const b64 = (s) => Buffer.from(s, 'utf8').toString('base64');
 // the 402: the terms where every x402 client looks, and in words
+// the call and its answer for discovery catalogs (x402 "bazaar", since 3.55): the indexes that build the call from the 402 itself
+// (AgentCash, x402scan) read what to send and what comes back from here, as JSON Schema too
+export function creditBazaar(base) {
+  const b = String(base || '').replace(/\/+$/, '');
+  return {
+    info: {
+      input: { type: 'http', method: 'POST', bodyType: 'json', body: {} },
+      output: { type: 'json', example: { token: 'mlc_…', pages: CREDIT.pages, left: CREDIT.pages, until: '2026-12-26T00:00:00.000Z', use: `x-sea-credit: <token> on GET ${b}/r/<page>` } },
+    },
+    schema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object', required: ['input'], properties: {
+      input: { type: 'object', required: ['type', 'method'], properties: { type: { type: 'string', const: 'http' }, method: { type: 'string', enum: ['POST'] }, bodyType: { type: 'string', enum: ['json'] }, body: { type: 'object', properties: {}, additionalProperties: false, description: 'nothing to send: the payment is the request' } } },
+      output: { type: 'object', properties: { type: { type: 'string', const: 'json' }, example: { type: 'object', required: ['token', 'pages', 'until'], properties: { token: { type: 'string', description: 'mlc_…, shown once: send it as x-sea-credit or as Authorization: Bearer' }, pages: { type: 'number' }, left: { type: 'number' }, until: { type: 'string' }, use: { type: 'string' } } } } } } },
+  };
+}
 export function creditRequired(t, { base, error, cors = {} }) {
   const b = String(base || '').replace(/\/+$/, '');
-  const v2 = { x402Version: 2, error: error || 'PAYMENT-SIGNATURE header is required', resource: { url: t.resource, description: t.description, mimeType: 'application/json' }, accepts: [t.v2] };
+  const v2 = { x402Version: 2, error: error || 'PAYMENT-SIGNATURE header is required', resource: { url: t.resource, description: t.description, mimeType: 'application/json' }, accepts: [t.v2], extensions: { bazaar: creditBazaar(b) } };
   const body = { x402Version: 1, error: error || 'X-PAYMENT header is required', accepts: [t.v1],
     amount_usd: usd6(t.micro), unit: 'USDC on Base, 6 decimals (maxAmountRequired is in millionths of a dollar)', what: t.description,
     credit: { pages: CREDIT.pages, days: CREDIT.days, per_page_usd: usd6(CREDIT.micro / CREDIT.pages), exact: 'a payment of exactly this amount; any other is not taken', use: 'x-sea-credit: <token> or Authorization: Bearer <token>', spent: 'one page per read that would count against the free limit, only after the network\'s 100 free pages of the day' },

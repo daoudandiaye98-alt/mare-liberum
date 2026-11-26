@@ -152,6 +152,11 @@ const noToll = (r, what) => { for (const k of TOLL_HDR) assert.equal(r.headers.g
 const micro = (usd) => Math.round(Number(usd) * 1e6);
 const twoFifths = (t) => Math.floor((t * 2) / 5); // 0.2 × USD 2 per million tokens, in millionths of a dollar: 0.4 a token
 const mask = (s, v) => String(s ?? '').replaceAll(v, '<V>').replace(/\br\d{8}[a-z0-9]{8}\b/g, 'r<id>');
+// the x402 manifest names every door that is sold since 3.55 (proven by tools/fair-proof.mjs and tools/till-proof.mjs): where an
+// answer is compared with the release before the toll, its route, its fair share and the rest stand as there, the doors sold
+// beside the route and its words set apart
+const manifestOf = (t) => { try { const j = JSON.parse(t); if (!Array.isArray(j?.resources) || !Array.isArray(j?.pricing)) return t; j.resources = j.resources.filter((u) => /\/(route|fair\/pay)$/.test(u)); j.pricing = j.pricing.filter((p) => p?.capability === 'route'); j.instructions = '<words>'; return JSON.stringify(j); } catch { return t; } };
+const manifestAnswer = (r) => Object.assign(Object.create(Object.getPrototypeOf(r)), r, { text: manifestOf(r.text) });
 const shape = (r, v) => ({ status: r.status, headers: Object.fromEntries([...r.headers.entries()].map(([k, x]) => [k, mask(x, v)]).sort(([a], [b]) => (a < b ? -1 : 1))), body: mask(r.text, v) });
 const sameAs = (a, va, b, vb, what) => { const x = shape(a, va), y = shape(b, vb); assert.equal(x.status, y.status, `${what}: status`); assert.deepEqual(x.headers, y.headers, `${what}: headers`); assert.equal(x.body, y.body, `${what}: body`); };
 let ipN = 0;
@@ -775,7 +780,7 @@ const DOOR_RUN = async (n, ip) => {
   for (const [m, p] of [['initialize', { protocolVersion: '2025-06-18', capabilities: {}, clientInfo: { name: 'toll-proof', version: '1' } }], ['tools/list', null], ['tools/call', { name: 'call_tool', arguments: { name: 'build_agent', arguments: {} } }], ['tools/call', { name: 'find_tools', arguments: { need: 'buy shoes' } }], ['tools/call', { name: 'think', arguments: { q: 'cheap flights' } }]]) put(`/mcp/lean ${m} ${p?.name || ''}`, await n.rpc('/mcp/lean', m, p, { ip }));
   put('/mcp tools/list', await n.rpc('/mcp', 'tools/list', null, { ip })); put('/mcp/app tools/list', await n.rpc('/mcp/app', 'tools/list', null, { ip }));
   put('/hello', await n.call('/hello', { ip })); put('/routes.json', await n.call('/routes.json', { ip }));
-  put('/fair/pay GET', await n.call('/fair/pay', { ip })); put('/fair/pay toll id', await n.call('/fair/pay?r=t20261125abcdefgh', { method: 'POST', ip })); put('/.well-known/x402', await n.call('/.well-known/x402', { ip }));
+  put('/fair/pay GET', await n.call('/fair/pay', { ip })); put('/fair/pay toll id', await n.call('/fair/pay?r=t20261125abcdefgh', { method: 'POST', ip })); put('/.well-known/x402', manifestAnswer(await n.call('/.well-known/x402', { ip })));
   provided.length = 0; put('/via/ with a payment and TOON', await n.call(`/via/${encodeVia(`${PROVIDER}/v1/prices`)}?fmt=toon`, { ip, headers: { 'payment-signature': v2(54000) } }));
   return out;
 };
@@ -867,15 +872,18 @@ await proof('/engine (a section "The toll" with the example $0.003630), /engine.
   }
   for (const [path, accept] of [['/', 'text/html'], ['/hello', 'application/json'], ['/stats', 'application/json'], ['/routes.json', 'application/json'], ['/savings.json', 'application/json'], ['/connect', 'text/html'], ['/mcp-server', 'text/html'], ['/robots.txt', 'text/plain'], ['/.well-known/x402', 'application/json'], ['/job', 'application/json'], ['/pay/howto', 'text/plain'], ['/proof.json', 'application/json']]) {
     const a = await F.call(path, { ip: '192.0.2.200', accept }), b = await M.call(path, { ip: '192.0.2.200', accept });
-    assert.equal(a.status, b.status, path); assert.equal(tmask(a.text, F.version), tmask(b.text, M.version), `${path}: as ${REF}`);
+    // (the x402 manifest names every door that is sold since 3.55, proven by tools/fair-proof.mjs and tools/till-proof.mjs:
+    // here its route, its fair share and the rest of it as the reference, the doors sold beside the route and its words set apart)
+    const norm = path === '/.well-known/x402' ? manifestOf : (t) => t;
+    assert.equal(a.status, b.status, path); assert.equal(tmask(norm(a.text), F.version), tmask(norm(b.text), M.version), `${path}: as ${REF}`);
   }
 });
-await proof('3.54.0 in VERSION, server.json, server-dev.json, server-lean.json and gemini-extension.json; RELEASES: 3.54.0 without day and pull request, 3.53.0 on 2026-11-26T15:36:12+01:00 with #45, 3.52.0 on 2026-11-26T15:07:52+01:00 with #44, 3.51.0 on 2026-11-26T14:55:39+01:00 with #43; proof:toll in package.json', async () => {
-  assert.equal(ON.version, '3.54.0'); for (const f of ['server.json', 'server-dev.json', 'server-lean.json', 'gemini-extension.json']) assert.equal(JSON.parse(readFileSync(join(ROOT, f), 'utf8')).version, '3.54.0', f);
-  assert.deepEqual([RELEASES[0].version, RELEASES[0].at, RELEASES[0].pr], ['3.54.0', null, undefined]); assert.ok(RELEASES[0].what.length > 40 && !RELEASES[0].what.includes('\n'));
-  assert.deepEqual([RELEASES[1].version, RELEASES[1].at, RELEASES[1].pr], ['3.53.0', '2026-11-26T15:36:12+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/45']);
-  assert.deepEqual([RELEASES[2].version, RELEASES[2].at, RELEASES[2].pr], ['3.52.0', '2026-11-26T15:07:52+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/44']);
-  assert.deepEqual([RELEASES[3].version, RELEASES[3].at, RELEASES[3].pr], ['3.51.0', '2026-11-26T14:55:39+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/43']);
+await proof('3.55.0 in VERSION, server.json, server-dev.json, server-lean.json and gemini-extension.json; RELEASES: 3.55.0 without day and pull request, 3.54.0 on 2026-11-26T16:11:39+01:00 with #46, 3.53.0 on 2026-11-26T15:36:12+01:00 with #45, 3.52.0 on 2026-11-26T15:07:52+01:00 with #44; proof:toll in package.json', async () => {
+  assert.equal(ON.version, '3.55.0'); for (const f of ['server.json', 'server-dev.json', 'server-lean.json', 'gemini-extension.json']) assert.equal(JSON.parse(readFileSync(join(ROOT, f), 'utf8')).version, '3.55.0', f);
+  assert.deepEqual([RELEASES[0].version, RELEASES[0].at, RELEASES[0].pr], ['3.55.0', null, undefined]); assert.ok(RELEASES[0].what.length > 40 && !RELEASES[0].what.includes('\n'));
+  assert.deepEqual([RELEASES[1].version, RELEASES[1].at, RELEASES[1].pr], ['3.54.0', '2026-11-26T16:11:39+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/46']);
+  assert.deepEqual([RELEASES[2].version, RELEASES[2].at, RELEASES[2].pr], ['3.53.0', '2026-11-26T15:36:12+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/45']);
+  assert.deepEqual([RELEASES[3].version, RELEASES[3].at, RELEASES[3].pr], ['3.52.0', '2026-11-26T15:07:52+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/44']);
 assert.equal(JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).scripts['proof:toll'], 'node tools/toll-proof.mjs');
 });
 
