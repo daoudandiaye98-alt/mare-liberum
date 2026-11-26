@@ -852,7 +852,16 @@ const since0 = (t) => t.replace(/"runningSince":"[^"]*"/g, '"runningSince":"<sta
   .replace(/<tr><td[^>]*>Bezahlter Check \([\s\S]*?<\/tr>/g, '')
   .replace(/ Past 20 checks an hour per network the JSON answer is a 402: an x402 client pays 0\.0[15] USDC and checks on in the same request; GET \S+\/x402\/check\?site=<domain> sells a check any time\./g, '')
   // (and the paid read of 3.57: up to ten pages for one payment, with the warden; a clause of llms.txt)
-  .replace(/; GET \S+\/x402\/read\?url=<page>&url=<page> reads up to 10 pages for one 0\.01 USDC payment, each with a prompt-injection warden/g, '');
+  .replace(/; GET \S+\/x402\/read\?url=<page>&url=<page> reads up to 10 pages for one 0\.01 USDC payment, each with a prompt-injection warden/g, '')
+  // (and the pilot of 3.59, proven by tools/pack-proof.mjs: a clause of AGB and terms § 3 (1) and (2), the last paragraph of
+  // § 4, a row of /de/preise, a section of llms.txt)
+  .replace(/ der Lotse im freien Umfang \(<code>\/pack<\/code>: 3 Pakete je Netz und Stunde, je bis zu 8 Seiten\),/g, '')
+  .replace(/ the pilot within its free measure \(<code>\/pack<\/code>: 3 packs per network an hour, up to 8 pages each\),/g, '')
+  .replace(/, der Lotse nach seinen freien Paketen ebenso mit den Bedingungen eines Pakets für 0,05 USDC \(Der Lotse, unten\)/g, '')
+  .replace(/, and the pilot past its free packs likewise with the terms of a pack for 0\.05 USDC \(the pilot, below\)/g, '')
+  .replace(/\n<p>\(\d+\) (?:Der Lotse|The pilot) \([\s\S]*?<\/p>/g, '')
+  .replace(/<tr><td[^>]*>Der Lotse \([\s\S]*?<\/tr>/g, '')
+  .replace(/## Ask a website, its docs or a PDF a question \(the pilot\)\n\n[^\n]*\n\n/g, '');
 // (and the version each tree names: a release bumps it, the answers stay the same)
 const vers = (t, v) => (v ? t.replaceAll(v, '<version>') : t);
 const sameText = (a, b, what) => { assert.equal(a.status, b.status, `${what}: status`); const x = vers(since0(a.text), MINE.version), y = vers(since0(b.text), THEIRS.version); assert.ok(x === y, `${what}: body ${x === y ? '' : firstDiff(x, y)}`); assert.deepEqual([...a.headers.entries()].sort(), [...b.headers.entries()].sort(), `${what}: headers`); };
