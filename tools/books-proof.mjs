@@ -824,7 +824,9 @@ const since0 = (t) => t.replace(/"runningSince":"[^"]*"/g, '"runningSince":"<sta
   .replace(/ buys 50 pages, or exactly 0\.50 USD by card or Link over MPP \(<code>POST \/reader\/credit\/stripe<\/code>\) buys 500 pages \(USD 0\.001 a page either way\)/g, ' buys 50 pages (USD 0.001 a page)')
   .replace(/, or by card or Link: POST \S+\/reader\/credit\/stripe over MPP, exactly 0\.50 USD for 500 pages \(30 days each\)/g, ' (30 days)')
   .replace(/\n<p>\(6\) (?:Mit Karte oder Link|By card or Link): [\s\S]*?<\/p>/g, '')
-  .replace(/<h2 id="karte">[\s\S]*?<\/p>\n/g, '');
+  .replace(/<h2 id="karte">[\s\S]*?<\/p>\n/g, '')
+  // (and what /open.json says of the skills index: since 3.51 it names the reading skill too, proven by tools/till-proof.mjs)
+  .replace('the agent skills (the resident skill and lean-web-reading), each with the digest of its bytes', 'the agent skill, with the digest of its bytes');
 // (and the version each tree names: a release bumps it, the answers stay the same)
 const vers = (t, v) => (v ? t.replaceAll(v, '<version>') : t);
 const sameText = (a, b, what) => { assert.equal(a.status, b.status, `${what}: status`); const x = vers(since0(a.text), MINE.version), y = vers(since0(b.text), THEIRS.version); assert.ok(x === y, `${what}: body ${x === y ? '' : firstDiff(x, y)}`); assert.deepEqual([...a.headers.entries()].sort(), [...b.headers.entries()].sort(), `${what}: headers`); };
