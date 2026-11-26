@@ -451,7 +451,8 @@ await proof('N1: a width the RPC refused is not asked again that UTC day (forwar
   await runTo(c, b, '2026-11-23T00:20:00Z', 600); const r1 = c.refused; c.head += 3000; await b.pass(); assert.ok(c.refused > r1, 'a new UTC day: wider ranges are tried again');
   // the forward reading never refused (its ranges are small), the last hour (1,800 blocks) is: it remembers that apart
   const s2 = blk('2026-11-22T10:00:00Z'), c2 = sim({ head: s2 + 60, maxRange: 1500 }), b2 = simBooks(c2, memoryKv(), { fromBlock: s2 });
-  await runTo(c2, b2, '2026-11-22T11:00:00Z', 60);
+  const steps2 = []; await runTo(c2, b2, '2026-11-22T11:00:00Z', 60, () => { steps2.push(b2.state().step); });
+  assert.ok(steps2.every((x, i) => i === 0 || x >= steps2[i - 1]), `the forward width never fell when the last hour was refused: ${steps2.slice(0, 8).join(',')}`);
   assert.equal(b2.state().step, 2000, 'the forward width grew to 2,000'); assert.equal(c2.refused, 1, `the last hour refused once, not ${c2.refused} times`);
 });
 await proof('P1: a write that fails half way (the store took the day, its journal line did not): the next pass puts the day back into the index, and its entry is there once', async () => {
