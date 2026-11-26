@@ -43,7 +43,9 @@ export function createLens(h) {
       if (!host) throw new SeaError('INVALID_ARGUMENT', 'type a website, for example example.com');
       const hit = (await kv.get(`check:${host}`)) || (await kv.get(`webcheck:${host}`)); if (hit) return { ...hit, cached: true, offers: await lens.offers() };
       if (cachedOnly) return { host, notChecked: true, note: 'not checked in the last hour — run the check in a browser at /check/' + host };
-      await allow(ctx, 'check', 20, 3600);
+      // a paid check (node/checkpay.mjs, since 3.56: 0.05 USDC over x402) is not one of the free checks of the hour; the free
+      // limit says it is the limit (checkLimit), so the doors can answer it with the terms of a paid check
+      if (!ctx?.paidCheck) { try { await allow(ctx, 'check', 20, 3600); } catch (e) { if (e instanceof SeaError) e.checkLimit = true; throw e; } }
       const r = await checkSite(host);
       if (r.reachable !== false) { await kv.set(`check:${host}`, r, 3600); const day = now().slice(0, 10); if (!ctx?.uncounted) { await kv.set(`check:count:${day}`, (Number(await kv.get(`check:count:${day}`)) || 0) + 1, 3 * DAY); await kv.set('check:total', (Number(await kv.get('check:total')) || 0) + 1, 400 * DAY); } }
       return { ...r, offers: await lens.offers() };

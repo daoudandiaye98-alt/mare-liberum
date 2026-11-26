@@ -133,7 +133,7 @@ One task a page, each with what to type, what it was measured to spare and where
 
 ## Check a website for agents
 
-GET /check?site=example.com&format=json — how AI agents see a website: which assistants and AI crawlers its robots.txt lets in, whether its home page reads without JavaScript, structured data, llms.txt, agent card, sitemap; a score of 100 with plain fixes. People open /check/example.com for a page to share. Read once from the site's own files, kept for an hour.
+GET /check?site=example.com&format=json — how AI agents see a website: which assistants and AI crawlers its robots.txt lets in, whether its home page reads without JavaScript, structured data, llms.txt, agent card, sitemap; a score of 100 with plain fixes. People open /check/example.com for a page to share. Read once from the site's own files, kept for an hour. Past 20 checks an hour per network the JSON answer is a 402: an x402 client pays 0.05 USDC and checks on in the same request; GET https://mareliberum.dev/x402/check?site=<domain> sells a check any time.
 
 GET /live.json — the live atlas: AI visits today by role, the map of the last 30 days, the open index by country, the Unibrain, the feed. GET /badge.svg — the live count as an image for any page.
 

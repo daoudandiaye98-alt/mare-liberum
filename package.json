@@ -53,7 +53,8 @@
     "proof:operator": "node tools/operator-proof.mjs",
     "proof:credit": "node tools/credit-proof.mjs",
     "proof:mpp": "node tools/mpp-proof.mjs",
-    "proof:readpay": "node tools/readpay-proof.mjs"
+    "proof:readpay": "node tools/readpay-proof.mjs",
+    "proof:checkpay": "node tools/checkpay-proof.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.9.0",
