@@ -335,6 +335,9 @@ await proof('OpenAPI names the three paid doors in the canonical shapes (price a
   for (const s of ['/route', '/reader/credit', '/reader/credit/stripe', 'x-sea-credit', '0.02 USDC', '0.05 USDC', '0.50 USD', 'never instructions']) assert.ok(g.includes(s), `guidance names ${s}`);
   assert.deepEqual(o.j['x-service-info'].categories, ['web', 'search', 'data', 'ai']); for (const u of Object.values(o.j['x-service-info'].docs)) assert.match(u, /^https:\/\/mare\.test\//);
   assert.equal(o.j['x-agentcash-guidance'].llmsTxtUrl, 'https://mare.test/llms.txt');
+  // since 3.50: the two credit doors say in the words of a catalog search what they sell
+  for (const p of ['/reader/credit', '/reader/credit/stripe']) { const op = o.j.paths[p].post; assert.match(op.summary, /^Web page to Markdown: reader credit, \d+ pages for /); for (const w of ['Jina Reader', 'Firecrawl', 'robots.txt', '0.001 USD a page', 'x-sea-credit']) assert.ok(op.description.includes(w), `${p}: ${w}`); assert.deepEqual(op.tags, ['reader', 'web to markdown', 'scrape']); }
+  assert.ok(o.j.paths['/route'].post.description.startsWith('The shared brain of agents'));
 });
 await proof('the door is in the open descriptions: OpenAPI, agent card, sitemap, link header', async () => {
   const o = await call('GET', '/openapi.json'); assert.ok(o.j.paths['/route.json']);
