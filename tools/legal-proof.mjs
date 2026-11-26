@@ -55,7 +55,8 @@ const route = pricingOf({ cents: DEFAULT_CENTS, payTo: HOUSE_WALLET });
 const kept = Array.from({ length: 101 }, (_, c) => c).filter((c) => priceOf({ MARE_ROUTE_PRICE_CENTS: String(c) }).cents === c);
 const range = [Math.min(...kept), Math.max(...kept)].map((c) => c / 100);
 const rows = pricingRows('https://mare.test', route);
-const EUROS = [...new Set(rows.flatMap((r) => [r.eur, r.yearly]).filter((x) => Number(x) > 0))].sort((a, b) => a - b);
+// (since 3.60 a row may also name the price of a year paid ahead: eurYear, the reader ladder and the Reederei)
+const EUROS = [...new Set(rows.flatMap((r) => [r.eur, r.yearly, r.eurYear]).filter((x) => Number(x) > 0))].sort((a, b) => a - b);
 const fairMin = FAIR.minMicro / 1e6;
 // the harbour toll: config/toll.json since 3.37 (node/toll.mjs reads the same file), before that the owner's rule
 const tollFile = join(ROOT, 'config/toll.json');

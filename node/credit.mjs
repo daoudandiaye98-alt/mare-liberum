@@ -51,7 +51,7 @@ export function creditOf(headers) {
 export function creditHint(base, why = null) {
   const b = String(base || '').replace(/\/+$/, '');
   const said = why === 'expired' ? 'This credit has expired. ' : why === 'used up' ? 'This credit is used up. ' : why === 'unknown' || why === 'bad' ? 'This credit token is not known here. ' : why === 'revoked' ? 'This credit was taken back: its payment did not settle. ' : '';
-  return { line: `${said}Or read on with prepaid reader credit: POST ${b}/reader/credit over x402 (0.05 USDC on Base for 50 pages above the free limit, 30 days), or by card or Link: POST ${b}/reader/credit/stripe over MPP (0.50 USD for 500 pages, 30 days), or as a business by card in the browser: ${b}/c/reader?from=limit (EUR 10 for 10,000 pages, 30 days); then send x-sea-credit: <token> (${b}/reader#credit).`,
+  return { line: `${said}Or read on with prepaid reader credit: POST ${b}/reader/credit over x402 (0.05 USDC on Base for 50 pages above the free limit, 30 days), or by card or Link: POST ${b}/reader/credit/stripe over MPP (0.50 USD for 500 pages, 30 days), or as a business by card in the browser: ${b}/c/reader?from=limit (EUR 10 for 10,000 pages, 30 days), with bigger packs up to 12,000,000 pages at ${b}/reader/credit/paid#plans; then send x-sea-credit: <token> (${b}/reader#credit).`,
     headers: { 'x-sea-credit-buy': `${b}/reader/credit`, 'x-sea-credit-buy-card': `${b}/reader/credit/stripe`, 'x-sea-credit-buy-business': `${b}/c/reader?from=limit`, link: `<${b}/reader#credit>; rel="payment"` } };
 }
 
@@ -154,10 +154,11 @@ export function createCredit({ kv, now = () => Date.now(), ledger = null, rpc = 
     // (since 3.55 the token may be given: derived from a payment whose page can be opened again, the operators' till of
     // node/checkout.mjs. A given token whose credit exists is never filled up again: its credit comes back as it stands,
     // with minted: false)
-    async mint(sale, claim = null, pages = CREDIT.pages, given = null) {
+    // (since 3.60 a pack may run longer than 30 days: a year of the reader ladder runs 365, node/checkout.mjs TILL)
+    async mint(sale, claim = null, pages = CREDIT.pages, given = null, days = CREDIT.days) {
       const own = given != null && CREDIT_RE.test(String(given));
       const token = own ? String(given) : `${CREDIT_PREFIX}${randomBytes(24).toString('base64url')}`, h = tokenHash(token), t = now();
-      let rec = { pages, left: pages, until: new Date(t + CREDIT.days * DAY * 1000).toISOString(), at: new Date(t).toISOString(), sale: sale?.id || null }, minted = true;
+      let rec = { pages, left: pages, until: new Date(t + (Number.isSafeInteger(days) && days > 0 ? days : CREDIT.days) * DAY * 1000).toISOString(), at: new Date(t).toISOString(), sale: sale?.id || null }, minted = true;
       await serial(h, async () => {
         if (own) { const old = await kv.get(T(h)); if (old) { rec = old; minted = false; return; } }
         await put(T(h), rec, ttlOf(rec.until), true); if (sale?.id) await put(`credit:sale:${sale.id}`, h, (CREDIT.days + 2) * DAY, true);

@@ -273,10 +273,13 @@ await proof('/pricing: one table of every paid offer, each with its counted link
   assert.match(h, /<h1[^>]*>Prices of the open sea<\/h1>/);
   for (const w of ['49 € a month, first month free', '79 € a month per team, first month free', '750 € setup + 990 € a year per office', '19 € once', '29 € once', '10 € once for 10,000 pages, valid 30 days', '0.02 USDC per call', 'Institutions: talk to us', SELLER.vat, 'href="/savings"', 'href="/proof"', 'Nothing pays to rank']) assert.ok(has(h, w), w);
   for (const id of ['teams', 'agency', 'law', 'owner', 'report', 'reader', 'route', 'talk']) assert.ok(h.includes(`href="/c/${id}?from=pricing"`), id);
-  assert.equal((h.match(/<tr id="[a-z]+">/g) || []).length, 8, 'one row per offer');
+  assert.equal((h.match(/<tr id="[a-z]+">/g) || []).length, 12, 'one row per offer (since 3.60 with the reader ladder and the Reederei)');
   const j = (await S.call('/pricing', { accept: 'application/json' })).j;
   assert.equal(j.price, 'POST /route costs 0.02 USDC on Base, no account, settle with POST /settle'); assert.equal(j.paid_route.pricing.amount_usd, '0.02'); assert.ok(j.house); assert.equal(j.how_to_pay, `${BASE}/pay/howto`);
-  assert.deepEqual(j.offers.map((o) => o.id), ['teams', 'agency', 'law', 'owner', 'report', 'reader', 'route', 'talk']); assert.ok(j.offers.every((o) => /^https:\/\/mare\.test\/c\/[a-z]+\?from=pricing$/.test(o.go)));
+  assert.deepEqual(j.offers.map((o) => o.id), ['teams', 'agency', 'law', 'owner', 'report', 'reader', 'kutter', 'fregatte', 'flotte', 'reederei', 'route', 'talk']); assert.ok(j.offers.every((o) => /^https:\/\/mare\.test\/c\/[a-z]+\?from=pricing$/.test(o.go)));
+  // (since 3.60) the ladder and the Reederei name a year paid ahead as a second counted link
+  assert.deepEqual(j.offers.filter((o) => o.go_year).map((o) => [o.id, o.go_year.replace(BASE, '')]), [['kutter', '/c/kutterjahr?from=pricing'], ['fregatte', '/c/fregattejahr?from=pricing'], ['flotte', '/c/flottejahr?from=pricing'], ['reederei', '/c/reedereijahr?from=pricing']]);
+  for (const id of ['kutter', 'kutterjahr', 'fregatte', 'fregattejahr', 'flotte', 'flottejahr', 'reederei', 'reedereijahr']) assert.ok(h.includes(`href="/c/${id}?from=pricing"`), id);
   assert.equal(j.value.measured.reuses30days, 0, 'zero stays zero'); assert.ok(j.value.modelledPerReuse.tokensMid > 0);
   assert.equal((await S.call('/pricing', { accept: '*/*' })).j.price, j.price, 'without asking for a page: data, as before');
   assert.match((await S.call('/pricing.md')).type, /text\/markdown/);

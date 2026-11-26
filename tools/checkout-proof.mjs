@@ -17,10 +17,11 @@ import { createMem } from '../node/mem.mjs';
 import { memoryKv } from '../node/flow.mjs';
 import { createLedger } from '../node/ledger.mjs';
 import { payConfig } from '../node/pay.mjs';
-import { CHECKOUT, CHECKOUT_DOOR, SESSION_RE, checkoutKey, checkoutToken, checkoutPaid } from '../node/checkout.mjs';
+import { CHECKOUT, CHECKOUT_DOOR, SESSION_RE, TILL, NODE, tillOffer, checkoutKey, checkoutToken, checkoutPaid } from '../node/checkout.mjs';
 import { CREDIT_RE, tokenHash } from '../node/credit.mjs';
 import { OFFER } from '../node/seo.mjs';
 import { CTA, ctaTarget } from '../node/attention.mjs';
+import { GATE } from '../node/legal.mjs';
 
 let passed = 0, failed = 0, negOk = 0, negBad = 0;
 const proof = async (name, fn) => { try { await fn(); passed++; console.log(`  ok   ${name}`); } catch (e) { failed++; console.log(`  FAIL ${name}\n       ${String(e?.stack || e).split('\n').slice(0, 5).join('\n       ')}`); } };
@@ -156,11 +157,75 @@ await proof('checkoutPaid in words: null only for complete, paid, payment mode, 
   assert.equal(checkoutPaid(null), 'the payment could not be read');
 });
 
+console.log('\nthe reader ladder (3.60)');
+const P = Object.fromEntries(TILL.map((o) => [o.id, o]));
+await proof('every pack: its own payment link in the code next to its link id, reached only through its order page /c/<id>; a year holds twelve times the pages for ten times the price and runs 365 days; a page gets cheaper up the ladder', async () => {
+  const seo = readFileSync(new URL('../node/seo.mjs', import.meta.url), 'utf8');
+  assert.deepEqual(TILL.map((o) => o.id), ['reader', 'kutter', 'kutterjahr', 'fregatte', 'fregattejahr', 'flotte', 'flottejahr']);
+  for (const o of TILL) {
+    assert.match(o.id, /^[a-z]{2,12}$/, `${o.id} fits the door /c/<id>`); assert.ok(Object.hasOwn(CTA, o.id), o.id); assert.equal(ctaTarget(o.id), OFFER[o.id], o.id);
+    assert.match(OFFER[o.id], /^https:\/\/buy\.stripe\.com\/[A-Za-z0-9]+$/, o.id); assert.match(o.linkId, /^plink_[A-Za-z0-9]+$/, o.id); assert.ok(seo.includes(o.linkId), `${o.id}: the link id stands next to the link`);
+    assert.equal(o.currency, 'eur'); assert.equal(tillOffer(o.linkId), o);
+  }
+  assert.equal(new Set(TILL.map((o) => o.linkId)).size, TILL.length, 'one link per pack'); assert.equal(new Set(TILL.map((o) => o.pages)).size, TILL.length, 'one size per pack');
+  for (const k of ['kutter', 'fregatte', 'flotte']) { const m = P[k], y = P[`${k}jahr`]; assert.deepEqual([m.days, y.days, y.pages, y.cents], [30, 365, m.pages * 12, m.cents * 10], k); }
+  assert.deepEqual(['kutter', 'fregatte', 'flotte'].map((k) => [P[k].cents, P[k].pages]), [[4900, 100000], [19900, 500000], [39000, 1000000]]);
+  const per = ['reader', 'kutter', 'fregatte', 'flotte'].map((k) => P[k].cents / P[k].pages); assert.ok(per.every((v, i) => i === 0 || v < per[i - 1]), 'a page gets cheaper up the ladder');
+  for (const t of NODE.terms) { assert.ok(Object.hasOwn(CTA, t.id), t.id); assert.equal(ctaTarget(t.id), OFFER[t.id]); assert.ok(seo.includes(t.linkId), t.id); assert.equal(tillOffer(t.linkId), null, 'the Reederei gives no token'); }
+});
+await proof('a Kutter session gives exactly 100,000 pages for 30 days, a Flotte year exactly 12,000,000 pages for 365 days; the answer names the pack, its price and the amount paid', async () => {
+  const now = Date.now();
+  for (const [k, n] of [['kutter', 70], ['flottejahr', 71], ['fregattejahr', 72]]) {
+    const o = P[k], s = sid(n); SESSIONS.set(s, paidSession(s, { payment_link: o.linkId, amount_total: o.cents }));
+    const r = await call(`${CHECKOUT_DOOR}?session=${s}`);
+    assert.equal(r.status, 200, r.text); assert.equal(r.j.token, checkoutToken(KEY, s)); assert.deepEqual([r.j.pages, r.j.left, r.j.minted, r.j.plan], [o.pages, o.pages, true, o.name]);
+    assert.equal(r.j.price_eur, (o.cents / 100).toFixed(2)); assert.equal(r.j.paid.amount_eur, (o.cents / 100).toFixed(2));
+    const days = (Date.parse(r.j.until) - now) / 86_400_000; assert.ok(days > o.days - 0.01 && days < o.days + 0.01, `${k}: ${days} days`);
+    const p = await peek(r.j.token); assert.deepEqual([p.state, p.pages, p.left], ['ok', o.pages, o.pages]);
+    const again = await call(`${CHECKOUT_DOOR}?session=${s}`); assert.deepEqual([again.j.minted, again.j.pages, again.j.plan], [false, o.pages, o.name]);
+  }
+});
+await proof('a ladder link paid at another pack\'s price, or in another currency, gives nothing (402) and nothing is minted', async () => {
+  let n = 80;
+  for (const [k, amount, currency] of [['kutter', 1000, 'eur'], ['flottejahr', 39000, 'eur'], ['fregatte', 19900, 'usd']]) {
+    const s = sid(n++); SESSIONS.set(s, paidSession(s, { payment_link: P[k].linkId, amount_total: amount, currency }));
+    const r = await call(`${CHECKOUT_DOOR}?session=${s}`); assert.equal(r.status, 402, k); assert.match(r.j.error.message, new RegExp(`exactly EUR ${(P[k].cents / 100).toFixed(2)}`)); assert.ok(!r.j.token);
+    assert.equal((await peek(checkoutToken(KEY, s))).state, 'unknown');
+  }
+  const s = sid(n++); SESSIONS.set(s, paidSession(s, { payment_link: NODE.terms[0].linkId, amount_total: NODE.terms[0].cents }));
+  const r = await call(`${CHECKOUT_DOOR}?session=${s}`); assert.equal(r.status, 402); assert.match(r.j.error.message, /not made through/); assert.ok(!r.j.token, 'a Reederei payment gives no reader token');
+});
+await proof('the door without a session lists the whole ladder with its order pages and the Reederei, never a payment link', async () => {
+  const r = await call(CHECKOUT_DOOR);
+  assert.deepEqual(r.j.plans.map((x) => [x.id, x.pages, x.days, x.price_eur]), TILL.map((o) => [o.id, o.pages, o.days, (o.cents / 100).toFixed(2)]));
+  for (const x of r.j.plans) assert.equal(x.buy, `${BASE}/c/${x.id}?from=reader`);
+  assert.equal(r.j.node.page, `${BASE}${NODE.door}`); assert.ok(!r.text.includes('buy.stripe.com'));
+  const h = await call(CHECKOUT_DOOR, { accept: 'text/html' });
+  for (const o of TILL.filter((x) => x.id !== 'reader')) assert.ok(h.text.includes(`href="/c/${o.id}?from=reader"`), o.id);
+  assert.ok(h.text.includes('id="plans"') && h.text.includes(`href="${NODE.door}"`)); assert.ok(!h.text.includes('buy.stripe.com'));
+});
+await proof('the Reederei: /reader/node names both terms and their order pages, never a payment link; ?paid=1 thanks the buyer, noindex and no-store', async () => {
+  const r = await call(NODE.door, { accept: 'text/html' });
+  assert.equal(r.status, 200); assert.match(r.h['content-type'], /^text\/html/); assert.ok(r.text.includes('href="/c/reederei?from=reader"') && r.text.includes('href="/c/reedereijahr?from=reader"'));
+  assert.ok(r.text.includes('2,900') && r.text.includes('9,900') && r.text.includes('48 hours')); assert.ok(!r.text.includes('buy.stripe.com')); assert.ok(!r.text.includes('noindex'));
+  const t = await call(`${NODE.door}?paid=1`, { accept: 'text/html' });
+  assert.equal(t.status, 200); assert.ok(t.text.includes('your payment has arrived')); assert.equal(t.h['cache-control'], 'no-store'); assert.match(t.h['x-robots-tag'], /noindex/); assert.ok(t.text.includes('<meta name="robots" content="noindex, nofollow">'));
+});
+await proof('every order page of the ladder asks for the business box first and only then leads to its own payment link', async () => {
+  for (const id of [...TILL.map((o) => o.id), ...NODE.terms.map((t) => t.id)]) {
+    const gate = await call(`/c/${id}?from=reader`, { accept: 'text/html' }); assert.equal(gate.status, 200, id); assert.ok(gate.text.includes('§ 14 BGB') && !gate.text.includes('buy.stripe.com'), id);
+    const go = await call(`/c/${id}?from=reader&${GATE.field}=${GATE.value}`); assert.equal(go.status, 302, id); assert.equal(go.h.location, OFFER[id], id);
+  }
+});
+
 console.log('\nnegative controls');
 await negative('a till that took any payment link is caught', () => assert.equal(checkoutPaid(paidSession(sid(1), { payment_link: 'plink_Other' })), null));
 await negative('a till that took any amount is caught', () => assert.equal(checkoutPaid(paidSession(sid(1), { amount_total: 100 })), null));
 await negative('a token not bound to its session is caught', () => assert.equal(checkoutToken(KEY, sid(1)), checkoutToken(KEY, sid(2))));
 await negative('a second visit that filled the credit up is caught', async () => { const r = await call(`${CHECKOUT_DOOR}?session=${sid(1)}`); assert.equal(r.j.left, 10000); });
+await negative('a till that gave the Starter\'s pages for a Flotte year is caught', async () => { const r = await call(`${CHECKOUT_DOOR}?session=${sid(71)}`); assert.equal(r.j.pages, CHECKOUT.pages); });
+await negative('a till that took a Kutter link at the Starter\'s price is caught', () => assert.equal(checkoutPaid(paidSession(sid(1), { payment_link: P.kutter.linkId, amount_total: 1000 })), null));
+await negative('a Reederei page that handed out a payment link is caught', async () => { const r = await call(NODE.door, { accept: 'text/html' }); assert.ok(r.text.includes('buy.stripe.com')); });
 await negative('a door that handed out the payment link is caught', async () => { const r = await call(CHECKOUT_DOOR); assert.ok(r.text.includes('buy.stripe.com')); });
 
 console.log(`\n${passed} passed, ${failed} failed; negative controls: ${negOk} failed as they must, ${negBad} did not`);

@@ -813,6 +813,23 @@ await proof('/status.json gains counts: numbers only (and the day), no address, 
 const firstDiff = (x, y) => { let i = 0; while (i < x.length && x[i] === y[i]) i++; return `at ${i}: ${JSON.stringify(x.slice(Math.max(0, i - 120), i + 120))} <> ${JSON.stringify(y.slice(Math.max(0, i - 120), i + 120))}`; };
 // (the moment each tree's modules were first loaded, runningSince of /open.json, is the only thing told apart: this tree's came first)
 const since0 = (t) => t.replace(/"runningSince":"[^"]*"/g, '"runningSince":"<start>"')
+  // (and the reader ladder and the Reederei of 3.60, proven by tools/checkout-proof.mjs, tools/attention-proof.mjs, tools/legal-proof.mjs
+  // and tools/credit-proof.mjs: four rows and their offers of /pricing and its sentence and data, a clause of llms.txt, of the
+  // limit answer and of /reader, the page list of terms and AGB § 2, § 4 (3) g, the term of § 5a (4), rows of /de/preise; cut
+  // first, so that the masks of 3.55 below find their words as they were)
+  .replace(/,\{"@type":"Offer","name":"(?:Reader pack (?:Kutter|Fregatte|Flotte)|Reederei: your own reader node)","url":"[^"]*","price":\d+,"priceCurrency":"EUR","seller":\{[^{}]*\}\}/g, '')
+  .replace(/<tr id="(?:kutter|fregatte|flotte|reederei)">[\s\S]*?<\/tr>\n?/g, '')
+  .replace(/,\{"id":"(?:kutter|fregatte|flotte|reederei)","name":[^{}]*\}/g, '')
+  .replace(/; bigger packs from 49 € for 100,000 pages: <a href="\/reader\/credit\/paid#plans">Kutter, Fregatte, Flotte<\/a>, and <a href="\/reader\/node">your own reader node<\/a>\./g, '.')
+  .replace(/ Bigger packs: Kutter, Fregatte and Flotte from 49 € for 100,000 pages to 3,900 € for a year of 12,000,000 pages \(\S+\/reader\/credit\/paid#plans\), and an own reader node in the EU \(\S+\/reader\/node\)\./g, '')
+  .replace(/; bigger packs \([^()]*\) at \S+\/reader\/credit\/paid#plans, and an own reader node in the EU \(Reederei\) at \S+\/reader\/node\./g, '.')
+  .replace(/, with bigger packs up to 12,000,000 pages at \S+\/reader\/credit\/paid#plans/g, '')
+  .replace(/ Bigger packs, Kutter, Fregatte and Flotte, from EUR 49 for 100,000 pages to EUR 3,900 for a year of 12,000,000 pages: \S+\/reader\/credit\/paid#plans; an own reader node in the EU \(Reederei\): \S+\/reader\/node\./g, '')
+  .replace(/, bigger packs at \S+\/reader\/credit\/paid#plans/g, '')
+  .replace(/, <a href="\/reader\/node">\/reader\/node<\/a>\) (ist kein bindendes|are not binding)/g, ') $1')
+  .replace(/<br>g\) (?:Reederei, eigener Leser-Knoten|Reederei, an own reader node) \([\s\S]*?<br>h\) (Institution)/g, '<br>g) $1')
+  .replace(/, ein Jahrespaket für Betreiber \(§ 4 Absatz 3 f\) 365 Tage;/g, ';').replace(/, a pack of a year for operators \(§ 4 paragraph 3 f\) 365 days;/g, ';')
+  .replace(/<tr><td[^>]*>(?:Leser-Paket (?:Kutter|Fregatte|Flotte) für Betreiber|Reederei, eigener Leser-Knoten)[\s\S]*?<\/tr>\n?/g, '')
   // (and the operators' till of 3.55 where it is sold, proven by tools/checkout-proof.mjs, tools/attention-proof.mjs and tools/legal-proof.mjs:
   // a row and a sentence of /pricing, a clause of llms.txt, AGB and terms § 2, § 4 (3) f and § 5a (7), a row of /de/preise;
   // the privacy notice's new paragraph is cut below)
