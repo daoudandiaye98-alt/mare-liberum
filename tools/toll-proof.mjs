@@ -859,7 +859,9 @@ await proof('/engine (a section "The toll" with the example $0.003630), /engine.
   // since 3.40.0 the English /mcp-server and /web-to-markdown end their "More:" line with links to the developer guides and the
   // reader's OpenAPI (node/seo.mjs, the reach pages); those links are taken out on both sides, everything else stays byte for byte
   const guides = (s) => s.replace(/ · <a href="\/(guides\/[a-z0-9-]+|openapi\/reader\.json)">[^<]*<\/a>/g, '');
-  const tmask = (s, v) => guides(mask(s, v)).replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?Z?/g, '<T>');
+  // since 3.41.0 /mcp-server counts the tools of both doors from the code (it said 53 by hand); the counts are masked on both sides
+  const doors = (s) => s.replace(/(with all|mit allen) \d+ (tools|Werkzeugen), <code>\/mcp\/app<\/code> (with the|mit den) \d+ /g, '$1 <n> $2, <code>/mcp/app</code> $3 <n> ');
+  const tmask = (s, v) => doors(guides(mask(s, v))).replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d+)?)?Z?/g, '<T>');
   for (const [path, accept] of [['/engine', 'text/html'], ['/engine.json', 'application/json'], ['/engine.md', 'text/markdown'], ['/fair', 'text/html'], ['/fair.json', 'application/json'], ['/pricing', 'text/html'], ['/pricing.json', 'application/json'], ['/treasury', 'application/json'], ['/open.json', 'application/json']]) {
     const r = await F.call(path, { ip: '192.0.2.200', accept }), o = await M.call(path, { ip: '192.0.2.200', accept }); assert.equal(r.status, 200, path); assert.ok(/toll/i.test(r.text) && !/toll/i.test(o.text), `${path}: its toll section`);
   }
@@ -868,12 +870,12 @@ await proof('/engine (a section "The toll" with the example $0.003630), /engine.
     assert.equal(a.status, b.status, path); assert.equal(tmask(a.text, F.version), tmask(b.text, M.version), `${path}: as ${REF}`);
   }
 });
-await proof('3.40.0 in VERSION, server.json, server-dev.json, server-lean.json and gemini-extension.json; RELEASES: 3.40.0 without day and pull request, 3.39.0 on 2026-11-26T00:54:11+01:00 with #31, 3.38.0 on 2026-11-26T00:35:28+01:00 with #30, 3.37.1 on 2026-11-25T23:02:33+01:00 with #29; proof:toll in package.json', async () => {
-  assert.equal(ON.version, '3.40.0'); for (const f of ['server.json', 'server-dev.json', 'server-lean.json', 'gemini-extension.json']) assert.equal(JSON.parse(readFileSync(join(ROOT, f), 'utf8')).version, '3.40.0', f);
-  assert.deepEqual([RELEASES[0].version, RELEASES[0].at, RELEASES[0].pr], ['3.40.0', null, undefined]); assert.ok(RELEASES[0].what.length > 40 && !RELEASES[0].what.includes('\n'));
-  assert.deepEqual([RELEASES[1].version, RELEASES[1].at, RELEASES[1].pr], ['3.39.0', '2026-11-26T00:54:11+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/31']);
-  assert.deepEqual([RELEASES[2].version, RELEASES[2].at, RELEASES[2].pr], ['3.38.0', '2026-11-26T00:35:28+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/30']);
-  assert.deepEqual([RELEASES[3].version, RELEASES[3].at, RELEASES[3].pr], ['3.37.1', '2026-11-25T23:02:33+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/29']);
+await proof('3.41.0 in VERSION, server.json, server-dev.json, server-lean.json and gemini-extension.json; RELEASES: 3.41.0 without day and pull request, 3.40.0 on 2026-11-26T03:46:59+01:00 with #32, 3.39.0 on 2026-11-26T00:54:11+01:00 with #31, 3.38.0 on 2026-11-26T00:35:28+01:00 with #30; proof:toll in package.json', async () => {
+  assert.equal(ON.version, '3.41.0'); for (const f of ['server.json', 'server-dev.json', 'server-lean.json', 'gemini-extension.json']) assert.equal(JSON.parse(readFileSync(join(ROOT, f), 'utf8')).version, '3.41.0', f);
+  assert.deepEqual([RELEASES[0].version, RELEASES[0].at, RELEASES[0].pr], ['3.41.0', null, undefined]); assert.ok(RELEASES[0].what.length > 40 && !RELEASES[0].what.includes('\n'));
+  assert.deepEqual([RELEASES[1].version, RELEASES[1].at, RELEASES[1].pr], ['3.40.0', '2026-11-26T03:46:59+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/32']);
+  assert.deepEqual([RELEASES[2].version, RELEASES[2].at, RELEASES[2].pr], ['3.39.0', '2026-11-26T00:54:11+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/31']);
+  assert.deepEqual([RELEASES[3].version, RELEASES[3].at, RELEASES[3].pr], ['3.38.0', '2026-11-26T00:35:28+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/30']);
   assert.equal(JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).scripts['proof:toll'], 'node tools/toll-proof.mjs');
 });
 
