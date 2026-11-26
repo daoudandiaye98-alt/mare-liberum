@@ -6,6 +6,9 @@
 //   reading      USDC's Transfer logs to the wallet (eth_getLogs through MARE_BASE_RPC, default https://mainnet.base.org),
 //                incrementally in small block ranges, from the last block read; a range the RPC finds too large is halved;
 //                a pass that fails waits (30 s, doubled each time, at most 30 minutes) and starts again where it stopped.
+//                Every pass reads the last 1,800 blocks behind the cursor once more, and once a UTC day (from 06:00 UTC) the
+//                whole previous UTC day: a public RPC behind a load balancer can answer from a node that has not indexed the
+//                newest blocks yet (an empty list, no error); what it left out is booked then, nothing twice.
 //                Only blocks 60 behind the head are read (two minutes: a block that could still change is not booked). It
 //                runs on its own timer, behind everything: no request ever waits for it. Read only: it asks the chain
 //                eth_blockNumber, eth_getLogs and eth_getBlockByNumber, and nothing else; it never signs, sends or holds
@@ -127,7 +130,7 @@ export function ledgerCsv(list) {
 // ------------------------------------------------------------------ the books of one node
 export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc = BOOKS_RPC, since = BOOKS_SINCE, fromBlock = null, ledger = null, facilitator = null, probe = true,
   get = (...a) => fetch(...a), now = () => Date.now(), log = () => {}, confirmations = 60, step: step0 = 1000, minStep = 50, maxStep = 2000, burst = 20, pauseMs = 250,
-  everyMs = 60_000, catchUpMs = 2000, rpcMs = 8000, probeMs = 15 * 60_000 } = {}) {
+  everyMs = 60_000, catchUpMs = 2000, rpcMs = 8000, probeMs = 15 * 60_000, again = 1800, dayAgainAfterH = 6, dayAgainBurst = 10 } = {}) {
   const W = lc(wallet), T = lc(token), on = HEX40.test(W) && HEX40.test(T) && !!rpc;
   let step = step0, seq = 0, running = null, timer = null, stopped = false, rev = 0, sum = null, sumRev = -1, waitUntilMs = 0, lastProbe = 0;
   const times = new Map(), delta = new Map();
@@ -165,8 +168,8 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
     return s;
   };
   // the first block at or after a time, found by halves (about 26 questions, once)
-  const firstBlockAt = async (sec, head) => {
-    let lo = 0, hi = head;
+  const firstBlockAt = async (sec, head, low = 0) => {
+    let lo = Math.max(0, low), hi = head;
     if ((await blockTime(hi)) < sec) return hi;
     while (lo < hi) { const mid = Math.floor((lo + hi) / 2); if ((await blockTime(mid)) < sec) lo = mid + 1; else hi = mid; }
     return lo;
@@ -193,6 +196,17 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
         if (mine.length) e.nonce = lc(mine[0].topics[2]);
       }
       for (const e of out) { e.time = iso((await blockTime(e.block, e.hint)) * 1000); delete e.hint; }
+    }
+    return out;
+  };
+
+  // the transfers of [a, b] in ranges the RPC takes (a range too large is halved, as when reading forward)
+  const readSpan = async (a, b) => {
+    const out = []; let x = a;
+    while (x <= b) {
+      const z = Math.min(x + step - 1, b);
+      try { out.push(...(await transfersIn(x, z))); x = z + 1; }
+      catch (e) { if (tooWide(e) && step > minStep) { step = Math.max(minStep, Math.floor(step / 2)); count('chain_narrowed'); await sleep(pauseMs); continue; } throw e; }
     }
     return out;
   };
@@ -254,6 +268,32 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
     catch { count('probe_failed'); }
   };
 
+  // ---- the previous UTC day once more (st.redo holds where it stands, st.redone the last day done): bounded to that day's blocks
+  async function dayAgain(recs) {
+    if (!(dayAgainBurst > 0) || st.next == null || st.next <= st.start) return;
+    const t = now(), y = dayOf(t - DAYMS);
+    if (t < Date.parse(`${dayOf(t)}T00:00:00Z`) + dayAgainAfterH * 3600e3) return;
+    let r = st.redo && st.redo.day === y ? st.redo : null;
+    if (!r) {
+      if (st.redone && st.redone >= y) return;
+      const t0 = Math.floor(Date.parse(`${y}T00:00:00Z`) / 1000), t1 = t0 + 86_400, hi = st.next - 1;
+      if ((await blockTime(hi)) < t1) return; // the forward reading has not passed the end of that day yet
+      const a = Math.max(st.start, await firstBlockAt(t0, hi, st.start)), b = (await firstBlockAt(t1, hi, st.start)) - 1;
+      r = st.redo = { day: y, from: a, to: b, next: a };
+    }
+    let n = 0, found = 0;
+    while (r.next <= r.to && n < dayAgainBurst && !stopped) {
+      const z = Math.min(r.next + step - 1, r.to);
+      let got;
+      try { got = await transfersIn(r.next, z); }
+      catch (e) { if (tooWide(e) && step > minStep) { step = Math.max(minStep, Math.floor(step / 2)); count('chain_narrowed'); await sleep(pauseMs); continue; } throw e; }
+      if (!(await keep(got, recs))) throw new Error('the books could not be written');
+      r.next = z + 1; n++; found += got.length;
+    }
+    if (r.next > r.to) { st.redone = r.day; st.redo = null; count('chain_day_reread'); }
+    return found;
+  }
+
   // ---- one pass: read what is new, look again at the last days, fold the counts
   async function passOnce() {
     st = await readState();
@@ -266,6 +306,14 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
       if (st.next == null) { st.start = Number.isSafeInteger(fromBlock) ? fromBlock : await firstBlockAt(Math.floor(Date.parse(`${since}T00:00:00Z`) / 1000) - 3600, safe); st.next = st.start; if (!(await put(KEYS.state(W), st, far()))) throw new Error('the state could not be written'); }
       let ranges = 0, found = 0;
       const recs = await recordsOf(kv, ledger);
+      // the last hour behind the cursor once more, every pass: a public RPC behind a load balancer can answer eth_getLogs from a
+      // node that has not indexed the newest blocks yet (an empty list, no error); what it left out is booked now. keep() counts
+      // nothing twice (tx and log index); a re-read that fails is counted and the pass goes on
+      if (again > 0 && st.next > st.start) {
+        const back = Math.max(st.start, st.next - again);
+        try { const got = await readSpan(back, st.next - 1); if (!(await keep(got, recs))) throw new Error('the books could not be written'); found += got.length; count('chain_reread'); }
+        catch (e) { count('chain_reread_failed'); log('mare_books', `the last hour once more: ${String(e?.message || e).slice(0, 160)}`); }
+      }
       while (st.next <= safe && ranges < burst && !stopped) {
         const a = st.next, b = Math.min(a + step - 1, safe);
         let got;
@@ -277,6 +325,9 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
         if (step < maxStep) step = Math.min(maxStep, Math.ceil(step * 1.25));
         if (st.next <= safe) await sleep(pauseMs);
       }
+      // once a UTC day, from 06:00 UTC, the whole previous UTC day once more (a backend more than an hour behind), a few
+      // ranges a pass; its first and last block are found by the chain's own times; never before the start
+      if (st.next > safe && !stopped) { try { await dayAgain(recs, safe); } catch (e) { count('chain_reread_failed'); log('mare_books', `the day once more: ${String(e?.message || e).slice(0, 160)}`); } }
       await relook(await recordsOf(kv, ledger));
       st.lastOk = iso(); st.errors = 0; st.lastError = null; waitUntilMs = 0;
       await put(KEYS.state(W), st, far());
@@ -391,7 +442,7 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
       for (const m of [now1[d], mine[d]]) for (const [k, v] of Object.entries(m || {})) c[k] = (c[k] || 0) + v;
       const g = (k) => c[k] || 0, e = out[d].errors, f = out[d].facilitator;
       e.facilitator_no_answer = g('verify_error') + g('settle_error'); e.facilitator_down = g('verify_down') + g('settle_down'); e.facilitator_no_verdict = g('verify_noverdict') + g('settle_noverdict');
-      e.settlement_failed = g('settle_failed'); e.chain_reads_failed = g('chain_errors');
+      e.settlement_failed = g('settle_failed'); e.chain_reads_failed = g('chain_errors') + g('chain_reread_failed');
       f.reached = g('verify_ok') + g('verify_refused') + g('verify_noverdict') + g('settle_ok') + g('settle_failed') + g('settle_noverdict') + g('probe_ok');
       f.missed = g('verify_error') + g('verify_down') + g('settle_error') + g('settle_down') + g('probe_failed'); f.payments_refused = g('verify_refused');
     }
