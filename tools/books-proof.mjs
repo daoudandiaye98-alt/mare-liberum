@@ -468,6 +468,13 @@ for (const [what, kind, where, times] of [['one timeout of the forward reading',
     assert.ok(per.slice(2).every((x) => x <= 3), `eth_getLogs a pass after the bad minute: ${per.join(',')}`);
   });
 }
+await proof('R1: the last hour starts from its own width, not the forward one: while a dense stretch keeps the forward width at 50 for an hour, the last hour is still 1 eth_getLogs a pass', async () => {
+  const start = blk('2026-11-22T10:00:00Z'), dense = start + 3000, c = sim({ head: start + 6000, failRange: (a, z) => a < dense && z - a + 1 > 50 }), kv = memoryKv(), b = simBooks(c, kv, { fromBlock: start });
+  const r0 = await b.pass(); assert.ok(!r0.error, r0.error); assert.equal((await b.sync()).behind_blocks, 0);
+  const per = [], steps = []; await runTo(c, b, '2026-11-22T13:50:00Z', 60, (r, n, m, next0) => { per.push(c.ranges(m).filter(([, z]) => z < next0).length); steps.push(b.state().step); });
+  assert.ok(steps.slice(0, 30).every((x) => x <= 50), `the forward width held narrow: ${[...new Set(steps.slice(0, 30))].join(',')}`);
+  assert.ok(per.slice(0, 30).every((x) => x === 1), `the last hour a pass: ${per.slice(0, 30).join(',')}`);
+});
 await proof('R2: a span that progresses through occasional errors (a 503 every 150th call, an RPC that takes 100 blocks) is finished, not given up', async () => {
   const start = blk('2026-11-21T00:00:00Z'), c = sim({ head: start + 60, maxRange: 100 }), kv = memoryKv(), b = simBooks(c, kv, { fromBlock: start });
   await runTo(c, b, '2026-11-23T05:50:00Z', 600);
@@ -713,7 +720,7 @@ const BREAK = [
   ['a zero transfer booked', 'node/books.mjs', 'if (value <= 0n) {', 'if (value < 0n) {'],
   ['another token booked (the RPC trusted)', 'node/books.mjs', "lc(g.address) !== T || ", ''],
   ['the amount as a floating point number', 'node/books.mjs', "value: value.toString(), usd: usdOf(value)", "value: String(Number(value)), usd: usdOf(value)"],
-  ['a range too large not halved', 'node/books.mjs', "if (tooWide(e) && step > minStep) {", "if (false) {"],
+  ['a range too large not halved', 'node/books.mjs', "if (tooWide(e) && (full ? step > minStep : aboutWidth(e) && w > minStep)) {", "if (false) {"],
   ['the time of the log\'s neighbour block', 'node/books.mjs', "e.time = iso((await blockTime(e.block, e.hint)) * 1000);", "e.time = iso((await blockTime(e.block + 1, e.hint)) * 1000);"],
   ['the signed transfer not matched (toll by nonce)', 'node/books.mjs', "if (e.nonce) { const r = recs.find((x) => x.door === 'toll'", "if (false) { const r = recs.find((x) => x.door === 'toll'"],
   ['no best effort by wallet, amount and time', 'node/books.mjs', "if (near.length && !near.some(", "if (false && !near.some("],
