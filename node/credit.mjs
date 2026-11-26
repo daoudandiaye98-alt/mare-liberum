@@ -51,8 +51,8 @@ export function creditOf(headers) {
 export function creditHint(base, why = null) {
   const b = String(base || '').replace(/\/+$/, '');
   const said = why === 'expired' ? 'This credit has expired. ' : why === 'used up' ? 'This credit is used up. ' : why === 'unknown' || why === 'bad' ? 'This credit token is not known here. ' : why === 'revoked' ? 'This credit was taken back: its payment did not settle. ' : '';
-  return { line: `${said}Or read on with prepaid reader credit: POST ${b}/reader/credit over x402 (0.05 USDC on Base for 50 pages above the free limit, 30 days), then send x-sea-credit: <token> (${b}/reader#credit).`,
-    headers: { 'x-sea-credit-buy': `${b}/reader/credit`, link: `<${b}/reader#credit>; rel="payment"` } };
+  return { line: `${said}Or read on with prepaid reader credit: POST ${b}/reader/credit over x402 (0.05 USDC on Base for 50 pages above the free limit, 30 days), or by card or Link: POST ${b}/reader/credit/stripe over MPP (0.50 USD for 500 pages, 30 days); then send x-sea-credit: <token> (${b}/reader#credit).`,
+    headers: { 'x-sea-credit-buy': `${b}/reader/credit`, 'x-sea-credit-buy-card': `${b}/reader/credit/stripe`, link: `<${b}/reader#credit>; rel="payment"` } };
 }
 
 // the terms of one purchase, in both shapes x402 knows (as the paid route's, node/pay.mjs termsFor)

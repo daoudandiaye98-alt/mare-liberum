@@ -818,7 +818,13 @@ const since0 = (t) => t.replace(/"runningSince":"[^"]*"/g, '"runningSince":"<sta
   // (and the list of releases of /open.json: a release adds its own line and gives the one before its day)
   .replace(/"releases":\[[\s\S]*?\n\]/, '"releases":[<releases>]')
   // (and what /open.json says of /openapi.json: since 3.46 it names the two paid doors, proven by tools/doors-proof.mjs)
-  .replace(/("path":"\/openapi\.json","url":"[^"]*","what":")[^"]*"/, '$1<what>"');
+  .replace(/("path":"\/openapi\.json","url":"[^"]*","what":")[^"]*"/, '$1<what>"')
+  // (and the card door of 3.49 where reader credit is offered, proven by tools/credit-proof.mjs and tools/mpp-proof.mjs: /pricing, llms.txt,
+  // AGB and terms § 5a (6), the table of /de/preise; the privacy notice's new paragraph is cut below)
+  .replace(/ buys 50 pages, or exactly 0\.50 USD by card or Link over MPP \(<code>POST \/reader\/credit\/stripe<\/code>\) buys 500 pages \(USD 0\.001 a page either way\)/g, ' buys 50 pages (USD 0.001 a page)')
+  .replace(/, or by card or Link: POST \S+\/reader\/credit\/stripe over MPP, exactly 0\.50 USD for 500 pages \(30 days each\)/g, ' (30 days)')
+  .replace(/\n<p>\(6\) (?:Mit Karte oder Link|By card or Link): [\s\S]*?<\/p>/g, '')
+  .replace(/<h2 id="karte">[\s\S]*?<\/p>\n/g, '');
 // (and the version each tree names: a release bumps it, the answers stay the same)
 const vers = (t, v) => (v ? t.replaceAll(v, '<version>') : t);
 const sameText = (a, b, what) => { assert.equal(a.status, b.status, `${what}: status`); const x = vers(since0(a.text), MINE.version), y = vers(since0(b.text), THEIRS.version); assert.ok(x === y, `${what}: body ${x === y ? '' : firstDiff(x, y)}`); assert.deepEqual([...a.headers.entries()].sort(), [...b.headers.entries()].sort(), `${what}: headers`); };
@@ -836,7 +842,7 @@ await proof('every other public answer as on origin/main (the pages, the data, /
   // (/operator itself is the operator's page since night/operator, proven by tools/operator-proof.mjs: new here, no door there)
   { const a = await MINE.call('/operator', { accept: 'text/html' }), b = await THEIRS.call('/operator', { accept: 'text/html' }); assert.equal(b.status, 404, '/operator on origin/main'); assert.equal(a.status, 200, '/operator here'); assert.equal(a.headers.get('cache-control'), 'no-store'); assert.match(a.headers.get('x-robots-tag') || '', /noindex/); }
   sameText(await MINE.rpc('/mcp', 'tools/list'), await THEIRS.rpc('/mcp', 'tools/list'), '/mcp tools/list');
-  const NEW = { '/de/datenschutz': [/\n<p>\(7\) Das Kassenbuch aus der Blockchain: [^<]*<\/p>/, /<tr><td>Kassenbuch aus der Blockchain[^\n]*<\/tr>\n/], '/privacy': [/\n<p>\(7\) The cash book from the blockchain: [^<]*<\/p>/, /<tr><td>Cash book from the blockchain[^\n]*<\/tr>\n/] };
+  const NEW = { '/de/datenschutz': [/\n<p>\(7\) Das Kassenbuch aus der Blockchain: [^<]*<\/p>/, /<tr><td>Kassenbuch aus der Blockchain[^\n]*<\/tr>\n/, /\n<p>\(4\) Leser-Guthaben mit Karte oder Link [\s\S]*?<\/p>/], '/privacy': [/\n<p>\(7\) The cash book from the blockchain: [^<]*<\/p>/, /<tr><td>Cash book from the blockchain[^\n]*<\/tr>\n/, /\n<p>\(4\) Reader credit by card or Link [\s\S]*?<\/p>/] };
   for (const [p, cut] of Object.entries(NEW)) {
     const a = await MINE.call(p, { accept: 'text/html' }), b = await THEIRS.call(p, { accept: 'text/html' });
     let t = a.text; for (const re of cut) { assert.ok(re.test(t), `${p}: ${re}`); t = t.replace(re, ''); }

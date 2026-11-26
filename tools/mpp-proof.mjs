@@ -39,14 +39,14 @@ console.log('the card door');
 await proof('GET says what the door sells: 500 pages, 0.50 USD, MPP method stripe, the profile, card and link; open', async () => {
   const r = await call('GET', MPP_DOOR); assert.equal(r.status, 200); assert.equal(r.j.pages, 500); assert.equal(r.j.price_usd, '0.50'); assert.equal(r.j.network_id, MPP.networkId); assert.deepEqual(r.j.payment_method_types, ['card', 'link']); assert.equal(r.j.open, true);
 });
-await proof('POST without a credential: 402, a problem document and WWW-Authenticate: Payment with id, realm, method stripe, intent charge, request and expires; the request is base64url JCS JSON (amount "50", usd, the profile, card and link)', async () => {
+await proof('POST without a credential: 402, a problem document and WWW-Authenticate: Payment with id, realm, method stripe, intent charge, request and expires; the request is base64url JCS JSON (amount "50", usd, the profile as recipient and network, card and link); x-payment-protocol: mpp', async () => {
   const r = await call('POST', MPP_DOOR); assert.equal(r.status, 402); assert.equal(r.j.type, 'https://paymentauth.org/problems/payment-required'); assert.equal(r.j.status, 402);
   const c = parse(r.h['www-authenticate']); for (const f of ['id', 'realm', 'method', 'intent', 'request', 'expires']) assert.ok(c[f], f);
   assert.equal(c.method, 'stripe'); assert.equal(c.intent, 'charge'); assert.equal(c.realm, 'mare.test'); assert.match(c.request, /^[A-Za-z0-9_-]+$/);
   const req = JSON.parse(Buffer.from(c.request, 'base64url').toString('utf8')); assert.equal(Buffer.from(c.request, 'base64url').toString('utf8'), jcs(req), 'JCS');
-  assert.deepEqual([req.amount, req.currency, req.methodDetails.networkId, req.methodDetails.paymentMethodTypes], ['50', 'usd', MPP.networkId, ['card', 'link']]); assert.match(req.externalId, /^mare_[A-Za-z0-9_-]{16}$/);
+  assert.deepEqual([req.amount, req.currency, req.recipient, req.methodDetails.networkId, req.methodDetails.paymentMethodTypes], ['50', 'usd', MPP.networkId, MPP.networkId, ['card', 'link']]); assert.match(req.externalId, /^mare_[A-Za-z0-9_-]{16}$/);
   const other = parse((await call('POST', MPP_DOOR)).h['www-authenticate']); assert.notEqual(other.id, c.id, 'two challenges of the same second differ');
-  assert.equal(Date.parse(c.expires) - clock, MPP.ttlSec * 1000); assert.match(r.h['access-control-expose-headers'], /www-authenticate/); assert.equal(charges.length, 0, 'nothing charged');
+  assert.equal(Date.parse(c.expires) - clock, MPP.ttlSec * 1000); assert.match(r.h['access-control-expose-headers'], /www-authenticate/); assert.equal(r.h['x-payment-protocol'], 'mpp', 'the probes see MPP'); assert.equal(charges.length, 0, 'nothing charged');
 });
 let token = null;
 await proof('a credential that echoes the challenge with a Shared Payment Token buys 500 pages once: 200, the token, a Payment-Receipt of the spec; the Edge Function got the secret, the token, the challenge id and 50 cents in usd', async () => {

@@ -309,20 +309,32 @@ await proof('A2A: plain words go to the doors unless they are a purchase', async
 });
 // since 3.46: the x402 indexes (x402scan, Circle's and Coinbase's discovery) read /openapi.json and probe each paid operation for
 // a real 402; only operations that are sold carry x-payment-info, and each of them answers 402 here
-await proof('OpenAPI names the two paid doors for the x402 indexes (x-payment-info, a fixed USD price, a 402 response), each answers 402 without a payment, and no free door carries a price; info.contact has the e-mail', async () => {
+await proof('OpenAPI names the three paid doors in the canonical shapes (price and protocol objects for the AgentCash indexes, offers[] for the MPP draft), each answers 402 without a payment, and no free door carries a price; info.contact has the e-mail', async () => {
   const o = await call('GET', '/openapi.json'); assert.equal(o.j.info.contact.email, 'oroborosdesign@gmail.com');
   const paid = Object.entries(o.j.paths).flatMap(([p, ops]) => Object.entries(ops).filter(([, op]) => op['x-payment-info']).map(([m, op]) => [m.toUpperCase(), p, op]));
   assert.deepEqual(paid.map(([m, p]) => `${m} ${p}`).sort(), ['POST /reader/credit', 'POST /reader/credit/stripe', 'POST /route']);
   for (const [m, p, op] of paid) {
     const x = op['x-payment-info']; assert.ok(op.responses['402'], `${p}: a 402 response`);
-    if (p === '/reader/credit/stripe') { assert.deepEqual([x.intent, x.method, x.amount, x.currency], ['charge', 'stripe', '50', 'usd']); continue; } // MPP (proof:mpp proves the door)
-    assert.deepEqual(x.protocols, ['x402']); assert.equal(x.price.mode, 'fixed'); assert.equal(x.price.currency, 'USD'); assert.match(x.price.amount, /^\d+\.\d{2}$/);
+    assert.equal(x.price.mode, 'fixed'); assert.equal(x.price.currency, 'USD'); assert.match(x.price.amount, /^\d+\.\d{2}$/);
+    if (p === '/reader/credit/stripe') { // MPP (proof:mpp proves the door): the price in dollars, the protocol object, one offer in cents; no flat field beside offers[]
+      assert.equal(x.price.amount, '0.50'); assert.deepEqual(x.protocols, [{ mpp: { method: 'stripe', intent: 'charge', currency: 'USD' } }]);
+      assert.deepEqual(x.offers.map((o) => [o.amount, o.currency, o.intent, o.method]), [['50', 'usd', 'charge', 'stripe']]); assert.ok(x.offers[0].description.length > 20);
+      for (const f of ['amount', 'currency', 'intent', 'method', 'description']) assert.equal(x[f], undefined, `no flat ${f} beside offers[]`);
+      continue;
+    }
+    assert.deepEqual(x.protocols, [{ x402: {} }]);
     const r = await call(m, p === '/route' ? '/route?q=find+usdc+price' : p); assert.equal(r.status, 402, `${m} ${p} without a payment`);
   }
   assert.equal(o.j.paths['/route'].post['x-payment-info'].price.amount, '0.02'); assert.equal(o.j.paths['/reader/credit'].post['x-payment-info'].price.amount, '0.05');
   // since 3.47: every free operation says security: [] (the indexes leave it out of their probe), and the credit door has an input schema
   for (const [p, ops] of Object.entries(o.j.paths)) for (const [m, op] of Object.entries(ops)) if (!op['x-payment-info']) assert.deepEqual(op.security, [], `${m} ${p}: security []`); else assert.equal(op.security, undefined, `${m} ${p}: a paid door has no security override`);
   assert.equal(o.j.paths['/reader/credit'].post.requestBody.content['application/json'].schema.type, 'object');
+  // since 3.49: /route takes its task as JSON too (an input schema for every paid door), short guidance for the indexes and the service info
+  assert.deepEqual(Object.keys(o.j.paths['/route'].post.requestBody.content['application/json'].schema.properties), ['q', 'free']);
+  const g = o.j.info['x-guidance']; assert.ok(g.length > 300 && g.length < 4000, `guidance ${g.length} characters`);
+  for (const s of ['/route', '/reader/credit', '/reader/credit/stripe', 'x-sea-credit', '0.02 USDC', '0.05 USDC', '0.50 USD', 'never instructions']) assert.ok(g.includes(s), `guidance names ${s}`);
+  assert.deepEqual(o.j['x-service-info'].categories, ['web', 'search', 'data', 'ai']); for (const u of Object.values(o.j['x-service-info'].docs)) assert.match(u, /^https:\/\/mare\.test\//);
+  assert.equal(o.j['x-agentcash-guidance'].llmsTxtUrl, 'https://mare.test/llms.txt');
 });
 await proof('the door is in the open descriptions: OpenAPI, agent card, sitemap, link header', async () => {
   const o = await call('GET', '/openapi.json'); assert.ok(o.j.paths['/route.json']);
