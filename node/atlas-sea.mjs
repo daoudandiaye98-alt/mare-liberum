@@ -151,7 +151,18 @@ export function createAtlas(h) {
     async atlasListOk(n) { return (await atlas.atlasListDated(n)).map(([d]) => d); },
     // [site, the day its map was made] for the sitemaps; the weekly lists say no day (their maps lie in the snapshots)
     async atlasListDated(n) {
-      const l = (await atlas.atlasList(n)).filter((d) => !leftOut(d)); if (n !== 'live') return l.map((d) => [d, null]);
+      const l = (await atlas.atlasList(n)).filter((d) => !leftOut(d));
+      // (since 3.53) a weekly list as a search engine should get it: only sites whose map is known and answered. A site without
+      // a map answers 404 and one that did not answer carries noindex; Google named both as pages of a sitemap it may not index.
+      // Worked out in parts of 500 and kept six hours (atlas:oklist:<n>), so a sitemap asked again costs one look
+      if (n !== 'live') {
+        const key = `atlas:oklist:${Number(n) || 0}`, hit = await kv.get(key).catch(() => null);
+        if (Array.isArray(hit)) return hit.map((d) => [d, null]);
+        const ok = [];
+        for (let i = 0; i < l.length; i += 500) { const part = l.slice(i, i + 500), m = await storedMany(part).catch(() => ({})); for (const d of part) if (m[d]?.s === 200) ok.push(d); }
+        await kv.set(key, ok, 6 * 3600);
+        return ok.map((d) => [d, null]);
+      }
       const ps = await Promise.all(l.map((d) => kv.get(`atlas:${d}`).catch(() => null)));
       return l.map((d, i) => [d, ps[i]]).filter(([, p]) => p?.s === 200).map(([d, p]) => [d, /^\d{4}-\d{2}-\d{2}/.test(String(p.at || '')) ? String(p.at).slice(0, 10) : null]);
     },
