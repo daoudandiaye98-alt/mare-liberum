@@ -98,14 +98,14 @@ await proof('GET /x402/check without a payment: 402, exactly 0.01 USDC to the ti
   const p = await call('/x402/check', { method: 'POST', ip: fresh(), body: { site: host() } }); assert.equal(p.status, 402);
   assert.equal((await funnel()).asked.check, before + 2); assert.equal((await funnel()).doors.check, `GET ${BASE}/x402/check?site=<domain>`);
 });
-await proof('/openapi.json names GET /x402/check (x-payment-info 0.01 USD, its 402) and the guide five sold doors; /discovery/resources and /.well-known/x402 list it', async () => {
+await proof('/openapi.json names GET /x402/check (x-payment-info 0.01 USD, its 402) and the guide six sold doors; /discovery/resources and /.well-known/x402 list it', async () => {
   const o = await call('/openapi.json', { ip: '127.0.0.1' }), op = o.j.paths['/x402/check']?.get;
   assert.ok(op); assert.deepEqual(op['x-payment-info'], { price: { mode: 'fixed', currency: 'USD', amount: '0.01' }, protocols: [{ x402: {} }] }); assert.ok(op.responses['402']); assert.equal(op.security, undefined);
-  assert.match(o.j.info['x-guidance'], /Five doors are sold/); assert.match(o.j.info['x-guidance'], /\/x402\/check\?site=<domain>/);
+  assert.match(o.j.info['x-guidance'], /Six doors are sold/); assert.match(o.j.info['x-guidance'], /\/x402\/check\?site=<domain>/);
   const d = await call('/discovery/resources', { ip: '127.0.0.1' }), it = d.j.items.find((x) => x.resource === `${BASE}/x402/check`);
   assert.ok(it); assert.equal(it.accepts[0].amount, '10000'); assert.ok(it.extensions.bazaar.info.output.example.score); assert.equal(d.j.pagination.total, d.j.items.length);
   const w = await call('/.well-known/x402', { ip: '127.0.0.1' }); assert.ok(w.j.resources.includes(`${BASE}/x402/check`)); const blk = w.j.pricing.find((p) => p.capability === 'check');
-  assert.equal(blk.amount_usd, '0.01'); assert.equal(blk.maxAmountRequired, '10000'); assert.equal(blk.payTo, WALLET); assert.match(w.j.instructions, /four moves/);
+  assert.equal(blk.amount_usd, '0.01'); assert.equal(blk.maxAmountRequired, '10000'); assert.equal(blk.payTo, WALLET); assert.match(w.j.instructions, /five moves/);
 });
 
 console.log('paying');

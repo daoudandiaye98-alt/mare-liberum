@@ -4,6 +4,8 @@
 import { roleOf, OPERATORS } from './atlantis.mjs';
 import { checkSite, safeHost, grab } from './check.mjs';
 import { readUrl, READER_UA } from './reader.mjs';
+import { packOf, packTarget, PACK } from './pack.mjs';
+import { PACKPAY } from './packpay.mjs';
 
 const FEED = new Set(['read', 'whale', 'brevet', 'seal', 'buoy', 'path', 'knock', 'enter', 'answer', 'ask', 'tide', 'job', 'job_done', 'note', 'mark', 'reflex', 'learn', 'course', 'outcome']);
 export const TAG = /^[a-z0-9]{4,12}$/;
@@ -50,6 +52,20 @@ export function createLens(h) {
       if (r.reachable !== false) { await kv.set(`check:${host}`, r, 3600); const day = now().slice(0, 10); if (!ctx?.uncounted) { await kv.set(`check:count:${day}`, (Number(await kv.get(`check:count:${day}`)) || 0) + 1, 3 * DAY); await kv.set('check:total', (Number(await kv.get('check:total')) || 0) + 1, 400 * DAY); } }
       return { ...r, offers: await lens.offers() };
     },
+    // the pilot (node/pack.mjs, since 3.59): a website, its documentation or a PDF asked a question, answered with the passages
+    // that answer it. Free: 3 packs an hour per network (8 pages, 4,000 tokens); the limit says it is the limit (packLimit), so
+    // the doors can answer it with the terms of a paid pack (node/packpay.mjs: 0.05 USDC, 40 pages, 32,000 tokens), which is none
+    // of the free packs. The pages are read through the reader below (robots.txt, its cache, PDFs), none a free read of the day
+    async pack(a = {}, ctx) {
+      if (ctx?.readOnly) return { note: 'crawlers read the sea itself; the pilot reads other sites for agents', how: 'GET /pack?url=<site>&q=<question>' };
+      const target = packTarget(a.url ?? a.site ?? a.u);
+      if (!target) throw new SeaError('INVALID_ARGUMENT', 'give a public web address: /pack?url=https://docs.example.com/&q=<your question> (a website, a docs section or a PDF)');
+      const paid = !!ctx?.paidPack;
+      if (!paid) { try { await allow(ctx, 'pack', PACKPAY.perHour, 3600); } catch (e) { if (e instanceof SeaError) e.packLimit = true; throw e; } }
+      const fetchText = async (u) => { const g = await grab(u, { max: 3_000_000, ms: 6000, ua: READER_UA }); return { status: g.status, body: g.body, type: g.type }; };
+      const read = (u) => lens.read({ url: u }, { ...ctx, packRead: true });
+      return packOf({ url: target, q: clean(a.q, 500) || '', budget: a.tokens, limits: paid ? PACK.paid : PACK.free, read, fetchText });
+    },
     // the reader: any public page as Markdown — free for every agent up to a fair daily amount, then Angel reads on
     async read(a = {}, ctx) {
       if (ctx?.readOnly) return { note: 'crawlers read the sea itself; the reader reads other pages for agents', how: 'GET /r/<page address>' };
@@ -61,7 +77,8 @@ export function createLens(h) {
       const full = a.full === true, shape = a.shape && typeof a.shape === 'object' ? a.shape : null, markup = !!(shape?.html || shape?.raw);
       const key = `read:${full ? 'full:' : ''}${shape?.key ? `${shape.key}:` : ''}${(await sha(raw)).slice(0, 24)}`, hit = a.fresh === true || markup ? null : await kv.get(key);
       // a paid read (node/readpay.mjs, since 3.48: one cent a page over x402) is not one of the free reads of the day
-      if (!hit && !ctx?.paidRead) {
+      // (since 3.59) the pages the pilot reads (node/pack.mjs) are none either: its own limit counts packs, not pages
+      if (!hit && !ctx?.paidRead && !ctx?.packRead) {
         try { await allow(ctx, 'read', 100, 86400); } catch {
           // prepaid reader credit (node/credit.mjs, since 3.38): only where the free limit refuses, one page per such read
           const paid = ctx?.credit ? await ctx.credit.spend() : null;
