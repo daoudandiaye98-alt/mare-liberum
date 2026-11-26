@@ -104,7 +104,8 @@ globalThis.fetch = async (u, o = {}) => {
       if (chain.limited > 0) { chain.limited--; return answer({ jsonrpc: '2.0', id: b.id, error: { code: -32005, message: 'rate limit exceeded: too many requests' } }, 429); }
       const f = b.params[0], a = num(f.fromBlock), z = num(f.toBlock);
       if (z - a + 1 > chain.maxRange) return err(-32005, `block range is too large: at most ${chain.maxRange}`);
-      const inRange = (l) => num(l.blockNumber) >= a && num(l.blockNumber) <= z;
+      const known = chain.lagUntil ? Math.min(z, chain.lagUntil) : z; // a backend behind a load balancer that has indexed the logs only so far
+      const inRange = (l) => num(l.blockNumber) >= a && num(l.blockNumber) <= known;
       return ok([...chain.logs.filter((l) => inRange(l) && matches(l, f)), ...chain.sloppy.filter(inRange)].map((l) => (chain.stamps ? { ...l, blockTimestamp: hex(timeOf(num(l.blockNumber))) } : l)));
     }
     return err(-32601, `the proof's chain does not know ${b.method}`);
@@ -235,7 +236,7 @@ await proof('every entry and the cursor are on the disk at once (the copy not ye
 });
 
 // ------------------------------------------------------------------ a restart: from the cursor, nothing twice; a late record labels later
-await proof('after a restart (the copy on disk never made) the books resume from the cursor: only new blocks are asked, nothing is counted twice', async () => {
+await proof('after a restart (the copy on disk never made) the books resume from the cursor: forward from it without a gap, behind it only the last 1,800 blocks once more, nothing counted twice', async () => {
   const before = await books1.sync();
   const disk2 = diskKv(f1, { everyMs: 1e9 }); await disk2.ready;
   put(45_990, { from: A('5'), value: 30_000, tx: TX('d') });
@@ -243,7 +244,12 @@ await proof('after a restart (the copy on disk never made) the books resume from
   const mark = chain.asked.length, b2 = B.createBooks({ kv: disk2, ledger, ...OPTS });
   const r = await b2.pass(); assert.ok(!r.error, r.error);
   const asked = chain.asked.slice(mark).filter((b) => b.method === 'eth_getLogs' && b.params[0].topics[0] === B.TRANSFER_TOPIC);
-  assert.ok(asked.length >= 1); assert.equal(num(asked[0].params[0].fromBlock), before.next_block, 'the first range starts at the cursor');
+  const fwd = asked.filter((b) => num(b.params[0].fromBlock) >= before.next_block), behind = asked.filter((b) => num(b.params[0].toBlock) < before.next_block);
+  assert.equal(fwd.length + behind.length, asked.length, 'every range is either forward from the cursor or behind it');
+  assert.ok(fwd.length >= 1 && behind.length >= 1, 'forward, and the last hour once more');
+  let next = before.next_block; for (const b of fwd) { const a0 = num(b.params[0].fromBlock), z0 = num(b.params[0].toBlock); if (z0 - a0 + 1 > chain.maxRange) continue; assert.equal(a0, next, 'forward without a gap from the cursor'); next = z0 + 1; }
+  assert.equal(next, 46_200 - 60 + 1);
+  for (const b of behind) assert.ok(num(b.params[0].fromBlock) >= before.next_block - 1800, 'once more only inside the last 1,800 blocks');
   const got = await b2.entries(); assert.equal(got.length, 9); assert.equal(new Set(got.map((e) => `${e.tx}:${e.log}`)).size, 9);
   const st = await b2.sync(); assert.equal(st.next_block, 46_200 - 60 + 1);
   disk1 = disk2; books1 = b2;
@@ -263,6 +269,36 @@ await proof('a best-effort label the till\'s record later contradicts (its settl
   led.saleSet(s1.id, { status: 'settled', tx: TX('e') }); later(60); await b.pass(); got = await b.entries();
   assert.deepEqual([one(TX('e')).door, one(TX('e')).match, one(TX('e')).ref], ['till', 'tx', s1.id]); assert.deepEqual([one(TX('0')).door, one(TX('0')).ref], ['unmatched', null]);
   chain.logs = chain.logs.filter((l) => ![TX('0'), TX('e')].includes(l.transactionHash)); setNow('2026-11-23T01:48:00.000Z');
+});
+await proof('K3: an RPC backend that has not indexed the newest blocks answers an empty list and the cursor moves on; the next pass reads the last hour once more and books the transfer exactly once', async () => {
+  const kv = memoryKv(), H0 = chain.head;
+  put(46_330, { from: A('2'), value: 40_000, tx: TX('0') }); chain.head = 46_400; chain.lagUntil = 46_300;
+  try {
+    const b = B.createBooks({ kv, ...OPTS, fromBlock: 46_250 });
+    const r1 = await b.pass(); assert.ok(!r1.error, r1.error); assert.equal((await b.entries()).length, 0, 'the lagging backend answered an empty list'); assert.equal((await b.sync()).next_block, 46_341, 'and the cursor moved past the block');
+    chain.lagUntil = null; chain.head = 46_420; later(60); await b.pass(); later(60); await b.pass(); later(60); await b.pass();
+    const got = (await b.entries()).filter((e) => e.tx === TX('0')); assert.equal(got.length, 1, 'booked exactly once'); assert.equal(got[0].block, 46_330); assert.equal(got[0].value, '40000');
+    assert.equal((await b.sync()).next_block, 46_420 - 60 + 1);
+  } finally { chain.lagUntil = null; chain.logs = chain.logs.filter((l) => l.transactionHash !== TX('0')); chain.head = H0; setNow('2026-11-23T01:48:00.000Z'); }
+});
+await proof('a backend more than an hour behind: from 06:00 UTC of the next day the whole previous UTC day is read once more (bounded to its own blocks, a few ranges a pass) and the transfer is booked exactly once', async () => {
+  const kv = memoryKv(), H0 = chain.head, mark = chain.asked.length;
+  put(46_330, { from: A('2'), value: 40_000, tx: TX('e') }); chain.head = 46_400; chain.lagUntil = 46_300; setNow('2026-11-23T02:00:00.000Z');
+  try {
+    const b = B.createBooks({ kv, ...OPTS, fromBlock: 46_250, again: 50 });
+    await b.pass(); chain.head = 46_500; later(60); await b.pass(); // still behind: the last 50 blocks once more do not reach back to it
+    chain.lagUntil = null; chain.head = 46_600; later(60); await b.pass();
+    assert.equal((await b.entries()).filter((e) => e.tx === TX('e')).length, 0, 'the window behind the cursor does not reach back that far');
+    chain.head = 86_700; setNow('2026-11-24T05:59:00.000Z'); await b.pass(); await b.pass();
+    assert.equal((await kv.get(`books:s:${WALLET}`)).redone, undefined, 'not before 06:00 UTC');
+    setNow('2026-11-24T06:30:00.000Z'); let st = null;
+    for (let i = 0; i < 80 && st?.redone !== '2026-11-23'; i++) { await b.pass(); st = await kv.get(`books:s:${WALLET}`); later(60); }
+    assert.equal(st.redone, '2026-11-23'); assert.equal(st.redo, null);
+    const got = (await b.entries()).filter((e) => e.tx === TX('e')); assert.equal(got.length, 1, 'booked exactly once');
+    const day = chain.asked.slice(mark).filter((x) => x.method === 'eth_getLogs' && x.params[0].topics[0] === B.TRANSFER_TOPIC).map((x) => [num(x.params[0].fromBlock), num(x.params[0].toBlock)]);
+    assert.ok(day.every(([a0, z0]) => a0 >= 46_250), 'never before the start');
+    const n0 = (await b.entries()).length; later(3600); await b.pass(); assert.equal((await b.entries()).length, n0, 'once a day: nothing more, nothing twice');
+  } finally { chain.lagUntil = null; chain.logs = chain.logs.filter((l) => l.transactionHash !== TX('e')); chain.head = H0; setNow('2026-11-23T01:48:00.000Z'); }
 });
 await proof('a flag stays when the toll\'s books let the payment go (3 days later), and the books keep the entry', async () => {
   const tb = await disk1.get('toll:books'); assert.ok(tb?.pays?.length, 'the toll\'s books came through the restart'); tb.pays = []; disk1.setNow('toll:books', tb, 4000 * 86400);
@@ -540,6 +576,9 @@ const BREAK = [
   ['a released toll payment on chain not flagged', 'node/books.mjs', "const r = mine.find((x) => x.status === 'released'); if (r) return", "const r = mine.find((x) => x.status === 'released'); if (false) return"],
   ['a flag taken back when the toll lets the payment go', 'node/books.mjs', "if (!e.flag) { const f = flagOf(e, recs);", "{ const f = flagOf(e, recs); if (!f && e.flag) { delete e.flag; changed = true; }"],
   ['a best-effort label kept when the record names another transaction', 'node/books.mjs', "if (e.match === 'payer-amount-time' && recs.some(", "if (false && recs.some("],
+  ['K3 taken back: the last hour behind the cursor not read again', 'node/books.mjs', "if (again > 0 && st.next > st.start) {", "if (false) {"],
+  ['the previous UTC day not read again', 'node/books.mjs', "if (st.next > safe && !stopped) { try { await dayAgain(recs, safe); }", "if (false) { try { await dayAgain(recs, safe); }"],
+  ['the previous day read again before the start', 'node/books.mjs', "const a = Math.max(st.start, await firstBlockAt(t0, hi, st.start)),", "const a = Math.max(0, await firstBlockAt(t0, hi, 0)),"],
   ['no second look at an unmatched entry', 'node/books.mjs', "if (e.door === 'unmatched') { const l = labelOf(e, recs, taken);", "if (false) { const l = labelOf(e, recs, taken);"],
   ['the cursor moved past a range that was not written', 'node/books.mjs', "if (!(await keep(got, recs))) throw new Error('the books could not be written: the range is read again');", 'await keep(got, recs);'],
   ['a rate limit taken for a range too large (the RPC asked again at once)', 'node/books.mjs', "if (e?.status === 429 || /rate.?limit|too many requests|requests per/i.test(m)) return false;", ''],
