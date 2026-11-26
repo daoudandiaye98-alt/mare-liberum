@@ -47,6 +47,7 @@
     "proof:toon": "node tools/toon-proof.mjs",
     "proof:leanmcp": "node tools/leanmcp-proof.mjs",
     "proof:pipes": "node tools/pipes-proof.mjs",
+    "proof:deal": "node tools/deal-proof.mjs",
     "proof:toll": "node tools/toll-proof.mjs",
     "proof:reader": "node tools/reader-compat-proof.mjs",
     "proof:books": "node tools/books-proof.mjs",

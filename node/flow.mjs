@@ -511,7 +511,7 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
   Object.assign(api, createEco({ kv, update, emit, resident, push, allow, api, living, SeaError, clean, strip, rid, now, num, https, toks, sha, overlap, DAY }));
   Object.assign(api, createWork({ kv, update, emit, resident, push, allow, SeaError, clean, strip, now, num, https, toks, sha, overlap, DAY }));
   Object.assign(api, createAtlantis({ kv, update, emit, resident, allow, api, living, SeaError, clean, strip, rid, now, DAY }));
-  Object.assign(api, createLens({ kv, update, api, living, SeaError, allow, clean, strip, now, https, sha, emit, resident, DAY }));
+  Object.assign(api, createLens({ kv, update, api, living, SeaError, allow, clean, strip, now, https, sha, emit, resident, DAY, shopAll }));
   Object.assign(api, createWeb({ kv, update, now, DAY }));
   Object.assign(api, createAtlas({ kv, update, now, DAY, allow, SeaError, store: atlasStore, ranks: frontier, countries, hunt: async (w) => { const r = route ? await route(w, { limit: 10 }) : []; return (r || []).map((e) => { try { return e.metadata?.publisher || new URL(e.url).hostname; } catch { return null; } }).filter(Boolean); }, base: String(profile || '').replace(/\/ucp\/agent\.json$/, '') }));
   Object.assign(api, createWorks({ url: process.env.MARE_DB_URL, key: process.env.MARE_DB_KEY, secret: process.env.MARE_DB_SECRET, kv, allow, SeaError, clean }));

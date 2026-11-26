@@ -232,9 +232,9 @@ await proof('the operator rests the till without a release ("till" in rest): 503
   assert.equal((await call('/route?q=usdc', { method: 'POST' })).status, 402);
 });
 // (since 3.34 the settlement of the fair share is listed beside the route while fair share is on, its default: node/fair.mjs)
-await proof('x402 discovery names the paid resources (the route, since 3.55 the paid read and the reader credit, since 3.56 the paid check, since 3.59 the pilot, and the fair-share settlement) and the wallet', async () => {
-  const r = await call('/.well-known/x402'); assert.deepEqual(r.j.resources, [`${BASE}/route`, `${BASE}/x402/read`, `${BASE}/reader/credit`, `${BASE}/x402/check`, `${BASE}/x402/pack`, `${BASE}/fair/pay`]); assert.equal(r.j.payTo[0].address, payConfig().payTo);
-  assert.deepEqual(r.j.pricing.map((p) => [p.capability, p.amount_usd, p.maxAmountRequired, p.payTo]), [['route', r.j.pricing[0].amount_usd, r.j.pricing[0].maxAmountRequired, payConfig().payTo], ['read', '0.01', '10000', payConfig().payTo], ['reader-credit', '0.05', '50000', payConfig().payTo], ['check', '0.01', '10000', payConfig().payTo], ['pack', '0.05', '50000', payConfig().payTo]]); assert.match(r.j.instructions, /\/x402\/read\?url=<page>/); assert.match(r.j.instructions, /\/x402\/pack\?url=<site>&q=<question>/);
+await proof('x402 discovery names the paid resources (the route, since 3.55 the paid read and the reader credit, since 3.56 the paid check, since 3.59 the pilot, since 3.64 the deal check, and the fair-share settlement) and the wallet', async () => {
+  const r = await call('/.well-known/x402'); assert.deepEqual(r.j.resources, [`${BASE}/route`, `${BASE}/x402/read`, `${BASE}/reader/credit`, `${BASE}/x402/check`, `${BASE}/x402/pack`, `${BASE}/x402/deal`, `${BASE}/fair/pay`]); assert.equal(r.j.payTo[0].address, payConfig().payTo);
+  assert.deepEqual(r.j.pricing.map((p) => [p.capability, p.amount_usd, p.maxAmountRequired, p.payTo]), [['route', r.j.pricing[0].amount_usd, r.j.pricing[0].maxAmountRequired, payConfig().payTo], ['read', '0.01', '10000', payConfig().payTo], ['reader-credit', '0.05', '50000', payConfig().payTo], ['check', '0.01', '10000', payConfig().payTo], ['pack', '0.05', '50000', payConfig().payTo], ['deal', '0.01', '10000', payConfig().payTo]]); assert.match(r.j.instructions, /\/x402\/read\?url=<page>/); assert.match(r.j.instructions, /\/x402\/pack\?url=<site>&q=<question>/);
 });
 
 console.log('the price in plain sight (3.28.0)');

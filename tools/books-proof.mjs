@@ -813,6 +813,15 @@ await proof('/status.json gains counts: numbers only (and the day), no address, 
 const firstDiff = (x, y) => { let i = 0; while (i < x.length && x[i] === y[i]) i++; return `at ${i}: ${JSON.stringify(x.slice(Math.max(0, i - 120), i + 120))} <> ${JSON.stringify(y.slice(Math.max(0, i - 120), i + 120))}`; };
 // (the moment each tree's modules were first loaded, runningSince of /open.json, is the only thing told apart: this tree's came first)
 const since0 = (t) => t.replace(/"runningSince":"[^"]*"/g, '"runningSince":"<start>"')
+  // (and the deal check of 3.64, proven by tools/deal-proof.mjs: its section of llms.txt, its free measure and its paragraph in
+  // terms and AGB § 4, its row of /de/preise; cut first)
+  .replace(/## Check a deal before you buy \(the deal check, for shopping agents\)\n\n[^\n]*\n\n/g, '')
+  .replace(/,\{"name":"deal-check","type":"skill-md","description":"[^"]*","url":"[^"]*","digest":"sha256:[0-9a-f]{64}"\}/g, '')
+  .replace(/, der Preisprüfer im freien Umfang \(.*?: 10 Prüfungen je Netz und Stunde, je bis zu 5 andere Angebote\)/g, '')
+  .replace(/, the deal check within its free measure \(.*?: 10 checks per network an hour, up to 5 other offers each\)/g, '')
+  .replace(/\n?(?:<(?:p|li)>)?(?:\(\d+\) )?Der Preisprüfer \((?:(?!<\/(?:p|li)>).)*?verwahrt kein Geld\.(?:<\/(?:p|li)>)?/g, '')
+  .replace(/\n?(?:<(?:p|li)>)?(?:\(\d+\) )?The deal check \((?:(?!<\/(?:p|li)>).)*?holds no money\.(?:<\/(?:p|li)>)?/g, '')
+  .replace(/<tr>(?:(?!<\/tr>)[\s\S])*?Der Preisprüfer[\s\S]*?<\/tr>/g, '')
   // (and the agent packs for everyone of 3.63, proven by tools/checkout-proof.mjs and tools/legal-proof.mjs: the checkout of each
   // pack and the page for agents in the card door's GET, the line of llms.txt, § 5a (8) in terms and AGB, its row of /de/preise,
   // the sentence of /de/widerruf in both languages; cut first)
