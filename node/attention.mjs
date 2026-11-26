@@ -77,10 +77,11 @@ export const CTA = {
   teams: { name: 'Team harbour for coding agents', price: '49 € a month, first month free', to: () => OFFER.teams },
   agency: { name: 'Team harbour for agencies', price: '79 € a month, first month free', to: () => OFFER.agency },
   law: { name: 'Kanzlei harbour', price: '750 € setup + 990 € a year per office', to: () => OFFER.law },
+  reader: { name: 'Reader credit for operators', price: '10 €, once, for 10,000 pages (30 days)', to: () => OFFER.reader },
   route: { name: 'Paid route', price: 'per call in USDC (x402)', to: () => '/pay/howto' },
   talk: { name: 'Institutions: talk to us', price: 'by agreement', to: () => '/about#contact' },
 };
-export const FROM = ['site', 'entry', 'check', 'attention', 'claim', 'pricing', 'offers', 'sample', 'business', 'business-de', 'teams', 'agency', 'law', 'other'];
+export const FROM = ['site', 'entry', 'check', 'attention', 'claim', 'pricing', 'offers', 'sample', 'business', 'business-de', 'teams', 'agency', 'law', 'reader', 'limit', 'other'];
 const STRIPE = /^https:\/\/buy\.stripe\.com\/[A-Za-z0-9_]{6,64}(\?client_reference_id=[A-Za-z0-9_-]{1,220})?$/;
 const OWN = /^\/(?![/\\])[A-Za-z0-9/._-]{0,80}(#[A-Za-z0-9_-]{1,40})?$/;
 export const safeTarget = (u) => typeof u === 'string' && (STRIPE.test(u) || OWN.test(u));

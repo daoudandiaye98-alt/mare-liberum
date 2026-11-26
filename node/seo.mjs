@@ -421,6 +421,7 @@ export const OFFER = {
   agency: 'https://buy.stripe.com/9B63co3Ly7F2fVJdTLes00m',   // Team-Hafen (Pilot), 79 € a month, first month free
   teams: 'https://buy.stripe.com/5kQ00ceqc0cA38X4jbes00n',    // team harbour for coding agents, 49 € a month, first month free
   law: 'https://buy.stripe.com/9B6bIUbe02kIcJx5nfes00r',      // Kanzlei-Hafen: Einrichtung 750 € (ohne Einblick in Mandatsdaten) + Jahresbegleitung 990 € je Standort (plink_1Uev8h4IVkazyZLzsmA53lgQ)
+  reader: 'https://buy.stripe.com/cNi6oA2HuaRe7pd9Dves00t',   // reader credit for operators, 10 € once for 10,000 pages, 30 days (plink_1Ug4VQ4IVkazyZLzBNhuF2wm; node/checkout.mjs)
   mail: 'oroborosdesign@gmail.com',
 };
 const cta = (href, label, sub) => `<p style="margin:1.4rem 0"><a href="${esc(href)}" style="display:inline-block;padding:.85rem 1.3rem;border-radius:10px;background:#0b5cad;color:#fff;font-weight:600;text-decoration:none">${esc(label)}</a>${sub ? `<br><small class="muted">${esc(sub)}</small>` : ''}</p>`;

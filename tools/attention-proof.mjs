@@ -271,12 +271,12 @@ await proof('/claim: how to claim, the owner check with its price, that its outc
 await proof('/pricing: one table of every paid offer, each with its counted link; § 19; measured savings beside modelled ones; for programs the answer of 3.29.0 still stands', async () => {
   const S = sea(), h = (await S.call('/pricing', person)).txt;
   assert.match(h, /<h1[^>]*>Prices of the open sea<\/h1>/);
-  for (const w of ['49 € a month, first month free', '79 € a month per team, first month free', '750 € setup + 990 € a year per office', '19 € once', '29 € once', '0.02 USDC per call', 'Institutions: talk to us', SELLER.vat, 'href="/savings"', 'href="/proof"', 'Nothing pays to rank']) assert.ok(has(h, w), w);
-  for (const id of ['teams', 'agency', 'law', 'owner', 'report', 'route', 'talk']) assert.ok(h.includes(`href="/c/${id}?from=pricing"`), id);
-  assert.equal((h.match(/<tr id="[a-z]+">/g) || []).length, 7, 'one row per offer');
+  for (const w of ['49 € a month, first month free', '79 € a month per team, first month free', '750 € setup + 990 € a year per office', '19 € once', '29 € once', '10 € once for 10,000 pages, valid 30 days', '0.02 USDC per call', 'Institutions: talk to us', SELLER.vat, 'href="/savings"', 'href="/proof"', 'Nothing pays to rank']) assert.ok(has(h, w), w);
+  for (const id of ['teams', 'agency', 'law', 'owner', 'report', 'reader', 'route', 'talk']) assert.ok(h.includes(`href="/c/${id}?from=pricing"`), id);
+  assert.equal((h.match(/<tr id="[a-z]+">/g) || []).length, 8, 'one row per offer');
   const j = (await S.call('/pricing', { accept: 'application/json' })).j;
   assert.equal(j.price, 'POST /route costs 0.02 USDC on Base, no account, settle with POST /settle'); assert.equal(j.paid_route.pricing.amount_usd, '0.02'); assert.ok(j.house); assert.equal(j.how_to_pay, `${BASE}/pay/howto`);
-  assert.deepEqual(j.offers.map((o) => o.id), ['teams', 'agency', 'law', 'owner', 'report', 'route', 'talk']); assert.ok(j.offers.every((o) => /^https:\/\/mare\.test\/c\/[a-z]+\?from=pricing$/.test(o.go)));
+  assert.deepEqual(j.offers.map((o) => o.id), ['teams', 'agency', 'law', 'owner', 'report', 'reader', 'route', 'talk']); assert.ok(j.offers.every((o) => /^https:\/\/mare\.test\/c\/[a-z]+\?from=pricing$/.test(o.go)));
   assert.equal(j.value.measured.reuses30days, 0, 'zero stays zero'); assert.ok(j.value.modelledPerReuse.tokensMid > 0);
   assert.equal((await S.call('/pricing', { accept: '*/*' })).j.price, j.price, 'without asking for a page: data, as before');
   assert.match((await S.call('/pricing.md')).type, /text\/markdown/);
