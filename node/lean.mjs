@@ -563,6 +563,8 @@ function lastPass(md, { product, seen = new Set(), menus = true } = {}) {
 // on a hostile page the reader takes about 0.5 s a megabyte, so it stays well inside its helper's 3 s
 export const LEAN_MAX = 1_500_000;
 export function leanMarkdown(html, base, { product: wantProduct = true, max = LEAN_MAX } = {}) {
+  // (since 26.11.2026) a page's own NUL bytes go first: none of them reaches an answer
+  html = String(html || '').replace(/\u0000/g, '');
   let page; try { page = new URL(base); } catch { page = null; }
   const root = parseHtml(html, { max }), order = measure(root);
   const body = order.find((n) => n.tag === 'body') || root, h1 = headingOf(root);

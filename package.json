@@ -42,6 +42,7 @@
     "proof:tidings": "node tools/tidings-proof.mjs",
     "proof:fair": "node tools/fair-proof.mjs",
     "proof:squeeze": "node tools/squeeze-proof.mjs",
+    "proof:reader-code": "node tools/reader-code-proof.mjs",
     "proof:engine": "node tools/engine-proof.mjs",
     "proof:toon": "node tools/toon-proof.mjs",
     "proof:leanmcp": "node tools/leanmcp-proof.mjs",

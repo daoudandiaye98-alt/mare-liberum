@@ -119,7 +119,14 @@ const refDir = (() => {
 // the version is the only thing a release changes on these answers: it is masked (a release bumps it, a builder branch does not)
 const VERSIONS = new Set();
 const steady = (s) => { let t = String(s).replace(/\br\d{8}[a-z0-9]{8}\b/g, 'r<id>'); for (const v of VERSIONS) t = t.split(v).join('<version>'); return t; };
-const same = (a, b, what) => { assert.equal(a.status, b.status, `${what}: status`); assert.equal(steady(a.text), steady(b.text), `${what}: body`); assert.deepEqual(Object.fromEntries(Object.entries(a.h).map(([k, v]) => [k, steady(v)])), Object.fromEntries(Object.entries(b.h).map(([k, v]) => [k, steady(v)])), `${what}: headers`); };
+// (since 26.11.2026, tools/reader-code-proof.mjs) code keeps its lines: inside a code block only the whitespace may differ
+// from the reference. A region is loosened only where it is a code block in both answers (a fence, a closing fence of its
+// sign, no other fence-like line between them) and both blocks open and close with the same lines; everything else,
+// a scene break of "~~~" lines and the text around it among them, is compared byte for byte
+const partsOf = (s) => { const L = String(s).split('\n'), out = []; let text = []; for (let i = 0; i < L.length; i++) { const o = /^(`{3,}|~{3,})/.exec(L[i]); if (o) { let j = i + 1; while (j < L.length && !/^(`{3,}|~{3,})/.test(L[j])) j++; if (j < L.length && new RegExp(`^${o[1][0] === '`' ? '`' : '~'}{${o[1].length},}\\s*$`).test(L[j])) { out.push({ t: text.join('\n') }); text = []; out.push({ fence: L[i], close: L[j], code: L.slice(i + 1, j) }); i = j; continue; } } text.push(L[i]); } out.push({ t: text.join('\n') }); return out; };
+const loose = (lines) => lines.map((x) => x.replace(/[ \t\u00a0]+/g, ' ').trim()).join('\n').replace(/\n(- )?\n(?=- )/g, '\n').replace(/\n{3,}/g, '\n\n').replace(/^\n+|\n+$/g, '');
+const sameButCode = (a, b) => { if (a === b) return true; const A = partsOf(a), B = partsOf(b); return A.length === B.length && A.every((p, i) => ('code' in p) === ('code' in B[i]) && ('code' in p ? p.fence === B[i].fence && p.close === B[i].close && loose(p.code) === loose(B[i].code) : p.t === B[i].t)); };
+const same = (a, b, what) => { assert.equal(a.status, b.status, `${what}: status`); if (!sameButCode(steady(a.text), steady(b.text))) assert.equal(steady(a.text), steady(b.text), `${what}: body`); assert.deepEqual(Object.fromEntries(Object.entries(a.h).map(([k, v]) => [k, steady(v)])), Object.fromEntries(Object.entries(b.h).map(([k, v]) => [k, steady(v)])), `${what}: headers`); };
 const savingsOf = async (n) => { const v = await n.sea().savings(); return { reads: v?.today?.counts?.reads || 0, readBytes: v?.today?.counts?.readBytes || 0 }; };
 
 const node = await nodeOf(ROOT);
