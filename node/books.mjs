@@ -6,9 +6,13 @@
 //   reading      USDC's Transfer logs to the wallet (eth_getLogs through MARE_BASE_RPC, default https://mainnet.base.org),
 //                incrementally in small block ranges, from the last block read; a range the RPC finds too large is halved;
 //                a pass that fails waits (30 s, doubled each time, at most 30 minutes) and starts again where it stopped.
-//                Every pass reads the last 1,800 blocks behind the cursor once more, and once a UTC day (from 06:00 UTC) the
-//                whole previous UTC day: a public RPC behind a load balancer can answer from a node that has not indexed the
-//                newest blocks yet (an empty list, no error); what it left out is booked then, nothing twice.
+//                A public RPC behind a load balancer can answer eth_getLogs from a node that has not indexed the newest blocks
+//                yet (an empty list, no error). So every pass reads the last 1,800 blocks behind the cursor once more (an hour
+//                at 2 s a block), and once a UTC day, from 06:00 UTC, the two UTC days before once more: every block of a day D
+//                is read again at 06:00 UTC of D+1 and of D+2, so a backend less than 30 hours behind misses no block (one
+//                further behind can miss the last hours of a day). A re-read never moves the forward reading's range width; a
+//                day re-read that fails in 3 passes is given up and counted. What a re-read finds is booked, nothing twice.
+//                (A reorg deeper than 60 blocks that changes a log index could book a transfer again; rare on Base.)
 //                Only blocks 60 behind the head are read (two minutes: a block that could still change is not booked). It
 //                runs on its own timer, behind everything: no request ever waits for it. Read only: it asks the chain
 //                eth_blockNumber, eth_getLogs and eth_getBlockByNumber, and nothing else; it never signs, sends or holds
@@ -132,7 +136,7 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
   get = (...a) => fetch(...a), now = () => Date.now(), log = () => {}, confirmations = 60, step: step0 = 1000, minStep = 50, maxStep = 2000, burst = 20, pauseMs = 250,
   everyMs = 60_000, catchUpMs = 2000, rpcMs = 8000, probeMs = 15 * 60_000, again = 1800, dayAgainAfterH = 6, dayAgainBurst = 10 } = {}) {
   const W = lc(wallet), T = lc(token), on = HEX40.test(W) && HEX40.test(T) && !!rpc;
-  let step = step0, seq = 0, running = null, timer = null, stopped = false, rev = 0, sum = null, sumRev = -1, waitUntilMs = 0, lastProbe = 0;
+  let step = step0, refused = null, refusedAgain = null, refusedAt = 0, refusedAgainAt = 0, seq = 0, running = null, timer = null, stopped = false, rev = 0, sum = null, sumRev = -1, waitUntilMs = 0, lastProbe = 0;
   const times = new Map(), delta = new Map();
   const iso = (ms = now()) => new Date(ms).toISOString();
   const count = (k, n = 1, d = dayOf(now())) => { let m = delta.get(d); if (!m) delta.set(d, (m = {})); m[k] = (m[k] || 0) + n; };
@@ -158,6 +162,10 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
   };
   // a range the RPC finds too large (or too slow) is halved; a rate limit is not a range: the pass waits instead
   const tooWide = (e) => { const m = String(e?.message || ''); if (e?.status === 429 || /rate.?limit|too many requests|requests per/i.test(m)) return false; return e?.name === 'TimeoutError' || e?.status === 413 || e?.code === -32005 || e?.code === -32602 || /range|limit|too many|exceed|more than|10000 results|query returned/i.test(m); };
+  // a refused width is remembered only for an answer about width: never a timeout, never one about the head (how some RPCs say
+  // that the node behind them has not indexed the newest blocks yet, the lag the re-reads are there for)
+  const aboutHead = (e) => /head|beyond|future|not (yet )?(available|found|indexed)/i.test(String(e?.message || ''));
+  const aboutWidth = (e) => tooWide(e) && e?.name !== 'TimeoutError' && !aboutHead(e);
   const sleep = (ms) => (ms > 0 ? new Promise((r) => { const tm = setTimeout(r, ms); tm.unref?.(); }) : Promise.resolve());
   const blockTime = async (n, hint) => {
     if (times.has(n)) return times.get(n);
@@ -200,24 +208,28 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
     return out;
   };
 
-  // the transfers of [a, b] in ranges the RPC takes (a range too large is halved, as when reading forward)
+  // the transfers of [a, b] in ranges the RPC takes: a width of its own (it starts from what the re-reads remember, never from the
+  // forward width, halves on a range too large and grows back by a quarter: a re-read never touches the forward reading's),
+  // a pause between ranges, nothing more once stopped
   const readSpan = async (a, b) => {
-    const out = []; let x = a;
-    while (x <= b) {
-      const z = Math.min(x + step - 1, b);
-      try { out.push(...(await transfersIn(x, z))); x = z + 1; }
-      catch (e) { if (tooWide(e) && step > minStep) { step = Math.max(minStep, Math.floor(step / 2)); count('chain_narrowed'); await sleep(pauseMs); continue; } throw e; }
+    const out = []; let x = a, s = Math.max(minStep, Math.min(maxStep, b - a + 1, refusedAgain ?? maxStep));
+    while (x <= b && !stopped) {
+      const z = Math.min(x + s - 1, b);
+      try { out.push(...(await transfersIn(x, z))); x = z + 1; s = Math.max(minStep, Math.min(maxStep, refusedAgain ?? maxStep, Math.ceil(s * 1.25))); }
+      catch (e) { if (tooWide(e) && s > minStep) { if (z - x + 1 >= s && aboutWidth(e)) { refusedAgain = Math.min(refusedAgain ?? Infinity, Math.floor((z - x + 1) * 0.8)); refusedAgainAt = now(); } s = Math.max(minStep, Math.floor(s / 2)); count('chain_narrowed'); await sleep(pauseMs); continue; } throw e; }
+      if (x <= b) await sleep(pauseMs);
     }
     return out;
   };
 
   // ---- the books: new entries into their days, at once; nothing counted twice
   let st = null;
+  // → the number of entries added (0: all were there), or null when a write failed (nothing may move past it then)
   const keep = async (found, recs) => {
-    if (!found.length) return true;
+    if (!found.length) return 0;
     const byDay = new Map(); for (const e of found) { const d = e.time.slice(0, 10); if (!byDay.has(d)) byDay.set(d, []); byDay.get(d).push(e); }
     const taken = await takenOf();
-    const days = await readDays(); let daysChanged = false;
+    const days = await readDays(); let daysChanged = false, total = 0;
     for (const [d, list] of byDay) {
       const cur = await readDay(d), have = new Set(cur.map((x) => x.k)); let added = 0;
       for (const e of list) {
@@ -227,14 +239,16 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
         if (l.ref) taken.add(`${l.door}:${l.ref}`);
         cur.push(x); have.add(e.k); added++;
       }
-      if (!added) continue;
+      // nothing new: a day whose entries are kept but that the index lost (a write that failed half way: the store took the
+      // day, the index never came) is put back into the index
+      if (!added) { if (cur.length && !days.includes(d)) { days.push(d); days.sort(); daysChanged = true; } continue; }
       cur.sort((p, q) => p.block - q.block || p.log - q.log);
-      if (!(await writeDay(d, cur))) return false;
+      if (!(await writeDay(d, cur))) return null;
       if (!days.includes(d)) { days.push(d); days.sort(); daysChanged = true; }
-      rev++;
+      rev++; total += added;
     }
-    if (daysChanged && !(await put(KEYS.days, days, far()))) return false;
-    return true;
+    if (daysChanged && !(await put(KEYS.days, days, far()))) return null;
+    return total;
   };
   const takenOf = async () => { const t = new Set(), cut = dayOf(now() - LOOK_BACK); for (const d of (await readDays()).filter((x) => x >= cut)) for (const e of await readDay(d)) if (e.ref) t.add(`${e.door}:${e.ref}`); return t; };
   // the entries of the last days once more: a label found now, a flag the door's record calls for now
@@ -268,7 +282,10 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
     catch { count('probe_failed'); }
   };
 
-  // ---- the previous UTC day once more (st.redo holds where it stands, st.redone the last day done): bounded to that day's blocks
+  // ---- the two UTC days before once more, once a day from 06:00 UTC (st.redo holds where it stands, st.redone the last day
+  // done): bounded to those two days' blocks, at most dayAgainBurst ranges a pass, a width of its own (r.step), never before the
+  // start; a span that fails in 3 passes is given up (counted, said once). Every block of a day D is read again at 06:00 of D+1
+  // and of D+2: a backend less than 30 hours behind misses none
   async function dayAgain(recs) {
     if (!(dayAgainBurst > 0) || st.next == null || st.next <= st.start) return;
     const t = now(), y = dayOf(t - DAYMS);
@@ -276,22 +293,33 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
     let r = st.redo && st.redo.day === y ? st.redo : null;
     if (!r) {
       if (st.redone && st.redone >= y) return;
-      const t0 = Math.floor(Date.parse(`${y}T00:00:00Z`) / 1000), t1 = t0 + 86_400, hi = st.next - 1;
-      if ((await blockTime(hi)) < t1) return; // the forward reading has not passed the end of that day yet
+      // yesterday and the day before: from 00:00:00 UTC of the day before yesterday to the last block before 00:00:00 today
+      const t1 = Math.floor(Date.parse(`${y}T00:00:00Z`) / 1000) + 86_400, t0 = t1 - 2 * 86_400, hi = st.next - 1;
+      if ((await blockTime(hi)) < t1) return; // the forward reading has not passed the end of yesterday yet
+      if (st.redo) count('chain_day_reread_dropped'); // an unfinished one of an earlier day gives way to this one
       const a = Math.max(st.start, await firstBlockAt(t0, hi, st.start)), b = (await firstBlockAt(t1, hi, st.start)) - 1;
-      r = st.redo = { day: y, from: a, to: b, next: a };
+      r = st.redo = { day: y, from: a, to: b, next: a, step: Math.max(minStep, Math.min(maxStep, refusedAgain ?? maxStep)), fails: 0 };
     }
-    let n = 0, found = 0;
-    while (r.next <= r.to && n < dayAgainBurst && !stopped) {
-      const z = Math.min(r.next + step - 1, r.to);
-      let got;
-      try { got = await transfersIn(r.next, z); }
-      catch (e) { if (tooWide(e) && step > minStep) { step = Math.max(minStep, Math.floor(step / 2)); count('chain_narrowed'); await sleep(pauseMs); continue; } throw e; }
-      if (!(await keep(got, recs))) throw new Error('the books could not be written');
-      r.next = z + 1; n++; found += got.length;
+    let n = 0, added = 0;
+    const capOf = () => Math.min(maxStep, r.refused ?? maxStep, refusedAgain ?? maxStep);
+    r.step = Math.max(minStep, Math.min(capOf(), Number(r.step) || maxStep));
+    try {
+      while (r.next <= r.to && n < dayAgainBurst && !stopped) {
+        const z = Math.min(r.next + r.step - 1, r.to);
+        let got;
+        try { got = await transfersIn(r.next, z); }
+        catch (e) { if (tooWide(e) && r.step > minStep) { if (z - r.next + 1 >= r.step && aboutWidth(e)) r.refused = Math.min(r.refused ?? Infinity, Math.floor((z - r.next + 1) * 0.8)); r.step = Math.max(minStep, Math.floor(r.step / 2)); count('chain_narrowed'); await sleep(pauseMs); continue; } throw e; }
+        const k = await keep(got, recs); if (k == null) throw new Error('the books could not be written');
+        r.next = z + 1; n++; added += k; r.step = Math.max(minStep, Math.min(capOf(), Math.ceil(r.step * 1.25))); // one early error does not keep the rest narrow
+        if (r.next <= r.to && n < dayAgainBurst) await sleep(pauseMs);
+      }
+    } catch (e) {
+      count('chain_reread_failed'); r.fails = (n > 0 ? 0 : (r.fails || 0)) + 1; // 3 passes in a row without progress
+      if (r.fails >= 3) { log('mare_books', `the days before ${r.day} once more given up after 3 passes, at block ${r.next}: ${String(e?.message || e).slice(0, 120)}`); st.redone = r.day; st.redo = null; count('chain_day_reread_given_up'); }
+      return added;
     }
     if (r.next > r.to) { st.redone = r.day; st.redo = null; count('chain_day_reread'); }
-    return found;
+    return added;
   }
 
   // ---- one pass: read what is new, look again at the last days, fold the counts
@@ -305,29 +333,42 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
       const safe = Math.max(0, head - confirmations); st.head = head; st.safe = safe;
       if (st.next == null) { st.start = Number.isSafeInteger(fromBlock) ? fromBlock : await firstBlockAt(Math.floor(Date.parse(`${since}T00:00:00Z`) / 1000) - 3600, safe); st.next = st.start; if (!(await put(KEYS.state(W), st, far()))) throw new Error('the state could not be written'); }
       let ranges = 0, found = 0;
+      // four fifths of the narrowest width the RPC refused for its width (forward, and the re-reads apart): the most asked, for an hour
+      if (refused != null && t - refusedAt >= 3600e3) refused = null;
+      if (refusedAgain != null && t - refusedAgainAt >= 3600e3) refusedAgain = null;
       const recs = await recordsOf(kv, ledger);
       // the last hour behind the cursor once more, every pass: a public RPC behind a load balancer can answer eth_getLogs from a
       // node that has not indexed the newest blocks yet (an empty list, no error); what it left out is booked now. keep() counts
       // nothing twice (tx and log index); a re-read that fails is counted and the pass goes on
       if (again > 0 && st.next > st.start) {
         const back = Math.max(st.start, st.next - again);
-        try { const got = await readSpan(back, st.next - 1); if (!(await keep(got, recs))) throw new Error('the books could not be written'); found += got.length; count('chain_reread'); }
+        try { const got = await readSpan(back, st.next - 1); const k = await keep(got, recs); if (k == null) throw new Error('the books could not be written'); found += k; count('chain_reread'); }
         catch (e) { count('chain_reread_failed'); log('mare_books', `the last hour once more: ${String(e?.message || e).slice(0, 160)}`); }
       }
       while (st.next <= safe && ranges < burst && !stopped) {
         const a = st.next, b = Math.min(a + step - 1, safe);
         let got;
         try { got = await transfersIn(a, b); }
-        catch (e) { if (tooWide(e) && step > minStep) { step = Math.max(minStep, Math.floor(step / 2)); count('chain_narrowed'); await sleep(pauseMs); continue; } throw e; }
-        if (!(await keep(got, recs))) throw new Error('the books could not be written: the range is read again');
-        st.next = b + 1; st.ranges = (st.ranges || 0) + 1; ranges++; found += got.length; count('chain_ranges');
+        catch (e) {
+          // a full range (as wide as the width) is halved on any error that can be about width; a shorter one (the head is near)
+          // only on an answer about width: a timeout or a word about the head there fails the pass and leaves the width alone
+          const w = b - a + 1, full = w >= step;
+          if (tooWide(e) && (full ? step > minStep : aboutWidth(e) && w > minStep)) {
+            if (full && aboutWidth(e)) { refused = Math.min(refused ?? Infinity, Math.floor(w * 0.8)); refusedAt = now(); }
+            step = Math.max(minStep, Math.floor(Math.min(step, w) / 2)); count('chain_narrowed'); await sleep(pauseMs); continue;
+          }
+          throw e;
+        }
+        const k = await keep(got, recs); if (k == null) throw new Error('the books could not be written: the range is read again');
+        st.next = b + 1; st.ranges = (st.ranges || 0) + 1; ranges++; found += k; count('chain_ranges');
         if (!(await put(KEYS.state(W), st, far()))) throw new Error('the state could not be written');
-        if (step < maxStep) step = Math.min(maxStep, Math.ceil(step * 1.25));
+        // wider again by a quarter, never to a width the RPC refused today (at most four fifths of the narrowest it refused)
+        if (step < maxStep) step = Math.max(minStep, Math.min(maxStep, Math.ceil(step * 1.25), refused ?? maxStep));
         if (st.next <= safe) await sleep(pauseMs);
       }
-      // once a UTC day, from 06:00 UTC, the whole previous UTC day once more (a backend more than an hour behind), a few
-      // ranges a pass; its first and last block are found by the chain's own times; never before the start
-      if (st.next > safe && !stopped) { try { await dayAgain(recs, safe); } catch (e) { count('chain_reread_failed'); log('mare_books', `the day once more: ${String(e?.message || e).slice(0, 160)}`); } }
+      // once a UTC day, from 06:00 UTC, the two UTC days before once more (a backend more than an hour behind, up to 30 hours),
+      // a few ranges a pass; their first and last block are found by the chain's own times; never before the start
+      if (st.next > safe && !stopped) { try { found += (await dayAgain(recs)) || 0; } catch (e) { count('chain_reread_failed'); log('mare_books', `the days before once more: ${String(e?.message || e).slice(0, 160)}`); } }
       await relook(await recordsOf(kv, ledger));
       st.lastOk = iso(); st.errors = 0; st.lastError = null; waitUntilMs = 0;
       await put(KEYS.state(W), st, far());
@@ -383,7 +424,7 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
       till: { sales: 0, by_status: {}, settled_usd: '0.00', unconfirmed_usd: '0.00' },
       fair: { payments: 0, by_status: {}, settled_usd: '0.000000', unconfirmed_usd: '0.000000' },
       ledger: { transfers: 0, usd: '0.000000', by_door: {}, unmatched: 0, flagged: 0 },
-      errors: { facilitator_no_answer: 0, facilitator_down: 0, facilitator_no_verdict: 0, settlement_failed: 0, chain_reads_failed: 0 },
+      errors: { facilitator_no_answer: 0, facilitator_down: 0, facilitator_no_verdict: 0, settlement_failed: 0, chain_reads_failed: 0, chain_rereads_failed: 0, chain_day_rereads_given_up: 0, chain_day_rereads_dropped: 0 },
       facilitator: { reached: 0, missed: 0, payments_refused: 0 },
     });
     const out = Object.fromEntries(list.map((d) => [d, blank()]));
@@ -442,7 +483,7 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
       for (const m of [now1[d], mine[d]]) for (const [k, v] of Object.entries(m || {})) c[k] = (c[k] || 0) + v;
       const g = (k) => c[k] || 0, e = out[d].errors, f = out[d].facilitator;
       e.facilitator_no_answer = g('verify_error') + g('settle_error'); e.facilitator_down = g('verify_down') + g('settle_down'); e.facilitator_no_verdict = g('verify_noverdict') + g('settle_noverdict');
-      e.settlement_failed = g('settle_failed'); e.chain_reads_failed = g('chain_errors') + g('chain_reread_failed');
+      e.settlement_failed = g('settle_failed'); e.chain_reads_failed = g('chain_errors'); e.chain_rereads_failed = g('chain_reread_failed'); e.chain_day_rereads_given_up = g('chain_day_reread_given_up'); e.chain_day_rereads_dropped = g('chain_day_reread_dropped');
       f.reached = g('verify_ok') + g('verify_refused') + g('verify_noverdict') + g('settle_ok') + g('settle_failed') + g('settle_noverdict') + g('probe_ok');
       f.missed = g('verify_error') + g('verify_down') + g('settle_error') + g('settle_down') + g('probe_failed'); f.payments_refused = g('verify_refused');
     }
@@ -460,7 +501,7 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
         const g = await digest({ days: 14, declKv }), today = g.days[0], s = g.now.ledger, b = g.now.books;
         const c = { day: today.day, ledger_transfers: s.transfers, ledger_transfers_today: today.ledger.transfers, ledger_unmatched: s.unmatched, ledger_flagged: s.flagged, ledger_behind_blocks: b.behind_blocks,
           tolled_answers_today: today.toll.tolled_answers, toll_payments_settled_today: today.toll.settled.payments, toll_payments_on_their_way: g.days.reduce((x, d) => x + d.toll.on_its_way.payments, 0),
-          till_sales_today: today.till.sales, fair_payments_today: today.fair.payments, payment_path_errors_today: Object.values(today.errors).reduce((x, v) => x + v, 0),
+          till_sales_today: today.till.sales, fair_payments_today: today.fair.payments, payment_path_errors_today: Object.entries(today.errors).filter(([k]) => !/^chain_day_rereads_(given_up|dropped)$/.test(k)).reduce((x, [, v]) => x + v, 0),
           facilitator_reached_today: today.facilitator.reached, facilitator_missed_today: today.facilitator.missed,
           declarations_today: today.declarations.withdrawals + today.declarations.cancellations, declarations_without_receipt: g.days.reduce((x, d) => x + d.declarations.open_without_receipt, 0) };
         cnt = c; cntAt = now(); return c;
