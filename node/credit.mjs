@@ -136,9 +136,10 @@ export function createCredit({ kv, now = () => Date.now(), ledger = null, rpc = 
     release(c) { if (!c?.key) return Promise.resolve(); return serial(c.key, () => put(c.key, null, 60, true)); },
     // the credit of one paid sale: the token, once; the sale stays open until its settlement answers (written before the
     // settlement is asked for, so that a restart in between finds it)
-    async mint(sale, claim = null) {
+    // (since 3.48 a pack may hold more pages: the card door of node/mpp.mjs sells 500 for 0.50 USD)
+    async mint(sale, claim = null, pages = CREDIT.pages) {
       const token = `${CREDIT_PREFIX}${randomBytes(24).toString('base64url')}`, h = tokenHash(token), t = now();
-      const rec = { pages: CREDIT.pages, left: CREDIT.pages, until: new Date(t + CREDIT.days * DAY * 1000).toISOString(), at: new Date(t).toISOString(), sale: sale?.id || null };
+      const rec = { pages, left: pages, until: new Date(t + CREDIT.days * DAY * 1000).toISOString(), at: new Date(t).toISOString(), sale: sale?.id || null };
       await serial(h, async () => { await put(T(h), rec, ttlOf(rec.until), true); if (sale?.id) await put(`credit:sale:${sale.id}`, h, (CREDIT.days + 2) * DAY, true); });
       if (sale?.id && claim?.chain) { await loadOpen(); open.list.push({ sale: sale.id, at: rec.at, ...claim.chain }); await keepOpen(); }
       return { token, pages: rec.pages, left: rec.left, until: rec.until };

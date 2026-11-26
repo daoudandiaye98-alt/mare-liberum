@@ -312,9 +312,11 @@ await proof('A2A: plain words go to the doors unless they are a purchase', async
 await proof('OpenAPI names the two paid doors for the x402 indexes (x-payment-info, a fixed USD price, a 402 response), each answers 402 without a payment, and no free door carries a price; info.contact has the e-mail', async () => {
   const o = await call('GET', '/openapi.json'); assert.equal(o.j.info.contact.email, 'oroborosdesign@gmail.com');
   const paid = Object.entries(o.j.paths).flatMap(([p, ops]) => Object.entries(ops).filter(([, op]) => op['x-payment-info']).map(([m, op]) => [m.toUpperCase(), p, op]));
-  assert.deepEqual(paid.map(([m, p]) => `${m} ${p}`).sort(), ['POST /reader/credit', 'POST /route']);
+  assert.deepEqual(paid.map(([m, p]) => `${m} ${p}`).sort(), ['POST /reader/credit', 'POST /reader/credit/stripe', 'POST /route']);
   for (const [m, p, op] of paid) {
-    const x = op['x-payment-info']; assert.deepEqual(x.protocols, ['x402']); assert.equal(x.price.mode, 'fixed'); assert.equal(x.price.currency, 'USD'); assert.match(x.price.amount, /^\d+\.\d{2}$/); assert.ok(op.responses['402'], `${p}: a 402 response`);
+    const x = op['x-payment-info']; assert.ok(op.responses['402'], `${p}: a 402 response`);
+    if (p === '/reader/credit/stripe') { assert.deepEqual([x.intent, x.method, x.amount, x.currency], ['charge', 'stripe', '50', 'usd']); continue; } // MPP (proof:mpp proves the door)
+    assert.deepEqual(x.protocols, ['x402']); assert.equal(x.price.mode, 'fixed'); assert.equal(x.price.currency, 'USD'); assert.match(x.price.amount, /^\d+\.\d{2}$/);
     const r = await call(m, p === '/route' ? '/route?q=find+usdc+price' : p); assert.equal(r.status, 402, `${m} ${p} without a payment`);
   }
   assert.equal(o.j.paths['/route'].post['x-payment-info'].price.amount, '0.02'); assert.equal(o.j.paths['/reader/credit'].post['x-payment-info'].price.amount, '0.05');
