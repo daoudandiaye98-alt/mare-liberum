@@ -219,8 +219,8 @@ await proof('the lean reader keeps code exactly; in a list item and a nested one
   const d = node.lean.leanMarkdown(DEPLOY, `${P}/deploy`).md; for (const c of [YAML, MAKE, SNIP]) hasExact(d, c, 'lean'); hasLines(d, PY, 'lean');
   const s = node.lean.leanMarkdown(STEPS, `${P}/steps`).md;
   assert.deepEqual(nestedAs(s, YAML), ['   '], 'the config in the first item of an ordered list: fence and code three spaces in ("1. ")'); assert.deepEqual(nestedAs(s, PY), ['   '], 'the module in the second item');
-  assert.deepEqual(nestedAs(s, MAKE), ['     '], 'the Makefile in the nested "- " item under "2. ": five spaces in, its tab kept');
-  assert.ok(s.includes('\n1. Write the config:\n   ```\n   harbour:\n     name: Mare\n'), 'the item and its code'); assert.ok(s.includes('\n  - and a nested step, the Makefile:\n     ```\n     deploy: build\n     \t./bot --deploy\n'), 'the nested item and its code');
+  assert.deepEqual(nestedAs(s, MAKE), ['    '], 'the Makefile in the nested "- " item under "2. ": four spaces in (its marker at 2, content at 4), its tab kept');
+  assert.ok(s.includes('\n1. Write the config:\n   ```\n   harbour:\n     name: Mare\n'), 'the item and its code'); assert.ok(s.includes('\n  - and a nested step, the Makefile:\n    ```\n    deploy: build\n    \t./bot --deploy\n'), 'the nested item and its code');
   for (const c of [YAML, PY, MAKE]) assert.ok(nestedIn(s, c).ok, `CommonMark: ${c.split('\n')[0]} in its item ${JSON.stringify(nestedIn(s, c))}`);
 });
 await proof('/r/<page>: the lean answer and format=full keep the code; the Makefile\'s recipe begins with a tab', async () => {
@@ -228,7 +228,7 @@ await proof('/r/<page>: the lean answer and format=full keep the code; the Makef
   assert.equal(r.status, 200); assert.equal(f.status, 200);
   for (const c of [YAML, MAKE, SNIP]) hasExact(r.text, c, '/r/'); hasLines(r.text, PY, '/r/');
   for (const c of [PY, YAML, MAKE, SNIP]) hasExact(f.text, c, '/r/ format=full');
-  const steps = await node.call(`/r/${P}/steps`, { ip }); for (const [c, ind] of [[YAML, '   '], [PY, '   '], [MAKE, '     ']]) assert.deepEqual(nestedAs(steps.text, c), [ind], `/r/ list items: ${c.split('\n')[0]}`);
+  const steps = await node.call(`/r/${P}/steps`, { ip }); for (const [c, ind] of [[YAML, '   '], [PY, '   '], [MAKE, '    ']]) assert.deepEqual(nestedAs(steps.text, c), [ind], `/r/ list items: ${c.split('\n')[0]}`);
   assert.ok(r.text.includes('\n\t./bot --deploy\n') && f.text.includes('\n\t./bot --deploy\n'));
 });
 await proof('POST /v2/scrape and /v1/scrape: data.markdown keeps the code, with onlyMainContent: false exactly', async () => {
@@ -309,6 +309,34 @@ await proof('code in an ordered list nested in an ordered list, every other mix,
   }
 });
 
+// R1: three levels, every mix of ul and ol, code at each level, and ten items at the inner level. The text lines of an item go
+// two spaces in, as before, so an ordered marker's two spaces are no nesting for CommonMark: where an item's marker line is
+// a list item (C <= its indentation <= C + 3, C the content column of the container it is read in), its code stands at the
+// item's content column, inside the item; where it is not, at C, the container's own column. Either way the block's code
+// comes back byte for byte (taking exactly the fence's indentation off), never lost and never with spaces too many
+const CODE3 = (i) => `def f${i}(x):\n    if x:\n        return ${i}\n    return 0`;
+const exactAt = (md, code) => { const L = md.split('\n'); for (let i = 0; i < L.length; i++) { const o = /^( *)(`{3,})/.exec(L[i]); if (!o) continue; const ind = o[1].length; let j = i + 1; while (j < L.length && !new RegExp(`^ {${ind}}\`{3,}\\s*$`).test(L[j])) j++; const body = L.slice(i + 1, j); if (body.every((l) => !l.trim() || l.startsWith(' '.repeat(ind))) && body.map((l) => l.slice(ind)).join('\n') === code) return { ind, line: i, L }; } return null; };
+const owner = (L, at, ind) => { let k = at - 1; while (k >= 0 && !(/^( *)([-*]|\d+[.)]) /.test(L[k]) && /^( *)/.exec(L[k])[1].length < ind)) k--; return k >= 0 ? L[k].trim() : null; };
+await proof('three levels of lists, every mix of ul and ol, code at each level, ten items at the inner level: each block byte-exact at its item\'s content column where CommonMark reads the item, else at its container\'s (R1)', async () => {
+  let n = 0;
+  for (const a of ['ul', 'ol']) for (const b of ['ul', 'ol']) for (const c of ['ul', 'ol']) for (const ten of [false, true]) {
+    const inner = ten ? Array.from({ length: 9 }, (_, i) => `<li>Three ${i + 1}</li>`).join('') + `<li>Level three text<pre>${esc(CODE3(3))}</pre></li>` : `<li>Level three text<pre>${esc(CODE3(3))}</pre></li><li>Three b</li>`;
+    const html = `<html><head><title>m</title></head><body><main><h1>Guide</h1><p>${WORDS}</p><${a}><li>Level one text<pre>${esc(CODE3(1))}</pre><${b}><li>Level two text<pre>${esc(CODE3(2))}</pre><${c}>${inner}</${c}></li><li>Two b</li></${b}></li><li>One b</li></${a}><p>Closing words.</p></main></body></html>`;
+    const w = (t, num) => (t === 'ol' ? String(num).length + 2 : 2), lv = []; let C = 0;
+    for (const [k, [t, num]] of [[a, 1], [b, 1], [c, ten ? 10 : 1]].entries()) { const d = 2 * k, real = C <= d && d <= C + 3, cc = d + w(t, num); lv.push({ d, C, real, cc, at: real ? cc : C }); C = real && w(t, num) <= 2 ? cc : C; }
+    PAGES.set(`${P}/m/${a}${b}${c}${ten}`, html);
+    for (const [what, md] of [['leanMarkdown', node.lean.leanMarkdown(html, `${P}/m`).md], ['/r/', (await node.call(`/r/${P}/m/${a}${b}${c}${ten}`, { ip: fresh() })).text]]) {
+      for (const [i, L] of lv.entries()) {
+        const x = exactAt(md, CODE3(i + 1)), name = `${a}>${b}>${c}${ten ? ' (ten)' : ''} level ${i + 1} ${what}`;
+        assert.ok(x, `${name}: no block holds the code byte for byte\n${md.slice(md.indexOf('Level one') - 3, md.indexOf('Closing'))}`); assert.equal(x.ind, L.at, `${name}: at ${x.ind}, not ${L.at}`);
+        if (L.real) assert.match(owner(x.L, x.line, x.ind) || '', new RegExp(`^(-|\\d+\\.) Level ${['one', 'two', 'three'][i]} text`), `${name}: in its own item`);
+        n++;
+      }
+    }
+  }
+  assert.equal(n, 96);
+});
+
 console.log('pages written to make the reader slow (verify-3.40 F2, nit 2)');
 // a page written to make the scan slow, converted by this tree's toMarkdown in a child process with a time limit of 10 s
 const ADVERSARIAL = {
@@ -364,9 +392,10 @@ console.log(`\n${passed} proofs held, ${failed} failed`);
 // ------------------------------------------------------------------ negative controls: each rule broken in a copy, the proof must fail there
 const BREAK = [
   ['the old trim: every line made tidy, the lines of code too', 'node/reader.mjs', '  return back(md);\n}', "  return back(md).split('\\n').map((l) => l.replace(/[ \\t\\u00a0]+/g, ' ').trim()).join('\\n');\n}"],
-  ['code in a list item at the margin while its fence goes in (5bef5ae)', 'node/lean.mjs', 'return code ? pad + l : `  ${l}`; }; };', 'return code ? l : `  ${l}`; }; };'],
+  ['code in a list item at the margin while its fence goes in (5bef5ae)', 'node/lean.mjs', 'return code ? (own ? pad + l : l) : `  ${l}`; }; };', 'return code ? l : `  ${l}`; }; };'],
   ['the fence of a list item\'s code at the margin, its code two spaces in (fbf500e)', 'node/lean.mjs', 'out.push(raw.includes(LIST_FENCE) ? raw.trimEnd() : raw.trim());', 'out.push(raw.trim());'],
   ['the fixed two-space shift for the code of ordered items (B3)', 'node/lean.mjs', 'const width = (k) => (ordered ? String(k).length + 2 : 2);', 'const width = () => 2;'],
+  ['the summed-width shift of 1b51af6 (R1)', 'node/lean.mjs', [["return own ? pad + l.replace(/^\\s*\\u0000?/, LIST_FENCE) : l; }", "return pad + l.replace(/^\\s*\\u0000?/, LIST_FENCE); }"], ["return code ? (own ? pad + l : l) : `  ${l}`; }; };", "return code ? pad + l : `  ${l}`; }; };"], ['const sh = shifter(real ? cc : C);', 'const sh = shifter(w);'], ["l.split('\\n').map(shifter(0))", "l.split('\\n').map(shifter(2))"]], null],
   ['the final NUL sweep of the lean reader removed (B2)', 'node/lean.mjs', "menus: region === body }).replace(/\\u0000/g, '');", 'menus: region === body });'],
   ['a page\'s own NULs let into toMarkdown (B2)', 'node/reader.mjs', "  let h = String(html || '').replace(/\\u0000/g, '').replace(", "  let h = String(html || '').replace("],
   ['a page\'s own NULs let into the lean reader (B2)', 'node/lean.mjs', "  html = String(html ?? '').replace(/\\u0000/g, '');\n", "  html = String(html ?? '');\n"],
@@ -382,8 +411,9 @@ if (CONTROLS) {
     try {
       for (const d of ['node', 'site', 'proof', 'config', 'public', 'engines']) if (existsSync(join(ROOT, d))) cpSync(join(ROOT, d), join(tmp, d), { recursive: true });
       mkdirSync(join(tmp, 'tools'), { recursive: true }); cpSync(join(ROOT, 'tools/reader-code-proof.mjs'), join(tmp, 'tools/reader-code-proof.mjs')); cpSync(join(ROOT, 'package.json'), join(tmp, 'package.json'));
-      const src = readFileSync(join(tmp, f), 'utf8'); if (!src.includes(from)) { console.log(`  FAIL control "${what}": the line to break is gone from ${f}`); continue; }
-      writeFileSync(join(tmp, f), src.replace(from, to));
+      let src = readFileSync(join(tmp, f), 'utf8'); const pairs = Array.isArray(from) ? from : [[from, to]];
+      if (pairs.some(([x]) => !src.includes(x))) { console.log(`  FAIL control "${what}": the line to break is gone from ${f}`); continue; }
+      for (const [x, y] of pairs) src = src.replace(x, y); writeFileSync(join(tmp, f), src);
       const run = spawnSync(process.execPath, ['tools/reader-code-proof.mjs', '--no-controls'], { cwd: tmp, encoding: 'utf8', timeout: 600_000, env: { ...process.env, MARE_CODE_REF_DIR: refDir || '' } });
       const held = /(\d+) proofs held, (\d+) failed/.exec(run.stdout || '');
       if (run.status !== 0 && held && Number(held[2]) > 0) { caught++; console.log(`  ok   caught: ${what} (${held[2]} ${held[2] === '1' ? 'proof' : 'proofs'} failed)`); }

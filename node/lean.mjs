@@ -440,21 +440,26 @@ function writer(page, base) {
     return out;
   };
   const list = (el, st, ordered) => {
-    // (since 26.11.2026) the lines of an item go two spaces in, as before; a code block in it (its fences and its lines) goes
-    // in by the width of the item's marker (2 for "-", 3 for "1.", 4 for "10."), which is where CommonMark reads the item's
-    // content, so the block nests in the item and its code comes back exactly. Its fences are marked (LIST_FENCE) so that
-    // tidy and the last pass leave them there; before, tidy set them at the margin and left their code in per level
-    const shifter = (w) => { let code = false; const pad = ' '.repeat(w); return (l) => {
-      if (/^\s*\u0000?```/.test(l)) { code = !code; return pad + l.replace(/^(\s*)\u0000?/, `$1${LIST_FENCE}`); }
-      return code ? pad + l : `  ${l}`; }; };
+    // (since 26.11.2026) the text lines of an item go two spaces in, as before. A code block in an item (its fences and its
+    // lines) is set where CommonMark reads it as the item's: at the item's content column (its indentation plus its marker,
+    // 2 for "-", 3 for "1.", 4 for "10.") when its marker line is a list item there, else at the content column of the
+    // container that marker line falls into (two spaces of text indentation under an ordered marker are no nesting for
+    // CommonMark: verify-3.40 R1), so the code comes back exactly at any depth. d: where this list's marker lines stand;
+    // C: the content column of the container they are read in. A block's fences are marked (LIST_FENCE): tidy and the last
+    // pass leave them where they stand, the lists around them do not move them again, and the marks go before the answer
+    const d = st.listD || 0, C = st.listC || 0, real = C <= d && d <= C + 3;
+    const shifter = (at) => { let code = false, own = false; const pad = ' '.repeat(at); return (l) => {
+      if (/^\s*\u0000?```/.test(l)) { if (!code) own = !l.includes(LIST_FENCE); code = !code; return own ? pad + l.replace(/^\s*\u0000?/, LIST_FENCE) : l; }
+      return code ? (own ? pad + l : l) : `  ${l}`; }; };
     const width = (k) => (ordered ? String(k).length + 2 : 2);
     const items = []; let n = 0;
     const item = (k) => {
-      const body = tidy(md(k, { ...st, depth: (st.depth || 0) + 1 })); if (!body || !/[\p{L}\p{N}]/u.test(body)) return;
+      const w = width(n + 1), cc = d + w;
+      const body = tidy(md(k, { ...st, depth: (st.depth || 0) + 1, listD: d + 2, listC: real && w <= 2 ? cc : C })); if (!body || !/[\p{L}\p{N}]/u.test(body)) return;
       n++; const [head, ...rest] = body.split('\n').filter((l) => l.trim());
-      const sh = shifter(width(n)); if (/^\s*\u0000?```/.test(head)) sh(head); items.push(`${ordered ? `${n}.` : '-'} ${head}${rest.length ? `\n${rest.map(sh).join('\n')}` : ''}`);
+      const sh = shifter(real ? cc : C); if (/^\s*\u0000?```/.test(head)) sh(head); items.push(`${ordered ? `${n}.` : '-'} ${head}${rest.length ? `\n${rest.map(sh).join('\n')}` : ''}`);
     };
-    for (const k of el.kids) { if (!isEl(k)) { if (k.trim()) items.push(one(entities(k))); continue; } if (k.tag === 'li') item(k); else if (k.tag === 'ul' || k.tag === 'ol') { const l = list(k, st, k.tag === 'ol'); if (l) items.push(l.split('\n').map(shifter(width(Math.max(n, 1)))).join('\n')); } else item(k); }
+    for (const k of el.kids) { if (!isEl(k)) { if (k.trim()) items.push(one(entities(k))); continue; } if (k.tag === 'li') item(k); else if (k.tag === 'ul' || k.tag === 'ol') { const l = list(k, { ...st, listD: d + 2, listC: C }, k.tag === 'ol'); if (l) items.push(l.split('\n').map(shifter(0)).join('\n')); } else item(k); }
     return items.join('\n');
   };
   const table = (el, st) => {
