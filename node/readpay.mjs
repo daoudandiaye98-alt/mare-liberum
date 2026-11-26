@@ -17,8 +17,8 @@ import { USDC_BASE } from './pricing.mjs';
 import { TOKEN_RATIO, tokensOf } from './proof.mjs';
 
 export const READPAY = Object.freeze({ cents: 1, micro: 10_000, path: '/x402/read' });
-const usd6 = (micro) => (Number(micro) / 1e6).toFixed(6);
-const b64 = (s) => Buffer.from(s, 'utf8').toString('base64');
+export const usd6 = (micro) => (Number(micro) / 1e6).toFixed(6);
+export const b64 = (s) => Buffer.from(s, 'utf8').toString('base64');
 const DAY = 86400;
 
 // the call and its answer, for discovery catalogs (x402 "bazaar"): what to send and what comes back
@@ -90,18 +90,20 @@ export function readLimitRequired(t, { base, shape = 'reader', code = 'RESOURCE_
 // a payment for exactly the price: a signed USDC transfer (x402 "exact", EIP-3009) to the till's wallet of exactly 0.01 USDC,
 // naming its wallet and nonce, ending within the terms' time and a minute. → null when it is that, else why not
 const HEX40 = /^0x[0-9a-fA-F]{40}$/, HEX64 = /^0x[0-9a-fA-F]{64}$/;
-export function readExact(pay, t, nowMs = Date.now()) {
+// (since 3.56 the same check for each door sold at a fixed sum: exactFor('a paid check') for node/checkpay.mjs)
+export const exactFor = (noun) => function exact(pay, t, nowMs = Date.now()) {
   const p = pay?.payload, auth = p?.payload?.authorization;
-  if (!auth || typeof auth !== 'object') return 'a paid read is paid with a signed USDC transfer on Base (x402 "exact", EIP-3009): this payment carries none';
+  if (!auth || typeof auth !== 'object') return `${noun} is paid with a signed USDC transfer on Base (x402 "exact", EIP-3009): this payment carries none`;
   let v; try { v = BigInt(String(auth.value)); } catch { return 'the amount of this payment could not be read'; }
-  if (v !== BigInt(t.atomic)) return `this payment is for ${usd6(Number(v))} USDC; a paid read costs exactly ${usd6(t.micro)} USDC: pay that sum`;
-  if (pay?.version === 2 && p?.accepted?.amount != null && String(p.accepted.amount) !== t.atomic) return `this payment accepted ${usd6(Number(p.accepted.amount) || 0)} USDC; a paid read costs exactly ${usd6(t.micro)} USDC`;
+  if (v !== BigInt(t.atomic)) return `this payment is for ${usd6(Number(v))} USDC; ${noun} costs exactly ${usd6(t.micro)} USDC: pay that sum`;
+  if (pay?.version === 2 && p?.accepted?.amount != null && String(p.accepted.amount) !== t.atomic) return `this payment accepted ${usd6(Number(p.accepted.amount) || 0)} USDC; ${noun} costs exactly ${usd6(t.micro)} USDC`;
   if (String(auth.to || '').toLowerCase() !== String(t.payTo || '').toLowerCase()) return `this payment goes to another wallet than ${t.payTo}`;
   if (!HEX40.test(String(auth.from || '')) || !HEX64.test(String(auth.nonce || ''))) return 'the signed transfer of this payment names no wallet (from) or no nonce: it is not taken';
   const before = Number(auth.validBefore), most = Math.floor(nowMs / 1000) + (Number(t.window) || 300) + 60;
   if (!Number.isSafeInteger(before) || before > most) return `the signed transfer of this payment must end within ${(Number(t.window) || 300) + 60} seconds (validBefore): a longer one is not taken`;
   return null;
-}
+};
+export const readExact = exactFor('a paid read');
 
 // the page an agent wants, as an address the reader takes (http or https, at most 2000 characters) → the address or null
 export function readTarget(x) {

@@ -833,7 +833,12 @@ const since0 = (t) => t.replace(/"runningSince":"[^"]*"/g, '"runningSince":"<sta
   .replace(/; past its free pages the reader answers with status 402 and the terms on which it reads the page for 0\.01 USDC \(paid read, below\)/g, '')
   .replace(/\n<p>\(\d+\) (?:Bezahltes Lesen|Paid read) \([\s\S]*?<\/p>/g, '')
   .replace(/<tr><td[^>]*>Bezahltes Lesen \([\s\S]*?<\/tr>/g, '')
-  .replace(/; past that the reader answers 402 and an x402 client reads on at 0\.01 USDC a page in the same request \(no account\)/g, '');
+  .replace(/; past that the reader answers 402 and an x402 client reads on at 0\.01 USDC a page in the same request \(no account\)/g, '')
+  // (and the paid check of 3.56, proven by tools/checkpay-proof.mjs and tools/legal-proof.mjs: the last paragraph of § 4, a row of
+  // /de/preise, a sentence of llms.txt)
+  .replace(/\n<p>\(\d+\) (?:Bezahlter Check|Paid check) \([\s\S]*?<\/p>/g, '')
+  .replace(/<tr><td[^>]*>Bezahlter Check \([\s\S]*?<\/tr>/g, '')
+  .replace(/ Past 20 checks an hour per network the JSON answer is a 402: an x402 client pays 0\.05 USDC and checks on in the same request; GET \S+\/x402\/check\?site=<domain> sells a check any time\./g, '');
 // (and the version each tree names: a release bumps it, the answers stay the same)
 const vers = (t, v) => (v ? t.replaceAll(v, '<version>') : t);
 const sameText = (a, b, what) => { assert.equal(a.status, b.status, `${what}: status`); const x = vers(since0(a.text), MINE.version), y = vers(since0(b.text), THEIRS.version); assert.ok(x === y, `${what}: body ${x === y ? '' : firstDiff(x, y)}`); assert.deepEqual([...a.headers.entries()].sort(), [...b.headers.entries()].sort(), `${what}: headers`); };
