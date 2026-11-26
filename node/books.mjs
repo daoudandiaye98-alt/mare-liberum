@@ -345,22 +345,26 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
         try { const got = await readSpan(back, st.next - 1); const k = await keep(got, recs); if (k == null) throw new Error('the books could not be written'); found += k; count('chain_reread'); }
         catch (e) { count('chain_reread_failed'); log('mare_books', `the last hour once more: ${String(e?.message || e).slice(0, 160)}`); }
       }
+      let half = null; // the retry of a range that timed out, in halves; the width itself stays
       while (st.next <= safe && ranges < burst && !stopped) {
-        const a = st.next, b = Math.min(a + step - 1, safe);
+        const a = st.next, b = Math.min(a + Math.min(step, half ?? step) - 1, safe);
         let got;
         try { got = await transfersIn(a, b); }
         catch (e) {
           // a full range (as wide as the width) is halved on any error that can be about width; a shorter one too when it is an
           // answer about width or still long (a catch-up after a stop: more than 120 blocks); near the head (about 30 blocks a
           // pass) a timeout or a word about the head fails the pass and leaves the width alone. Only a full range refused for its
-          // width is remembered
+          // width is remembered. Only an answer about width lowers the width; a timeout narrows only the retry of that range
+          // (half), so random timeouts never wear the width down
           const w = b - a + 1, full = w >= step;
           if (tooWide(e) && (full ? step > minStep : (aboutWidth(e) || w > 120) && w > minStep)) {
             if (full && aboutWidth(e)) { refused = Math.min(refused ?? Infinity, Math.floor(w * 0.8)); refusedAt = now(); }
-            step = Math.max(minStep, Math.floor(Math.min(step, w) / 2)); count('chain_narrowed'); await sleep(pauseMs); continue;
+            if (aboutWidth(e)) step = Math.max(minStep, Math.floor(Math.min(step, w) / 2)); else half = Math.max(minStep, Math.floor(w / 2));
+            count('chain_narrowed'); await sleep(pauseMs); continue;
           }
           throw e;
         }
+        half = null; // the range that timed out is through: the next one is as wide as the width again
         const k = await keep(got, recs); if (k == null) throw new Error('the books could not be written: the range is read again');
         st.next = b + 1; st.ranges = (st.ranges || 0) + 1; ranges++; found += k; count('chain_ranges');
         if (!(await put(KEYS.state(W), st, far()))) throw new Error('the state could not be written');

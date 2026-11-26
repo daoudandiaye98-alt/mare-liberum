@@ -485,7 +485,10 @@ await proof('F1: a catch-up whose long ranges time out (an RPC that answers at m
   c.inject = (a, z) => (z - a + 1 > 600 ? 'timeout' : null);
   c.head += 1200; let passes = 0; do { c.head += 30; await b.pass(); passes++; } while (passes < 10 && (await b.sync()).behind_blocks !== 0);
   assert.ok(passes <= 3, `caught up the 1,200 blocks in ${passes} passes`); assert.equal((await b.sync()).behind_blocks, 0);
-  c.inject = null;
+  c.inject = null; assert.equal(b.state().step, 2000, 'timeouts never lowered the width');
+  // NQ: a timeout is no width the RPC refused: a catch-up within the hour asks ranges of 2,000 blocks again
+  const n0 = (await b.sync()).next_block; c.head += 6000; const m = c.mark(); await b.pass();
+  assert.equal(Math.max(...c.ranges(m).filter(([x]) => x >= n0).map(([x, z]) => z - x + 1)), 2000, 'nothing remembered from the timeouts');
 });
 await proof('F2: a range too large in words that say "beyond" ("block range beyond the limit of 1000 blocks") is about width and is remembered; "beyond current head" is about the head', async () => {
   const start = blk('2026-11-22T10:00:00Z'), c = sim({ head: start + 20_000, maxRange: 1000 }), kv = memoryKv(), b = simBooks(c, kv, { fromBlock: start });
@@ -495,6 +498,27 @@ await proof('F2: a range too large in words that say "beyond" ("block range beyo
   // near the head the other wording fails the pass and leaves the width alone (R1)
   const w0 = b.state().step; let once = 1; c.inject = (a, z) => (once && z >= c.head - 60 ? (once--, 'head') : null); c.head += 30; const r = await b.pass(); c.inject = null;
   assert.ok(r.error && /beyond current head/.test(r.error), r.error); assert.equal(b.state().step, w0);
+});
+await proof('NP: near the head a timeout fails the pass at once (one forward request, no retry) and never changes the forward width', async () => {
+  const start = blk('2026-11-22T10:00:00Z'), c = sim({ head: start + 60 }), kv = memoryKv(), b = simBooks(c, kv, { fromBlock: start });
+  await runTo(c, b, '2026-11-22T11:00:00Z', 60); assert.equal(b.state().step, 2000);
+  const n0 = (await b.sync()).next_block; let once = 1; c.inject = (a, z) => (once && a >= n0 ? (once--, 'timeout') : null);
+  c.head += 100; const m = c.mark(); const r = await b.pass(); c.inject = null; // a range of 100 blocks: near the head (120 or fewer)
+  assert.ok(r.error, 'the pass failed'); assert.equal(c.ranges(m).filter(([x]) => x >= n0).length, 1, 'one forward request, no retry'); assert.equal(b.state().step, 2000); assert.equal((await b.sync()).next_block, n0);
+});
+await proof('S1: with 30 % random timeouts (none about width) over six hours the forward width is never worn down and the worst lag stays within 35 minutes; nothing lost, nothing twice (seeded)', async () => {
+  for (const seed0 of [1, 2, 3, 4]) {
+    const start = blk('2026-11-22T06:00:00Z'), logs = []; for (let n = start + 100; n < blk('2026-11-22T12:00:00Z'); n += 150) logs.push(simLog(n));
+    const c = sim({ head: start + 60, logs }), kv = memoryKv(), b = simBooks(c, kv, { fromBlock: start });
+    let seed = seed0; const rnd = () => ((seed = (seed * 1103515245 + 12345) % 2 ** 31) / 2 ** 31);
+    c.inject = () => (rnd() < 0.3 ? 'timeout' : null);
+    let worst = 0, low = 2000;
+    const run = async (until) => { const end = blk(until); while (c.head < end) { const w = b.state().waiting; if (w > 0) { c.head += Math.max(1, Math.round(Math.ceil(w / 1000) / 2)); continue; } const r = await b.pass(); worst = Math.max(worst, (c.head - 60) - (await stOf(kv)).next + 1); low = Math.min(low, b.state().step); c.head += r.error ? 0 : r.behind > 0 ? 1 : 30; } };
+    await run('2026-11-22T12:00:00Z'); c.inject = null; await run('2026-11-22T13:00:00Z');
+    const all = await b.entries(); assert.equal(all.length, logs.length, `seed ${seed0}: booked`); assert.equal(new Set(all.map((e) => e.k)).size, logs.length);
+    assert.ok(worst * 2 / 60 <= 35, `seed ${seed0}: worst lag ${Math.round(worst * 2 / 60)} min`);
+    assert.ok(low >= 1000, `seed ${seed0}: the forward width went down to ${low}`);
+  }
 });
 await proof('R2: a span that progresses through occasional errors (a 503 every 150th call, an RPC that takes 100 blocks) is finished, not given up', async () => {
   const start = blk('2026-11-21T00:00:00Z'), c = sim({ head: start + 60, maxRange: 100 }), kv = memoryKv(), b = simBooks(c, kv, { fromBlock: start });
@@ -761,6 +785,9 @@ const BREAK = [
   ['F1 taken back: a long catch-up range that times out fails the pass', 'node/books.mjs', "(full ? step > minStep : (aboutWidth(e) || w > 120) && w > minStep)", "(full ? step > minStep : aboutWidth(e) && w > minStep)"],
   ['F2 taken back: "beyond" alone is about the head', 'node/books.mjs', "/beyond (the )?(current )?head|head block|header not found|future block|not (yet )?(available|indexed)/i", "/head|beyond|future|not (yet )?(available|found|indexed)/i"],
   ['NN taken back: the forward width remembered a day', 'node/books.mjs', "if (refused != null && t - refusedAt >= 3600e3) refused = null;", "if (refused != null && t - refusedAt >= 86400e3) refused = null;"],
+  ['S1 taken back: a timeout lowers the forward width for good', 'node/books.mjs', "if (aboutWidth(e)) step = Math.max(minStep, Math.floor(Math.min(step, w) / 2)); else half = Math.max(minStep, Math.floor(w / 2));", "step = Math.max(minStep, Math.floor(Math.min(step, w) / 2));"],
+  ['NP taken back: a timeout near the head retried at once', 'node/books.mjs', "(aboutWidth(e) || w > 120) && w > minStep", "(aboutWidth(e) || w > 0) && w > minStep"],
+  ['NQ taken back: a long range that timed out remembered as refused', 'node/books.mjs', "if (full && aboutWidth(e)) { refused = Math.min(refused ?? Infinity, Math.floor(w * 0.8)); refusedAt = now(); }", "if ((full && aboutWidth(e)) || w > 120) { refused = Math.min(refused ?? Infinity, Math.floor(w * 0.8)); refusedAt = now(); }"],
   ['R2 taken back: a span given up after 3 failures in all', 'node/books.mjs', "r.fails = (n > 0 ? 0 : (r.fails || 0)) + 1;", "r.fails = (r.fails || 0) + 1;"],
   ['NE taken back: a dropped span not counted', 'node/books.mjs', "if (st.redo) count('chain_day_reread_dropped');", ""],
   ['B2 taken back: only yesterday read again', 'node/books.mjs', "t0 = t1 - 2 * 86_400, hi = st.next - 1;", "t0 = t1 - 86_400, hi = st.next - 1;"],
