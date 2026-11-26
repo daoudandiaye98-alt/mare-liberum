@@ -1661,7 +1661,11 @@ async function tollRestsFor(db, cfg, ip) {
   return T.rests(a);
 }
 // prepaid reader credit (node/credit.mjs, since 3.38): the book of the node (its state), on the reader's HTTP doors only
-const creditBook = (db, cfg) => (db.creditBook ||= createCredit({ kv: cfg.kv || db.kv || memoryKv() }));
+// (CR8) with the till's books, the toll's chain check (tollRpc: MARE_BASE_RPC, off switches it off) and its own timer: a sale whose
+// settlement never answered is settled or taken back once Base can say which (node/credit.mjs recheck), never in a request
+const creditBook = (db, cfg) => (db.creditBook ||= createCredit({ kv: cfg.kv || db.kv || memoryKv(), ledger: ledgerOf(cfg), rpc: tollRpc(cfg), sweepMs: cfg.creditSweepMs ?? 60_000 }));
+// at the start of a node (serve.mjs): the sales an earlier run left open are looked at once (then once a minute on the timer)
+export async function startCredit(db, cfg = {}) { return creditBook(db, cfg).recheck(); }
 const READER_DOORS = /^\/(r(\/|$)|read$|v[12]\/scrape$)/;
 // an answer that spent a page of credit says what is left; it is the caller's own (no shared cache) and asks no fair share
 function withCredit(res, c) {
@@ -2111,9 +2115,10 @@ async function handleOne(req, db, cfg = {}) {
       // a payment buys once (its wallet and nonce), also while two of the same arrive at once
       const claim = await book.claim(pay);
       if (claim.used) return creditRequired(t, { base, error: 'this payment bought reader credit before: a payment buys once', cors: CORS });
-      // the sale's later word: a settlement that fails takes the credit back
-      const books = Object.assign(Object.create(ledger), { saleSet: (id, patch) => { ledger.saleSet(id, patch); if (patch?.status && patch.status !== 'settled' && patch.status !== 'pending') book.revokeSale(id).catch(() => {}); } });
-      const r = await takePayment({ cfg: payCfg, t, pay, q: `reader credit: ${CREDIT.pages} pages`, ledger: books, work: (sale) => book.mint(sale), callerHash: caller(), waitUntil: cfg.waitUntil, base, label: 'credit', strict: true });
+      // the sale's later word: a settlement that fails takes the credit back, one that settled closes the sale (one that never
+      // answers is looked at on the chain later, node/credit.mjs recheck)
+      const books = Object.assign(Object.create(ledger), { saleSet: (id, patch) => { ledger.saleSet(id, patch); if (patch?.status && patch.status !== 'settled' && patch.status !== 'pending') book.revokeSale(id).catch(() => {}); if (patch?.status === 'settled') book.landed(id).catch(() => {}); } });
+      const r = await takePayment({ cfg: payCfg, t, pay, q: `reader credit: ${CREDIT.pages} pages`, ledger: books, work: (sale) => book.mint(sale, claim), callerHash: caller(), waitUntil: cfg.waitUntil, base, label: 'credit', strict: true });
       if (r.refuse) { await book.release(claim); return creditRequired(t, { base, error: r.refuse, cors: CORS }); }
       if (r.sale.status !== 'settled' && r.sale.status !== 'pending') { await book.revokeSale(r.sale.id); return creditRequired(t, { base, error: `the payment was checked but did not settle (${String(r.reason || r.sale.status).slice(0, 160)}): no credit was given`, cors: CORS }); }
       tallyDrop();

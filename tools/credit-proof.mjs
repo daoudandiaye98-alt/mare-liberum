@@ -11,6 +11,12 @@
 //   tokens refused with today's limit answer, no double spend under concurrency, the scrape doors and Jina's form alike;
 //   non-payers: today's limit answer, one line and two headers more; every other answer byte for byte origin/main (/r/ and
 //   /mcp/app as before); the terms (§ 5a DE and EN), the price lists, the privacy notice, /reader and llms.txt say it.
+//   CR8, a settlement whose answer never came back (lost, or a restart between verify and settle), with a stubbed Base RPC:
+//   on its own timer and at the start (never in a request), once validBefore and a minute are past and the claim is ten
+//   minutes old, the chain is asked: used, settled in the till and the credit kept; not used, taken back (429 "taken back");
+//   no clear answer, nothing changed and counted; at most 20 questions a run; the chain check off, nothing asked or taken
+//   back; a transfer valid beyond the terms' maxTimeoutSeconds and a minute not taken; wallet, nonce and validBefore kept,
+//   never the signature.
 // Negative controls at the end: each rule broken in a copy of the code, and this proof must fail there.
 // Runs without the network: node tools/credit-proof.mjs   (exit code 1 when a proof fails or a control is not caught)
 //   --no-controls              only the proofs (the controls run this file that way in each broken copy)
@@ -47,10 +53,18 @@ const P = 'https://pages.credit-proof.dev', FAC = 'https://facilitator.credit-pr
 const PAGE = `<!doctype html><html lang="en"><head><title>Pier notes</title></head><body><main><h1>Pier notes</h1>${Array.from({ length: 8 }, (_, i) => `<h2>Pier ${i + 1}</h2><p>The ferry leaves pier ${i + 1} at half past the hour, and the harbour office answers every question about berths.</p>`).join('')}</main></body></html>`;
 const outgoing = [], asked = [];
 let facilitator = null; // (kind, body) => Response
+// a stubbed Base RPC (USDC authorizationState): up (answers from used), down (no connection), garbage (no result)
+const CHAIN = 'https://chain.credit-proof.dev', chain = { mode: 'up', used: new Set(), asked: [] };
 const answer = (j, status = 200) => new Response(JSON.stringify(j), { status, headers: { 'content-type': 'application/json' } });
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (u, o = {}) => {
   const s = String(u?.url ?? u); outgoing.push({ url: s, headers: Object.fromEntries(new Headers(o.headers || {})), body: typeof o.body === 'string' ? o.body : '' });
+  if (s.startsWith(CHAIN)) {
+    const j = JSON.parse(o.body), d = String(j.params?.[0]?.data || ''), q = { from: `0x${d.slice(34, 74)}`, nonce: `0x${d.slice(74, 138)}`, to: j.params?.[0]?.to, selector: d.slice(0, 10) };
+    chain.asked.push(q); if (chain.mode === 'down') throw new TypeError('fetch failed');
+    if (chain.mode === 'garbage') return answer({ jsonrpc: '2.0', id: j.id, error: { code: -32000, message: 'header not found' } });
+    return answer({ jsonrpc: '2.0', id: j.id, result: `0x${(chain.used.has(q.nonce) ? 1 : 0).toString(16).padStart(64, '0')}` });
+  }
   if (s.startsWith(FAC)) { const kind = s.slice(FAC.length + 1), body = JSON.parse(o.body); asked.push({ kind, body }); if (!facilitator) throw new Error('the facilitator must not be asked'); return facilitator(kind, body); }
   if (/^http:\/\/127\.0\.0\.1:\d+\//.test(s)) return realFetch(u, o);
   const url = new URL(s);
@@ -79,7 +93,7 @@ async function nodeOf(rootDir) {
   writeFileSync(file, ''); writeFileSync(join(dir, 'build.json'), JSON.stringify({ builtAt: '2026-11-20T10:00:00.000Z', entries: 0, lakes: {} }));
   const db = createMem({ file, base: BASE }), kv = recordingKv(memoryKv), ledger = createLedger({});
   const PAY = { ...payConfig({}), facilitator: FAC, settleWaitMs: 300, verifyMs: 800, settleMs: 4000 };
-  const cfg = { base: BASE, kv, ledger, pay: PAY, site: SITE, waitUntil: (p) => { waits.push(p); } };
+  const cfg = { base: BASE, kv, ledger, pay: PAY, site: SITE, waitUntil: (p) => { waits.push(p); }, chainRpc: CHAIN, creditSweepMs: 0 };
   const call = async (path, { method = 'GET', accept = 'text/markdown, text/plain;q=0.9, */*;q=0.5', ua = UA, ip, headers = {}, body, c = {} } = {}) => {
     assert.ok(ip, 'every call of the proof names its network');
     const h = { accept, 'user-agent': ua, 'x-forwarded-for': ip, ...(body !== undefined && typeof body !== 'string' ? { 'content-type': 'application/json' } : {}), ...headers };
@@ -109,8 +123,8 @@ let pageNo = 0; const nextPage = () => `${P}/t/${++pageNo}.txt`;
 // the free pages of a network used up (each a new page, a second apart: the sea's pace per site stays calm)
 const useFree = async (n, ip) => { for (let i = 0; i < 100; i++) { T0 += 600; const r = await n.call(`/r/${nextPage()}`, { ip }); assert.equal(r.status, 200, `free read ${i + 1}: ${r.text.slice(0, 120)}`); } };
 // a signed USDC transfer (x402 exact, EIP-3009) in the header of x402 v2 (or v1)
-const payment = ({ value = '50000', to = WALLET, version = 2, nonce = `0x${randomBytes(32).toString('hex')}`, from = PAYER, noAuth = false } = {}) => {
-  const authorization = { from, to, value: String(value), validAfter: '0', validBefore: String(Math.floor(T0 / 1000) + 300), nonce };
+const payment = ({ value = '50000', to = WALLET, version = 2, nonce = `0x${randomBytes(32).toString('hex')}`, from = PAYER, noAuth = false, before } = {}) => {
+  const authorization = { from, to, value: String(value), validAfter: '0', ...(before === null ? {} : { validBefore: String(before ?? Math.floor(T0 / 1000) + 300) }), nonce };
   const inner = noAuth ? { signature: `0x${'ab'.repeat(65)}` } : { signature: `0x${'ab'.repeat(65)}`, authorization };
   const p = version === 2 ? { x402Version: 2, accepted: { scheme: 'exact', network: 'eip155:8453', amount: String(value), asset: USDC, payTo: to }, payload: inner } : { x402Version: 1, scheme: 'exact', network: 'base', payload: inner };
   return { [version === 2 ? 'payment-signature' : 'x-payment']: Buffer.from(JSON.stringify(p)).toString('base64') };
@@ -238,6 +252,122 @@ await proof('no double spend: ten reads at once with three pages left spend thre
   const g = await node.call('/reader/credit', { ip, accept: 'application/json', headers: { 'x-sea-credit': tok } }); assert.equal(g.j.token.left, 0);
 });
 
+console.log('CR8: a settlement whose answer never came back (the chain asked on its own timer, never in a request)');
+// the facilitator verifies, but its answer to settle is lost (no word either way: the sale stays pending)
+const lost = (onSettle = () => {}) => (kind) => { if (kind === 'settle') onSettle(); return kind === 'verify' ? answer({ isValid: true, payer: PAYER }) : answer({ error: 'upstream timed out' }, 504); };
+const minted = [];
+const buyLost = async (o = {}, onSettle) => {
+  facilitator = lost(onSettle); const nonce = `0x${randomBytes(32).toString('hex')}`, at = T0;
+  const r = await buy(payment({ nonce, ...o })); await settled();
+  assert.equal(r.status, 200, r.text.slice(0, 200)); assert.equal(r.j.paid.status, 'pending', 'handed out while its settlement has not answered'); minted.push(r.j.token);
+  return { nonce, at, sale: r.j.paid.sale, token: r.j.token };
+};
+const saleOf = (id) => node.ledger.mem.sales.find((x) => x.id === id);
+const peek = async (tok) => (await node.call('/reader/credit', { ip: fresh(), accept: 'application/json', headers: { 'x-sea-credit': tok } })).j.token;
+// one run of the re-check (what the timer does once a minute, and serve.mjs at the start)
+const tick = () => node.core.startCredit(node.db, node.cfg);
+// a restart: the node's book and all it held in memory are gone, the state stays; the new one checks at its start
+const restart = (c = {}) => { node.db.creditBook?.close?.(); delete node.db.creditBook; return node.core.startCredit(node.db, { ...node.cfg, ...c }); };
+let freeNet = null;
+const pastFree = async () => { const day = new Date(T0).toISOString().slice(0, 10); if (freeNet?.day !== day) { freeNet = { ip: fresh(), day }; await useFree(node, freeNet.ip); } return freeNet.ip; };
+await proof('settle answer lost, the authorization unused on Base: nothing decided before its time or in a request; then taken back (429 "taken back"), the sale unsettled in the till', async () => {
+  const b = await buyLost(), ip = await pastFree();
+  const r1 = await node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': b.token } }); assert.equal(r1.status, 200); assert.equal(r1.h['x-sea-credit-left'], '49', 'a credit whose settlement is on its way reads');
+  assert.equal(saleOf(b.sale).status, 'pending'); const a0 = chain.asked.length;
+  let x = await tick(); assert.equal(x.asked, 0, 'nothing is due before its time');
+  T0 = Math.max(T0, b.at + 11 * 60e3);
+  const r2 = await node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': b.token } }); assert.equal(r2.status, 200, 'a request decides nothing'); assert.equal(chain.asked.length, a0, 'a request asks no chain');
+  x = await tick(); assert.equal(x.asked, 1); assert.equal(x.revoked, 1); assert.equal(x.settled, 0);
+  const q = chain.asked.at(-1); assert.equal(q.nonce, b.nonce); assert.equal(q.from, PAYER.toLowerCase()); assert.equal(q.selector, '0xe94a0102'); assert.equal(q.to, USDC);
+  const r3 = await node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': b.token } }); assert.equal(r3.status, 429); assert.match(r3.j.error.message, /taken back/);
+  assert.equal(saleOf(b.sale).status, 'unsettled', 'the till shows it did not settle'); assert.equal((await peek(b.token)).state, 'revoked');
+  assert.equal((await tick()).asked, 0, 'decided once');
+});
+await proof('settle answer lost, the authorization used on Base: settled in the till (/treasury counts the money), the credit keeps its pages', async () => {
+  const s0 = await salesOf(), b = await buyLost(); chain.used.add(b.nonce);
+  T0 = Math.max(T0, b.at + 11 * 60e3);
+  const x = await tick(); assert.equal(x.asked, 1); assert.equal(x.settled, 1); assert.equal(x.revoked, 0);
+  assert.equal(saleOf(b.sale).status, 'settled'); assert.ok(saleOf(b.sale).settled_at, 'settled_at set, as for a settlement that answered');
+  const s1 = await salesOf(); assert.equal(Math.round(s1.total_usd * 100), Math.round(s0.total_usd * 100) + 5, 'the money counts as arrived'); assert.equal(s1.total_count, s0.total_count + 1);
+  const g = await peek(b.token); assert.equal(g.state, 'ok'); assert.equal(g.left, 50);
+  const ip = await pastFree(), r = await node.call(`/r/${nextPage()}`, { ip, headers: { 'x-sea-credit': b.token } }); assert.equal(r.status, 200); assert.equal(r.h['x-sea-credit-left'], '49');
+  assert.equal((await tick()).asked, 0, 'decided once');
+});
+await proof('the chain unreachable or without a clear answer: nothing taken back, nothing settled, counted, asked again a minute later; once it answers, the right outcome follows', async () => {
+  const u = await buyLost(), s = await buyLost(); chain.used.add(s.nonce);
+  T0 = Math.max(T0, s.at + 11 * 60e3); const c0 = node.db.creditBook.state().unclear;
+  try {
+    chain.mode = 'down'; let x = await tick(); assert.equal(x.asked, 2); assert.equal(x.unclear, 2); assert.equal(x.revoked, 0); assert.equal(x.settled, 0);
+    chain.mode = 'garbage'; T0 += 60e3; x = await tick(); assert.equal(x.asked, 2); assert.equal(x.unclear, 2); assert.equal(x.revoked, 0);
+    assert.equal(node.db.creditBook.state().unclear, c0 + 4, 'counted');
+    for (const b of [u, s]) { assert.equal((await peek(b.token)).state, 'ok'); assert.equal(saleOf(b.sale).status, 'pending'); }
+    chain.mode = 'up'; T0 += 60e3; x = await tick(); assert.equal(x.revoked, 1); assert.equal(x.settled, 1);
+  } finally { chain.mode = 'up'; }
+  assert.equal((await peek(u.token)).state, 'revoked'); assert.equal(saleOf(u.sale).status, 'unsettled');
+  assert.equal((await peek(s.token)).state, 'ok'); assert.equal(saleOf(s.sale).status, 'settled');
+});
+await proof('a restart between verify and settle: the open sale was written before the settlement was asked for, and the check at the start decides it', async () => {
+  let before = -1; const u = await buyLost({}, () => { before = node.kv.sets.length; });
+  assert.ok(before > 0 && node.kv.sets.slice(0, before).some((l) => l.startsWith('["credit:open"') && l.includes(u.nonce)), 'on the disk before the settlement was asked for');
+  const s = await buyLost(); chain.used.add(s.nonce);
+  T0 = Math.max(T0, s.at + 11 * 60e3);
+  const x = await restart(); assert.equal(x.asked, 2); assert.equal(x.revoked, 1); assert.equal(x.settled, 1);
+  assert.equal((await peek(u.token)).state, 'revoked'); assert.equal(saleOf(u.sale).status, 'unsettled');
+  assert.equal((await peek(s.token)).state, 'ok'); assert.equal(saleOf(s.sale).status, 'settled');
+});
+await proof('before validBefore nothing is decided: a transfer valid 20 minutes (terms of 1200 s) is not asked about after 11 minutes nor at validBefore; a minute after it, it is', async () => {
+  facilitator = lost(); const nonce = `0x${randomBytes(32).toString('hex')}`, at = T0, before = Math.floor(T0 / 1000) + 1200;
+  const r = await node.call('/reader/credit', { method: 'POST', accept: 'application/json', ip: fresh(), headers: payment({ nonce, before }), c: { pay: { ...node.PAY, window: 1200 } } }); await settled();
+  assert.equal(r.status, 200, r.text.slice(0, 200)); assert.equal(r.j.paid.status, 'pending'); minted.push(r.j.token);
+  const a0 = chain.asked.length;
+  T0 = Math.max(T0, at + 11 * 60e3); assert.equal((await tick()).asked, 0, 'ten minutes, validBefore not past');
+  T0 = Math.max(T0, before * 1000); assert.equal((await tick()).asked, 0, 'at validBefore');
+  assert.equal(chain.asked.length, a0); assert.equal((await peek(r.j.token)).state, 'ok'); assert.equal(saleOf(r.j.paid.sale).status, 'pending');
+  T0 = Math.max(T0, before * 1000 + 61e3); const x = await tick(); assert.equal(x.revoked, 1); assert.equal((await peek(r.j.token)).state, 'revoked');
+});
+await proof('the validBefore bound: a signed transfer that holds longer than maxTimeoutSeconds and a minute, or names no validBefore, is not taken (402, the facilitator never asked, nothing sold); at the bound it buys', async () => {
+  facilitator = settles(); const a0 = asked.length, s0 = (await salesOf()).total_count, now = Math.floor(T0 / 1000);
+  for (const p of [payment({ before: now + 361 }), payment({ before: now + 361, version: 1 }), payment({ before: now + 30 * 86400 }), payment({ before: null }), payment({ before: null, version: 1 }), payment({ before: 'soon' })]) {
+    const r = await buy(p); assert.equal(r.status, 402); assert.match(String(r.j.error), /validBefore/); assert.equal(r.j.token, undefined);
+  }
+  assert.equal(asked.length, a0, 'the facilitator was never asked'); assert.equal((await salesOf()).total_count, s0, 'nothing sold');
+  for (const version of [1, 2]) { const ok = await buy(payment({ before: now + 360, version })); assert.equal(ok.status, 200, ok.text.slice(0, 200)); await settled(); }
+});
+await proof('the chain check off (chainRpc off, MARE_BASE_RPC=off): the re-check asks nothing and takes nothing back; switched on again, it decides', async () => {
+  const b = await buyLost(); T0 = Math.max(T0, b.at + 11 * 60e3); const a0 = chain.asked.length;
+  let x = await restart({ chainRpc: 'off' }); assert.equal(x.asked, 0); assert.equal(x.off, true);
+  process.env.MARE_BASE_RPC = 'off'; try { x = await restart({ chainRpc: undefined }); assert.equal(x.asked, 0); assert.equal(x.off, true); } finally { delete process.env.MARE_BASE_RPC; }
+  assert.equal(chain.asked.length, a0, 'no chain question'); assert.equal((await peek(b.token)).state, 'ok'); assert.equal(saleOf(b.sale).status, 'pending');
+  x = await restart(); assert.equal(x.revoked, 1, 'on again: decided');
+});
+await proof('bounded: at most 20 chain questions a run, the ones not yet asked first; the rest the next minute', async () => {
+  const list = []; for (let i = 0; i < 23; i++) list.push(await buyLost());
+  T0 = Math.max(T0, list.at(-1).at + 11 * 60e3);
+  try {
+    chain.mode = 'down'; const a0 = chain.asked.length; let x = await tick(); assert.equal(x.asked, 20); assert.equal(chain.asked.length - a0, 20); assert.equal(x.open, 23);
+    chain.mode = 'up'; T0 += 60e3; const a1 = chain.asked.length; x = await tick(); assert.equal(x.asked, 20); assert.equal(x.revoked, 20);
+    assert.deepEqual(chain.asked.slice(a1, a1 + 3).map((q) => q.nonce).sort(), list.slice(20).map((b) => b.nonce).sort(), 'the three not asked before come first');
+    T0 += 60e3; x = await tick(); assert.equal(x.asked, 3); assert.equal(x.revoked, 3); assert.equal(x.open, 0);
+  } finally { chain.mode = 'up'; }
+});
+await proof('the re-check runs on its own timer (once a minute in a node, here every 30 ms), not in a request', async () => {
+  const b = await buyLost(); T0 = Math.max(T0, b.at + 11 * 60e3);
+  node.db.creditBook?.close?.(); delete node.db.creditBook;
+  try {
+    const g = await node.call('/reader/credit', { ip: fresh(), accept: 'application/json', headers: { 'x-sea-credit': b.token }, c: { creditSweepMs: 30 } });
+    assert.equal(g.j.token.state, 'ok', 'the request that made the book decided nothing');
+    for (let i = 0; i < 200 && (await node.db.creditBook.peek(sha(b.token))).state === 'ok'; i++) await new Promise((ok) => setTimeout(ok, 10));
+    assert.equal((await node.db.creditBook.peek(sha(b.token))).state, 'revoked', 'the timer took it back');
+  } finally { node.db.creditBook?.close?.(); delete node.db.creditBook; }
+});
+await proof('the open sales keep wallet, nonce and validBefore with the sale and its time: never the signature, never a token', async () => {
+  const lines = node.kv.sets.filter((l) => l.startsWith('["credit:open"')); assert.ok(lines.length > 10);
+  for (const l of lines) for (const e of JSON.parse(l)[1].list) assert.deepEqual(Object.keys(e).sort(), ['at', 'before', 'from', 'nonce', 'sale']);
+  assert.ok(!node.kv.sets.some((l) => l.includes('ab'.repeat(65))), 'no signature in the state');
+  assert.ok(minted.length > 30); for (const t of minted) assert.ok(!node.kv.sets.some((l) => l.includes(t) || l.includes(t.slice(4))), 'no token in the state');
+  assert.ok(!logs.some((l) => minted.some((t) => l.includes(t.slice(4)))), 'no token in a log');
+});
+
 console.log('the texts that say it');
 await proof('terms § 5a (DE, EN), the price lists, the privacy notice, /reader, /reader.json and llms.txt name price, pages, days, refund, bearer secret, hash', async () => {
   const ip = fresh(), get = async (p) => (await node.call(p, { ip, accept: 'text/html' })).text;
@@ -253,7 +383,7 @@ await proof('terms § 5a (DE, EN), the price lists, the privacy notice, /reader,
 
 // ------------------------------------------------------------------ negative controls
 const BREAK = [
-  ['delivery without a verified payment (strict off)', 'node/core.mjs', "work: (sale) => book.mint(sale), callerHash: caller(), waitUntil: cfg.waitUntil, base, label: 'credit', strict: true });", "work: (sale) => book.mint(sale), callerHash: caller(), waitUntil: cfg.waitUntil, base, label: 'credit', strict: false });"],
+  ['delivery without a verified payment (strict off)', 'node/core.mjs', "work: (sale) => book.mint(sale, claim), callerHash: caller(), waitUntil: cfg.waitUntil, base, label: 'credit', strict: true });", "work: (sale) => book.mint(sale, claim), callerHash: caller(), waitUntil: cfg.waitUntil, base, label: 'credit', strict: false });"],
   ['any amount above the price taken', 'node/credit.mjs', 'if (v !== BigInt(t.atomic)) return', 'if (v < BigInt(t.atomic)) return'],
   ['the token kept in clear', 'node/credit.mjs', 'await serial(h, async () => { await put(T(h), rec, ttlOf(rec.until), true);', 'await serial(h, async () => { await put(T(h), { ...rec, token }, ttlOf(rec.until), true);'],
   ['any Authorization read as credit', 'node/credit.mjs', "if (a == null || !/^\\s*bearer\\s+mlc_/i.test(a)) return null;", 'if (a == null) return null;'],
@@ -266,6 +396,12 @@ const BREAK = [
   ['the line on credit added to every error (non-payers and others changed)', 'node/core.mjs', 'const more = e.readLimit ? creditHint(base, e.readLimit === true ? null : e.readLimit) : null;\n      return fin(', 'const more = creditHint(base, null);\n      return fin('],
   ['the app door changed', 'node/core.mjs', "read_page: 'Read a public web page as clean Markdown (title, description, main text, links), up to 100 pages a day per address.", "read_page: 'Read a public web page as clean Markdown (title, description, main text, links), up to 100 pages a day per network."],
   ['§ 5a without the refund rule', 'node/legal.mjs', 'Nicht genutzte Seiten werden nicht erstattet, soweit das Gesetz nichts anderes vorschreibt; ', ''],
+  // CR8: a settlement whose answer never came back
+  ['the re-check removed (a sale whose settlement never answered keeps its credit)', 'node/credit.mjs', 'if (!rpc) return { asked: 0, off: true };', 'return { asked: 0, off: true };'],
+  ['revoke on a chain error (no clear answer taken for "not used")', 'node/credit.mjs', 'else if (word === false) {', 'else if (word !== true) {'],
+  ['revoke before validBefore (only the ten minutes waited for)', 'node/credit.mjs', 'const openDue = (e) => Math.max(e.before * 1000 + GRACE, Date.parse(e.at) + WAIT);', 'const openDue = (e) => Date.parse(e.at) + WAIT;'],
+  ['a used authorization revoked anyway', 'node/credit.mjs', 'if (word === true) { await closeOpen(e.sale);', 'if (word === true) { await book.revokeSale(e.sale);'],
+  ['a transfer valid far beyond the terms taken (no validBefore bound)', 'node/credit.mjs', 'if (!Number.isSafeInteger(before) || before > most) return', 'if (!Number.isSafeInteger(before)) return'],
 ];
 let caught = 0;
 if (CONTROLS) {

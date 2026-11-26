@@ -15,9 +15,18 @@
 //   never    a token in clear anywhere (not in the state, the books, a log or a request the sea makes); credit before the free
 //            pages are used; a page spent twice; a non-payer's answer other than today's limit answer (one line and two headers
 //            more: how to buy credit).
+//   lost     (CR8) a sale whose settlement never answered (a lost facilitator answer, a restart between verify and settle)
+//            stays open in credit:open with what the chain needs (wallet, nonce, validBefore of the signed transfer; never its
+//            signature, never the token) until its word comes. On its own timer (at the start, then once a minute; never in a
+//            request), once validBefore is past (and a minute) and the claim is ten minutes old, the toll's chain check
+//            (node/toll.mjs authorizationUsed, MARE_BASE_RPC) is asked, at most 20 times a run: used, the sale is settled in
+//            the till and the credit stays; not used, it can no longer be, so the credit is taken back; no clear answer, nothing
+//            changes and it is asked again a minute later. With the chain check off (MARE_BASE_RPC=off) nothing is asked and
+//            nothing taken back. A payment whose transfer holds longer than the terms' time and a minute is not taken.
 import { createHash, randomBytes } from 'node:crypto';
 import { Buffer } from 'node:buffer';
 import { USDC_BASE } from './pricing.mjs';
+import { authorizationUsed } from './toll.mjs';
 
 export const CREDIT = Object.freeze({ cents: 5, micro: 50_000, pages: 50, days: 30 });
 export const CREDIT_PREFIX = 'mlc_';
@@ -73,7 +82,7 @@ export function creditRequired(t, { base, error, cors = {} }) {
 // a payment for exactly the price: a signed USDC transfer (x402 "exact", EIP-3009) to the till's wallet of exactly 0.05 USDC,
 // naming its wallet and nonce (so that it buys once). → null when it is that, else why not
 const HEX40 = /^0x[0-9a-fA-F]{40}$/, HEX64 = /^0x[0-9a-fA-F]{64}$/;
-export function creditExact(pay, t) {
+export function creditExact(pay, t, nowMs = Date.now()) {
   const p = pay?.payload, auth = p?.payload?.authorization;
   if (!auth || typeof auth !== 'object') return 'reader credit is paid with a signed USDC transfer on Base (x402 "exact", EIP-3009): this payment carries none';
   let v; try { v = BigInt(String(auth.value)); } catch { return 'the amount of this payment could not be read'; }
@@ -81,33 +90,61 @@ export function creditExact(pay, t) {
   if (pay?.version === 2 && p?.accepted?.amount != null && String(p.accepted.amount) !== t.atomic) return `this payment accepted ${usd6(Number(p.accepted.amount) || 0)} USDC; reader credit costs exactly ${usd6(t.micro)} USDC`;
   if (String(auth.to || '').toLowerCase() !== String(t.payTo || '').toLowerCase()) return `this payment goes to another wallet than ${t.payTo}`;
   if (!HEX40.test(String(auth.from || '')) || !HEX64.test(String(auth.nonce || ''))) return 'the signed transfer of this payment names no wallet (from) or no nonce: it is not taken';
+  // (CR8) it must end within the terms' time (maxTimeoutSeconds) and a minute, as the toll's (node/toll.mjs authOf): once that
+  // is past, the chain says for good whether it was carried out, so no sale stays open for long
+  const before = Number(auth.validBefore), most = Math.floor(nowMs / 1000) + (Number(t.window) || 300) + 60;
+  if (!Number.isSafeInteger(before) || before > most) return `the signed transfer of this payment must end within ${(Number(t.window) || 300) + 60} seconds (validBefore): a longer one is not taken`;
   return null;
 }
 const payKey = (pay) => { const a = pay?.payload?.payload?.authorization; return createHash('sha256').update(`${String(a?.from || '').toLowerCase()}|${String(a?.nonce || '').toLowerCase()}`).digest('hex'); };
+// what the chain needs to be asked later about a payment (x402 v1 and v2 alike: paymentOf of node/pay.mjs reads both into
+// payload.payload.authorization): the signing wallet, the nonce and validBefore of its signed transfer. Never its signature
+const chainOf = (pay) => { const a = pay?.payload?.payload?.authorization, before = Number(a?.validBefore); return a && HEX40.test(String(a.from || '')) && HEX64.test(String(a.nonce || '')) && Number.isSafeInteger(before) ? { from: String(a.from), nonce: String(a.nonce).toLowerCase(), before } : null; };
+// the sales whose settlement has not answered: credit:open → { v: 1, list: [{ sale, at, from, nonce, before }] }; one is looked at
+// once validBefore and a minute are past and the claim is ten minutes old; at most ASK_MAX questions to the chain a run
+const OPEN = 'credit:open', WAIT = 600_000, GRACE = 60_000, ASK_MAX = 20;
+const openDue = (e) => Math.max(e.before * 1000 + GRACE, Date.parse(e.at) + WAIT);
 
 // the credit of a node, in its state: credit:t:<sha256 of the token> → { pages, left, until, at, sale, revoked? };
 // credit:sale:<sale id> → the hash (to take back the credit of a payment that did not settle); credit:pay:<hash of wallet and
 // nonce> → the payment bought once. Purchases and their taking back go to the disk at once (kv.setNow, node/disk.mjs), a page
 // spent with the copy a minute later (a restart may give a page back, never take one).
-export function createCredit({ kv, now = () => Date.now() }) {
+// ledger: the till's books (a sale the chain shows settled is set there as a settlement that answered); rpc: the toll's chain
+// check (node/toll.mjs tollRpc; null: off, nothing asked, nothing taken back); sweepMs: the re-check's own timer (0: none)
+export function createCredit({ kv, now = () => Date.now(), ledger = null, rpc = null, get = null, sweepMs = 0 }) {
   const chains = new Map();
   // one after the other per key: two reads with the same token never both spend the last page
   const serial = (k, fn) => { const prev = chains.get(k) || Promise.resolve(); const run = prev.then(fn, fn); const tail = run.then(() => {}, () => {}); chains.set(k, tail); tail.then(() => { if (chains.get(k) === tail) chains.delete(k); }); return run; };
   const put = async (k, v, ttl, soon = false) => { if (soon && typeof kv.setNow === 'function') { const r = kv.setNow(k, v, ttl); if (r !== false) return r; } return kv.set(k, v, ttl); };
   const T = (h) => `credit:t:${h}`, ttlOf = (until) => Math.max(DAY, Math.ceil((Date.parse(until) - now()) / 1000) + DAY);
   const state = (r) => (!r ? 'unknown' : r.revoked ? 'revoked' : Date.parse(r.until) <= now() ? 'expired' : !(r.left > 0) ? 'used up' : 'ok');
-  return {
-    // a payment buys once: taken for this purchase, or { used } when it bought (or is buying) before
-    claim(pay) { const k = `credit:pay:${payKey(pay)}`; return serial(k, async () => { if (await kv.get(k)) return { used: true }; await put(k, { at: new Date(now()).toISOString() }, (CREDIT.days + 2) * DAY, true); return { key: k }; }); },
+  // (CR8) the sales whose settlement has not answered, read once from the state and written at once on every change
+  let open = null, openP = null, running = null;
+  const counts = { runs: 0, asked: 0, settled: 0, revoked: 0, unclear: 0 }, lastAsked = new Map();
+  const loadOpen = () => (open ? Promise.resolve(open) : (openP ||= (async () => {
+    let v = null; try { v = await kv.get(OPEN); } catch {}
+    const list = v && v.v === 1 && Array.isArray(v.list) ? v.list.filter((e) => e && typeof e.sale === 'string' && HEX40.test(String(e.from)) && HEX64.test(String(e.nonce)) && Number.isSafeInteger(e.before) && Date.parse(e.at)) : [];
+    return (open = { v: 1, list });
+  })()));
+  const keepOpen = () => put(OPEN, open, (CREDIT.days + 2) * DAY, true);
+  const closeOpen = async (id) => { await loadOpen(); const i = open.list.findIndex((e) => e.sale === id); if (i < 0) return false; open.list.splice(i, 1); lastAsked.delete(id); await keepOpen(); return true; };
+  const book = {
+    // a payment buys once: taken for this purchase, or { used } when it bought (or is buying) before; with it what the chain
+    // needs to be asked later (wallet, nonce, validBefore; never the signature)
+    claim(pay) { const k = `credit:pay:${payKey(pay)}`; return serial(k, async () => { if (await kv.get(k)) return { used: true }; await put(k, { at: new Date(now()).toISOString() }, (CREDIT.days + 2) * DAY, true); return { key: k, chain: chainOf(pay) }; }); },
     // a purchase that was not taken (refused, no verdict): the payment may come again
     release(c) { if (!c?.key) return Promise.resolve(); return serial(c.key, () => put(c.key, null, 60, true)); },
-    // the credit of one paid sale: the token, once
-    async mint(sale) {
+    // the credit of one paid sale: the token, once; the sale stays open until its settlement answers (written before the
+    // settlement is asked for, so that a restart in between finds it)
+    async mint(sale, claim = null) {
       const token = `${CREDIT_PREFIX}${randomBytes(24).toString('base64url')}`, h = tokenHash(token), t = now();
       const rec = { pages: CREDIT.pages, left: CREDIT.pages, until: new Date(t + CREDIT.days * DAY * 1000).toISOString(), at: new Date(t).toISOString(), sale: sale?.id || null };
       await serial(h, async () => { await put(T(h), rec, ttlOf(rec.until), true); if (sale?.id) await put(`credit:sale:${sale.id}`, h, (CREDIT.days + 2) * DAY, true); });
+      if (sale?.id && claim?.chain) { await loadOpen(); open.list.push({ sale: sale.id, at: rec.at, ...claim.chain }); await keepOpen(); }
       return { token, pages: rec.pages, left: rec.left, until: rec.until };
     },
+    // the settlement answered: settled (the sale is closed, the credit stays)
+    landed(id) { return closeOpen(id); },
     // one page, where the free limit refuses: { ok, left, until } or { ok: false, why }
     spend(h) {
       return serial(h, async () => {
@@ -118,8 +155,38 @@ export function createCredit({ kv, now = () => Date.now() }) {
     async peek(h) { const r = await kv.get(T(h)); return { state: state(r), ...(r ? { pages: r.pages, left: r.revoked ? 0 : r.left, until: r.until } : {}) }; },
     // the credit of a sale whose payment did not settle is taken back
     async revokeSale(id) {
+      await closeOpen(id);
       const h = await kv.get(`credit:sale:${id}`); if (!h) return false;
       return serial(h, async () => { const r = await kv.get(T(h)); if (!r) return false; r.revoked = true; r.left = 0; await put(T(h), r, ttlOf(r.until), true); return true; });
     },
+    // (CR8) the sales whose settlement never answered, once their time is past: the chain says whether the signed transfer was
+    // carried out. Used: the money arrived, the sale is settled in the till, the credit stays. Not used (and validBefore past):
+    // it can never be, the sale is unsettled and the credit taken back. No clear answer: nothing changes, counted, asked again
+    // at the next run. At most ASK_MAX questions a run, the longest unasked first. Off (no rpc): nothing asked, nothing changed
+    async recheck() {
+      if (!rpc) return { asked: 0, off: true };
+      if (running) return running;
+      running = (async () => {
+        await loadOpen(); counts.runs++;
+        const t = now(), stale = t - (CREDIT.days + 1) * DAY * 1000;
+        for (const e of open.list.filter((x) => Date.parse(x.at) < stale)) await closeOpen(e.sale);
+        const due = open.list.filter((e) => t > openDue(e)).sort((a, b) => (lastAsked.get(a.sale) || 0) - (lastAsked.get(b.sale) || 0) || Date.parse(a.at) - Date.parse(b.at)).slice(0, ASK_MAX);
+        let asked = 0, settled = 0, revoked = 0, unclear = 0;
+        for (const e of due) {
+          asked++; counts.asked++; lastAsked.set(e.sale, t);
+          const word = await authorizationUsed({ rpc, from: e.from, nonce: e.nonce, ...(get ? { get } : {}) });
+          if (word === true) { await closeOpen(e.sale); ledger?.saleSet?.(e.sale, { status: 'settled', settled_at: new Date(now()).toISOString() }); settled++; counts.settled++; }
+          else if (word === false) { ledger?.saleSet?.(e.sale, { status: 'unsettled' }); await book.revokeSale(e.sale); revoked++; counts.revoked++; }
+          else { unclear++; counts.unclear++; }
+        }
+        return { asked, settled, revoked, unclear, open: open.list.length };
+      })().finally(() => { running = null; });
+      return running;
+    },
+    state: () => ({ open: open ? open.list.length : null, ...counts }),
+    close() { if (timer) clearInterval(timer); },
   };
+  // the re-check on its own timer, once a minute (it keeps no process alive); never in the path of a request
+  const timer = sweepMs > 0 ? setInterval(() => { book.recheck().catch(() => {}); }, sweepMs) : null; timer?.unref?.();
+  return book;
 }

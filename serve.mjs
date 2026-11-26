@@ -14,7 +14,7 @@ import { Readable } from 'node:stream';
 import { join, dirname, normalize, extname, sep } from 'node:path';
 import { readFileSync, statSync, createReadStream } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { handle, startToll, AGENT_LINK, AGENT_HINT } from './node/core.mjs';
+import { handle, startToll, startCredit, AGENT_LINK, AGENT_HINT } from './node/core.mjs';
 import { createMem } from './node/mem.mjs';
 import { memoryKv } from './node/flow.mjs';
 import { durableKv, createMemStore, KEPT } from './node/durable.mjs';
@@ -76,6 +76,9 @@ const ledger = createLedger({ url: process.env.MARE_DB_URL, key: process.env.MAR
 // the toll of the lossless levers (node/toll.mjs): a payment an earlier run left on its way is checked now (on Base: settled
 // or released), behind the start
 try { waitUntil(startToll(db, { kv, waitUntil, ledger, base })); } catch (e) { log('mare_toll', e?.message); }
+// reader credit (node/credit.mjs, CR8): a sale an earlier run left with no answer from its settlement is looked at on Base now,
+// behind the start, and then once a minute
+try { waitUntil(startCredit(db, { kv, waitUntil, ledger, base })); } catch (e) { log('mare_credit', e?.message); }
 
 // files that travel beside the node (fonts, icons, the key of the search engines): a web server in front serves them
 // first; a node without one serves them itself
