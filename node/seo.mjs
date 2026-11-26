@@ -422,6 +422,15 @@ export const OFFER = {
   teams: 'https://buy.stripe.com/5kQ00ceqc0cA38X4jbes00n',    // team harbour for coding agents, 49 € a month, first month free
   law: 'https://buy.stripe.com/9B6bIUbe02kIcJx5nfes00r',      // Kanzlei-Hafen: Einrichtung 750 € (ohne Einblick in Mandatsdaten) + Jahresbegleitung 990 € je Standort (plink_1Uev8h4IVkazyZLzsmA53lgQ)
   reader: 'https://buy.stripe.com/cNi6oA2HuaRe7pd9Dves00t',   // reader credit for operators, 10 € once for 10,000 pages, 30 days (plink_1Ug4VQ4IVkazyZLzBNhuF2wm; node/checkout.mjs)
+  // the reader ladder (since 3.60, node/checkout.mjs TILL): one payment link per pack, each behind its order page /c/<id>
+  kutter: 'https://buy.stripe.com/bJeeV6fug3oMfVJaHzes00u',          // Kutter, 49 € once, 100,000 pages, 30 days (plink_1Ug6ai4IVkazyZLzsS3UkFKX)
+  kutterjahr: 'https://buy.stripe.com/4gMeV66XK9NacJx2b3es00v',      // Kutter, one year, 490 € once, 1,200,000 pages, 365 days (plink_1Ug6aj4IVkazyZLz39fIvFiV)
+  fregatte: 'https://buy.stripe.com/aFa5kwdm82kI9xl2b3es00w',        // Fregatte, 199 € once, 500,000 pages, 30 days (plink_1Ug6ak4IVkazyZLz8nNglOqX)
+  fregattejahr: 'https://buy.stripe.com/dRm9AMfugcZm38XaHzes00x',    // Fregatte, one year, 1,990 € once, 6,000,000 pages, 365 days (plink_1Ug6ak4IVkazyZLzOr0fuf7J)
+  flotte: 'https://buy.stripe.com/bJe7sE0zm2kIcJx5nfes00y',          // Flotte, 390 € once, 1,000,000 pages, 30 days (plink_1Ug6al4IVkazyZLzXK36l7ZK)
+  flottejahr: 'https://buy.stripe.com/4gM9AMbe07F224Tg1Tes00z',      // Flotte, one year, 3,900 € once, 12,000,000 pages, 365 days (plink_1Ug6am4IVkazyZLzFdrqEbPB)
+  reederei: 'https://buy.stripe.com/3cI28k3Ly3oM4d1g1Tes00A',        // Reederei, an own reader node in the EU, 2,900 € once for 90 days (plink_1Ug6an4IVkazyZLz7cCZ9jLt)
+  reedereijahr: 'https://buy.stripe.com/7sY14g4PC5wUdNB02Ves00B',    // Reederei, one year, 9,900 € once for 12 months (plink_1Ug6ao4IVkazyZLzl3H93euT)
   mail: 'oroborosdesign@gmail.com',
 };
 const cta = (href, label, sub) => `<p style="margin:1.4rem 0"><a href="${esc(href)}" style="display:inline-block;padding:.85rem 1.3rem;border-radius:10px;background:#0b5cad;color:#fff;font-weight:600;text-decoration:none">${esc(label)}</a>${sub ? `<br><small class="muted">${esc(sub)}</small>` : ''}</p>`;

@@ -78,6 +78,15 @@ export const CTA = {
   agency: { name: 'Team harbour for agencies', price: '79 € a month, first month free', to: () => OFFER.agency },
   law: { name: 'Kanzlei harbour', price: '750 € setup + 990 € a year per office', to: () => OFFER.law },
   reader: { name: 'Reader credit for operators', price: '10 €, once, for 10,000 pages (30 days)', to: () => OFFER.reader },
+  // the reader ladder and the Reederei (since 3.60, node/checkout.mjs TILL and NODE)
+  kutter: { name: 'Reader pack Kutter for operators', price: '49 €, once, for 100,000 pages (30 days)', to: () => OFFER.kutter },
+  kutterjahr: { name: 'Reader pack Kutter for operators, one year', price: '490 €, once, for 1,200,000 pages (365 days)', to: () => OFFER.kutterjahr },
+  fregatte: { name: 'Reader pack Fregatte for operators', price: '199 €, once, for 500,000 pages (30 days)', to: () => OFFER.fregatte },
+  fregattejahr: { name: 'Reader pack Fregatte for operators, one year', price: '1,990 €, once, for 6,000,000 pages (365 days)', to: () => OFFER.fregattejahr },
+  flotte: { name: 'Reader pack Flotte for operators', price: '390 €, once, for 1,000,000 pages (30 days)', to: () => OFFER.flotte },
+  flottejahr: { name: 'Reader pack Flotte for operators, one year', price: '3,900 €, once, for 12,000,000 pages (365 days)', to: () => OFFER.flottejahr },
+  reederei: { name: 'Reederei: your own reader node in the EU', price: '2,900 €, once, for 90 days', to: () => OFFER.reederei },
+  reedereijahr: { name: 'Reederei: your own reader node in the EU, one year', price: '9,900 €, once, for 12 months', to: () => OFFER.reedereijahr },
   route: { name: 'Paid route', price: 'per call in USDC (x402)', to: () => '/pay/howto' },
   talk: { name: 'Institutions: talk to us', price: 'by agreement', to: () => '/about#contact' },
 };
