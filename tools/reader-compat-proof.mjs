@@ -288,13 +288,13 @@ await proof('the size limit: a page past 2.5 MB is read up to it (rawHtml too), 
   const ip = fresh(), r = await node.call('/v2/scrape', { method: 'POST', accept: 'application/json', ip, body: { url: `${P}/big`, formats: ['markdown', 'rawHtml'] } });
   assert.equal(r.status, 200); assert.ok(r.j.data.rawHtml.length <= 2_500_000, `rawHtml ${r.j.data.rawHtml.length}`); assert.ok(r.j.data.markdown.length <= 60_000); assert.match(r.j.data.warning, /read up to 1\.5 MB|cut at 60,000/);
 });
-await proof('the free limit: 100 pages a day per network, shared by /r/, Jina and the scrape doors; the 101st is a 429; another network reads on', async () => {
+await proof('the free limit: 100 pages a day per network, shared by /r/, Jina and the scrape doors; the 101st asks for a cent (402, since 3.54); another network reads on', async () => {
   const ip = fresh(); let i = 0;
   for (; i < 100; i++) { T0 += 1000; const r = i % 3 === 0 ? await node.call(`/r/${P}/t/${i}.txt`, { ip }) : i % 3 === 1 ? await node.call(`/r/${P}/t/${i}.txt`, { ip, headers: { 'x-return-format': 'text' } }) : await node.call('/v2/scrape', { method: 'POST', accept: 'application/json', ip, body: { url: `${P}/t/${i}.txt` } }); assert.equal(r.status, 200, `read ${i}: ${r.text.slice(0, 200)}`); }
-  const s = await node.call('/v2/scrape', { method: 'POST', accept: 'application/json', ip, body: { url: `${P}/t/120.txt` } }); assert.equal(s.status, 429); assert.equal(s.j.success, false); assert.equal(s.j.code, 'RATE_LIMIT_EXCEEDED'); assert.match(s.j.error, /100 free reads a day/);
-  const nc = await node.call('/v1/scrape', { method: 'POST', accept: 'application/json', ip, body: { url: `${P}/t/5.txt`, maxAge: 0 } }); assert.equal(nc.status, 429, 'a new read of a page read before counts too');
-  const mk = await node.call('/v2/scrape', { method: 'POST', accept: 'application/json', ip, body: { url: `${P}/t/6.txt`, formats: ['rawHtml'] } }); assert.equal(mk.status, 429, 'markup is always a read');
-  const j = await node.call(`/r/${P}/t/121.txt`, { ip, headers: { 'x-no-cache': 'true' } }); assert.equal(j.status, 429); const r = await node.call(`/r/${P}/t/122.txt`, { ip }); assert.equal(r.status, 429);
+  const s = await node.call('/v2/scrape', { method: 'POST', accept: 'application/json', ip, body: { url: `${P}/t/120.txt` } }); assert.equal(s.status, 402); assert.equal(s.j.success, false); assert.equal(s.j.code, 'RATE_LIMIT_EXCEEDED'); assert.match(s.j.error, /100 free reads a day/); assert.equal(s.j.accepts[0].maxAmountRequired, '10000');
+  const nc = await node.call('/v1/scrape', { method: 'POST', accept: 'application/json', ip, body: { url: `${P}/t/5.txt`, maxAge: 0 } }); assert.equal(nc.status, 402, 'a new read of a page read before counts too');
+  const mk = await node.call('/v2/scrape', { method: 'POST', accept: 'application/json', ip, body: { url: `${P}/t/6.txt`, formats: ['rawHtml'] } }); assert.equal(mk.status, 402, 'markup is always a read');
+  const j = await node.call(`/r/${P}/t/121.txt`, { ip, headers: { 'x-no-cache': 'true' } }); assert.equal(j.status, 402); const r = await node.call(`/r/${P}/t/122.txt`, { ip }); assert.equal(r.status, 402);
   const other = await node.call('/v2/scrape', { method: 'POST', accept: 'application/json', ip: fresh(), body: { url: `${P}/t/120.txt` } }); assert.equal(other.status, 200);
 });
 await proof('the immune system\'s pace holds on the scrape doors', async () => {

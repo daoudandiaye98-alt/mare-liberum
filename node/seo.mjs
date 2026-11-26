@@ -230,7 +230,7 @@ export function markdownPage(base, lang) {
     ['Hält sich der Leser an robots.txt?', 'Ja. Was eine Website für Agenten sperrt, liest er nicht, und er sagt das.'],
     ['Warum Markdown statt HTML?', 'Ein Sprachmodell braucht den Text, nicht Menüs, Skripte und Werbung. Markdown spart meist den größten Teil der Token und behält Überschriften, Listen, Tabellen und Links.'],
   ] : [
-    ['Do I need an API key?', 'No. Put the page address after /r/ and fetch it. 100 pages a day per network address are free.'],
+    ['Do I need an API key?', 'No. Put the page address after /r/ and fetch it. 100 pages a day per network address are free; past that the reader answers 402, and an x402 client pays 0.01 USDC for the page in the same request.'],
     ['Does the reader respect robots.txt?', 'Yes. What a site closes to agents it does not read, and it says so.'],
     ['Why Markdown instead of HTML?', 'A language model needs the text, not menus, scripts and ads. Markdown usually saves most of the tokens and keeps headings, lists, tables and links.'],
   ];

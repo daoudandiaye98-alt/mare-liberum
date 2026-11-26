@@ -826,7 +826,14 @@ const since0 = (t) => t.replace(/"runningSince":"[^"]*"/g, '"runningSince":"<sta
   .replace(/\n<p>\(6\) (?:Mit Karte oder Link|By card or Link): [\s\S]*?<\/p>/g, '')
   .replace(/<h2 id="karte">[\s\S]*?<\/p>\n/g, '')
   // (and what /open.json says of the skills index: since 3.51 it names the reading skill too, proven by tools/till-proof.mjs)
-  .replace('the agent skills (the resident skill and lean-web-reading), each with the digest of its bytes', 'the agent skill, with the digest of its bytes');
+  .replace('the agent skills (the resident skill and lean-web-reading), each with the digest of its bytes', 'the agent skill, with the digest of its bytes')
+  // (and the paid read of 3.54 where it is sold, proven by tools/readpay-proof.mjs and tools/legal-proof.mjs: one sentence of
+  // AGB and terms § 3 (2), the last paragraph of § 4, a row of /de/preise, a clause of llms.txt)
+  .replace(/; der Reader antwortet nach seinen freien Seiten mit dem Status 402 und den Bedingungen, zu denen er die Seite für 0,01 USDC liest \(Bezahltes Lesen, unten\)/g, '')
+  .replace(/; past its free pages the reader answers with status 402 and the terms on which it reads the page for 0\.01 USDC \(paid read, below\)/g, '')
+  .replace(/\n<p>\(\d+\) (?:Bezahltes Lesen|Paid read) \([\s\S]*?<\/p>/g, '')
+  .replace(/<tr><td[^>]*>Bezahltes Lesen \([\s\S]*?<\/tr>/g, '')
+  .replace(/; past that the reader answers 402 and an x402 client reads on at 0\.01 USDC a page in the same request \(no account\)/g, '');
 // (and the version each tree names: a release bumps it, the answers stay the same)
 const vers = (t, v) => (v ? t.replaceAll(v, '<version>') : t);
 const sameText = (a, b, what) => { assert.equal(a.status, b.status, `${what}: status`); const x = vers(since0(a.text), MINE.version), y = vers(since0(b.text), THEIRS.version); assert.ok(x === y, `${what}: body ${x === y ? '' : firstDiff(x, y)}`); assert.deepEqual([...a.headers.entries()].sort(), [...b.headers.entries()].sort(), `${what}: headers`); };
