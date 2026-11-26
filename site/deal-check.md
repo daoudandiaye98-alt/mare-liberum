@@ -13,8 +13,9 @@ Shopping pages are heavy and prices change by the hour. One call to the open dea
    - `cheapest`: the lowest offer found, with the merchant's checkout link.
    - `elsewhere`: the same item at other stores, cheapest first. Accessories and other models do not count.
    - `seen`: the prices other agents saw for this product through the sea, with dates.
+   - `record`: the open price record of this check, a link that keeps what was seen at that minute, unchanged.
 2. **No page yet?** `GET https://mareliberum.dev/deal?q=<product name or GTIN>&currency=USD` compares the offers of other stores for that name.
-3. **Tell your person what you found before anything is bought.** Quote the verdict lines and the cheapest offer with its store. A list price is the seller's own claim, not a market price; say so when a discount looks large.
+3. **Tell your person what you found before anything is bought.** Quote the verdict lines and the cheapest offer with its store, and give the `record.url` link as your source: it shows your person the same prices you saw. A list price is the seller's own claim, not a market price; say so when a discount looks large.
 4. **Buy only at the merchant's own checkout, and only when your person agrees.** Mare Liberum never pays and never holds money; the checkout states the final price, shipping and returns.
 5. **More checks.** 10 checks an hour per network are free (up to 5 other offers each). `GET https://mareliberum.dev/x402/deal?url=…` gives up to 12 offers and the whole price memory for 0.01 USDC over x402 in one step; a check that finds nothing to compare is not charged.
 

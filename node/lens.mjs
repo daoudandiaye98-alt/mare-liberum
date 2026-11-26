@@ -8,6 +8,7 @@ import { packOf, packTarget, PACK } from './pack.mjs';
 import { PACKPAY } from './packpay.mjs';
 import { productOf } from './lean.mjs';
 import { DEAL, dealTarget, dealQuery, dealKey, remembered, dealOf, wordsOf } from './deal.mjs';
+import { SEEN, recordKey, recordOf, recordRef, canonical } from './seen.mjs';
 
 const FEED = new Set(['read', 'whale', 'brevet', 'seal', 'buoy', 'path', 'knock', 'enter', 'answer', 'ask', 'tide', 'job', 'job_done', 'note', 'mark', 'reflex', 'learn', 'course', 'outcome']);
 export const TAG = /^[a-z0-9]{4,12}$/;
@@ -101,8 +102,31 @@ export function createLens(h) {
         if (price != null && product?.currency && !ctx?.uncounted) await kv.set(k, remembered(before, { t: now(), p: price, c: product.currency }), DEAL.seen.keepDays * DAY);
       }
       if (!ctx?.uncounted) { const day = now().slice(0, 10); await kv.set(`deal:count:${day}`, (Number(await kv.get(`deal:count:${day}`)) || 0) + 1, 3 * DAY); }
-      return dealOf({ product, page, q, offers, seen: before, paid, base: a.base || '' });
+      const ans = dealOf({ product, page, q, offers, seen: before, paid, base: a.base || '' });
+      // the open price record (node/seen.mjs): only for a page read with its price, never for words someone typed, never for a
+      // crawler's call; the same look on the same day is the same record, a record never changes
+      if (url && !ctx?.uncounted) { try { const ref = await lens.keepRecord(ans, a.base || ''); if (ref) { ans.record = ref; const at = ans.next.findIndex((x) => x.do === 'check the store before paying'); ans.next.splice(at + 1, 0, { do: 'show your person the open record', at: ref.url, note: 'what this check saw, unchanged at its own address: the source of the price you name' }); } } catch {} }
+      return ans;
     },
+    // a deal check's answer → its open price record kept (new) or found (the same look today) → the line the answer carries, or
+    // null (no record for this answer, or the day's records are made)
+    async keepRecord(ans, base = '') {
+      const t = now(), day = t.slice(0, 10), key = recordKey(ans, day); if (!key) return null;
+      const id = (await sha(`seen|${key}`)).slice(0, 16), k = `seen:rec:${id}`;
+      const had = await kv.get(k).catch(() => null); if (had?.id) return recordRef(had, had.sha256);
+      const made = Number(await kv.get(`seen:new:${day}`).catch(() => 0)) || 0; if (made >= SEEN.perDay) return null;
+      const rec = recordOf(ans, { id, at: t, base }), sha256 = await sha(canonical(rec)), kept = { ...rec, sha256 };
+      await kv.set(k, kept, SEEN.keepDays * DAY);
+      await kv.set(`seen:new:${day}`, made + 1, 3 * DAY);
+      const recent = (await kv.get('seen:recent').catch(() => null)) || [];
+      const line = { id, at: t, name: rec.product.name, store: rec.store, price: rec.product.price, currency: rec.product.currency, word: rec.verdict.word, n: rec.elsewhere_found, ix: rec.indexable };
+      await kv.set('seen:recent', [line, ...(Array.isArray(recent) ? recent : []).filter((x) => x?.id !== id)].slice(0, SEEN.recent), SEEN.keepDays * DAY);
+      return recordRef(kept, sha256);
+    },
+    // one record as it was kept, or null; the newest records (for /seen); the addresses of those open to search engines
+    async seenRecord(id) { if (!/^[0-9a-f]{16}$/.test(String(id || ''))) return null; const r = await kv.get(`seen:rec:${id}`).catch(() => null); return r?.id === id ? r : null; },
+    async seenRecent() { const r = (await kv.get('seen:recent').catch(() => null)) || []; return Array.isArray(r) ? r : []; },
+    async seenListed() { return (await lens.seenRecent()).filter((x) => x?.ix && /^[0-9a-f]{16}$/.test(x.id)).map((x) => `${SEEN.path}/${x.id}`); },
     // how many deal checks this node made today (UTC), free and paid: the number GET /deal shows beside how to call it
     async dealToday() { const day = now().slice(0, 10); return { day, checks: Number(await kv.get(`deal:count:${day}`)) || 0 }; },
     // the reader: any public page as Markdown — free for every agent up to a fair daily amount, then Angel reads on

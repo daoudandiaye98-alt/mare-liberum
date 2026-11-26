@@ -58,7 +58,8 @@
     "proof:checkpay": "node tools/checkpay-proof.mjs",
     "proof:pdf": "node tools/pdf-proof.mjs",
     "proof:pack": "node tools/pack-proof.mjs",
-    "proof:checkout": "node tools/checkout-proof.mjs"
+    "proof:checkout": "node tools/checkout-proof.mjs",
+    "proof:seen": "node tools/seen-proof.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.9.0",
