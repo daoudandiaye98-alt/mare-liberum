@@ -31,7 +31,7 @@ const idOf = (key, c) => createHmac('sha256', key).update(jcs({ realm: c.realm, 
 // every challenge is one of its own: externalId (the spec's merchant identifier) carries a random order id, so two challenges of
 // the same second never share an id
 export function mppRequest({ cents = MPP.cents, description, networkId = MPP.networkId, externalId = `mare_${randomBytes(12).toString('base64url')}` } = {}) {
-  return { amount: String(cents), currency: 'usd', description, externalId, methodDetails: { networkId, paymentMethodTypes: [...MPP.types] } };
+  return { amount: String(cents), currency: 'usd', description, externalId, recipient: networkId, methodDetails: { networkId, paymentMethodTypes: [...MPP.types] } };
 }
 // a fresh challenge: { challenge, header }
 export function mppChallenge({ realm, key, now = Date.now(), request }) {
