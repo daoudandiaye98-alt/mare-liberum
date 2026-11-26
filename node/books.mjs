@@ -164,7 +164,7 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
   const tooWide = (e) => { const m = String(e?.message || ''); if (e?.status === 429 || /rate.?limit|too many requests|requests per/i.test(m)) return false; return e?.name === 'TimeoutError' || e?.status === 413 || e?.code === -32005 || e?.code === -32602 || /range|limit|too many|exceed|more than|10000 results|query returned/i.test(m); };
   // a refused width is remembered only for an answer about width: never a timeout, never one about the head (how some RPCs say
   // that the node behind them has not indexed the newest blocks yet, the lag the re-reads are there for)
-  const aboutHead = (e) => /head|beyond|future|not (yet )?(available|found|indexed)/i.test(String(e?.message || ''));
+  const aboutHead = (e) => /beyond (the )?(current )?head|head block|header not found|future block|not (yet )?(available|indexed)/i.test(String(e?.message || ''));
   const aboutWidth = (e) => tooWide(e) && e?.name !== 'TimeoutError' && !aboutHead(e);
   const sleep = (ms) => (ms > 0 ? new Promise((r) => { const tm = setTimeout(r, ms); tm.unref?.(); }) : Promise.resolve());
   const blockTime = async (n, hint) => {
@@ -350,10 +350,12 @@ export function createBooks({ kv, wallet = HOUSE_WALLET, token = USDC_BASE, rpc 
         let got;
         try { got = await transfersIn(a, b); }
         catch (e) {
-          // a full range (as wide as the width) is halved on any error that can be about width; a shorter one (the head is near)
-          // only on an answer about width: a timeout or a word about the head there fails the pass and leaves the width alone
+          // a full range (as wide as the width) is halved on any error that can be about width; a shorter one too when it is an
+          // answer about width or still long (a catch-up after a stop: more than 120 blocks); near the head (about 30 blocks a
+          // pass) a timeout or a word about the head fails the pass and leaves the width alone. Only a full range refused for its
+          // width is remembered
           const w = b - a + 1, full = w >= step;
-          if (tooWide(e) && (full ? step > minStep : aboutWidth(e) && w > minStep)) {
+          if (tooWide(e) && (full ? step > minStep : (aboutWidth(e) || w > 120) && w > minStep)) {
             if (full && aboutWidth(e)) { refused = Math.min(refused ?? Infinity, Math.floor(w * 0.8)); refusedAt = now(); }
             step = Math.max(minStep, Math.floor(Math.min(step, w) / 2)); count('chain_narrowed'); await sleep(pauseMs); continue;
           }
