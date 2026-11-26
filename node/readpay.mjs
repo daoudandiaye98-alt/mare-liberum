@@ -46,7 +46,7 @@ export function readTerms(cfg, { base, resource: at = null, method = 'GET' }) {
   // where it was); by default the paid read's door. Only that door is listed in the x402 indexes (discoverable, the bazaar
   // extension): a page bought at /r/ or at a scrape door is the same sale, and an index must not list every page as a service
   const b = String(base || '').replace(/\/+$/, ''), resource = at || `${b}${READPAY.path}`, atomic = String(READPAY.micro), listed = !at;
-  const description = 'Mare Liberum: up to 10 public web pages per call as clean, token-lean Markdown (robots.txt respected), each with its token count against the raw HTML and a prompt-injection warden; 0.01 USDC per call, so 0.001 USDC a page, no account, no key';
+  const description = 'Mare Liberum: up to 10 public web pages or PDFs per call as clean, token-lean Markdown (robots.txt respected), each with its token count against the raw HTML and a prompt-injection warden; 0.01 USDC per call, so 0.001 USDC a page, no account, no key';
   const extra = { name: 'USD Coin', version: '2' };
   const outputSchema = {
     input: listed ? { type: 'http', method: 'GET', discoverable: true, queryParams: { url: { type: 'string', required: true, description: 'the public page to read (http or https); repeat url= for up to 10 pages in one call' } } } : { type: 'http', method, discoverable: false },

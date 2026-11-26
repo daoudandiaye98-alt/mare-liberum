@@ -1,5 +1,6 @@
 // Mare Liberum · the reader: any public page as clean Markdown for an agent — the membrane agents pass on their way through the web.
 // It follows robots.txt, reads one page per call, keeps nothing but a short cache and the name of the site that was read.
+// A PDF is read too (since 3.59): its text layer, as Markdown, beside the node (node/pdf.mjs).
 import { safeHost, publicDns, grab, robotsGroups, robotsAllows, readPage } from './check.mjs';
 import { aside } from './aside.mjs';
 import { entities, leanMarkdown, parseHtml, attrs, LEAN_MAX } from './lean.mjs';
@@ -7,6 +8,8 @@ export { entities };
 
 export const READER_UA = 'MareLiberum-Reader/1.0 (+https://mareliberum.dev/read; reads one page for an agent and follows robots.txt)';
 export const READER_TOKEN = 'MareLiberum-Reader';
+// the largest PDF the reader takes (since 3.59): a PDF longer than this is read up to here, and says so
+export const PDF_MAX = 12_000_000;
 
 const abs = (href, base) => { try { const u = new URL(entities(href).trim(), base); return /^https?:$/.test(u.protocol) ? u.href : null; } catch { return null; } };
 const inline = (s) => entities(s.replace(/<[^>]+>/g, ' ')).replace(/\s+/g, ' ').trim();
@@ -129,10 +132,19 @@ export async function readUrl(raw, { robots, full = false, shape = null } = {}) 
   if (!(await publicDns(host))) return { error: 'this name does not lead to a public website' };
   const rb = robots ? await robots(host) : null;
   if (rb?.status === 200 && rb.body) { const g = robotsGroups(rb.body), allow = robotsAllows(g, READER_TOKEN, u.pathname + u.search); if (!allow.allowed) return { url: u.href, host, blocked: true, note: 'this site asks readers like this one not to read this page (robots.txt)' }; }
-  const r = await grab(u.href, { max: 2_500_000, ms: 9000, ua: READER_UA });
+  const r = await grab(u.href, { max: 2_500_000, ms: 9000, ua: READER_UA, pdf: true, maxPdf: PDF_MAX });
   if (!r.status) return { url: u.href, host, error: 'the page did not answer' };
   if (r.status >= 400) return { url: u.href, host, status: r.status, error: `the page answered ${r.status}` };
   const type = r.type.toLowerCase(), final = r.url || u.href;
+  // a PDF (since 3.59): its text layer, read beside the node with a time limit (node/pdf.mjs); a scan, a locked file or one
+  // too large to unpack is said, and nothing else is made up
+  if (r.bytes) {
+    let d; try { d = await aside(new URL('./pdf.mjs', import.meta.url).href, 'pdfDigest', [r.bytes], { ms: 9000, heapMb: 384 }); }
+    catch (e) { return { url: u.href, final, host, status: r.status, type: 'application/pdf', error: e?.code === 'EBUSY' ? e.message : 'this PDF could not be read in time' }; }
+    if (d.error) return { url: u.href, final, host, status: r.status, type: 'application/pdf', error: d.error };
+    return { url: u.href, final, host, status: r.status, type: 'application/pdf', title: d.title, words: d.words, markdown: d.markdown,
+      pdf: { pages: d.pages, read: d.read, author: d.author, bytes: r.bytes.length, cut: r.cut || d.truncated || undefined } };
+  }
   if (/html|xml\+xhtml/.test(type) || /^\s*</.test(r.body)) {
     // a page can be written to stall whoever reads it: it is read beside the node, with a time limit
     let meta, md, found, cut, shaped, clean; try { ({ meta, md, links: found, cut, shaped, html: clean } = await aside(import.meta.url, 'digest', [r.body, final, shape ? { full, shape: { target: shape.target, remove: shape.remove, html: !!shape.html } } : { full }])); } catch (e) { return { url: u.href, final, host, status: r.status, error: e?.code === 'EBUSY' ? e.message : 'this page could not be read in time; it is built in a way that stalls readers' }; }
@@ -142,5 +154,5 @@ export async function readUrl(raw, { robots, full = false, shape = null } = {}) 
       ...(shape ? { shaped: shaped || undefined, html: shape.html ? clean : undefined, rawHtml: shape.raw ? r.body : undefined, type: shape.raw || shape.html ? (type || undefined) : undefined } : {}) };
   }
   if (/^text\/|json|markdown|xml/.test(type)) return { url: u.href, final, host, status: r.status, type, markdown: r.body.slice(0, 60_000), truncated: r.body.length > 60_000 || undefined, ...(shape?.raw ? { rawHtml: r.body } : {}) };
-  return { url: u.href, final, host, status: r.status, type, error: `this reader reads web pages and text, not ${type.split(';')[0] || 'this kind of file'}` };
+  return { url: u.href, final, host, status: r.status, type, error: `this reader reads web pages, text and PDFs, not ${type.split(';')[0] || 'this kind of file'}` };
 }

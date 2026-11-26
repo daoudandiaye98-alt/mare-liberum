@@ -82,11 +82,11 @@ const QUIET = new Set(['url', 'formats', 'onlyMainContent', 'includeTags', 'excl
 const ASKS = {
   headers: (v) => v && typeof v === 'object' && Object.keys(v).length > 0, actions: (v) => Array.isArray(v) && v.length > 0, waitFor: (v) => Number(v) > 0, mobile: (v) => v === true,
   skipTlsVerification: (v) => v === true, location: (v) => !!v && typeof v === 'object' && Object.keys(v).length > 0, proxy: (v) => !!v && !/^(basic|auto)$/i.test(String(v)),
-  removeBase64Images: (v) => v === false, storeInCache: (v) => v === false, zeroDataRetention: (v) => v === true, parsePDF: () => false, parsers: (v) => Array.isArray(v) && v.length > 0,
+  removeBase64Images: (v) => v === false, storeInCache: (v) => v === false, zeroDataRetention: (v) => v === true, parsePDF: () => false, parsers: (v) => Array.isArray(v) && v.some((x) => (typeof x === 'string' ? x : x?.type) !== 'pdf'),
 };
 const WHY = { headers: 'never sent to the page', actions: 'no browser', waitFor: 'no browser: nothing is waited for', mobile: 'one reader for every device', skipTlsVerification: 'TLS is always verified',
   location: 'no location is set', proxy: 'no proxy is used', removeBase64Images: 'image data is never sent', storeInCache: "the reader keeps a page's Markdown one hour", zeroDataRetention: "the reader keeps a page's Markdown one hour",
-  parsers: 'the reader reads HTML and text pages, not PDF or images' };
+  parsers: 'the reader reads HTML, text and PDF (its text layer), not images' };
 // the body of a scrape request → what to read and how, or { error }; v: 1 or 2 (maxAge: v1 reads anew unless told, v2 keeps 2 days)
 export function scrapeAsk(body, v) {
   if (!body || typeof body !== 'object' || Array.isArray(body)) return { error: 'send a JSON object: {"url": "https://…", "formats": ["markdown"]}' };
