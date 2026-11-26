@@ -60,7 +60,7 @@ import { toonAsked, jsonRequest, toonAnswer } from './toondoor.mjs';
 import { leanTools, leanSizes, leanSentence, leanInstructions, findTools, leanText, LEAN_DIRECT, LEAN_FORMAT } from './leanmcp.mjs';
 import { createToll, tollSwitch, tollSecret, tollRpc, tollRequired, tollFacts, TOLL, TOLL_EXPOSE, TOLL_META, TOLL_ID } from './toll.mjs';
 import { jinaAsk, jinaText, jinaJson, scrapeAsk, scrapeAnswer, scrapeError, readerDoc, readerDocPage } from './compat.mjs';
-import { createBooks, booksSwitch, booksRpc, booksStart, booksAnswer, BOOKS_PATHS } from './books.mjs';
+import { createBooks, booksSwitch, booksRpcs, booksStart, booksAnswer, BOOKS_PATHS } from './books.mjs';
 import { createCredit, creditOf as creditAsked, creditHint, creditTerms, creditRequired, creditExact, CREDIT, CREDIT_EXPOSE } from './credit.mjs';
 
 export const VERSION = '3.41.0';
@@ -1609,8 +1609,9 @@ export async function startToll(db, cfg = {}) { if (!tollSwitch(cfg) || !tollSec
 // The books from the chain (node/books.mjs, since 3.38): every incoming USDC transfer to the till's wallet on Base, read from the
 // chain into the node's own state (never the database), for the operator only (/operator/ledger.csv, .json, /operator/digest,
 // with the operator key); /status.json shows counts. A node reads the chain on its own timer while it keeps its state on disk
-// (serve.mjs starts it); MARE_BOOKS=off or MARE_BASE_RPC=off switch the reading off. No request ever waits for it.
-const booksOf = (db, cfg) => (db.chainBooks ||= createBooks({ kv: cfg.kv || db.kv || memoryKv(), ledger: ledgerOf(cfg), wallet: (cfg.pay || payConfig()).payTo, facilitator: (cfg.pay || payConfig()).facilitator, rpc: booksSwitch(cfg) ? booksRpc(cfg) : null, ...booksStart(), ...(cfg.booksOptions || {}), log: (t, m) => console.error(t, m) }));
+// (serve.mjs starts it); MARE_BOOKS=off or MARE_BASE_RPC=off switch the reading off. No request ever waits for it. It asks
+// MARE_BASE_RPC (else mainnet.base.org) and, where that refuses eth_getLogs, base-rpc.publicnode.com (node/books.mjs).
+const booksOf = (db, cfg) => (db.chainBooks ||= createBooks({ kv: cfg.kv || db.kv || memoryKv(), ledger: ledgerOf(cfg), wallet: (cfg.pay || payConfig()).payTo, facilitator: (cfg.pay || payConfig()).facilitator, rpc: null, rpcs: booksSwitch(cfg) ? booksRpcs(cfg) : [], ...booksStart(), ...(cfg.booksOptions || {}), log: (t, m) => console.error(t, m) }));
 export function startBooks(db, cfg = {}) { if (!booksSwitch(cfg)) return null; return booksOf(db, cfg).start(); }
 export function stopBooks(db) { return db.chainBooks?.stop(); }
 const PAY_DOORS = /^\/(route|settle|fair|pay|via)(\/|$)/;
