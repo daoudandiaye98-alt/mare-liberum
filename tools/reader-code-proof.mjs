@@ -5,9 +5,10 @@
 // NULs go before it reads. Code in a list item, which the lean reader sets as before, is work for a later day.
 // It proves, on nodes in this process with a stubbed web (no network, no live site):
 //   a page whose code blocks hold Python (blank lines, nested blocks), YAML (nested lists), a Makefile (a tab) and a block
-//   whose first line is indented keeps every line's leading whitespace, exactly, through toMarkdown: in /r/ format=full,
-//   in POST /v2/scrape with onlyMainContent: false and in the .md twins of the sea's own pages (/engine.md holds the Python
-//   of the OpenAI Agents SDK and LangChain word for word); the lean answers keep the code as before; code in a list item of
+//   whose first line is indented keeps every line's leading whitespace, exactly, through toMarkdown (a line indented with
+//   no-break spaces, &#160; or &nbsp;, with plain spaces): in /r/ format=full, in POST /v2/scrape with onlyMainContent:
+//   false and in the .md twins of the sea's own pages (/engine.md holds the Python of the OpenAI Agents SDK and LangChain
+//   word for word); the lean answers keep the code as before; code in a list item of
 //   every shape (two and three levels, every mix of ul and ol, items numbered 10 and up) reads in leanMarkdown, /r/ and
 //   /v2/scrape byte for byte as the reference reads it; fenced blocks written in a page's text (``` with an info string,
 //   ~~~, an indented fence) stay text, exactly as before (verify-3.40 B1: a "~~~" scene break around a <pre> no longer
@@ -119,7 +120,17 @@ const PLAIN = `<!doctype html><html lang="en"><head><title>Harbour notes</title>
 <table><tr><th>Berth</th><th>Depth</th></tr><tr><td> one </td><td>12 m</td></tr></table>
 <blockquote>  a quote   with   spaces </blockquote><p><code>inline   code</code> stays inline.</p>
 <p>A line<br>    broken   in two.</p></main><footer>Imprint</footer></body></html>`;
-const PAGES = new Map([[`${P}/deploy`, DEPLOY], [`${P}/steps`, STEPS], [`${P}/fences`, FENCES], [`${P}/plain`, PLAIN]]);
+// code indented with no-break spaces, as a page writes them (&#160;, &nbsp;, &#xa0;): four plain spaces in every answer
+const NBSPAGE = `<!doctype html><html lang="en"><head><title>No-break spaces</title></head><body><main><h1>No-break spaces</h1><p>${WORDS}</p>
+<pre>def f():
+&#160;&#160;&#160;&#160;return 1
+
+def g():
+&nbsp;&nbsp;&nbsp;&nbsp;if True:
+&#xa0;&#xa0;&#xa0;&#xa0;&#xa0;&#xa0;&#xa0;&#xa0;return 2</pre>
+<p>That is the whole of it.</p></main></body></html>`;
+const NBSPCODE = 'def f():\n    return 1\n\ndef g():\n    if True:\n        return 2';
+const PAGES = new Map([[`${P}/deploy`, DEPLOY], [`${P}/steps`, STEPS], [`${P}/fences`, FENCES], [`${P}/plain`, PLAIN], [`${P}/nbsp`, NBSPAGE]]);
 const realFetch = globalThis.fetch;
 globalThis.fetch = async (u, o = {}) => {
   const s = String(u?.url ?? u);
@@ -217,6 +228,12 @@ await proof('POST /v2/scrape and /v1/scrape: data.markdown keeps the code, with 
     const full = await node.call(`/v${v}/scrape`, { method: 'POST', accept: 'application/json', ip, body: { url: `${P}/deploy`, formats: ['markdown'], onlyMainContent: false } });
     for (const c of [PY, YAML, MAKE, SNIP]) hasExact(full.j.data.markdown, c, `/v${v}/scrape onlyMainContent: false`);
   }
+});
+await proof('a line of code indented with no-break spaces (&#160;&#160;&#160;&#160;return 1, and as &nbsp; and &#xa0;) comes back with plain spaces, four a level: toMarkdown, the .md twin, /r/ format=full, /v2/scrape and /v1/scrape with onlyMainContent: false', async () => {
+  const url = `${P}/nbsp`, ip = fresh();
+  const outs = [['toMarkdown', node.reader.toMarkdown(NBSPAGE, url)], ['toMarkdown menus=false', node.reader.toMarkdown(NBSPAGE, url, { menus: false })], ['the .md twin', node.agentmd.pageMarkdown(NBSPAGE, url, BASE).md], ['/r/ format=full', (await node.call(`/r/${url}?format=full`, { ip })).text]];
+  for (const v of [2, 1]) { const r = await node.call(`/v${v}/scrape`, { method: 'POST', accept: 'application/json', ip, body: { url, formats: ['markdown'], onlyMainContent: false } }); assert.equal(r.status, 200); outs.push([`/v${v}/scrape onlyMainContent: false`, r.j.data.markdown]); }
+  for (const [what, md] of outs) { hasExact(md, NBSPCODE, what); assert.ok(md.includes('\n    return 1\n'), `${what}: four plain spaces`); assert.ok(!md.includes('\u00a0'), `${what}: a no-break space in the answer`); }
 });
 await proof('Jina\'s layout (X-Return-Format: markdown, and its JSON) carries the code as the reader wrote it', async () => {
   const ip = fresh(), t = await node.call(`/r/${P}/deploy`, { ip, headers: { 'x-return-format': 'markdown', 'x-no-cache': 'true' } });
@@ -329,7 +346,7 @@ await proof('every page of the sea (as this node serves it) through toMarkdown, 
   for (const p of HUB_PATHS) { if (p === '/' || p === '/works') continue; const r = await node.call(p, { accept: 'text/html', ua: 'Mozilla/5.0 (X11; Linux x86_64) Chrome/131.0 Safari/537.36', ip: fresh() }); if (r.status === 200 && /<main/.test(r.text)) SEA.push([p, r.text]); }
   assert.ok(SEA.length >= 50, `${SEA.length} pages`);
   let same = 0, code = 0;
-  for (const [p, html] of [...SEA, ['/proof/deploy', DEPLOY], ['/proof/steps', STEPS], ['/proof/fences', FENCES], ['/proof/plain', PLAIN]]) {
+  for (const [p, html] of [...SEA, ['/proof/deploy', DEPLOY], ['/proof/steps', STEPS], ['/proof/fences', FENCES], ['/proof/plain', PLAIN], ['/proof/nbsp', NBSPAGE]]) {
     const url = BASE + p, outs = [
       ['toMarkdown', node.reader.toMarkdown(html, url), ref.reader.toMarkdown(html, url)],
       ['toMarkdown menus=false', node.reader.toMarkdown(html, url, { menus: false }), ref.reader.toMarkdown(html, url, { menus: false })],
@@ -356,6 +373,7 @@ const BREAK = [
   ['a page\'s own NULs let into toMarkdown (B2)', 'node/reader.mjs', "  let h = String(html || '').replace(/\\u0000/g, '').replace(", "  let h = String(html || '').replace("],
   ['a page\'s own NULs let into the lean reader (B2)', 'node/lean.mjs', "  html = String(html || '').replace(/\\u0000/g, '');\n", "  html = String(html || '');\n"],
   ['marker slices held as fences, back() not recursive (5bef5ae, B1)', 'node/reader.mjs', "  let ls = md.split('\\n').map((l) =>", "  { const raw = md.split('\\n'), o2 = []; for (let i = 0; i < raw.length; i++) { if (/^[ \\t]*(```|~~~)/.test(raw[i])) { let j = i + 1; while (j < raw.length && raw[j].trim() !== raw[i].trim()) j++; if (j < raw.length) { o2.push(raw[i], `\\u0000c${codes.push(raw.slice(i + 1, j).join('\\n').replace(/\\u0000c/g, '\\u0000C')) - 1}\\u0000`, raw[j]); i = j; continue; } } o2.push(raw[i]); } md = o2.join('\\n'); }\n  let ls = md.split('\\n').map((l) =>"],
+  ['no-break spaces inside code kept as they came (no &#160; made a space)', 'node/reader.mjs', ".replace(/\\u00a0/g, ' ').split('\\n')", ".split('\\n')"],
   ['a tab of a Makefile written as spaces', 'node/reader.mjs', ".replace(/\\u00a0/g, ' ').split('\\n')", ".replace(/\\u00a0/g, ' ').replace(/\\t/g, '    ').split('\\n')"],
   ['outside code, spaces no longer run together', 'node/reader.mjs', "  let ls = md.split('\\n').map((l) => l.replace(", "  let ls = md.split('\\n').map((l) => l.trim() || l.replace("],
 ];
