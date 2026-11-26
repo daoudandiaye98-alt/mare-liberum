@@ -826,6 +826,7 @@ const since0 = (t) => t.replace(/"runningSince":"[^"]*"/g, '"runningSince":"<sta
   .replace(/, with bigger packs up to 12,000,000 pages at \S+\/reader\/credit\/paid#plans/g, '')
   .replace(/ Bigger packs, Kutter, Fregatte and Flotte, from EUR 49 for 100,000 pages to EUR 3,900 for a year of 12,000,000 pages: \S+\/reader\/credit\/paid#plans; an own reader node in the EU \(Reederei\): \S+\/reader\/node\./g, '')
   .replace(/, bigger packs at \S+\/reader\/credit\/paid#plans/g, '')
+  .replace(/; bigger packs for operators from 49 EUR for 100,000 pages to 3,900 EUR for a year of 12,000,000 pages: \S+\/reader\/credit\/paid#plans, and an own reader node in the EU: \S+\/reader\/node/g, '')
   .replace(/, <a href="\/reader\/node">\/reader\/node<\/a>\) (ist kein bindendes|are not binding)/g, ') $1')
   .replace(/<br>g\) (?:Reederei, eigener Leser-Knoten|Reederei, an own reader node) \([\s\S]*?<br>h\) (Institution)/g, '<br>g) $1')
   .replace(/, ein Jahrespaket für Betreiber \(§ 4 Absatz 3 f\) 365 Tage;/g, ';').replace(/, a pack of a year for operators \(§ 4 paragraph 3 f\) 365 days;/g, ';')
