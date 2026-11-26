@@ -816,7 +816,9 @@ const since0 = (t) => t.replace(/"runningSince":"[^"]*"/g, '"runningSince":"<sta
   // (and the Stand of the legal texts: a release that changes any of them sets the day of the release, node/legal.mjs STAND)
   .replace(/Stand: \d{2}\.\d{2}\.\d{4}/g, 'Stand: <day>').replace(/"stand":"\d{2}\.\d{2}\.\d{4}"/g, '"stand":"<day>"')
   // (and the list of releases of /open.json: a release adds its own line and gives the one before its day)
-  .replace(/"releases":\[[\s\S]*?\n\]/, '"releases":[<releases>]');
+  .replace(/"releases":\[[\s\S]*?\n\]/, '"releases":[<releases>]')
+  // (and what /open.json says of /openapi.json: since 3.46 it names the two paid doors, proven by tools/doors-proof.mjs)
+  .replace(/("path":"\/openapi\.json","url":"[^"]*","what":")[^"]*"/, '$1<what>"');
 // (and the version each tree names: a release bumps it, the answers stay the same)
 const vers = (t, v) => (v ? t.replaceAll(v, '<version>') : t);
 const sameText = (a, b, what) => { assert.equal(a.status, b.status, `${what}: status`); const x = vers(since0(a.text), MINE.version), y = vers(since0(b.text), THEIRS.version); assert.ok(x === y, `${what}: body ${x === y ? '' : firstDiff(x, y)}`); assert.deepEqual([...a.headers.entries()].sort(), [...b.headers.entries()].sort(), `${what}: headers`); };
