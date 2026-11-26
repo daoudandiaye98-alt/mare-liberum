@@ -439,18 +439,18 @@ function writer(page, base) {
     }
     return out;
   };
-  // the lines of a list item go two spaces in, but the lines of a code block in it stay as the page wrote them (since the
-  // fix of 26.11.2026: Python in a step of a tutorial kept its indentation, and two spaces more in front of every line);
-  // its fences go in like every line, and tidy sets them at the margin again
-  const inset = (lines) => { let code = false; return lines.map((l) => { if (/^\s*```/.test(l)) { code = !code; return `  ${l}`; } return code ? l : `  ${l}`; }); };
   const list = (el, st, ordered) => {
+    // (since 26.11.2026) every line of an item goes two spaces in, a fence and its code alike: so CommonMark nests a fenced
+    // block in a list item. The fences are marked (LIST_FENCE) so that tidy and the last pass leave them where the item set
+    // them; before, tidy set them at the margin and left their code two spaces in per level
+    const shift = (l) => `  ${/^\s*\u0000?```/.test(l) ? l.replace(/^(\s*)\u0000?/, `$1${LIST_FENCE}`) : l}`;
     const items = []; let n = 0;
     const item = (k) => {
       const body = tidy(md(k, { ...st, depth: (st.depth || 0) + 1 })); if (!body || !/[\p{L}\p{N}]/u.test(body)) return;
       n++; const [head, ...rest] = body.split('\n').filter((l) => l.trim());
-      items.push(`${ordered ? `${n}.` : '-'} ${head}${rest.length ? `\n${inset([head, ...rest]).slice(1).join('\n')}` : ''}`);
+      items.push(`${ordered ? `${n}.` : '-'} ${head}${rest.length ? `\n${rest.map(shift).join('\n')}` : ''}`);
     };
-    for (const k of el.kids) { if (!isEl(k)) { if (k.trim()) items.push(one(entities(k))); continue; } if (k.tag === 'li') item(k); else if (k.tag === 'ul' || k.tag === 'ol') { const l = list(k, st, k.tag === 'ol'); if (l) items.push(inset(l.split('\n')).join('\n')); } else item(k); }
+    for (const k of el.kids) { if (!isEl(k)) { if (k.trim()) items.push(one(entities(k))); continue; } if (k.tag === 'li') item(k); else if (k.tag === 'ul' || k.tag === 'ol') { const l = list(k, st, k.tag === 'ol'); if (l) items.push(l.split('\n').map(shift).join('\n')); } else item(k); }
     return items.join('\n');
   };
   const table = (el, st) => {
@@ -478,11 +478,13 @@ function writer(page, base) {
   };
   return { md, links };
 }
-// lines: trimmed, one blank line at most, list indentation and code kept
+// the mark of a fence a list item set in (writer, list): it stays where it stands, and the mark goes before the answer
+const LIST_FENCE = '\u0000', LIST_FENCE_AT = /^( *)\u0000(?=```)/gm;
+// lines: trimmed, one blank line at most, list indentation and code kept; a fence a list item set in stays there
 function tidy(s) {
   const out = []; let code = false;
   for (const raw of String(s).replace(/\n\s*\n/g, '\n\n').split('\n')) {
-    if (/^\s*```/.test(raw)) { code = !code; out.push(raw.trim()); continue; }
+    if (/^\s*\u0000?```/.test(raw)) { code = !code; out.push(raw.includes(LIST_FENCE) ? raw.trimEnd() : raw.trim()); continue; }
     if (code) { out.push(raw.trimEnd()); continue; }
     const ind = /^( *)(?:[-*]|\d+\.) /.exec(raw)?.[1] || '';
     // (a link is written with a space on each side; none before a comma or a full stop, none inside brackets)
@@ -507,9 +509,9 @@ function lastPass(md, { product, seen = new Set(), menus = true } = {}) {
   const lines = md.split('\n'), out = []; let code = false, prev = null;
   for (let i = 0; i < lines.length; i++) {
     const l = lines[i];
-    if (/^```/.test(l)) {
+    if (/^```/.test(l) || /^ *\u0000```/.test(l)) {
       // a code example's label ("js", "python") written just before it: the fence says it once
-      if (!code) { let j = out.length - 1; while (j >= 0 && !out[j]) j--; const w = j >= 0 ? out[j].trim().toLowerCase() : ''; if (LANGS.has(w)) { out.length = j; if (l === '```') { out.push(`\`\`\`${w}`); code = true; prev = null; continue; } } }
+      if (!code) { let j = out.length - 1; while (j >= 0 && !out[j]) j--; const w = j >= 0 ? out[j].trim().toLowerCase() : ''; if (LANGS.has(w)) { out.length = j; if (l.replace(/^ *\u0000/, '') === '```') { out.push(`${l.slice(0, l.indexOf('`'))}\`\`\`${w}`); code = true; prev = null; continue; } } }
       code = !code; out.push(l); prev = null; continue;
     }
     if (code) { out.push(l); continue; }
@@ -638,7 +640,7 @@ export function leanMarkdown(html, base, { product: wantProduct = true, max = LE
   if (h1 && !inRegion(h1)) { const x = one(entities(textOfEl(h1))); if (x) md = `# ${x}\n\n${md}`; }
   // the essentials, under the page's own heading; what the page says after them is said once, without the shop's chatter
   const head = product ? essentialsMd(product, { heading: h1 ? one(entities(textOfEl(h1))).slice(0, 200) : null }) : '';
-  const rest = lastPass(md, { product, seen: new Set(head.split('\n').map(keyOf).filter(Boolean)), menus: region === body });
+  const rest = lastPass(md, { product, seen: new Set(head.split('\n').map(keyOf).filter(Boolean)), menus: region === body }).replace(LIST_FENCE_AT, '$1');
   const md2 = [head, rest].filter(Boolean).join('\n\n');
   // the links the Markdown still carries (a menu left out takes its links with it), each as a full address
   // (one walk over the Markdown: after each "](" the address runs to a ")" before the next space)

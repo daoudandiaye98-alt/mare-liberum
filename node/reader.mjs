@@ -20,7 +20,14 @@ const codeLines = (s, keepEdges = false) => {
 };
 // a fence written in a page's own text: ``` or ~~~ (three or more), an info string or none (a backtick fence's info has
 // no backtick); it closes with a line of the same sign, at least as long, and nothing after it
-const FENCE_OPEN = /^([ \t]*)(`{3,}|~{3,})(.*)$/, FENCE_CLOSE = /^[ \t]*(`{3,}|~{3,})[ \t]*$/;
+const FENCE_OPEN = /^([ \t]*)(`{3,}|~{3,})(.*)$/;
+// a line that can close a fence: its length, positive for backticks and negative for tildes, else 0 (one look at the line)
+const closerOf = (l) => {
+  let a = 0, b = l.length; while (a < b && (l[a] === ' ' || l[a] === '\t')) a++; while (b > a && (l[b - 1] === ' ' || l[b - 1] === '\t')) b--;
+  const c = l[a]; if (b - a < 3 || (c !== '`' && c !== '~')) return 0;
+  for (let k = a + 1; k < b; k++) if (l[k] !== c) return 0;
+  return c === '`' ? b - a : a - b;
+};
 
 // HTML to Markdown, plainly: the main part of the page, headings, paragraphs, lists, links, code; no scripts, no menus.
 // menus: false keeps runs of links (a page whose main part holds no menu, like the pages of the sea itself)
@@ -46,13 +53,19 @@ export function toMarkdown(html, base, { menus = true } = {}) {
     .replace(/<\/?(p|div|section|article|main|ul|ol|table|tbody|thead|tr|blockquote|figure|figcaption|dl|dt|dd|header|footer|nav|aside|form|fieldset|details|summary)\b[^>]*>/gi, '\n\n').replace(/<[^>]+>/g, ' ');
   let md = entities(h).replace(/\u0000(\d+)\u0000/g, (m, i) => keep[i]).replace(/\u0000(\d+)\u0000/g, (m, i) => keep[i]);
   // a fenced block in the page's own text that closes: its fences are lines like any other, its lines are held aside (without
-  // the indentation of the opening fence, as CommonMark reads them); a fence that never closes is no code block
-  const raw = md.split('\n'), lines = [];
+  // the indentation of the opening fence, as CommonMark reads them); a fence that never closes is no code block.
+  // Linear (verify-3.40 F2): the lines that can close are known in one pass; an opener that finds no close spares every later
+  // opener of its sign as long or longer (none of them can close either); and the search costs at most 4 lines per line of
+  // the page and 10,000 more in all: once that is spent, no fence is read any more and the rest stays text, as before
+  const raw = md.split('\n'), lines = [], closes = raw.map(closerOf), failed = { '`': Infinity, '~': Infinity };
+  let budget = 4 * raw.length + 10_000;
   for (let i = 0; i < raw.length; i++) {
-    const o = FENCE_OPEN.exec(raw[i]);
-    if (o && !(o[2][0] === '`' && o[3].includes('`'))) {
-      let j = i + 1; for (; j < raw.length; j++) { const c = FENCE_CLOSE.exec(raw[j]); if (c && c[1][0] === o[2][0] && c[1].length >= o[2].length) break; }
-      if (j < raw.length) { const cut = new RegExp(`^[ \\t]{0,${o[1].length}}`); lines.push(raw[i]); if (j > i + 1) lines.push(aside(codeLines(raw.slice(i + 1, j).map((l) => l.replace(cut, '')).join('\n'), true))); lines.push(raw[j]); i = j; continue; }
+    const o = budget > 0 ? FENCE_OPEN.exec(raw[i]) : null;
+    if (o && !(o[2][0] === '`' && o[3].includes('`')) && o[2].length < failed[o[2][0]]) {
+      const sign = o[2][0] === '`' ? 1 : -1; let j = i + 1, found = false;
+      for (; j < raw.length; j++) { if (--budget < 0) break; if (closes[j] * sign >= o[2].length) { found = true; break; } }
+      if (!found && j >= raw.length) failed[o[2][0]] = o[2].length;
+      if (found) { const cut = new RegExp(`^[ \\t]{0,${o[1].length}}`); lines.push(raw[i]); if (j > i + 1) lines.push(aside(codeLines(raw.slice(i + 1, j).map((l) => l.replace(cut, '')).join('\n'), true))); lines.push(raw[j]); i = j; continue; }
     }
     lines.push(raw[i]);
   }

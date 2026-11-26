@@ -1,14 +1,17 @@
 // Mare Liberum · proof that code keeps its lines through the reader (the fix of 26.11.2026: node/reader.mjs toMarkdown,
 // node/lean.mjs list items). The reader made every line tidy, the lines of code too: Python and YAML lost their indentation
 // and a Makefile its tab in every .md twin of the sea, in /r/<page>?format=full and in Firecrawl's onlyMainContent: false;
-// the lean reader kept code but set a code block inside a list item two spaces in. It proves, on nodes in this process with
-// a stubbed web (no network, no live site):
+// the lean reader kept code, but set the fence of a code block in a list item at the margin and left its lines two spaces in
+// per level. It proves, on nodes in this process with a stubbed web (no network, no live site):
 //   a page whose code blocks hold Python (blank lines, nested blocks), YAML (nested lists), a Makefile (a tab) and a block
 //   whose first line is indented keeps every line's leading whitespace, exactly, in /r/ (lean and format=full), in
 //   POST /v2/scrape (markdown, and onlyMainContent: false), in Jina's layout and in the .md twins of the sea's own pages
 //   (/engine.md holds the Python of the OpenAI Agents SDK and LangChain word for word); code in a list item and in a nested
-//   one stays at its own margin; fenced blocks written in a page's text (``` with an info string, ~~~, an indented fence)
-//   keep their lines, a fence that never closes changes nothing;
+//   one nests as CommonMark reads it: the fence and every line of code go in by the item's indentation, and taking exactly
+//   the fence's indentation off gives the code back byte for byte; fenced blocks written in a page's text (``` with an info
+//   string, ~~~, an indented fence) keep their lines, a fence that never closes changes nothing;
+//   the search for a fence's close is linear: a 2 MB page of fences that never close, and one of fences of falling length
+//   among many short closing lines, are read in a child process in well under 2 seconds, as text exactly as before;
 //   everything outside code is byte for byte what the reference tree writes (default fbf500e, 3.39.0): every page of the
 //   sea (its HTML as this node serves it) and every page of the proof through toMarkdown (with and without menus),
 //   leanMarkdown and the .md twin; a page without code through /r/, /v2/scrape and Jina's layout as the reference node
@@ -158,19 +161,24 @@ const steady = (s) => { let t = String(s).replace(/\br\d{8}[a-z0-9]{8}\b/g, 'r<i
 let net = 0; const fresh = () => `198.51.100.${++net}`;
 
 // ------------------------------------------------------------------ code blocks in Markdown
-// the fenced blocks of a Markdown text: a fence at the margin (``` or ~~~, an info string or none) to the next of its sign
-const FENCE = /^(`{3,}|~{3,})(.*)$/;
+// the fenced blocks of a Markdown text: a fence (``` or ~~~, an info string or none, at any indentation) to the next of its
+// sign; ind: the fence's indentation (a block in a list item goes in with its item)
+const FENCE = /^([ \t]*)(`{3,}|~{3,})(.*)$/;
 function split(md) {
   const parts = [], lines = String(md).split('\n'); let text = [];
   for (let i = 0; i < lines.length; i++) {
     const o = FENCE.exec(lines[i]);
-    if (o) { let j = i + 1; for (; j < lines.length; j++) if (new RegExp(`^${o[1][0] === '`' ? '`' : '~'}{${o[1].length},}\\s*$`).test(lines[j])) break;
-      if (j < lines.length) { parts.push({ text: text.join('\n') }); text = []; parts.push({ fence: lines[i], code: lines.slice(i + 1, j).join('\n') }); i = j; continue; } }
+    if (o) { let j = i + 1; for (; j < lines.length; j++) if (new RegExp(`^[ \\t]*${o[2][0] === '`' ? '`' : '~'}{${o[2].length},}\\s*$`).test(lines[j])) break;
+      if (j < lines.length) { parts.push({ text: text.join('\n') }); text = []; parts.push({ fence: lines[i].trim(), ind: o[1], code: lines.slice(i + 1, j).join('\n') }); i = j; continue; } }
     text.push(lines[i]);
   }
   parts.push({ text: text.join('\n') });
   return parts;
 }
+// CommonMark's rule for a block in a list item: every line of code carries at least the fence's indentation, and taking
+// exactly that off gives the code (blank lines inside a list item's code go, as before): the indentations of the blocks
+// that hold the code so, or none
+const nestedAs = (md, code) => split(md).filter((p) => 'code' in p && p.code.split('\n').every((l) => !l.trim() || l.startsWith(p.ind)) && nonBlank(p.code.split('\n').map((l) => l.slice(p.ind.length)).join('\n')) === nonBlank(code)).map((p) => p.ind);
 const blocks = (md) => split(md).filter((p) => 'code' in p).map((p) => p.code);
 const nonBlank = (s) => s.split('\n').filter((l) => l.trim()).join('\n');
 // exactly the code (where code keeps its blank lines too), or its lines exactly with blank lines as the lean reader sets them
@@ -183,7 +191,7 @@ const asBefore = (code) => code.split('\n').map((l) => l.replace(/[ \t\u00a0]+/g
 function onlyCodeDiffers(now, before, what) {
   const a = split(now), b = split(before);
   assert.equal(a.length, b.length, `${what}: ${a.length} parts against ${b.length}`);
-  a.forEach((p, i) => { if ('code' in p) { assert.equal(p.fence, b[i].fence, `${what}: fence ${i}`); assert.equal(asBefore(p.code), asBefore(b[i].code), `${what}: block ${i} differs beyond whitespace`); } else assert.equal(p.text, b[i].text, `${what}: the text around code, part ${i}`); });
+  a.forEach((p, i) => { if ('code' in p) { assert.ok('code' in b[i], `${what}: part ${i} is code here only`); assert.equal(p.fence, b[i].fence, `${what}: fence ${i}`); assert.equal(asBefore(p.code), asBefore(b[i].code), `${what}: block ${i} differs beyond whitespace`); } else assert.equal(p.text, b[i].text, `${what}: the text around code, part ${i}`); });
 }
 
 console.log('code keeps its lines: the reader, the scrape doors, Jina\'s layout, the twins');
@@ -191,17 +199,19 @@ await proof(`the reference tree is there (${REF})`, () => { assert.ok(ref, 'git 
 await proof('toMarkdown (the twins, format=full, onlyMainContent: false) keeps Python, YAML, the Makefile\'s tab and an indented first line exactly, blank lines and all', () => {
   for (const menus of [true, false]) { const md = node.reader.toMarkdown(DEPLOY, `${P}/deploy`, { menus }); for (const c of [PY, YAML, MAKE, SNIP]) hasExact(md, c, `toMarkdown menus=${menus}`); assert.ok(md.includes('\n\t./bot --deploy\n'), 'the tab is a tab'); }
 });
-await proof('the lean reader keeps every line of code at its own margin, also in a list item and in a nested one (blank lines inside code as before: at most one)', () => {
+await proof('the lean reader keeps code exactly; in a list item and a nested one the block nests as CommonMark reads it (fence and code in by the item, the fence\'s indentation off gives the code back; blank lines inside code as before)', () => {
   const d = node.lean.leanMarkdown(DEPLOY, `${P}/deploy`).md; for (const c of [YAML, MAKE, SNIP]) hasExact(d, c, 'lean'); hasLines(d, PY, 'lean');
-  const s = node.lean.leanMarkdown(STEPS, `${P}/steps`).md; for (const c of [YAML, PY, MAKE]) hasLines(s, c, 'lean, a list item');
-  assert.ok(/\n1\. Write the config:\n```\nharbour:\n  name: Mare\n/.test(s), 'the item and its code'); assert.ok(/\n  - and a nested step, the Makefile:\n```\ndeploy: build\n\t\.\/bot --deploy\n/.test(s), 'the nested item and its code');
+  const s = node.lean.leanMarkdown(STEPS, `${P}/steps`).md;
+  assert.deepEqual(nestedAs(s, YAML), ['  '], 'the config in the first item: fence and code two spaces in'); assert.deepEqual(nestedAs(s, PY), ['  '], 'the module in the second item');
+  assert.deepEqual(nestedAs(s, MAKE), ['    '], 'the Makefile in the nested item: four spaces in, its tab kept');
+  assert.ok(s.includes('\n1. Write the config:\n  ```\n  harbour:\n    name: Mare\n'), 'the item and its code'); assert.ok(s.includes('\n  - and a nested step, the Makefile:\n    ```\n    deploy: build\n    \t./bot --deploy\n'), 'the nested item and its code');
 });
 await proof('/r/<page>: the lean answer and format=full keep the code; the Makefile\'s recipe begins with a tab', async () => {
   const ip = fresh(), r = await node.call(`/r/${P}/deploy`, { ip }), f = await node.call(`/r/${P}/deploy?format=full`, { ip });
   assert.equal(r.status, 200); assert.equal(f.status, 200);
   for (const c of [YAML, MAKE, SNIP]) hasExact(r.text, c, '/r/'); hasLines(r.text, PY, '/r/');
   for (const c of [PY, YAML, MAKE, SNIP]) hasExact(f.text, c, '/r/ format=full');
-  const steps = await node.call(`/r/${P}/steps`, { ip }); for (const c of [YAML, PY, MAKE]) hasLines(steps.text, c, '/r/ list items');
+  const steps = await node.call(`/r/${P}/steps`, { ip }); for (const [c, ind] of [[YAML, '  '], [PY, '  '], [MAKE, '    ']]) assert.deepEqual(nestedAs(steps.text, c), [ind], `/r/ list items: ${c.split('\n')[0]}`);
   assert.ok(r.text.includes('\n\t./bot --deploy\n') && f.text.includes('\n\t./bot --deploy\n'));
 });
 await proof('POST /v2/scrape and /v1/scrape: data.markdown keeps the code, with onlyMainContent: false exactly', async () => {
@@ -231,6 +241,26 @@ await proof('fenced blocks written in a page\'s text keep their lines (``` with 
   assert.ok(md.includes('```sh\n  ./run --fast\n```'), 'an indented fence: its indentation off every line, the rest kept');
   const tail = (s) => s.slice(s.lastIndexOf('```\nthis fence'));
   assert.equal(tail(md), tail(old), 'the fence that never closes'); assert.match(tail(md), /^```\nthis fence never closes,\nso these lines stay as they were$/);
+});
+
+console.log('the search for a fence\'s close is linear (verify-3.40 F2)');
+// a page written to make the scan slow, converted by this tree's toMarkdown in a child process with a time limit of 10 s
+const ADVERSARIAL = {
+  unclosed: 'const parts = Array.from({ length: 150000 }, (_, i) => "```x" + i);',
+  falling: 'const parts = []; for (let k = 1903; k >= 4; k--) parts.push("`".repeat(k) + "x"); for (let i = 0; i < 50000; i++) parts.push("```");',
+};
+const pageOf = (kind) => `${ADVERSARIAL[kind]} const html = "<html><body><main><p>" + parts.join("<br>") + "</p></main></body></html>";`;
+const timed = (kind) => {
+  const script = `${pageOf(kind)} const { toMarkdown } = await import(${JSON.stringify(pathToFileURL(join(ROOT, 'node/reader.mjs')).href)}); const { createHash } = await import('node:crypto'); const t = performance.now(); const out = toMarkdown(html, "https://example.org/"); console.log(JSON.stringify({ ms: Math.round(performance.now() - t), bytes: html.length, sha: createHash('sha256').update(out).digest('hex') }));`;
+  const r = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8', timeout: 10_000 });
+  return r.error?.code === 'ETIMEDOUT' || r.signal ? { timeout: true } : JSON.parse((r.stdout || '').trim().split('\n').pop() || '{}');
+};
+const refSha = async (kind) => { const { createHash } = await import('node:crypto'); const parts = (0, eval)(`(() => { ${ADVERSARIAL[kind]} return parts; })()`); return createHash('sha256').update(ref.reader.toMarkdown(`<html><body><main><p>${parts.join('<br>')}</p></main></body></html>`, 'https://example.org/')).digest('hex'); };
+await proof('a 2 MB page of fences that never close ("```x" 150,000 times) is read in under 2,000 ms, as text exactly as before', async () => {
+  const r = timed('unclosed'); assert.ok(!r.timeout, 'the conversion did not end within 10 s'); assert.ok(r.bytes >= 1_900_000, `${r.bytes} bytes`); assert.ok(r.ms < 2000, `${r.ms} ms`); assert.equal(r.sha, await refSha('unclosed'), 'the same text as before');
+});
+await proof('a 2 MB page of fences of falling length (1,903 backticks down to 4) among 50,000 short closing lines is read in under 2,000 ms, as text exactly as before', async () => {
+  const r = timed('falling'); assert.ok(!r.timeout, 'the conversion did not end within 10 s'); assert.ok(r.bytes >= 1_900_000, `${r.bytes} bytes`); assert.ok(r.ms < 2000, `${r.ms} ms`); assert.equal(r.sha, await refSha('falling'), 'the same text as before');
 });
 
 console.log('everything outside code, byte for byte as the reference tree');
@@ -264,10 +294,12 @@ console.log(`\n${passed} proofs held, ${failed} failed`);
 // ------------------------------------------------------------------ negative controls: each rule broken in a copy, the proof must fail there
 const BREAK = [
   ['the old trim: every line made tidy, the lines of code too', 'node/reader.mjs', '  return back(md);\n}', "  return back(md).split('\\n').map((l) => l.replace(/[ \\t\\u00a0]+/g, ' ').trim()).join('\\n');\n}"],
-  ['code in a list item set two spaces in again', 'node/lean.mjs', 'return code ? l : `  ${l}`;', 'return `  ${l}`;'],
+  ['code in a list item at the margin while its fence goes in (5bef5ae)', 'node/lean.mjs', "items.push(`${ordered ? `${n}.` : '-'} ${head}${rest.length ? `\\n${rest.map(shift).join('\\n')}` : ''}`);", "{ let c = /^\\s*```/.test(head); items.push(`${ordered ? `${n}.` : '-'} ${head}${rest.length ? `\\n${rest.map((l) => { if (/^\\s*\\u0000?```/.test(l)) { c = !c; return shift(l); } return c ? l : `  ${l}`; }).join('\\n')}` : ''}`); }"],
+  ['the fence of a list item\'s code at the margin, its code two spaces in (fbf500e)', 'node/lean.mjs', 'out.push(raw.includes(LIST_FENCE) ? raw.trimEnd() : raw.trim());', 'out.push(raw.trim());'],
+  ['the unbounded search for a fence\'s close (5bef5ae)', 'node/reader.mjs', "    if (o && !(o[2][0] === '`' && o[3].includes('`')) && o[2].length < failed[o[2][0]]) {\n      const sign = o[2][0] === '`' ? 1 : -1; let j = i + 1, found = false;\n      for (; j < raw.length; j++) { if (--budget < 0) break; if (closes[j] * sign >= o[2].length) { found = true; break; } }", "    if (o && !(o[2][0] === '`' && o[3].includes('`'))) {\n      const sign = o[2][0] === '`' ? 1 : -1; let j = i + 1, found = false;\n      for (; j < raw.length; j++) { const c = /^[ \\t]*(`{3,}|~{3,})[ \\t]*$/.exec(raw[j]); if (c && c[1][0] === o[2][0] && c[1].length >= o[2].length) { found = true; break; } }"],
   ['a tab of a Makefile written as spaces', 'node/reader.mjs', ".replace(/\\u00a0/g, ' ').split('\\n')", ".replace(/\\u00a0/g, ' ').replace(/\\t/g, '    ').split('\\n')"],
   ['outside code, spaces no longer run together', 'node/reader.mjs', "  let ls = lines.map((l) => l.replace(", "  let ls = lines.map((l) => l.trim() || l.replace("],
-  ['a fence that never closes taken as code', 'node/reader.mjs', 'if (j < raw.length) { const cut', 'if (j >= raw.length) { j = raw.length - 1; } if (j < raw.length) { const cut'],
+  ['a fence that never closes taken as code', 'node/reader.mjs', '      if (found) { const cut', '      if (!found && j > i + 1) { found = true; j = raw.length - 1; }\n      if (found) { const cut'],
 ];
 let caught = 0;
 if (CONTROLS) {
