@@ -439,14 +439,18 @@ function writer(page, base) {
     }
     return out;
   };
+  // the lines of a list item go two spaces in, but the lines of a code block in it stay as the page wrote them (since the
+  // fix of 26.11.2026: Python in a step of a tutorial kept its indentation, and two spaces more in front of every line);
+  // its fences go in like every line, and tidy sets them at the margin again
+  const inset = (lines) => { let code = false; return lines.map((l) => { if (/^\s*```/.test(l)) { code = !code; return `  ${l}`; } return code ? l : `  ${l}`; }); };
   const list = (el, st, ordered) => {
     const items = []; let n = 0;
     const item = (k) => {
       const body = tidy(md(k, { ...st, depth: (st.depth || 0) + 1 })); if (!body || !/[\p{L}\p{N}]/u.test(body)) return;
       n++; const [head, ...rest] = body.split('\n').filter((l) => l.trim());
-      items.push(`${ordered ? `${n}.` : '-'} ${head}${rest.length ? `\n${rest.map((l) => `  ${l}`).join('\n')}` : ''}`);
+      items.push(`${ordered ? `${n}.` : '-'} ${head}${rest.length ? `\n${inset([head, ...rest]).slice(1).join('\n')}` : ''}`);
     };
-    for (const k of el.kids) { if (!isEl(k)) { if (k.trim()) items.push(one(entities(k))); continue; } if (k.tag === 'li') item(k); else if (k.tag === 'ul' || k.tag === 'ol') { const l = list(k, st, k.tag === 'ol'); if (l) items.push(l.split('\n').map((x) => `  ${x}`).join('\n')); } else item(k); }
+    for (const k of el.kids) { if (!isEl(k)) { if (k.trim()) items.push(one(entities(k))); continue; } if (k.tag === 'li') item(k); else if (k.tag === 'ul' || k.tag === 'ol') { const l = list(k, st, k.tag === 'ol'); if (l) items.push(inset(l.split('\n')).join('\n')); } else item(k); }
     return items.join('\n');
   };
   const table = (el, st) => {
