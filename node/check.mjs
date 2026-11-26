@@ -40,22 +40,30 @@ export async function publicDns(host) {
 }
 
 // one small read: manual redirects (each target checked again), a size cap and a time cap
-export async function grab(url, { max = 350_000, ms = 6000, ua = CHECK_UA } = {}) {
+// pdf (since 3.59, the reader): a PDF (by its type or its first bytes) comes back as its bytes, not as text, up to maxPdf
+export async function grab(url, { max = 350_000, ms = 6000, ua = CHECK_UA, pdf = false, maxPdf = max } = {}) {
   const ac = new AbortController(), timer = setTimeout(() => ac.abort(), ms);
   try {
     let u = url;
     for (let hop = 0; hop < 4; hop++) {
-      const r = await fetch(u, { redirect: 'manual', signal: ac.signal, headers: { 'user-agent': ua, accept: 'text/html,text/plain,application/json;q=0.9,*/*;q=0.5' } });
+      const r = await fetch(u, { redirect: 'manual', signal: ac.signal, headers: { 'user-agent': ua, accept: pdf ? 'text/html,text/plain,application/json;q=0.9,application/pdf;q=0.8,*/*;q=0.5' : 'text/html,text/plain,application/json;q=0.9,*/*;q=0.5' } });
       if (r.status >= 300 && r.status < 400 && r.headers.get('location')) {
         const next = new URL(r.headers.get('location'), u); try { await r.body?.cancel(); } catch {}
         if (next.protocol !== 'https:' && next.protocol !== 'http:') return { status: 0 };
         const h = safeHost(next.hostname); if (!h || !(await publicDns(h))) return { status: 0, blocked: true };
         u = next.href; continue;
       }
+      const type = r.headers.get('content-type') || ''; let cap = pdf && /pdf/i.test(type) ? Math.max(max, maxPdf) : max;
       const reader = r.body?.getReader(); const parts = []; let size = 0;
-      if (reader) for (;;) { const { done, value } = await reader.read(); if (done) break; size += value.length; parts.push(value); if (size > max) { try { await reader.cancel(); } catch {} break; } }
-      const all = new Uint8Array(Math.min(size, max)); let o = 0; for (const p of parts) { const take = Math.min(p.length, all.length - o); if (take <= 0) break; all.set(p.subarray(0, take), o); o += take; }
-      return { status: r.status, url: u, type: r.headers.get('content-type') || '', robotsTag: r.headers.get('x-robots-tag') || '', body: new TextDecoder().decode(all) };
+      if (reader) for (;;) {
+        const { done, value } = await reader.read(); if (done) break;
+        // a PDF sent without its type (application/octet-stream) is known by its first bytes, and gets the PDF's limit
+        if (pdf && !parts.length && value[0] === 0x25 && value[1] === 0x50 && value[2] === 0x44 && value[3] === 0x46) cap = Math.max(max, maxPdf);
+        size += value.length; parts.push(value); if (size > cap) { try { await reader.cancel(); } catch {} break; }
+      }
+      const all = new Uint8Array(Math.min(size, cap)); let o = 0; for (const p of parts) { const take = Math.min(p.length, all.length - o); if (take <= 0) break; all.set(p.subarray(0, take), o); o += take; }
+      if (pdf && (/pdf/i.test(type) || (all[0] === 0x25 && all[1] === 0x50 && all[2] === 0x44 && all[3] === 0x46))) return { status: r.status, url: u, type, robotsTag: r.headers.get('x-robots-tag') || '', body: '', bytes: all, cut: size > cap || undefined };
+      return { status: r.status, url: u, type, robotsTag: r.headers.get('x-robots-tag') || '', body: new TextDecoder().decode(all) };
     }
     return { status: 0 };
   } catch { return { status: 0 }; } finally { clearTimeout(timer); }

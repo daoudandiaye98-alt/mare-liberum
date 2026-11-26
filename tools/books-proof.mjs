@@ -850,7 +850,9 @@ const since0 = (t) => t.replace(/"runningSince":"[^"]*"/g, '"runningSince":"<sta
   // /de/preise, a sentence of llms.txt)
   .replace(/\n<p>\(\d+\) (?:Bezahlter Check|Paid check) \([\s\S]*?<\/p>/g, '')
   .replace(/<tr><td[^>]*>Bezahlter Check \([\s\S]*?<\/tr>/g, '')
-  .replace(/ Past 20 checks an hour per network the JSON answer is a 402: an x402 client pays 0\.05 USDC and checks on in the same request; GET \S+\/x402\/check\?site=<domain> sells a check any time\./g, '');
+  .replace(/ Past 20 checks an hour per network the JSON answer is a 402: an x402 client pays 0\.0[15] USDC and checks on in the same request; GET \S+\/x402\/check\?site=<domain> sells a check any time\./g, '')
+  // (and the paid read of 3.57: up to ten pages for one payment, with the warden; a clause of llms.txt)
+  .replace(/; GET \S+\/x402\/read\?url=<page>&url=<page> reads up to 10 pages for one 0\.01 USDC payment, each with a prompt-injection warden/g, '');
 // (and the version each tree names: a release bumps it, the answers stay the same)
 const vers = (t, v) => (v ? t.replaceAll(v, '<version>') : t);
 const sameText = (a, b, what) => { assert.equal(a.status, b.status, `${what}: status`); const x = vers(since0(a.text), MINE.version), y = vers(since0(b.text), THEIRS.version); assert.ok(x === y, `${what}: body ${x === y ? '' : firstDiff(x, y)}`); assert.deepEqual([...a.headers.entries()].sort(), [...b.headers.entries()].sort(), `${what}: headers`); };

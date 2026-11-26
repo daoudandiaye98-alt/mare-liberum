@@ -55,6 +55,7 @@
     "proof:mpp": "node tools/mpp-proof.mjs",
     "proof:readpay": "node tools/readpay-proof.mjs",
     "proof:checkpay": "node tools/checkpay-proof.mjs",
+    "proof:pdf": "node tools/pdf-proof.mjs",
     "proof:checkout": "node tools/checkout-proof.mjs"
   },
   "dependencies": {

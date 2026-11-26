@@ -1,10 +1,10 @@
-// Mare Liberum · proof of the paid check (3.56, node/checkpay.mjs): how AI agents see a website, as data, 0.05 USDC over x402
+// Mare Liberum · proof of the paid check (3.56, node/checkpay.mjs; 0.01 USDC since 3.57): how AI agents see a website, as data, over x402
 // in one step, at its own door and at /check past the free checks of the hour.
 // It proves, on a node in this process (handle, as serve.mjs answers), with a stubbed web, facilitator and DNS (no network):
 //   asking: GET and POST /x402/check without a payment answer 402 with the exact terms (PAYMENT-REQUIRED v2 with the bazaar
-//   extension and its JSON Schema, the v1 body discoverable), 0.05 USDC to the till's wallet; /openapi.json, the guide,
+//   extension and its JSON Schema, the v1 body discoverable), 0.01 USDC to the till's wallet; /openapi.json, the guide,
 //   /discovery/resources and /.well-known/x402 name the door; every 402 without a payment is counted in the funnel
-//   paying: only a signed transfer of exactly 0.05 USDC to the till's wallet (the paid read's cent, another wallet: refused,
+//   paying: only a signed transfer of exactly 0.01 USDC to the till's wallet (the five cents of before, another wallet: refused,
 //   the facilitator not asked); a payment buys once; a missing site or a site that cannot be checked is never charged (the
 //   claim given back, the same payment then buys a check); strict (refused, no verdict: nothing delivered)
 //   delivering: the check with its score and fixes, settled, the sale in the till's books (check: <host>), counted in the funnel
@@ -76,7 +76,7 @@ await call('/stats', { ip: '127.0.0.1' });
 immune.set({ mode: 'normal', rest: [], pace: { perMinute: 1_000_000, burst: 1_000_000 } });
 const WALLET = PAY.payTo, USDC = '0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913';
 let net = 0, site = 0; const fresh = () => `198.51.100.${++net}`, host = () => `s${++site}.checkpay-proof.dev`;
-const payment = ({ value = '50000', to = WALLET, version = 2, nonce = `0x${randomBytes(32).toString('hex')}` } = {}) => {
+const payment = ({ value = '10000', to = WALLET, version = 2, nonce = `0x${randomBytes(32).toString('hex')}` } = {}) => {
   const authorization = { from: PAYER, to, value: String(value), validAfter: '0', validBefore: String(Math.floor(T0 / 1000) + 300), nonce };
   const inner = { signature: `0x${'ab'.repeat(65)}`, authorization };
   const p = version === 2 ? { x402Version: 2, accepted: { scheme: 'exact', network: 'eip155:8453', amount: String(value), asset: USDC, payTo: to }, payload: inner } : { x402Version: 1, scheme: 'exact', network: 'base', payload: inner };
@@ -88,33 +88,33 @@ const funnel = async () => (await call('/funnel.json', { ip: '127.0.0.1' })).j;
 const spend = async (ip) => { for (let i = 0; i < 20; i++) { T0 += 500; const r = await call(`/check?site=${host()}&format=json`, { ip }); assert.equal(r.status, 200, `free check ${i + 1}: ${r.text.slice(0, 120)}`); assert.equal(typeof r.j.score, 'number'); } };
 
 console.log('asking');
-await proof('GET /x402/check without a payment: 402, exactly 0.05 USDC to the till, v2 with the bazaar extension and its JSON Schema, v1 discoverable; counted', async () => {
+await proof('GET /x402/check without a payment: 402, exactly 0.01 USDC to the till (0.05 until 3.57), v2 with the bazaar extension and its JSON Schema, v1 discoverable; counted', async () => {
   facilitator = null; const before = (await funnel()).asked.check || 0;
   const r = await call(`/x402/check?site=${host()}`, { ip: fresh() });
   assert.equal(r.status, 402);
-  const v2 = required(r); assert.equal(v2.x402Version, 2); assert.equal(v2.accepts[0].amount, '50000'); assert.equal(v2.accepts[0].payTo, WALLET); assert.equal(v2.resource.url, `${BASE}/x402/check`);
+  const v2 = required(r); assert.equal(v2.x402Version, 2); assert.equal(v2.accepts[0].amount, '10000'); assert.equal(v2.accepts[0].payTo, WALLET); assert.equal(v2.resource.url, `${BASE}/x402/check`);
   assert.equal(v2.extensions.bazaar.info.input.method, 'GET'); assert.equal(v2.extensions.bazaar.schema.properties.input.properties.queryParams.properties.site.type, 'string');
-  assert.equal(r.j.accepts[0].maxAmountRequired, '50000'); assert.equal(r.j.accepts[0].outputSchema.input.discoverable, true); assert.equal(r.j.amount_usd, '0.050000');
+  assert.equal(r.j.accepts[0].maxAmountRequired, '10000'); assert.equal(r.j.accepts[0].outputSchema.input.discoverable, true); assert.equal(r.j.amount_usd, '0.010000');
   const p = await call('/x402/check', { method: 'POST', ip: fresh(), body: { site: host() } }); assert.equal(p.status, 402);
   assert.equal((await funnel()).asked.check, before + 2); assert.equal((await funnel()).doors.check, `GET ${BASE}/x402/check?site=<domain>`);
 });
-await proof('/openapi.json names GET /x402/check (x-payment-info 0.05 USD, its 402) and the guide five sold doors; /discovery/resources and /.well-known/x402 list it', async () => {
+await proof('/openapi.json names GET /x402/check (x-payment-info 0.01 USD, its 402) and the guide five sold doors; /discovery/resources and /.well-known/x402 list it', async () => {
   const o = await call('/openapi.json', { ip: '127.0.0.1' }), op = o.j.paths['/x402/check']?.get;
-  assert.ok(op); assert.deepEqual(op['x-payment-info'], { price: { mode: 'fixed', currency: 'USD', amount: '0.05' }, protocols: [{ x402: {} }] }); assert.ok(op.responses['402']); assert.equal(op.security, undefined);
+  assert.ok(op); assert.deepEqual(op['x-payment-info'], { price: { mode: 'fixed', currency: 'USD', amount: '0.01' }, protocols: [{ x402: {} }] }); assert.ok(op.responses['402']); assert.equal(op.security, undefined);
   assert.match(o.j.info['x-guidance'], /Five doors are sold/); assert.match(o.j.info['x-guidance'], /\/x402\/check\?site=<domain>/);
   const d = await call('/discovery/resources', { ip: '127.0.0.1' }), it = d.j.items.find((x) => x.resource === `${BASE}/x402/check`);
-  assert.ok(it); assert.equal(it.accepts[0].amount, '50000'); assert.ok(it.extensions.bazaar.info.output.example.score); assert.equal(d.j.pagination.total, d.j.items.length);
+  assert.ok(it); assert.equal(it.accepts[0].amount, '10000'); assert.ok(it.extensions.bazaar.info.output.example.score); assert.equal(d.j.pagination.total, d.j.items.length);
   const w = await call('/.well-known/x402', { ip: '127.0.0.1' }); assert.ok(w.j.resources.includes(`${BASE}/x402/check`)); const blk = w.j.pricing.find((p) => p.capability === 'check');
-  assert.equal(blk.amount_usd, '0.05'); assert.equal(blk.maxAmountRequired, '50000'); assert.equal(blk.payTo, WALLET); assert.match(w.j.instructions, /four moves/);
+  assert.equal(blk.amount_usd, '0.01'); assert.equal(blk.maxAmountRequired, '10000'); assert.equal(blk.payTo, WALLET); assert.match(w.j.instructions, /four moves/);
 });
 
 console.log('paying');
-await proof('another amount (the paid read\'s cent too) or another wallet is refused before the facilitator is asked', async () => {
+await proof('another amount (the five cents of before too) or another wallet is refused before the facilitator is asked', async () => {
   facilitator = null; asked.length = 0;
-  const a = await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: payment({ value: '10000' }) });
+  const a = await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: payment({ value: '50000' }) });
   const b = await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: payment({ to: '0x3333333333333333333333333333333333333333' }) });
-  const c = await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: payment({ value: '10000', version: 1 }) });
-  assert.equal(a.status, 402); assert.match(a.j.error, /a paid check costs exactly 0\.050000/); assert.equal(b.status, 402); assert.match(b.j.error, /another wallet/); assert.equal(c.status, 402); assert.match(c.j.error, /exactly 0\.050000/);
+  const c = await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: payment({ value: '20000', version: 1 }) });
+  assert.equal(a.status, 402); assert.match(a.j.error, /a paid check costs exactly 0\.010000/); assert.equal(b.status, 402); assert.match(b.j.error, /another wallet/); assert.equal(c.status, 402); assert.match(c.j.error, /exactly 0\.010000/);
   assert.equal(asked.length, 0);
 });
 await proof('a payment without a site, or for a site that cannot be checked, is never charged; its claim is given back and buys a check afterwards', async () => {
@@ -140,10 +140,10 @@ await proof('a paid check: score and fixes, settled, in the till\'s books with t
   const r = await call(`/x402/check?site=https://${h}/some/page`, { ip, headers: pay });
   assert.equal(r.status, 200, r.text.slice(0, 300));
   assert.equal(r.j.host, h); assert.equal(typeof r.j.score, 'number'); assert.ok(r.j.score >= 50, `score ${r.j.score}`); assert.ok(Array.isArray(r.j.parts)); assert.equal(r.j.offers, undefined); assert.equal(r.j.page, `${BASE}/check/${h}`);
-  assert.equal(r.j.paid.status, 'settled'); assert.equal(r.j.paid.amount_usd, '0.050000'); assert.ok(r.h['payment-response']); assert.deepEqual(asked.map((x) => x.kind), ['verify', 'settle']);
+  assert.equal(r.j.paid.status, 'settled'); assert.equal(r.j.paid.amount_usd, '0.010000'); assert.ok(r.h['payment-response']); assert.deepEqual(asked.map((x) => x.kind), ['verify', 'settle']);
   const t1 = await ledger.treasury(); assert.equal(t1.total_count, (t0.total_count || 0) + 1);
-  const sale = (t1.last_5 || []).find((s) => s.q === `check: ${h}`); assert.ok(sale, JSON.stringify(t1.last_5)); assert.equal(sale.amount_usd, 0.05);
-  const f1 = await funnel(); assert.equal(f1.paid.check, (f0.paid.check || 0) + 1); assert.equal(Number(f1.paid_usd), Number(f0.paid_usd) + 0.05);
+  const sale = (t1.last_5 || []).find((s) => s.q === `check: ${h}`); assert.ok(sale, JSON.stringify(t1.last_5)); assert.equal(sale.amount_usd, 0.01);
+  const f1 = await funnel(); assert.equal(f1.paid.check, (f0.paid.check || 0) + 1); assert.equal(Number(f1.paid_usd), Number(f0.paid_usd) + 0.01);
   asked.length = 0; const again = await call(`/x402/check?site=${host()}`, { ip, headers: pay }); assert.equal(again.status, 402); assert.match(again.j.error, /buys once/); assert.equal(asked.length, 0);
 });
 
@@ -152,12 +152,12 @@ await proof('/check stays free under its limit; past 20 an hour its JSON answer 
   facilitator = null; asked.length = 0; const ip = fresh(); await spend(ip);
   const f0 = (await funnel()).asked.check || 0, h = host(), path = `/check?site=${h}&format=json`;
   const r = await call(path, { ip });
-  assert.equal(r.status, 402, r.text.slice(0, 200)); assert.equal(r.j.error.code, 'RESOURCE_EXHAUSTED'); assert.match(r.j.error.message, /calmer pace on check/); assert.match(r.j.error.message, /0\.05 USDC/);
-  const v2 = required(r); assert.equal(v2.resource.url, BASE + path); assert.equal(v2.accepts[0].amount, '50000'); assert.equal(v2.extensions, undefined, 'a site bought at /check is not listed as a service');
+  assert.equal(r.status, 402, r.text.slice(0, 200)); assert.equal(r.j.error.code, 'RESOURCE_EXHAUSTED'); assert.match(r.j.error.message, /calmer pace on check/); assert.match(r.j.error.message, /0\.01 USDC/);
+  const v2 = required(r); assert.equal(v2.resource.url, BASE + path); assert.equal(v2.accepts[0].amount, '10000'); assert.equal(v2.extensions, undefined, 'a site bought at /check is not listed as a service');
   assert.equal(r.j.accepts[0].outputSchema.input.discoverable, false); assert.equal((await funnel()).asked.check, f0 + 1); assert.equal(asked.length, 0);
   const page = await call(`/check/${host()}`, { ip, accept: 'text/html' }); assert.equal(page.status, 200); assert.match(page.h['content-type'], /text\/html/);
 });
-await proof('paying that 402 at /check: one payment of exactly 0.05 USDC buys the check where it was asked; a paid check is not one of the free ones', async () => {
+await proof('paying that 402 at /check: one payment of exactly 0.01 USDC buys the check where it was asked; a paid check is not one of the free ones', async () => {
   facilitator = settles(); asked.length = 0; const ip = fresh(); await spend(ip);
   const h = host(), r = await call(`/check?site=${h}&format=json`, { ip, headers: payment() });
   assert.equal(r.status, 200, r.text.slice(0, 200)); assert.equal(r.j.host, h); assert.equal(r.j.paid.status, 'settled'); assert.deepEqual(asked.map((x) => x.kind), ['verify', 'settle']);
@@ -172,7 +172,7 @@ let caught = 0, missed = 0;
 if (!process.argv.includes('--no-controls')) {
   console.log('\nnegative controls: each rule broken in a copy, the proof must fail there');
   const CONTROLS = [
-    ['another amount taken (a cent buys a check)', 'node/readpay.mjs', "if (v !== BigInt(t.atomic)) return", "if (false) return"],
+    ['another amount taken (five cents buy a check)', 'node/readpay.mjs', "if (v !== BigInt(t.atomic)) return", "if (false) return"],
     ['an unreachable site charged (the claim not given back)', 'node/core.mjs', "      if (!r || r.error || r.reachable === false || typeof r.score !== 'number') {\n        await book.release(claim);", "      if (false) {\n        await book.release(claim);"],
     ['a paid check counted against the free checks', 'node/lens.mjs', "if (!ctx?.paidCheck) { try { await allow(ctx, 'check', 20, 3600); }", "if (true) { try { await allow(ctx, 'check', 20, 3600); }"],
     ['no 402 without a payment (the door gives the check away)', 'node/core.mjs', "      if (!pay) { funnelOf(db, cfg).asked('check'); return checkRequired(t, { base, cors: CORS }); }", "      if (!pay) { funnelOf(db, cfg).asked('check'); return json({ score: 100 }); }"],

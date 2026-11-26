@@ -1,19 +1,19 @@
-// Mare Liberum · the paid check (since 3.56, "Der bezahlte Blick"): how AI agents see a website, as data, for 0.05 USDC over
+// Mare Liberum · the paid check (since 3.56, "Der bezahlte Blick"; 0.01 USDC since 3.57): how AI agents see a website, as data, over
 // x402 in one step. Why it exists: the check is the second thing agents use the sea for, and like the reader it only gave
 // itself away (20 checks an hour per network, then a limit). Machines that audit sites in series (SEO and GEO tools, agents
 // that prepare a site for agents) had no way to pay for more; an x402 client pays only where a door answers 402.
-//   price    exactly 0.05 USDC on Base (x402 "exact", EIP-3009) to the till's wallet; any other amount is not taken
+//   price    exactly 0.01 USDC on Base (x402 "exact", EIP-3009) to the till's wallet (0.05 until 3.57); any other amount is not taken
 //   order    as the paid read's (node/readpay.mjs): the payment checked as far as it can be without the facilitator and
 //            claimed once (the same claim as the reader credit's: a payment buys once, anywhere); then the site is checked;
 //            only a site that answered is sold: an unreachable or invalid site costs nothing and the claim is given back.
 //            Then the till's own path (node/pay.mjs takePayment, strict) verifies, delivers and settles
 //   free     /check stays free as before (20 checks an hour per network); past that its JSON answer is a 402 with the terms
-//            of that site (since 3.56), and one payment of exactly 0.05 USDC there buys the check where it was asked
+//            of that site (since 3.56), and one payment of exactly the price there buys the check where it was asked
 //   found    only GET /x402/check is listed in the x402 indexes (discoverable, the bazaar extension with JSON Schema)
 import { USDC_BASE } from './pricing.mjs';
 import { usd6, b64, exactFor } from './readpay.mjs';
 
-export const CHECKPAY = Object.freeze({ cents: 5, micro: 50_000, path: '/x402/check' });
+export const CHECKPAY = Object.freeze({ cents: 1, micro: 10_000, path: '/x402/check' });
 
 // the call and its answer, for discovery catalogs (x402 "bazaar"), also as JSON Schema (AgentCash and x402scan build the call
 // from schema.properties.input.properties.queryParams and read the answer from …output.properties.example)
@@ -22,7 +22,7 @@ export function checkBazaar(base) {
   return {
     info: {
       input: { type: 'http', method: 'GET', queryParams: { site: 'example.com' } },
-      output: { type: 'json', example: { host: 'example.com', score: 64, grade: 'C', parts: { robots: 'all 18 AI agents may read', llms_txt: false, agent_card: false, sitemap: true, text_without_js: true }, fixes: ['publish /llms.txt: what the site is and where its main pages are'], page: `${b}/check/example.com`, paid: { amount_usd: '0.050000', status: 'settled', treasury: `${b}/treasury` } } },
+      output: { type: 'json', example: { host: 'example.com', score: 64, grade: 'C', parts: { robots: 'all 18 AI agents may read', llms_txt: false, agent_card: false, sitemap: true, text_without_js: true }, fixes: ['publish /llms.txt: what the site is and where its main pages are'], page: `${b}/check/example.com`, paid: { amount_usd: '0.010000', status: 'settled', treasury: `${b}/treasury` } } },
     },
     schema: { $schema: 'https://json-schema.org/draft/2020-12/schema', type: 'object', required: ['input'], properties: {
       input: { type: 'object', required: ['type', 'method', 'queryParams'], properties: {
@@ -38,7 +38,7 @@ export function checkBazaar(base) {
 // sells the check there too, then not listed in the indexes)
 export function checkTerms(cfg, { base, resource: at = null }) {
   const b = String(base || '').replace(/\/+$/, ''), resource = at || `${b}${CHECKPAY.path}`, atomic = String(CHECKPAY.micro), listed = !at;
-  const description = 'Mare Liberum: how AI agents see a website, as data: robots.txt rules for 18 AI agents, llms.txt, agent card, MCP card, sitemap and the text without JavaScript, with a score out of 100 and the fixes; 0.05 USDC per check, no account, no key';
+  const description = 'Mare Liberum: how AI agents see a website, as data: robots.txt rules for 18 AI agents, llms.txt, agent card, MCP card, sitemap and the text without JavaScript, with a score out of 100 and the fixes; 0.01 USDC per check, no account, no key';
   const extra = { name: 'USD Coin', version: '2' };
   const outputSchema = {
     input: listed ? { type: 'http', method: 'GET', discoverable: true, queryParams: { site: { type: 'string', required: true, description: 'the website to check, e.g. example.com' } } } : { type: 'http', method: 'GET', discoverable: false },

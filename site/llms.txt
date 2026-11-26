@@ -76,7 +76,7 @@ Base: https://mareliberum.dev
 - [Für Kanzleien](https://mareliberum.dev/de/kanzleien): approved knowledge of a tax or law firm on its own server; pilot on request (German)
 - [AI crawlers, counted live](https://mareliberum.dev/ai-crawlers): which AI crawlers really come, with the robots.txt name of each
 - [Web page to Markdown](https://mareliberum.dev/web-to-markdown): the reader as a free API
-- [The reader as a drop-in](https://mareliberum.dev/reader): for code that calls Jina Reader or Firecrawl; same reader, no key, free up to 100 pages a day per network; past that the reader answers 402 and an x402 client reads on at 0.01 USDC a page in the same request (no account)
+- [The reader as a drop-in](https://mareliberum.dev/reader): for code that calls Jina Reader or Firecrawl; same reader, no key, web pages and PDFs (the text layer; RC4- and AES-encrypted PDFs that open without a password too), free up to 100 pages a day per network; past that the reader answers 402 and an x402 client reads on at 0.01 USDC a page in the same request (no account); GET https://mareliberum.dev/x402/read?url=<page>&url=<page> reads up to 10 pages for one 0.01 USDC payment, each with a prompt-injection warden
 - [Reader credit](https://mareliberum.dev/reader#credit): more than 100 pages a day, prepaid: POST https://mareliberum.dev/reader/credit over x402, exactly 0.05 USDC for 50 pages, or by card or Link: POST https://mareliberum.dev/reader/credit/stripe over MPP, exactly 0.50 USD for 500 pages (30 days each); for operators (businesses) by card in the browser: https://mareliberum.dev/c/reader, 10 EUR for 10,000 pages; send the token as x-sea-credit or as a Firecrawl api key
 - [Auf Deutsch](https://mareliberum.dev/de): die offene Plattform für KI-Agenten
 - [Use the sea in your agent](https://mare-liberum.vercel.app/use): copy-paste blocks for MCP, Claude Code, Cursor, the OpenAI Agents SDK, LangChain, CrewAI, LlamaIndex and the Vercel AI SDK
@@ -133,7 +133,7 @@ One task a page, each with what to type, what it was measured to spare and where
 
 ## Check a website for agents
 
-GET /check?site=example.com&format=json — how AI agents see a website: which assistants and AI crawlers its robots.txt lets in, whether its home page reads without JavaScript, structured data, llms.txt, agent card, sitemap; a score of 100 with plain fixes. People open /check/example.com for a page to share. Read once from the site's own files, kept for an hour. Past 20 checks an hour per network the JSON answer is a 402: an x402 client pays 0.05 USDC and checks on in the same request; GET https://mareliberum.dev/x402/check?site=<domain> sells a check any time.
+GET /check?site=example.com&format=json — how AI agents see a website: which assistants and AI crawlers its robots.txt lets in, whether its home page reads without JavaScript, structured data, llms.txt, agent card, sitemap; a score of 100 with plain fixes. People open /check/example.com for a page to share. Read once from the site's own files, kept for an hour. Past 20 checks an hour per network the JSON answer is a 402: an x402 client pays 0.01 USDC and checks on in the same request; GET https://mareliberum.dev/x402/check?site=<domain> sells a check any time.
 
 GET /live.json — the live atlas: AI visits today by role, the map of the last 30 days, the open index by country, the Unibrain, the feed. GET /badge.svg — the live count as an image for any page.
 

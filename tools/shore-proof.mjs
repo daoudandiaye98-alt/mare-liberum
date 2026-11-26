@@ -83,7 +83,7 @@ await proof('x402 discovery of this origin in the Bazaar shape: the paid move wi
   assert.equal(d.x402Version, 2); assert.equal(d.items.length, 3); const it = d.items[0]; // since 3.48 the paid read stands second, since 3.56 the paid check third
   assert.equal(it.resource, `${BASE}/route`); assert.equal(it.type, 'http'); assert.equal(it.accepts[0].amount, '20000'); assert.equal(it.accepts[0].network, 'eip155:8453'); assert.equal(it.accepts[0].payTo, HOUSE_WALLET);
   assert.equal(it.extensions.bazaar.info.input.method, 'POST'); assert.equal(it.extensions.bazaar.info.output.type, 'json'); assert.deepEqual(d.pagination, { limit: 3, offset: 0, total: 3 });
-  const ck = d.items[2]; assert.equal(ck.resource, `${BASE}/x402/check`); assert.equal(ck.accepts[0].amount, '50000'); assert.equal(ck.accepts[0].payTo, HOUSE_WALLET); assert.equal(ck.extensions.bazaar.info.input.method, 'GET');
+  const ck = d.items[2]; assert.equal(ck.resource, `${BASE}/x402/check`); assert.equal(ck.accepts[0].amount, '10000'); assert.equal(ck.accepts[0].payTo, HOUSE_WALLET); assert.equal(ck.extensions.bazaar.info.input.method, 'GET');
   const rd = d.items[1]; assert.equal(rd.resource, `${BASE}/x402/read`); assert.equal(rd.accepts[0].amount, '10000'); assert.equal(rd.accepts[0].payTo, HOUSE_WALLET); assert.equal(rd.extensions.bazaar.info.input.method, 'GET');
 });
 await proof('the 402 lets x402 catalogs list the move: the bazaar extension in PAYMENT-REQUIRED (v2) and outputSchema with discoverable in the v1 terms', async () => {
