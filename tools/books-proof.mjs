@@ -919,7 +919,9 @@ const since0 = (t) => t.replace(/"runningSince":"[^"]*"/g, '"runningSince":"<sta
   .replace(/, and the pilot past its free packs likewise with the terms of a pack for 0\.05 USDC \(the pilot, below\)/g, '')
   .replace(/\n<p>\(\d+\) (?:Der Lotse|The pilot) \([\s\S]*?<\/p>/g, '')
   .replace(/<tr><td[^>]*>Der Lotse \([\s\S]*?<\/tr>/g, '')
-  .replace(/## Ask a website, its docs or a PDF a question \(the pilot\)\n\n[^\n]*\n\n/g, '');
+  .replace(/## Ask a website, its docs or a PDF a question \(the pilot\)\n\n[^\n]*\n\n/g, '')
+  // (and the reads of the Poppy file of 3.77 in /open.json, proven by tools/poppy-proof.mjs)
+  .replace(/\n"poppy":\{\n[\s\S]*?"note":"reads of the Poppy file[^"]*"\n\},/g, '');
 // (and the version each tree names: a release bumps it, the answers stay the same)
 const vers = (t, v) => (v ? t.replaceAll(v, '<version>') : t);
 const sameText = (a, b, what) => { assert.equal(a.status, b.status, `${what}: status`); const x = vers(since0(a.text), MINE.version), y = vers(since0(b.text), THEIRS.version); assert.ok(x === y, `${what}: body ${x === y ? '' : firstDiff(x, y)}`); assert.deepEqual([...a.headers.entries()].sort(), [...b.headers.entries()].sort(), `${what}: headers`); };

@@ -45,7 +45,8 @@ export const COSTS = [{ what: 'the server: one Hetzner CX23 (2 vCPU, 4 GB) behin
 // then the page says how long this node has run it. No day is written before it happened.
 const REPO = 'https://github.com/daoudandiaye98-alt/mare-liberum';
 export const RELEASES = [
-  ['3.76.0', null, null, 'the record book watches first a fixed start list (config/watch-seed.json): product pages of the stores whose commission programmes the sea applied for and of the goods people ask for most, at most 2 per store, checked first every day; a page that gave no comparison with another store on 2 days in a row rests 30 days and leaves the watch; /seen.json names the pages of the start list and the pages that rest'],
+  ['3.77.0', null, null, 'the Poppy file: /.well-known/poppy.json (Personal Agent Protocol 1.0, which Meta Muse reads first on a site) names Mare Liberum, its OpenAPI description led by the free deal check and the full MCP server /mcp, with no auth block, so a personal agent knows it may call the sea without a login; reads of the file are counted per day by the name each reader gives itself (/open.json, poppy)'],
+  ['3.76.0', '2026-11-27T13:32:00+01:00', 70, 'the record book watches first a fixed start list (config/watch-seed.json): product pages of the stores whose commission programmes the sea applied for and of the goods people ask for most, at most 2 per store, checked first every day; a page that gave no comparison with another store on 2 days in a row rests 30 days and leaves the watch; /seen.json names the pages of the start list and the pages that rest'],
   ['3.75.0', '2026-11-27T12:35:11+01:00', 69, 'the price in the store\'s own currency: a Shopify store shows the sea\'s reader in Germany its euro prices, so a product page in another currency than the store\'s own (its /meta.json) or the one asked for is read once more with ?currency=, the deal check compares and keeps that price, and the answer and the open record say in product.market what the reader was first shown and why'],
   ['3.74.0', '2026-11-27T11:56:09+01:00', 68, 'the privacy notice says where a commission link leads: through the network it names (for example Awin), which may set its own cookies, while the sea sets none and learns only totals per store, never who bought; and the shipped config/commission.json may name only shops whose Awin programme accepted the publisher of the sea, each with its Awin id, never an Amazon tag or a wrapper'],
   ['3.73.0', '2026-11-27T11:31:52+01:00', 67, 'the quote of the open price records at /seen/quote (page and JSON): how often a checked product page was cheaper elsewhere, the median saving at the lowest other store without a caution and how many pages state a list price of their own, apart for agents\' checks and the sea\'s own sample; /sitemaps/seen.xml now names every record open to search engines that is still kept, from a list of its own'],
@@ -287,12 +288,14 @@ export function createOpen(h) {
 // sea: the flow (node/flow.mjs); ledger: the till and the steps through the sea (node/ledger.mjs). A part that does not
 // answer is left out and says so; nothing is guessed in its place.
 // toll (since 3.37): what the toll of the lossless levers brought in, from its own books (node/toll.mjs totals); tollOn: it acts
-export async function openOf({ sea, ledger, version, base, tools = [], toll = null, tollOn = false }) {
+export async function openOf({ sea, ledger, version, base, tools = [], toll = null, tollOn = false, poppy = null }) {
   const safe = (f, fb = null) => Promise.resolve().then(f).catch(() => fb);
   const [work, visits, mcp, brain, areas, savings, pulse, treasury, flow, csvDays] = await Promise.all([safe(() => sea.workDays(OPEN.days), null),
     safe(() => sea.censusDays(OPEN.days), []), safe(() => sea.mcpTools(OPEN.days), null), safe(() => sea.brainStats(), null), safe(() => sea.areasLive(), null),
     safe(() => sea.savings(), null), safe(() => ledger?.pulse(), null), safe(() => ledger?.treasury(), null), safe(() => sea.pulse(), null), safe(() => sea.censusDays(OPEN.csvDays), [])]);
   const tt = toll ? await safe(toll, null) : null;
+  // (since 3.77) the reads of the Poppy file today, by the name each reader gives itself (node/poppy.mjs)
+  const pp = poppy ? await safe(poppy, null) : null;
   const at = new Date().toISOString(), today = at.slice(0, 10), known = new Set(tools);
   const days = visits.map((d) => ({ day: d.day, recorded: !!d.kinds, today: d.day === today, kinds: d.kinds ? Object.fromEntries(KIND_ORDER.map((k) => [k, Number(d.kinds[k]) || 0])) : null }));
   const firstRecord = csvDays.find((d) => d.kinds)?.day || null;
@@ -322,6 +325,7 @@ export async function openOf({ sea, ledger, version, base, tools = [], toll = nu
     money: { till: treasury ? { todayUsd: t.today_usd ?? 0, totalUsd: t.total_usd ?? 0, sales: t.total_count ?? 0, paidToday: t.today_paid ?? 0, freeSamplesToday: t.today_free ?? 0, totalUsdUnconfirmed: t.total_usd_unconfirmed ?? 0, source: t.source || null } : null,
       ...(tt ? { toll: { on: !!tollOn, settledUsd: tt.settledMicro / 1e6, payments: tt.payments, onItsWayUsd: tt.onItsWayMicro / 1e6, onItsWay: tt.onItsWay, todaySettledUsd: tt.todaySettledMicro / 1e6, todayPayments: tt.todayPayments, what: 'the toll of the lossless levers above 10,000 saved tokens per network and day (20 % of the saving at USD 2 per million tokens), settled over x402; exact to the millionth from the toll\'s own books in this node\'s state, apart from the paid route and never in the database\'s sales', rule: `${base}/engine#toll` } } : {}),
       what: 'Money the node itself counts: the paid route over x402 (POST /route, 0.02 USDC on Base), and since 3.37 the toll of the lossless levers (toll), apart. Money seen to arrive on chain counts; claims count apart as unconfirmed; tests and free samples never count as money', treasury: `${base}/treasury` },
+    ...(pp ? { poppy: pp } : {}),
     costs: COSTS.map((c) => ({ what: c.what, eurPerMonth: c.eurPerMonth, vatIncluded: c.vatIncluded, statedBy: c.statedBy })),
     releases: RELEASES, current: { version, released: RELEASES.find((r) => r.version === version)?.at || null },
     endpoints: ENDPOINTS.flatMap(([group, list]) => list.map(([path, what, since]) => ({ group, path, url: `${base}${path}`, what, ...(since ? { since } : {}) }))),

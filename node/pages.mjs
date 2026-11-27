@@ -280,6 +280,7 @@ export function botsParts(base, d = {}) {
     limits: `${perHour} deal checks an hour per network are free (up to ${offers} other offers each). For more, ${base}/x402/deal answers for 0.01 USDC over x402, or take a prepaid package at ${base}/offers.`,
     money: 'Mare Liberum never pays and never holds money: you buy at the merchant\'s own checkout, when you agree. Where a checkout link earns the sea a commission, the answer says so; it never changes the order or the verdict.',
     count: `via=${BOTS.via} only counts how many checks come from this routine: one number a day, nothing about you or your pages.`,
+    poppy: `${base}/.well-known/poppy.json`,
   };
 }
 // (since 3.70) the free deal check first, where assistants that can only open a link arrive: ChatGPT-User reads /earn, /about
@@ -333,6 +334,10 @@ Assistants that read skills (Grok, Claude, Codex and others) take the deal check
 
 ${p.count}
 
+## Meta Muse and other personal agents
+
+Agents that speak Poppy (the Personal Agent Protocol) read ${p.poppy} first: it names the deal check and the full server /mcp, with no login.
+
 ## Limits
 
 ${p.limits}
@@ -350,6 +355,7 @@ export function botsPage(base, d) {
 <h2>xAI API</h2><p>Add this to the tools of a request:</p>${code(p.xai)}
 <h2>The skill</h2><p>Assistants that read skills (Grok, Claude, Codex and others) take the deal check as one file: <a href="${esc(p.skill)}">${esc(p.skill)}</a></p>
 <h2>A routine for every morning</h2>${code(p.routine)}<p class="muted"><small>${esc(p.count)}</small></p>
+<h2>Meta Muse and other personal agents</h2><p>Agents that speak Poppy (the Personal Agent Protocol) read <a href="${esc(p.poppy)}">${esc(p.poppy)}</a> first: it names the deal check and the full server /mcp, with no login.</p>
 <h2>Limits</h2><p>${esc(p.limits).replace(esc(`${base}/offers`), `<a href="/offers">${esc(`${base}/offers`)}</a>`)}</p><p>${esc(p.money)}</p>
 <p class="muted"><small>As Markdown: <a href="${BOTS.path}.md">${esc(base)}${BOTS.path}.md</a> · <a href="/deal">The deal check</a> · <a href="/seen">Open price records</a> · <a href="/terms#s4">Terms</a></small></p>`;
   return page(base, BOTS.path, `${p.title} · Grok Bot, xAI API, a daily routine · Mare Liberum`, p.lead, body, { '@context': 'https://schema.org', '@type': 'HowTo', name: p.title, description: p.lead, url: `${base}${BOTS.path}` }, '/og.png');
