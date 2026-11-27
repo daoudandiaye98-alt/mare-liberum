@@ -1,7 +1,7 @@
 SPEC  GET /session?as=key (first choice) · POST /session (the same key as JSON)  ·  Mare Liberum 3.78.0 (key), 3.79.0 (server-timing,
       next_step, contact book), 3.80.0 (the key by GET, x-sea-session first, the no-wallet words first in every 402),
       3.81.0 (calls_left and calls_used in every keyed answer, way_out at 3 and 0, the topup POST /route?a=topup)
-Code: node/session.mjs, node/core.mjs (route /session, sessionDoor)  ·  Proof: tools/session-proof.mjs (22 proofs, 12 controls),
+Code: node/session.mjs, node/core.mjs (route /session, sessionDoor)  ·  Proof: tools/session-proof.mjs (25 proofs, 16 controls),
 tools/contacts-proof.mjs (K2 proof)  ·  Live since 27.11.2026 15:50 (3.78.0)
 
 SUCCESS BAR (K2)
