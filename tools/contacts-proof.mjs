@@ -302,7 +302,7 @@ if (!process.argv.includes('--no-controls')) {
   console.log('\nnegative controls: each rule broken in a copy, the proof must fail there');
   const CONTROLS = [
     ['a key that opened a door stays a probe (3.81)', 'node/contacts.mjs', "if (e.kind === 'probe' && c.rolle !== 'agent_with_key') {", 'if (false) {'],
-    ['no next_step in the 402', 'node/core.mjs', 'return new Response(JSON.stringify({ ...body, next_step }), { status: 402,', 'return res; new Response(JSON.stringify({ ...body, next_step }), { status: 402,'],
+    ['no next_step in the 402', 'node/core.mjs', 'return new Response(JSON.stringify({ ...body, next_step, ...(supply', 'return res; new Response(JSON.stringify({ ...body, next_step, ...(supply'],
     ['the session step without as=key (the key cannot be kept from the answer)', 'node/core.mjs', "const open = { method: 'GET', url: `${base}/session?as=key`, keep: 'key' };", "const open = { method: 'GET', url: `${base}/session`, keep: 'key' };"],
     ['no way out without a wallet in the 402 (error and header)', 'node/core.mjs', "headers.set('x-sea-no-wallet', hint);", "headers.set('x-sea-other', hint);"],
     ['GET /session?as=key gives no key', 'node/core.mjs', "if (url.searchParams.get('as') === 'key' && req.method === 'GET' && !", "if (false && !"],
