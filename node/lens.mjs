@@ -9,7 +9,7 @@ import { PACKPAY } from './packpay.mjs';
 import { productOf } from './lean.mjs';
 import { DEAL, MARKET, dealTarget, dealQuery, dealKey, remembered, dealOf, wordsOf, shopifyPage, homeOf, inCurrency, marketOf } from './deal.mjs';
 import { SEEN, recordKey, recordOf, recordRef, canonical, lineOf } from './seen.mjs';
-import { BOOK, bookHost, freshOf, nextVisit, watchAfter, seriesAfter, bookSays } from './book.mjs';
+import { BOOK, bookHost, freshOf, nextVisit, watchAfter, seriesAfter, bookSays, dryAfter, isDry } from './book.mjs';
 
 const FEED = new Set(['read', 'whale', 'brevet', 'seal', 'buoy', 'path', 'knock', 'enter', 'answer', 'ask', 'tide', 'job', 'job_done', 'note', 'mark', 'reflex', 'learn', 'course', 'outcome']);
 export const TAG = /^[a-z0-9]{4,12}$/;
@@ -171,37 +171,45 @@ export function createLens(h) {
     // 3.69 also how many of them came from the routine of /for/bots
     // the record book (node/book.mjs, since 3.72): one visit per step, called after a tide; the state it keeps is its own: the
     // visits and records of the day, the pages visited today, the watch, the cursor over the current's picks, the stores visited
-    // within the gap and one series of prices per page
-    async bookStep(base = '') {
+    // within the gap and one series of prices per page; since 3.76 also the start list (`seed`, the pages of
+    // config/watch-seed.json as the node read them) goes first, and the pages that rest dry are kept in book:dry
+    async bookStep(base = '', seed = []) {
       const day = now().slice(0, 10), tried = Number(await kv.get(`book:tried:${day}`).catch(() => 0)) || 0;
       if (!(tried < BOOK.perDay)) return { calm: true, day, tried };
       const arr = (x) => (Array.isArray(x) ? x : []);
-      const [watch, done, recent, cur0] = await Promise.all(['book:watch', `book:done:${day}`, 'tide:recent', 'book:cursor'].map((k) => kv.get(k).catch(() => null)));
+      const [watch0, done, recent, cur0, dry] = await Promise.all(['book:watch', `book:done:${day}`, 'tide:recent', 'book:cursor', 'book:dry'].map((k) => kv.get(k).catch(() => null)));
+      const seeds = arr(seed), watch = arr(watch0).filter((u) => !seeds.includes(u)), resting = (u) => isDry(dry, u, day);
       const slugs = arr(recent), cur = (Number(cur0) || 0) % Math.max(slugs.length, 1), take = slugs.length ? Array.from({ length: Math.min(BOOK.scan, slugs.length) }, (_, i) => slugs[(cur + i) % slugs.length]) : [];
       const fresh = freshOf(await Promise.all(take.map((s) => kv.get(`tide:${s}`).catch(() => null))));
       if (slugs.length) await kv.set('book:cursor', (cur + take.length) % slugs.length, BOOK.keepDays * DAY);
-      const hosts = [...new Set([...arr(watch), ...fresh].map(bookHost).filter(Boolean))];
+      const hosts = [...new Set([...seeds, ...watch, ...fresh].map(bookHost).filter(Boolean))];
       const busy = new Set((await Promise.all(hosts.map(async (x) => ((await kv.get(`book:host:${x}`).catch(() => null)) ? x : null)))).filter(Boolean));
-      const visit = nextVisit({ tried, watch: arr(watch), done: arr(done), fresh, busy: (x) => busy.has(x) });
+      const visit = nextVisit({ tried, seed: seeds, watch, done: arr(done), fresh, busy: (x) => busy.has(x), dry: resting });
       if (!visit) return { calm: true, day, tried };
       // the visit is counted before the page is read, so a page that hangs or fails still uses its place of the day
       await kv.set(`book:tried:${day}`, tried + 1, 3 * DAY);
       await kv.set(`book:done:${day}`, [...arr(done), visit.url].slice(-BOOK.perDay * 2), 3 * DAY);
       await kv.set(`book:host:${bookHost(visit.url)}`, 1, BOOK.hostGapS);
       let ans = null; try { ans = await lens.deal({ url: visit.url, base }, { ip: 'sea-book', who: 'the sea', whoKind: 'sea', book: true }); } catch {}
-      const rec = ans?.record || null;
-      await kv.set('book:watch', watchAfter(arr(watch), visit, !!rec), 400 * DAY);
+      const rec = ans?.record || null, compared = !!rec && !!ans?.verdict?.word && ans.verdict.word !== 'no-comparison';
+      const dry2 = dryAfter(dry, visit.url, day, compared);
+      await kv.set('book:dry', dry2, 400 * DAY);
+      const seeded = seeds.filter((u) => !isDry(dry2, u, day)).length;
+      await kv.set('book:watch', watchAfter(watch, visit, !!rec, { seeded, dry: isDry(dry2, visit.url, day) }), 400 * DAY);
       if (rec) {
         await kv.set(`book:records:${day}`, (Number(await kv.get(`book:records:${day}`).catch(() => 0)) || 0) + 1, 3 * DAY);
         const sk = `book:series:${(await sha(visit.url)).slice(0, 32)}`;
         await kv.set(sk, seriesAfter(await kv.get(sk).catch(() => null), { day, price: ans.product?.price, currency: ans.product?.currency, record: rec.id }), BOOK.keepDays * DAY);
       }
-      return { day, url: visit.url, kind: visit.kind, record: rec?.id || null };
+      return { day, url: visit.url, kind: visit.kind, record: rec?.id || null, compared };
     },
-    // the book's numbers of today (UTC) and one page's series of prices (oldest first), as /seen says them
-    async bookToday() {
-      const day = now().slice(0, 10), [tried, records, watch] = await Promise.all([`book:tried:${day}`, `book:records:${day}`, 'book:watch'].map((k) => kv.get(k).catch(() => null)));
-      return bookSays({ day, tried: Number(tried) || 0, records: Number(records) || 0, watch: Array.isArray(watch) ? watch.length : 0 });
+    // the book's numbers of today (UTC) and one page's series of prices (oldest first), as /seen says them; since 3.76 with the
+    // pages of the start list that do not rest and the pages that rest dry
+    async bookToday(seed = []) {
+      const day = now().slice(0, 10), [tried, records, watch, dry] = await Promise.all([`book:tried:${day}`, `book:records:${day}`, 'book:watch', 'book:dry'].map((k) => kv.get(k).catch(() => null)));
+      const seeds = (Array.isArray(seed) ? seed : []), w = (Array.isArray(watch) ? watch : []).filter((u) => !seeds.includes(u));
+      const resting = Object.keys(dry && typeof dry === 'object' ? dry : {}).filter((u) => isDry(dry, u, day)).length;
+      return bookSays({ day, tried: Number(tried) || 0, records: Number(records) || 0, watch: w.length, seed: seeds.filter((u) => !isDry(dry, u, day)).length, dry: resting });
     },
     async bookSeries(url) { const u = String(url || ''); if (!u) return []; const s = await kv.get(`book:series:${(await sha(u)).slice(0, 32)}`).catch(() => null); return Array.isArray(s) ? s : []; },
     // (since 3.75) a Shopify store's own currency and country, as its /meta.json names them, kept a week per store; a store whose
