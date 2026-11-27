@@ -15,7 +15,11 @@
 //            needs' pages of node/needs.mjs: fewer than 3 prices is no page to index); every other one says noindex
 //   not      an endorsement of any store and no advice: the page says so, and keeps the deal check's caution beside an offer
 //            far below the others
+//   by       (since 3.72) a record made by the sea's own daily sample (node/book.mjs) says so: by: "sea" and the sentence of the
+//            book, on its page and in the list; a record an agent's check made carries neither and is unchanged
 
+// the sentence a record of the record book carries (node/book.mjs names it BOOK.said)
+export const BOOK_SAID = 'Made by the sea\'s own daily sample of product pages (at most 40 a day, the same watched pages every day, one read per store an hour, robots.txt respected), not by an agent\'s check.';
 export const SEEN = Object.freeze({ path: '/seen', keepDays: 90, perDay: 400, recent: 200, list: 60, index: 2, offers: 6 });
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -45,7 +49,7 @@ export function recordKey(ans, day) {
   return [store, url, p.price, p.currency, day, ans.verdict?.word || '', ans.cheapest?.where === 'another store' ? ans.cheapest.price : ''].join('|');
 }
 // the record from a deal check's answer (node/deal.mjs dealOf), seen at `at`: only public facts, nothing of who asked
-export function recordOf(ans, { id, at, base = '' }) {
+export function recordOf(ans, { id, at, base = '', by } = {}) {
   const b = String(base || '').replace(/\/+$/, ''), p = ans.product, store = ans.page?.host || hostOf(p.url);
   const url = canonOf(p.url && hostOf(p.url) === store ? p.url : ans.page?.url);
   const offers = (Array.isArray(ans.elsewhere) ? ans.elsewhere : []).slice(0, SEEN.offers).map((o) => ({ store: o.store || null, title: String(o.title || '').slice(0, 120), price: o.price, currency: o.currency,
@@ -55,6 +59,7 @@ export function recordOf(ans, { id, at, base = '' }) {
     record: 'price record', id, url: `${b}${SEEN.path}/${id}`, seen_at: at, day: at.slice(0, 10),
     product: { name: p.name || null, brand: p.brand || null, gtin: p.gtin || null, price: p.price, ...(p.price_is ? { price_is: p.price_is } : {}), list_price: p.list_price ?? null, currency: p.currency, in_stock: p.in_stock ?? null, url },
     store,
+    ...(by === 'sea' ? { by: 'sea', sample: BOOK_SAID } : {}),
     verdict: { word: ans.verdict?.word || null, lines: (ans.verdict?.lines || []).map((l) => String(l).slice(0, 400)).slice(0, 8) },
     elsewhere: offers, elsewhere_found: n, median: ans.median || null,
     seen_before: ans.seen?.checks ? { checks: ans.seen.checks, since: ans.seen.since, low: ans.seen.low, high: ans.seen.high } : { checks: 0 },
@@ -117,7 +122,8 @@ export function recordPage(rec, base) {
 <body><main><h1>${esc(recordHeadline(rec))}</h1>
 <p class="lead">${esc(lead)}</p>
 <p class="box"><b>${esc(money(p.price, cur))}</b>${p.price_is ? ' (from: its lowest variant)' : ''} at <b>${esc(rec.store)}</b>${p.in_stock === true ? ', in stock' : p.in_stock === false ? ', out of stock' : ''}${Number.isFinite(p.list_price) && p.list_price > p.price ? ` · its own list price ${esc(money(p.list_price, cur))}` : ''}<br><small>seen ${esc(when(rec.seen_at))} on <a href="${esc(p.url)}" rel="nofollow noopener">the product page</a>${p.brand ? ` · ${esc(p.brand)}` : ''}${p.gtin ? ` · GTIN ${esc(p.gtin)}` : ''}</small></p>
-<h2>What the deal check found</h2><ul class="v">${rec.verdict.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
+${rec.by === 'sea' ? `<p><small>${esc(rec.sample || BOOK_SAID)}</small></p>
+` : ''}<h2>What the deal check found</h2><ul class="v">${rec.verdict.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
 ${rows ? `<h2>The same item at other stores</h2><table><thead><tr><th>Store</th><th>Price</th><th></th></tr></thead><tbody>${rows}</tbody></table><p><small>${rec.elsewhere_found} matching offer${rec.elsewhere_found === 1 ? '' : 's'} in stock found${rec.median ? ` · median of all prices ${esc(money(rec.median.price, rec.median.currency))} (of ${rec.median.of})` : ''}</small></p>` : '<p class="mut">No matching offer at another Shopify store was found at that minute.</p>'}
 ${rec.seen_before.checks ? `<p><small>Before this check agents saw this product ${rec.seen_before.checks} time${rec.seen_before.checks === 1 ? '' : 's'} through the sea since ${esc(String(rec.seen_before.since).slice(0, 10))}: lowest ${esc(money(rec.seen_before.low?.price, rec.seen_before.low?.currency))}, highest ${esc(money(rec.seen_before.high?.price, rec.seen_before.high?.currency))}.</small></p>` : ''}
 <h2>Check it again</h2><p>Prices move, above all on sale days. A new check reads the page again and leaves a new record if anything changed:</p>
@@ -128,7 +134,7 @@ ${NAV()}</main></body></html>`;
 }
 
 // the newest records, as the page /seen shows them
-export function recordsPage(list, base) {
+export function recordsPage(list, base, book = null) {
   const b = String(base || '').replace(/\/+$/, ''), xs = (Array.isArray(list) ? list : []).slice(0, SEEN.list);
   const d = 'Open price records of shopping agents: what Mare Liberum\'s deal check saw on product pages, with the same item at other stores, at the minute it was seen. Each record stays unchanged at its own address.';
   // the count in the heading and the newest record in the first sentence, as on each record's page (since 3.67)
@@ -140,11 +146,12 @@ export function recordsPage(list, base) {
 <body><main><h1>${esc(H)}</h1><p class="lead">${esc(lead)}</p><p>${esc(d)}</p>
 <p>An agent makes one with every deal check of a product page and can hand it to its person as the source of the price it names:</p>
 <pre>GET ${esc(b)}/deal?url=&lt;product page&gt;</pre>
-${xs.length ? `<table><thead><tr><th>Product</th><th>Price</th><th>Seen</th></tr></thead><tbody>${xs.map((x) => `<tr><td><a href="${SEEN.path}/${esc(x.id)}">${esc(x.name || 'a product')}</a><br><small>${esc(x.store)} · ${esc(SAYS[x.word] || x.word || '')}${Number.isFinite(x.n) ? ` · ${x.n} other offer${x.n === 1 ? '' : 's'}` : ''}</small></td><td class="n">${esc(money(x.price, x.currency))}</td><td><small>${esc(when(x.at))}</small></td></tr>`).join('')}</tbody></table>` : ''}
+${book ? `<p>The sea adds its own every day: up to ${esc(String(book.per_day))} product pages, ${esc(String(book.watch_max))} of them the same watched pages each day, so each has a series of prices. Today (${esc(String(book.day || ''))} UTC) ${esc(String(book.visits))} visit${book.visits === 1 ? '' : 's'}, ${esc(String(book.records))} record${book.records === 1 ? '' : 's'}, ${esc(String(book.watch))} page${book.watch === 1 ? '' : 's'} watched. Its records say so and are never counted as an agent's check.</p>
+` : ''}${xs.length ? `<table><thead><tr><th>Product</th><th>Price</th><th>Seen</th></tr></thead><tbody>${xs.map((x) => `<tr><td><a href="${SEEN.path}/${esc(x.id)}">${esc(x.name || 'a product')}</a><br><small>${esc(x.store)} · ${esc(SAYS[x.word] || x.word || '')}${Number.isFinite(x.n) ? ` · ${x.n} other offer${x.n === 1 ? '' : 's'}` : ''}${x.by === 'sea' ? ' · the sea\'s daily sample' : ''}</small></td><td class="n">${esc(money(x.price, x.currency))}</td><td><small>${esc(when(x.at))}</small></td></tr>`).join('')}</tbody></table>` : ''}
 <p><small>Records hold only the store's public page and the catalog's public offers, never who asked. Mare Liberum vouches for no store. Data: <a href="${SEEN.path}.json">JSON</a> · <a href="/llms.txt">/llms.txt</a></small></p>
 ${NAV()}</main></body></html>`;
 }
-export const recordsJson = (list, base) => { const b = String(base || '').replace(/\/+$/, ''); return { what: 'the newest open price records: what the deal check saw on product pages, each unchanged at its own address', records: (Array.isArray(list) ? list : []).slice(0, SEEN.list).map((x) => ({ ...x, url: `${b}${SEEN.path}/${x.id}`, json: `${b}${SEEN.path}/${x.id}.json` })), make_one: `${b}/deal?url=<product page>` }; };
+export const recordsJson = (list, base, book = null) => { const b = String(base || '').replace(/\/+$/, ''); return { what: 'the newest open price records: what the deal check saw on product pages, each unchanged at its own address', records: (Array.isArray(list) ? list : []).slice(0, SEEN.list).map((x) => ({ ...x, url: `${b}${SEEN.path}/${x.id}`, json: `${b}${SEEN.path}/${x.id}.json` })), make_one: `${b}/deal?url=<product page>`, ...(book ? { book } : {}) }; };
 
 // the records open to search engines as a sitemap of their own (/sitemaps/seen.xml, since 3.66): only those that compare 3 or
 // more prices (the others say noindex, so a map that named them would contradict their pages), each dated by the day it was
