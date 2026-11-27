@@ -129,9 +129,9 @@ await proof('never a seat without a payment Stripe confirmed: unpaid, open, fore
   assert.equal((await ledger.treasury()).today_count, before, 'nothing written');
 });
 
-await proof('/seats and /licence: the offer with the card way first, the wallet after it; ?as= and ?a= read alike; /seat?as=key and ?a=key give a key as /session?as=key does', async () => {
+await proof('/seats and /licence: the offer with the way on credit first (since 4.1), the card second, the wallet after it; ?as= and ?a= read alike; /seat?as=key and ?a=key give a key as /session?as=key does', async () => {
   for (const p of ['/seats', '/licence', '/seats?as=host', '/licence?a=host', '/seat']) {
-    const r = await call(p); assert.equal(r.status, 200, p); assert.equal(r.j.ways[0].way, 'card'); assert.equal(r.j.ways[1].way, 'wallet'); assert.equal(r.j.price_usd, 24); assert.equal(r.j.line, seatLine());
+    const r = await call(p); assert.equal(r.status, 200, p); assert.equal(r.j.ways[0].way, 'credit'); assert.equal(r.j.ways[1].way, 'card'); assert.equal(r.j.ways[2].way, 'wallet'); assert.equal(r.j.price_usd, 24); assert.equal(r.j.line, seatLine());
   }
   const a = await call('/seat?as=key'), b = await call('/seat?a=key'); assert.equal(a.status, 200); assert.equal(b.status, 200);
   assert.match(JSON.parse(a.text).key, /^mls_[A-Za-z0-9_-]{32}$/); assert.match(JSON.parse(b.text).key, /^mls_[A-Za-z0-9_-]{32}$/);

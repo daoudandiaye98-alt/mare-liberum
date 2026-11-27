@@ -296,8 +296,9 @@ await proof('/pay/howto: plain text under 60 lines, the way without a wallet fir
   const res = await handle(new Request(`${BASE}/pay/howto`, { headers: { 'user-agent': 'curl/8.5.0' } }), db, { base: BASE, pay: PAY, ledger: createLedger({}), waitUntil: () => {} });
   assert.equal(res.status, 200); assert.match(res.headers.get('content-type'), /^text\/plain/);
   const txt = await res.text(), lines = txt.trimEnd().split('\n'), curls = lines.filter((l) => l.startsWith('curl '));
-  assert.ok(lines.length <= 60, `${lines.length} lines`); assert.equal(curls.length, 6);
-  assert.equal(curls.shift(), `curl -s -X POST '${BASE}/seat?as=host'`, '(since 4.0) the card way for a host without a wallet stands first');
+  assert.ok(lines.length <= 60, `${lines.length} lines`); assert.equal(curls.length, 7);
+  assert.equal(curls.shift(), `curl -s -X POST '${BASE}/seat' -H "x-sea-session: $KEY"`, '(since 4.1) the way on credit stands first: a key buys without card or wallet');
+  assert.equal(curls.shift(), `curl -s -X POST '${BASE}/seat?as=host'`, '(since 4.0) the card way for a host without a wallet stands second');
   assert.ok(lines.indexOf(`KEY=$(curl -s ${BASE}/session?as=key | jq -r .key)`) > 0 && lines.indexOf(`KEY=$(curl -s ${BASE}/session?as=key | jq -r .key)`) < lines.indexOf(curls[0]), 'the one GET for a key comes first');
   assert.equal(curls[0], `curl -s -X POST '${BASE}/route?q=<task>' -H "x-sea-session: $KEY"`); curls.shift();
   assert.equal(curls[0], `curl -s '${BASE}/x402/check?site=example.com' -H "x-sea-session: $KEY"`, '(since 4.0) the check door as it answers: GET with ?site= and the key'); curls.shift();
@@ -355,14 +356,14 @@ await proof('the sitemap names the brain, both guides, the agent card and the pu
   for (const p of ['/brain', '/via/howto', '/pay/howto', '/.well-known/agent-card.json', '/pulse']) assert.ok(x.includes(`<loc>${BASE}${p}</loc>`), p);
   for (const p of ['/route', '/treasury']) assert.ok(!x.includes(`<loc>${BASE}${p}</loc>`), `${p} answers noindex`);
 });
-await proof('the resident skill is one file in two places (site, skills/), version 4.2.0, under 80 lines, with the price line, the free sample, /pay/howto, /treasury, /pulse and a /via/ walk; the plugin carries a skill of its own (5.0.0)', () => {
+await proof('the resident skill is one file in two places (site, skills/), version 4.3.0, under 80 lines, with the price line, the free sample, /pay/howto, /treasury, /pulse and a /via/ walk; the plugin carries a skill of its own (5.0.0)', () => {
   const read = (f) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
   const site = read('site/skill.md');
   assert.equal(read('skills/mare-liberum/SKILL.md'), site); assert.notEqual(read('plugins/mare-liberum/skills/mare-liberum/SKILL.md'), site);
-  assert.match(site, /^---\nname: mare-liberum\nversion: 4\.2\.0\n/); assert.ok(site.split('\n').length < 80, 'a host pastes the skill into its context: under 80 lines');
-  for (const w of ['session?as=key', '/brain?q=', '/route?q=', 'POST "https://mareliberum.dev/seat?as=host"', 'checkout_url', '20 probe calls']) assert.ok(site.includes(w), w);
+  assert.match(site, /^---\nname: mare-liberum\nversion: 4\.3\.0\n/); assert.ok(site.split('\n').length < 80, 'a host pastes the skill into its context: under 80 lines');
+  for (const w of ['session?as=key', '/brain?q=', '/route?q=', 'POST "https://mareliberum.dev/seat?as=host"', 'POST "https://mareliberum.dev/seat" -H "x-sea-session: $KEY"', 'status: credit', 'checkout_url', '20 probe calls']) assert.ok(site.includes(w), w);
   for (const w of [priceLine(PRICING), '&free=true', '/pay/howto', '/treasury', '/pulse', '/via/<token>']) assert.ok(site.includes(w), w);
-  assert.equal(JSON.parse(read('site/skill.json')).version, '4.2.0'); assert.equal(JSON.parse(read('.claude-plugin/marketplace.json')).plugins[0].version, '5.0.0'); assert.equal(JSON.parse(read('plugins/mare-liberum/.claude-plugin/plugin.json')).version, '5.0.0');
+  assert.equal(JSON.parse(read('site/skill.json')).version, '4.3.0'); assert.equal(JSON.parse(read('.claude-plugin/marketplace.json')).plugins[0].version, '5.0.0'); assert.equal(JSON.parse(read('plugins/mare-liberum/.claude-plugin/plugin.json')).version, '5.0.0');
 });
 // (since 4.0) the short address of the resident skill, always Markdown, HEAD included; ?a= reads as ?as=; llms.txt names the
 // short way in its first 20 lines

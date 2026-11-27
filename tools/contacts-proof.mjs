@@ -175,7 +175,8 @@ await proof('K2: POST /session?as=key gives the key answer (JSON since 4.1, 201;
 
 console.log('task 1: the way out without a wallet');
 await proof('every 402 begins with the way out without a wallet: the error of the body, of PAYMENT-REQUIRED and of x402-payment-required, and the header x-sea-no-wallet; POST /route with a JSON body too', async () => {
-  const W0 = `no wallet needed: run  curl -s ${BASE}/session?as=key | jq -r .key  then repeat this call with header  x-sea-session: <key>`;
+  // (since 4.1) the way on credit first, the brief's words, then what a new key does at a door whose first calls are free
+  const W0 = `no card, no wallet: curl -s ${BASE}/session?as=key | jq -r .key, then repeat this call with header x-sea-session: <key>. that buys on credit, 7 days. (a new key's first 20 calls are free; then POST ${BASE}/seat with the key buys a seat on credit)`;
   const r = await call('/route', { method: 'POST', ip: fresh(), ua: 't1-route/1.0', body: { q: 'x' } }); assert.equal(r.status, 402);
   assert.equal(r.h['x-sea-no-wallet'], W0); assert.ok(String(r.j.error).startsWith(W0), String(r.j.error).slice(0, 120));
   const v2 = JSON.parse(Buffer.from(r.h['payment-required'], 'base64').toString('utf8')); assert.ok(v2.error.startsWith(W0)); assert.equal(v2.accepts.length, 1, 'the terms stay');
@@ -185,7 +186,7 @@ await proof('every 402 begins with the way out without a wallet: the error of th
     const x = await call(path, { ip: fresh(), ua: 't1-doors/1.0' }); assert.equal(x.status, 402, path); assert.equal(x.h['x-sea-no-wallet'], W0, path);
     assert.ok(String(typeof x.j.error === 'string' ? x.j.error : x.j.error.message).startsWith(W0), path);
   }
-  const c = await call('/reader/credit', { method: 'POST', ip: fresh(), ua: 't1-credit/1.0' }); assert.equal(c.status, 402); assert.match(c.h['x-sea-no-wallet'], /^no wallet needed: run {2}curl -s https:\/\/mare\.test\/session\?as=key \| jq -r \.key {2}then read with {2}GET https:\/\/mare\.test\/x402\/read\?url=<page>/);
+  const c = await call('/reader/credit', { method: 'POST', ip: fresh(), ua: 't1-credit/1.0' }); assert.equal(c.status, 402); assert.match(c.h['x-sea-no-wallet'], /^no card, no wallet: curl -s https:\/\/mare\.test\/session\?as=key \| jq -r \.key, then repeat this call with header x-sea-session: <key>\. that buys on credit, 7 days\. \(with the key, read with GET https:\/\/mare\.test\/x402\/read\?url=<page>/);
 });
 await proof('GET /session?as=key: one GET, no body: the key answer as JSON (since 4.1; ?raw=1 the key alone as one line) (200, Location, server-timing); a crawler and a HEAD get the words, never a key; POST stays as the other way', async () => {
   const r = await call('/session?as=key', { ip: fresh(), ua: 't1-get/1.0', accept: '*/*' }); assert.equal(r.status, 200); assert.match(JSON.parse(r.text).key, /^mls_[A-Za-z0-9_-]{32}$/); assert.match(r.h['content-type'], /^application\/json/);

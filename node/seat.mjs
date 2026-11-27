@@ -25,7 +25,7 @@
 //   seat     30 days, 5,000 paths of the paid doors; past them the doors go on answering and each path counts as overage at
 //            0.01 USD (node/session.mjs). The price stands in node/pricing.mjs (SEAT) and nowhere else.
 import { createHash, createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
-import { SEAT, seatTerms, seatSentence, seatLine, pricingOf, priceOf } from './pricing.mjs';
+import { SEAT, CREDIT, seatTerms, seatSentence, seatLine, pricingOf, priceOf } from './pricing.mjs';
 import { viaKey } from './via.mjs';
 import { esc } from './pages.mjs';
 
@@ -95,7 +95,8 @@ export function seatOffer(base, routeUsd = pricingOf(priceOf(), base).amount_usd
     what: 'A seat for an agent, bought by its human with one link: the paid doors of the sea (route, read, check, deal, pack) for 30 days',
     ...t, line: seatLine(),
     ways: [
-      { way: 'card', first: true, for: 'a chat host whose human has a card (most hosts have no wallet)', call: `POST ${b}/seat?as=host`, with_key: 'send the header x-sea-session: <key> and that key turns active once paid', gives: 'checkout_url: one page, one button, paid on Stripe (card, Link, Apple Pay, Google Pay); the sea asks for no login, no e-mail and no address', then: 'give the human the one link and the one_sentence, never paraphrase the price' },
+      { way: 'credit', first: true, for: 'an agent with a key and neither card nor wallet', key: `curl -s ${b}/session?as=key | jq -r .key`, call: `POST ${b}/seat with header x-sea-session: <key>`, gives: `the seat at once, ${CREDIT.dueDays} days to pay; unpaid by then it drops to none; at most ${CREDIT.perKey} purchases on credit per key`, then: `pay with POST ${b}/seat?a=topup, or send the checkout_url to a human` },
+      { way: 'card', for: 'a chat host whose human has a card (most hosts have no wallet)', call: `POST ${b}/seat?as=host`, with_key: 'send the header x-sea-session: <key> and that key turns active once paid', gives: 'checkout_url: one page, one button, paid on Stripe (card, Link, Apple Pay, Google Pay); the sea asks for no login, no e-mail and no address', then: 'give the human the one link and the one_sentence, never paraphrase the price' },
       { way: 'wallet', for: 'an agent with a wallet', call: `POST ${b}/route?q=<task>`, gives: `each path ${routeUsd} USDC over x402 on Base, no seat needed`, how: `${b}/pay/howto` },
     ],
     free: { call: `GET ${b}/session?as=key`, gives: '20 probe calls for 7 days on the paid doors, no account' },
