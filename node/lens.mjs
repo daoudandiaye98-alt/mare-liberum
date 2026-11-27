@@ -102,6 +102,8 @@ export function createLens(h) {
         if (price != null && product?.currency && !ctx?.uncounted) await kv.set(k, remembered(before, { t: now(), p: price, c: product.currency }), DEAL.seen.keepDays * DAY);
       }
       if (!ctx?.uncounted) { const day = now().slice(0, 10); await kv.set(`deal:count:${day}`, (Number(await kv.get(`deal:count:${day}`)) || 0) + 1, 3 * DAY); }
+      // (since 3.69) a check made by the routine of /for/bots is counted once more, apart: one number a day, nothing else
+      if (!ctx?.uncounted && ctx?.via === 'bot-template') { const day = now().slice(0, 10); await kv.set(`deal:via:bot-template:${day}`, (Number(await kv.get(`deal:via:bot-template:${day}`)) || 0) + 1, 3 * DAY); }
       const ans = dealOf({ product, page, q, offers, seen: before, paid, base: a.base || '' });
       // the open price record (node/seen.mjs): only for a page read with its price, never for words someone typed, never for a
       // crawler's call; the same look on the same day is the same record, a record never changes
@@ -127,8 +129,9 @@ export function createLens(h) {
     async seenRecord(id) { if (!/^[0-9a-f]{16}$/.test(String(id || ''))) return null; const r = await kv.get(`seen:rec:${id}`).catch(() => null); return r?.id === id ? r : null; },
     async seenRecent() { const r = (await kv.get('seen:recent').catch(() => null)) || []; return Array.isArray(r) ? r : []; },
     async seenListed() { return (await lens.seenRecent()).filter((x) => x?.ix && /^[0-9a-f]{16}$/.test(x.id)).map((x) => `${SEEN.path}/${x.id}`); },
-    // how many deal checks this node made today (UTC), free and paid: the number GET /deal shows beside how to call it
-    async dealToday() { const day = now().slice(0, 10); return { day, checks: Number(await kv.get(`deal:count:${day}`)) || 0 }; },
+    // how many deal checks this node made today (UTC), free and paid: the number GET /deal shows beside how to call it; since
+    // 3.69 also how many of them came from the routine of /for/bots
+    async dealToday() { const day = now().slice(0, 10); return { day, checks: Number(await kv.get(`deal:count:${day}`)) || 0, via_bot_template: Number(await kv.get(`deal:via:bot-template:${day}`)) || 0 }; },
     // the reader: any public page as Markdown — free for every agent up to a fair daily amount, then Angel reads on
     async read(a = {}, ctx) {
       if (ctx?.readOnly) return { note: 'crawlers read the sea itself; the reader reads other pages for agents', how: 'GET /r/<page address>' };

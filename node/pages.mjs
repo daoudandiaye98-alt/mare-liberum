@@ -263,6 +263,77 @@ export const readPage = tool({
   return page(base, '/use', 'Use Mare Liberum in your agent · reader, shared brain, memory', 'Free Markdown reader, shared brain and memory for AI agents: copy-paste blocks for MCP, Claude Code, Cursor, OpenAI Agents SDK, LangChain, CrewAI, LlamaIndex and the Vercel AI SDK.', body, { '@context': 'https://schema.org', '@type': 'TechArticle', headline: 'Use Mare Liberum in your agent', url: `${base}/use` }, '/og.png');
 }
 
+// (since 3.69) the deal check inside a person's own assistant: one sentence for Grok Bot, one tool block for the xAI API, the
+// skill to paste, and a daily routine for saved product pages. The page and its Markdown twin are made from the same parts, so
+// they never say different things. The address given to paste is the full server /mcp, never the app door /mcp/app, which
+// stays as it was reviewed. The routine marks its checks with via=bot-template, which only counts them (one number a day).
+export const BOTS = Object.freeze({ path: '/for/bots', via: 'bot-template', tools: Object.freeze(['ask', 'decide', 'read_page']) });
+export function botsParts(base, d = {}) {
+  const perHour = d.perHour ?? 10, offers = d.offers ?? 5, mcp = `${base}/mcp`;
+  const grok = `Add a custom MCP server called mare-liberum at ${mcp}`;
+  const xai = JSON.stringify({ type: 'mcp', server_url: mcp, server_label: 'mare_liberum', allowed_tools: [...BOTS.tools] });
+  const routine = `Every morning, call ${base}/deal?url=<page>&via=${BOTS.via} for each product page I saved. Tell me only when the verdict is cheaper-elsewhere or the price is lower than last time, with the store, the price and the record link. Mark the price read from the store's own product page as "VERIFIED on the store's own product page" and any price you did not see there as "UNVERIFIED".`;
+  return {
+    title: 'Put the deal check into your assistant',
+    lead: 'One sentence for Grok Bot, one block for the xAI API, one routine that checks your saved product pages every day: free, no key, no account.',
+    grok, xai, routine, mcp, skill: `${base}/skills/deal-check/SKILL.md`,
+    limits: `${perHour} deal checks an hour per network are free (up to ${offers} other offers each). For more, ${base}/x402/deal answers for 0.01 USDC over x402, or take a prepaid package at ${base}/offers.`,
+    money: 'Mare Liberum never pays and never holds money: you buy at the merchant\'s own checkout, when you agree. Where a checkout link earns the sea a commission, the answer says so; it never changes the order or the verdict.',
+    count: `via=${BOTS.via} only counts how many checks come from this routine: one number a day, nothing about you or your pages.`,
+  };
+}
+export function botsMd(base, d) {
+  const p = botsParts(base, d);
+  return `# ${p.title}
+
+${p.lead}
+
+## Grok Bot
+
+Paste this sentence into Grok Bot:
+
+    ${p.grok}
+
+Then ask: "Check the price of <product page> with mare-liberum."
+
+## xAI API
+
+Add this to the tools of a request:
+
+    ${p.xai}
+
+## The skill
+
+Assistants that read skills (Grok, Claude, Codex and others) take the deal check as one file: ${p.skill}
+
+## A routine for every morning
+
+    ${p.routine}
+
+${p.count}
+
+## Limits
+
+${p.limits}
+
+${p.money}
+
+Source: ${base}${BOTS.path}
+`;
+}
+export function botsPage(base, d) {
+  const p = botsParts(base, d), code = (t) => `<pre style="white-space:pre-wrap;overflow-wrap:anywhere;font-size:.85rem">${esc(t)}</pre>`;
+  const body = `<h1>${esc(p.title)}</h1>
+<p class="lead" style="font-size:1.1rem">${esc(p.lead)}</p>
+<h2>Grok Bot</h2><p>Paste this sentence into Grok Bot:</p>${code(p.grok)}<p>Then ask: “Check the price of &lt;product page&gt; with mare-liberum.”</p>
+<h2>xAI API</h2><p>Add this to the tools of a request:</p>${code(p.xai)}
+<h2>The skill</h2><p>Assistants that read skills (Grok, Claude, Codex and others) take the deal check as one file: <a href="${esc(p.skill)}">${esc(p.skill)}</a></p>
+<h2>A routine for every morning</h2>${code(p.routine)}<p class="muted"><small>${esc(p.count)}</small></p>
+<h2>Limits</h2><p>${esc(p.limits).replace(esc(`${base}/offers`), `<a href="/offers">${esc(`${base}/offers`)}</a>`)}</p><p>${esc(p.money)}</p>
+<p class="muted"><small>As Markdown: <a href="${BOTS.path}.md">${esc(base)}${BOTS.path}.md</a> · <a href="/deal">The deal check</a> · <a href="/seen">Open price records</a> · <a href="/terms#s4">Terms</a></small></p>`;
+  return page(base, BOTS.path, `${p.title} · Grok Bot, xAI API, a daily routine · Mare Liberum`, p.lead, body, { '@context': 'https://schema.org', '@type': 'HowTo', name: p.title, description: p.lead, url: `${base}${BOTS.path}` }, '/og.png');
+}
+
 // ---------------------------------------------------------------- the Atlas: the web as an agent needs it
 const grammar = (B) => `<pre>${B}/site/&lt;domain&gt;        how an agent uses any website (search link, sections, feeds, who may read)
 ${B}/find?q=&lt;words&gt;      websites for a task, the most usable for agents first
