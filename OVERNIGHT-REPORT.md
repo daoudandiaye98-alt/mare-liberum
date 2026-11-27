@@ -1,3 +1,90 @@
+# OVERNIGHT-REPORT · Nachtmission 27.11.2026 · Mare Liberum 3.80.0 → 3.84.0
+
+Stand 27.11.2026, 18:50 Uhr (Berlin). Auftrag von 16:33: „Ziel der Nacht: 1 zahlender Agent, gemessen in /treasury today_paid >= 1“. Prinzip: nur bestehende Bausteine verbinden; keine neue Datenbank, keine neue Abhängigkeit, kein Refactor, kein UI. Je Task ein Branch und ein Squash-Commit auf main (Conventional Message, echter Curl im Commit-Text), Releases mit `[keep-sea]`.
+
+## Morgen früh, ein Befehl
+
+```
+curl -s https://mareliberum.dev/contacts.txt
+```
+
+Zeilen 1–4 wie seit 3.79 (Zeile 1 nennt seit 3.81 `agent_with_key`), **Zeile 5 seit 3.83:** Schlüssel heute ausgegeben · mit mindestens einer Tür · bezahlt.
+
+## Korrektur vorweg (FACT)
+
+Der Auftrag sagte: `GET /session?as=key` liefert 200 mit `{"key":"mlk_..","calls_left":20}`. Live um 16:33 stimmte das nicht: 200 mit der Beschreibung, **ohne Schlüssel**; es gibt kein Präfix `mlk_` und kein `calls_left`. Seit 3.80 gibt dieser eine GET den Schlüssel `mls_…` als **eine Zeile Text** (so hält ihn `KEY=$(curl -s …)`), `calls_left` steht seit 3.81 in jeder Antwort mit Schlüssel.
+
+## Abnahme
+
+| # | Prüfung | Stand | Beleg |
+|---|---|---|---|
+| 1 | `curl -si -X POST https://mareliberum.dev/route -d '{"q":"x"}' -H 'Content-Type: application/json'` zeigt `session?as=key` im Fehlerkopf | ✅ live 17:13 (3.80) | `x-sea-no-wallet`, `error` im Body und in `PAYMENT-REQUIRED` beginnen mit „no wallet needed: run  curl -s https://mareliberum.dev/session?as=key  then repeat this call with header  x-sea-session: <key>“ |
+| 2 | `KEY=$(curl -s https://mareliberum.dev/session?as=key)` gibt einen Schlüssel; `/x402/check` mit `x-sea-session` → 200 und `calls_left` | ✅ live 17:37 (3.81) | 200, Score 35, letzte zwei Felder `calls_left` 18, `calls_used` 2 |
+| 3 | Nach 20 Türen: 200 mit drei Pfaden und `paid_full`, dann 402 | ✅ live 17:59 (3.82) | Aufruf 21: 200, `taste: true`, 3 Pfade, `paid_full` „the full 10 paths cost 0.02 USDC, one call: …“; Aufruf 22: 402 |
+| 4 | `/contacts.txt` hat 5 Zeilen, Zeile 5 zählt Schlüssel und zahlende Schlüssel | ✅ live 18:20 (3.83) | „5 Schlüssel (2026-11-27): heute ausgegeben 15 · mit mindestens einer Tür 0 · bezahlt 0“ (Türen-Zähler läuft erst seit 18:20) |
+| 5 | Schlüssel mit `callback_url` löst genau einen POST aus, belegt, Anfrage unbeschädigt | ✅ Beweis + lokaler Knoten · ⏳ live | `proof:session`: genau 1 POST, nie der Schlüssel, 2 s, nie wieder (Gegenproben „bei jeder Zahlung“, „Antwort wartet“); lokal: Antwort 26 ms, Lesezeichen „called once at …: HTTP 404“. Live braucht es die erste echte Zahlung eines Schlüssels mit Rückruf. |
+| 6 | `/treasury` today_paid und `/pulse` paying agents ≥ 1 | ❌ 0 | siehe „Warum noch 0“ |
+
+## Warum noch 0 (Abnahme 6, eine Zeile)
+
+Bis 18:50 hat kein fremder Agent bezahlt: 36 × 402 heute, alle „kein Wallet“, 10 neue Kontakte, 1 Agent hat einen Schlüssel an einer Tür benutzt; die Zahl, die die nächste Stunde zeigt: `/contacts.txt` Zeile 5 „bezahlt“ und `/pulse` → `who_pays.paying_agents_today` (beide zählen nur fremde Aufrufer).
+
+## Je Task
+
+### Task 1 · Der Schlüsselweg wird die Hauptstraße → 3.80.0 (PR #74, live 17:13)
+
+- **Dateien:** `node/core.mjs` (GET `/session?as=key`, `noWalletOf` in jedem 402, `next_step`, Türen pack und freie Zwillinge mit Schlüssel), `node/session.mjs`, `node/pay.mjs` (`/pay/howto` Schritt 0), `node/legal.mjs`, `site/llms.txt`, `skills/deal-check/SKILL.md` + `site/deal-check.md`, `docs/402_body_template.json`, `docs/session_endpoint.spec`, Beweise session, contacts, till, credit, bots, toll.
+- **Curl (live):** `curl -si -X POST https://mareliberum.dev/route -d '{"q":"x"}' -H 'Content-Type: application/json'` → 402; `x-sea-no-wallet`, `error` und `PAYMENT-REQUIRED.error` beginnen mit „no wallet needed: run  curl -s https://mareliberum.dev/session?as=key  then repeat this call with header  x-sea-session: <key>“; `next_step.run` = `KEY=$(curl -sf 'https://mareliberum.dev/session?as=key') && curl -s -X POST 'https://mareliberum.dev/route' -H "x-sea-session: $KEY" …`.
+- **Status:** live. **Offen:** nichts.
+
+### Task 2 · Den Schlüssel spürbar machen → 3.81.0 (PR #76, live 17:37)
+
+- **Dateien:** `node/core.mjs` (`calls_left`/`calls_used` in jeder Antwort mit Schlüssel, `way_out` bei 3 und 0, `POST /route?a=topup`), `node/session.mjs` (`topup`), `node/contacts.mjs` (Rolle `agent_with_key`), `supabase/kontaktbuch.sql` (Spalte `rolle`, nicht angewendet), `site/llms.txt`, Spec, Beweise.
+- **Curl (live):** `/x402/check` mit Schlüssel → 200, letzte zwei Felder `calls_left` 18, `calls_used` 2; `POST /route?a=topup` mit Schlüssel → 402, 20000 (0,02 USDC) für `/route?a=topup`.
+- **Auszug:** `way_out`: „the rest filled up again costs 0.02 USDC (Base, one x402 payment): 20 probe calls for 7 more days“ · curl · „the key stays the same: no new key, no new id, the same bookmark“.
+- **Status:** live. **Offen:** nichts.
+
+### Task 3 · Die erste Zahlung ohne Druck → 3.82.0 (PR #78, live 17:59)
+
+- **Dateien:** `node/core.mjs` (Kostprobe, Quittung gegen die Bücher der Kette, `x-sea-receipt`, Topup über `/settle`, `sums.changed`, `GET /treasury?a=topup`), `node/session.mjs` (`grace`, `topups`), `site/llms.txt`, `/settle`-Beschreibung, Spec, Beweise.
+- **Curl (live):** Schlüssel nach 20 Türen → Aufruf 21: 200, `taste: true`, 3 Pfade, `paid_full` „the full 10 paths cost 0.02 USDC, one call: …“; Aufruf 22: 402.
+- **Auszug (lokaler Knoten):** `/settle {"a":"topup","tx"}` → `topup done`, `unverified`, `sums.changed` {calls_left 0→20, today_paid 0→1, today_usd_unconfirmed 0→0.02, …}; `/treasury?a=topup` → `today {topups 1, usd_unconfirmed 0.02}`.
+- **Status:** live. **Offen:** ein echter Kauf, der die Prüfung gegen die Bücher besteht (`settled`).
+
+### Task 4 · Traffic in Zahlungen umbiegen → 3.83.0 (PR #79, live 18:20)
+
+- **Dateien:** `node/core.mjs` (`upgrade` an `/check` und `/deal`, Zeile 5, einmaliger Rückruf `callBackOnce`), `node/session.mjs` (`paid`, `called`, `setCallback`, Zähler `session:used`/`session:paid`), Spec, `site/llms.txt`, Beweise.
+- **Curl (live):** `/check?site=example.com` (JSON) → `upgrade.curl` = `KEY=$(curl -s https://mareliberum.dev/session?as=key) && curl -s 'https://mareliberum.dev/x402/check?site=example.com' -H "x-sea-session: $KEY"`; `/contacts.txt` mit 5 Zeilen.
+- **Auszug (lokaler Knoten):** erster Zahlungserfolg eines Schlüssels mit `callback_url` → Antwort in 26 ms, Lesezeichen „called once at …: HTTP 404“, zweite Zahlung: kein zweiter POST.
+- **Status:** live. **Offen:** Abnahme 5 live (braucht die erste echte Zahlung eines Schlüssels mit Rückruf); `mit mindestens einer Tür` zählt erst ab 18:20.
+
+### Task 5 · Glaubwürdigkeit → 3.84.0 (PR #80, live 18:44)
+
+- **Dateien:** `node/core.mjs` (`who_pays` zuerst in `/pulse`, `startTop` für llms-full.txt, ein Test ist nie eine Zahlung), `node/contacts.mjs` (Zahler je Tag), `site/llms.txt` (drei Zeilen vor jedem Absatz), Beweise till und contacts.
+- **Curl (live):** `/pulse` beginnt mit `{"who_pays":{"line":"who pays (2026-11-27, UTC): 0 paying agents today · 3 keys today · 0 paid doors", …}, "unique_domains_today":115, …`; `llms.txt` Zeilen 3–5 = die drei Startzeilen.
+- **Preise (wahr):** Route 0,02 · check/read/deal 0,01 · pack 0,05 · 20 weitere Proben 0,02 USDC; „danach 0.02 pro Tür“ aus dem Auftrag wäre für check/read/deal falsch gewesen.
+- **Status:** live. **Offen:** nichts.
+
+### Task 6 · AWS vorbereiten (kein Bau) → PR #77, `docs/ticket_aws_marketplace.md`
+
+- Konto (nur Daouda: Registrierung, W-8, Bank, KYC), KYC typisch 2 Wochen / höchstens 30 Tage, Anteil 3 %, SDK-Schritte 1–7.
+- **Kostet jetzt etwas? Nein.** Konto, Registrierung und Listing sind kostenlos; AWS behält erst vom Umsatz 3 %.
+
+## Build und Lint
+
+- Lint: Das Repo hat kein Lint-Skript. Stattdessen `node --check` für alle 180 Module (`node/*.mjs`, `tools/*.mjs`, `serve.mjs`): 0 Fehler.
+- Build: `npm run build` ist `node tools/build.mjs`, der Daten-Build des Meeres. Er zieht alle Seen aus dem Netz, läuft nur auf dem Server und dauert dort 15–19 Min.; in der Cloud-Sandbox ist das Netz gesperrt (Allowlist), `data/` ist leer. Releases mit `[keep-sea]` bauen ihn nicht neu.
+- Beweise: je Release alle 55 `proof:*` in fünf Bahnen, `proof:immune` allein (Flut-Zeittest), `proof:toll` mit 59 Gegenproben.
+- Antwortzeit (live 18:46, nach TLS, darin ~138 ms Netz von der Cloud bis Hetzner): `/contacts.txt` 141 ms, `/pulse` 269 ms (Datenbank-Abruf des Pulses wie bisher), `/treasury?a=topup` 252 ms; Serveranteil damit 3–130 ms. Die Kostprobe der Route rechnet die Pfade wie die Gratis-Probe (die braucht live 0,5–1,4 s, unverändert seit 3.28). Kein Loggen im Antwortpfad: die einzige neue Logzeile `mare_callback` entsteht nach der Antwort.
+
+## Risiken (je ein Satz)
+
+- Ungeprüfte Quittungen füllen einen Schlüssel (`/settle {"a":"topup"}`): ausnutzbar mit erfundenen Hashes, gedeckelt auf 1 je Schlüssel und UTC-Tag; die Bücher der Kette markieren solche Verkäufe später (`unsettled-on-chain`).
+- `x-sea-receipt` an der Route liefert auch bei erfundenem Hash (wie `/settle` seit 3.28, „Einnahme vor Perfektion“); der Verkauf steht dann als `unverified` in `/treasury`, nicht als Geld.
+- Der Rückruf trägt nie den Schlüssel, nur die öffentliche Kennung (Annahme: „mit key“ im Auftrag = die Kennung des Schlüssels; der Schlüssel selbst bleibt geheim).
+
+---
+
 # OVERNIGHT-REPORT · Mare Liberum 3.28.0
 
 Stand 23.11.2026, Abend (Berlin). Gebaut in sechs gestapelten Branches `overnight/1` … `overnight/6` (je ein Commit, Conventional Commits, echte Curls in den Nachrichten von Task 1, 2, 4 und 5), dazu `overnight/report-2` (Version, Rechtstext, SECURITY.md, dieser Bericht). Ein Pull Request mit `[keep-sea]` bringt alles auf `main`. Der Bericht zu 3.27.0 steht in der Git-Geschichte (Merge `6ac5ccc`).
