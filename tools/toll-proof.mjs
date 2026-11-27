@@ -874,7 +874,8 @@ await proof('/engine (a section "The toll" with the example $0.003630), /engine.
     const a = await F.call(path, { ip: '192.0.2.200', accept }), b = await M.call(path, { ip: '192.0.2.200', accept });
     // (the x402 manifest names every door that is sold since 3.55, proven by tools/fair-proof.mjs and tools/till-proof.mjs:
     // here its route, its fair share and the rest of it as the reference, the doors sold beside the route and its words set apart)
-    const norm = path === '/.well-known/x402' ? manifestOf : (t) => t;
+    // (since 3.80 /pay/howto begins with the way without a wallet, one GET for a key, proven by tools/till-proof.mjs: set apart)
+    const norm = path === '/.well-known/x402' ? manifestOf : path === '/pay/howto' ? (t) => t.replace(/\n\n0\) No wallet needed:[^\n]*\nKEY=[^\n]*\ncurl [^\n]*\n {3}\(POST [^\n]*\)\n\n/, '\n') : (t) => t;
     assert.equal(a.status, b.status, path); assert.equal(tmask(norm(a.text), F.version), tmask(norm(b.text), M.version), `${path}: as ${REF}`);
   }
 });
