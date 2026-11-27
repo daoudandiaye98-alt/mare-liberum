@@ -303,6 +303,8 @@ await proof('/pulse says who pays first, above unique_domains_today: the agents 
   for (let i = 0; i < 2; i++) assert.equal((await call(`/x402/check?site=${host()}`, { ip, ua, headers: payment() })).status, 200);
   await call(`/x402/check?site=${host()}`, { ip: fresh(), ua: 'MareLiberum-session/1.0', headers: payment() }); facilitator = null;
   const p1 = await pulse(); assert.equal(p1.who_pays.paying_agents_today, p0.who_pays.paying_agents_today + 1, 'one agent, two payments'); assert.equal(p1.who_pays.paid_doors_today, p0.who_pays.paid_doors_today + 2); assert.equal(p1.who_pays.keys_today, p0.who_pays.keys_today + 1);
+  await call('/settle', { method: 'POST', ip: fresh(), ua: 'harbour-tester/1.0', body: { q: 'find usdc price', test: true } }); const p2 = await pulse();
+  assert.equal(p2.who_pays.paying_agents_today, p1.who_pays.paying_agents_today, 'a test is never a paying agent'); assert.equal(p2.who_pays.paid_doors_today, p1.who_pays.paid_doors_today, 'nor a paid door');
   assert.match(p1.who_pays.line, new RegExp(`^who pays \\(${today()}, UTC\\): ${p1.who_pays.paying_agents_today} paying agents? today · ${p1.who_pays.keys_today} keys? today · ${p1.who_pays.paid_doors_today} paid doors?$`));
 });
 await proof('the operator\'s lines: /contacts.ndjson only with x-mare-mod, in exactly the columns of supabase/kontaktbuch.sql', async () => {
@@ -330,6 +332,7 @@ let caught = 0, missed = 0;
 if (!process.argv.includes('--no-controls')) {
   console.log('\nnegative controls: each rule broken in a copy, the proof must fail there');
   const CONTROLS = [
+    ['a test counted as a payment (3.84)', 'node/core.mjs', "if (b?.paid?.status === 'test') return supplied(res);", ''],
     ['a payer counted at every payment (3.84)', 'node/contacts.mjs', "const payer = e.kind === 'paid' && c.paid_day !== d;", "const payer = e.kind === 'paid';"],
     ['no line 5 (3.83)', 'node/core.mjs', "d.lines = [...d.lines, `5 Schlüssel", "d.lines_ = [...d.lines, `5 Schlüssel"],
     ['no upgrade on the free check (3.83)', 'node/core.mjs', "upgrade: upgradeOf('check',", "upgrade_: upgradeOf('check',"],

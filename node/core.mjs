@@ -1925,6 +1925,8 @@ async function paywallAfter({ req, copy, res, db, cfg, url }) {
   if ((res.status === 200 || res.status === 201) && ((pay && !pay.bad) || res.headers.has('payment-receipt') || (path === '/settle' && method === 'POST') || (path === '/route' && req.headers.has('x-sea-receipt')))) {
     let usd = null, b = null; try { b = JSON.parse(await res.clone().text()); usd = Number(b?.paid?.amount_usd ?? b?.amount_usd); } catch {}
     if (path === '/settle' && !b?.paid) return supplied(res);
+    // (since 3.84) a test is never money: no payment in the contact book, no paying agent on /pulse, no paid key, no callback
+    if (b?.paid?.status === 'test') return supplied(res);
     note({ kind: 'paid', paid: true, paid_usd: Number.isFinite(usd) && usd > 0 ? usd : null, session: keyed ? sv.id : null });
     // (since 3.83) a key that paid: its day counted, and at its first payment the one call to its callback (behind the answer)
     if (keyed) { try { const pr = await sessionsOf(db, cfg).paid(sv.h); if (pr.call) callBackOnce(db, cfg, base, sv, pr.call); } catch {} }
