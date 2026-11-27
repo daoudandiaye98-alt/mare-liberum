@@ -344,6 +344,42 @@ const checks = {
     assert.equal(out.paths[1].commission, undefined); assert.equal(out.paths[2].commission, undefined, 'an Amazon via address carries no commission'); assert.equal(out.commission_rule, t.cm.COMMISSION_RULE);
     const none = t.via.rewriteForAgents({ paths: [{ to: 'https://www.amazon.de/dp/B0ALPHA' }] }, { base: BASE }); assert.ok(!('commission' in none.paths[0]) && !('commission_rule' in none), 'without cm: as before');
   },
+  // the deal check (/deal): the offers at other stores carry the commission where one applies and say so, the answer says the
+  // rule once; the same offers in the same order, the same prices and verdict; a promoted offer keeps its own; the page asked
+  // about, the product read from it, the cheapest when it is this page, the steps back to it and the record stay as they came
+  async deals(t) {
+    t.rest(false); t.set(null);
+    const deal = async () => JSON.parse((await t.call(`/deal?q=${encodeURIComponent(NEED)}`)).text);
+    const off = await deal();
+    assert.ok(Array.isArray(off.elsewhere) && off.elsewhere.length >= 3, `the deal check finds the offers (${off.elsewhere?.length})`);
+    assert.ok(!TAGGED.test(JSON.stringify(off)) && !off.commission_rule && !/"commission":true/.test(JSON.stringify(off)), 'off: no commission in a deal answer');
+    t.set(ON);
+    const on = await deal();
+    assert.deepEqual(on.elsewhere.map((o) => [o.title, o.price, o.currency]), off.elsewhere.map((o) => [o.title, o.price, o.currency]), 'the same offers in the same order');
+    assert.deepEqual(on.verdict, off.verdict, 'the same verdict');
+    const beta = on.elsewhere.find((o) => /Beta/.test(o.title));
+    assert.ok(beta && /^https:\/\/www\.awin1\.com\/cread\.php\?awinmid=4711&awinaffid=1234567&ued=/.test(beta.url) && beta.commission === true && beta.commission_network === 'awin', `the Awin shop carries its deep link and says so: ${beta?.url}`);
+    const delta = on.elsewhere.find((o) => /Delta/.test(o.title));
+    if (delta) assert.ok(delta.commission !== true && !TAGGED.test(JSON.stringify(delta)), 'a promoted offer keeps its own');
+    for (const o of on.elsewhere) if (o.commission === true) assert.equal(untag(o.url), off.elsewhere.find((x) => x.title === o.title)?.url, `a commission link leads to the same shop address: ${o.title}`);
+    assert.equal(on.commission_rule, t.cm.COMMISSION_RULE, 'the answer says the rule');
+    if (on.cheapest?.where === 'another store' && !/Delta/.test(on.cheapest.title)) {
+      assert.equal(on.cheapest.commission, true, 'the cheapest at another store carries it too');
+      const buy = (on.next || []).find((x) => x.do === 'buy'), was = (off.next || []).find((x) => x.do === 'buy');
+      assert.ok(buy && was && buy.commission === true && buy.at === t.cm.commissionFor(was.at)?.url, `the buy step leads there with it: ${buy?.at}`);
+    }
+    // the page asked about stays as it came, even when that shop has a rule of its own
+    const page = 'https://beta-shoes.example/products/beta';
+    const ans = { product: { name: 'Trail running shoes Beta', price: 99, currency: 'EUR', url: page }, page: { url: page, host: 'beta-shoes.example', read: true }, verdict: { word: 'lowest-found', lines: ['This page has the lowest price.'] }, cheapest: { where: 'this page', price: 99, currency: 'EUR', url: page },
+      elsewhere: [{ store: 'Gamma Run', title: 'Trail running shoes Gamma', price: 109, currency: 'EUR', url: 'https://gamma-run.example/products/gamma', checkout: 'https://gamma-run.example/cart/7:1' }],
+      next: [{ do: 'check again later', at: `${BASE}/deal?url=${encodeURIComponent(page)}` }, { do: 'read the whole page', at: `${BASE}/r/${page}` }], record: { id: '0123456789abcdef', url: `${BASE}/seen/0123456789abcdef` } };
+    const out = t.cm.dealWithCommission(ans);
+    for (const k of ['product', 'page', 'cheapest', 'next', 'record', 'verdict']) assert.equal(JSON.stringify(out[k]), JSON.stringify(ans[k]), `${k} stays as it came`);
+    assert.equal(out.elsewhere[0].commission, true, 'another store with a rule carries it');
+    t.set({ domains: { 'nowhere.example': { tag: 'x' } } }); assert.equal(t.cm.dealWithCommission(ans), ans, 'no fitting rule: the same object');
+    t.set(null); assert.equal(t.cm.dealWithCommission(ans), ans, 'off: the same object');
+    t.set(ON); t.rest(true); try { assert.equal(t.cm.dealWithCommission(ans), ans, 'resting: the same object'); } finally { t.rest(false); }
+  },
 };
 
 // ------------------------------------------------------------------ the proofs
@@ -369,6 +405,7 @@ await proof('M10: the commission mark on a via address is signed like the token;
 await proof('wherever a commission link stands it says so: the words beside it on every page and in the Markdown, commission: true in every JSON answer (decide, ask, MCP, A2A, the brain)', () => checks.markedEverywhere(T));
 console.log('where the ids come from, and what the sea keeps');
 await proof('config/commission.json: the shipped (empty) file and no file are off and answer byte for byte the same; ids in the file turn it on; MARE_COMMISSION wins over the file', () => checks.configFile(T));
+await proof('/deal: the offers at other stores carry the commission where one applies and say so; same order, prices and verdict; a promoted offer keeps its own; the page asked about, its product, the cheapest when it is this page, the steps back and the record stay as they came', () => checks.deals(T));
 await proof('pathways keep the shop\'s own address: lay_path and /lay with a tag or a wrapper of ours store the clean address (one path), a rating keeps it, someone else\'s tag stays; commission and uncommission are exact inverses', () => checks.cleanStore(T));
 T.set(null);
 
@@ -393,6 +430,10 @@ const MUTANTS = [
   ['a wrapper without the network\'s consent', 'commission.mjs', ' && c.wrap.agentsAllowed === true', '', 'rules'],
   ['off is not off: a person is sent on without commissions', 'core.mjs', 'commission: commissionOn() ? viaCommissionFor : null,', 'commission: (u) => viaCommissionFor(u),', 'viaOff'],
   ['a pathway keeps the commission link', 'brain.mjs', 'const url = https(uncommission(to));', 'const url = https(to);', 'cleanStore'],
+  ['a deal check lays the commission over the page it was asked about', 'commission.mjs', "const away = ans.cheapest?.where === 'another store';", "const away = !!ans.cheapest;", 'deals'],
+  ['the free deal door hands out the clean links', 'core.mjs', 'return json(ctx.readOnly ? r : dealWithCommission(r), 200, dlHdr);', 'return json(r, 200, dlHdr);', 'deals'],
+  ['a deal check takes a commission on an offer that pays through its catalog', 'commission.mjs', "if (!o || typeof o !== 'object' || Array.isArray(o) || o.promoted || typeof o.commission === 'number' || paid.has(o.url) || paid.has(o.checkout)) return o;", "if (!o || typeof o !== 'object' || Array.isArray(o)) return o;", 'deals'],
+  ['a deal check hands out a commission link without its mark', 'commission.mjs', 'n += 1; copy.commission = true; copy.commission_network = net;', 'n += 1;', 'deals'],
   ['the file is never read', 'commission.mjs', "let f = null; try { f = readFileSync(COMMISSION_FILE, 'utf8'); }", "let f = null; try { f = null; }", 'configFile'],
   ['the file wins over the environment', 'commission.mjs', "const e = String(env.MARE_COMMISSION ?? '').trim();", "let f0 = null; try { f0 = readFileSync(COMMISSION_FILE, 'utf8'); } catch {} const e = f0 && parseCommission(f0).domains.size ? '' : String(env.MARE_COMMISSION ?? '').trim();", 'configFile'],
 ];
