@@ -175,7 +175,7 @@ if (!process.argv.includes('--no-controls')) {
     ['another amount taken (five cents buy a check)', 'node/readpay.mjs', "if (v !== BigInt(t.atomic)) return", "if (false) return"],
     ['an unreachable site charged (the claim not given back)', 'node/core.mjs', "      if (!r || r.error || r.reachable === false || typeof r.score !== 'number') {\n        await book.release(claim);", "      if (false) {\n        await book.release(claim);"],
     ['a paid check counted against the free checks', 'node/lens.mjs', "if (!ctx?.paidCheck) { try { await allow(ctx, 'check', 20, 3600); }", "if (true) { try { await allow(ctx, 'check', 20, 3600); }"],
-    ['no 402 without a payment (the door gives the check away)', 'node/core.mjs', "      if (!pay) { funnelOf(db, cfg).asked('check'); return checkRequired(t, { base, cors: CORS }); }", "      if (!pay) { funnelOf(db, cfg).asked('check'); return json({ score: 100 }); }"],
+    ['no 402 without a payment (the door gives the check away)', 'node/core.mjs', "        funnelOf(db, cfg).asked('check'); return checkRequired(t, { base, cors: CORS });", "        funnelOf(db, cfg).asked('check'); return json({ score: 100 });"],
     ['the free door past its limit without terms (429 as before)', 'node/core.mjs', "if (!html && e instanceof SeaError && e.checkLimit) {", "if (false) {"],
     ['delivered without a verdict (strict off)', 'node/core.mjs', "label: 'check', strict: true });", "label: 'check', strict: false });"],
   ];

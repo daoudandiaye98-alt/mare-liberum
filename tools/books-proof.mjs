@@ -813,6 +813,11 @@ await proof('/status.json gains counts: numbers only (and the day), no address, 
 const firstDiff = (x, y) => { let i = 0; while (i < x.length && x[i] === y[i]) i++; return `at ${i}: ${JSON.stringify(x.slice(Math.max(0, i - 120), i + 120))} <> ${JSON.stringify(y.slice(Math.max(0, i - 120), i + 120))}`; };
 // (the moment each tree's modules were first loaded, runningSince of /open.json, is the only thing told apart: this tree's came first)
 const since0 = (t) => t.replace(/"runningSince":"[^"]*"/g, '"runningSince":"<start>"')
+  // (and the sessions of 3.78, proven by tools/session-proof.mjs and tools/legal-proof.mjs: the paragraph of the privacy notice
+  // and its row in the table of how long data are kept, in German and in English; cut first)
+  .replace(/\n<p>\(\d+\) Sitzungen: [\s\S]*?<\/p>/g, '')
+  .replace(/\n<p>\(\d+\) Sessions: [\s\S]*?<\/p>/g, '')
+  .replace(/<tr><td>(?:Sitzungen|Sessions) \(POST \/session\)<\/td><td>[^<]*<\/td><\/tr>\n/g, '')
   // (and the commission links of 3.74, proven by tools/commission-proof.mjs and tools/legal-proof.mjs: the paragraph of the
   // privacy notice, in German and in English; cut first)
   .replace(/\n<p>\(\d+\) Provisionslinks: [\s\S]*?<\/p>/g, '')
