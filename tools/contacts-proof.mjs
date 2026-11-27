@@ -255,8 +255,8 @@ await proof('back within 7 days: a contact seen on another UTC day is wiederkunf
   const first = today(); T0 += 86_400_000;
   await call(`/x402/check?site=${host()}`, { ip, ua }); const c = await contact(ua, ip); assert.equal(c.wiederkunft_d7, true); assert.deepEqual(c.days, [first, today()]);
   const j = (await call('/contacts.json', { ip: '127.0.0.1' })).j; assert.ok(j.returned_so_far.back >= 1); assert.equal(j.cohort_d7, null, 'no full cohort yet');
-  assert.equal(j.lines.length, 4); assert.match(j.lines[3], /^4 Wiederkehr d7: erste volle Kohorte am \d{4}-\d{2}-\d{2} \(bisher: \d+ von \d+/);
-  const t = await call('/contacts.txt', { ip: '127.0.0.1', accept: 'text/plain' }); assert.equal(t.text.trim().split('\n').length, 4); assert.match(t.text, /^1 Neue Agenten an der Bezahlwand \(/);
+  assert.equal(j.lines.length, 5, 'since 3.83 the keys are line 5'); assert.match(j.lines[4], /^5 Schlüssel \(/); assert.match(j.lines[3], /^4 Wiederkehr d7: erste volle Kohorte am \d{4}-\d{2}-\d{2} \(bisher: \d+ von \d+/);
+  const t = await call('/contacts.txt', { ip: '127.0.0.1', accept: 'text/plain' }); assert.equal(t.text.trim().split('\n').length, 5, 'since 3.83 five lines'); assert.match(t.text, /^1 Neue Agenten an der Bezahlwand \(/);
   assert.match(t.text, /\n2 402 nach Typ \(.*\): kein Wallet \d+ · Preis \d+ · Scheme \d+ · Chain \d+ · Timeout \d+/); assert.match(t.text, /\n3 402 zu bezahlt \(/);
   T0 += 9 * 86_400_000; const k = (await call('/contacts.json', { ip: '127.0.0.1' })).j; assert.ok(k.cohort_d7, 'a full cohort eight days on'); assert.match(k.lines[3], /^4 Wiederkehr d7 \(Kohorte /);
 });
@@ -275,6 +275,25 @@ await proof('a key that opened a door makes its contact agent_with_key, not a pr
   assert.equal((await day()).with_key, d3.with_key, 'once per contact');
   const plain = 'harbour-buyer/1.0', ip2 = fresh(); await call(`/x402/check?site=${host()}`, { ip: ip2, ua: plain }); assert.equal((await contact(plain, ip2)).rolle, 'agent');
   const t = await call('/contacts.txt', { ip: '127.0.0.1', accept: 'text/plain' }); assert.match(t.text.split('\n')[0], /; agent_with_key, ein Schlüssel öffnete eine Tür: \d+\)$/);
+});
+await proof('line 5 of the morning: the keys of the day, given, with at least one door, paid; /contacts.json says the same as numbers (3.83)', async () => {
+  const keys = async () => (await call('/contacts.json', { ip: '127.0.0.1' })).j.keys, k0 = await keys();
+  const ip = fresh(), key = (await call('/session?as=key', { ip, accept: '*/*' })).text.trim();
+  assert.equal((await keys()).given, k0.given + 1);
+  assert.equal((await call(`/x402/check?site=${host()}`, { ip, headers: { 'x-sea-session': key } })).status, 200); assert.equal((await call(`/x402/check?site=${host()}`, { ip, headers: { 'x-sea-session': key } })).status, 200);
+  assert.equal((await keys()).with_a_door, k0.with_a_door + 1, 'a key once, however many doors');
+  facilitator = settles(); const paid = await call(`/x402/check?site=${host()}`, { ip, headers: { 'x-sea-session': key, ...payment() } }); facilitator = null; assert.equal(paid.status, 200);
+  const k1 = await keys(); assert.equal(k1.paid, k0.paid + 1);
+  const t = await call('/contacts.txt', { ip: '127.0.0.1', accept: 'text/plain' }), l5 = t.text.trim().split('\n')[4];
+  assert.equal(l5, `5 Schlüssel (${today()}): heute ausgegeben ${k1.given} · mit mindestens einer Tür ${k1.with_a_door} · bezahlt ${k1.paid}`);
+});
+await proof('the free /check and /deal lead to the paid door: upgrade with the one curl (a key from one GET and the call with it), and that curl works as it stands (3.83)', async () => {
+  const site1 = host(), c = await call(`/check?site=${site1}`, { ip: fresh() }); assert.equal(c.status, 200); assert.equal(typeof c.j.score, 'number');
+  assert.equal(c.j.upgrade.curl, `KEY=$(curl -s ${BASE}/session?as=key) && curl -s '${BASE}/x402/check?site=${site1}' -H "x-sea-session: $KEY"`); assert.match(c.j.upgrade.price, /20 probe calls free with one key, then 0\.01 USDC/);
+  const m = /^KEY=\$\(curl -s (\S+)\) && curl -s '([^']+)' -H "x-sea-session: \$KEY"$/.exec(c.j.upgrade.curl), ip = fresh();
+  const key = (await call(rel(m[1]), { ip, accept: '*/*' })).text.trim(), paidDoor = await call(rel(m[2]), { ip, headers: { 'x-sea-session': key } }); assert.equal(paidDoor.status, 200); assert.equal(paidDoor.j.calls_left, 19);
+  const d = await call(`/deal?url=${URLQ(`https://shop.${W}/products/trail-runner-3`)}`, { ip: fresh() }); assert.equal(d.status, 200, d.text.slice(0, 200));
+  assert.match(d.j.upgrade.curl, /^KEY=\$\(curl -s https:\/\/mare\.test\/session\?as=key\) && curl -s 'https:\/\/mare\.test\/x402\/deal\?url=https%3A%2F%2Fshop\./);
 });
 await proof('the operator\'s lines: /contacts.ndjson only with x-mare-mod, in exactly the columns of supabase/kontaktbuch.sql', async () => {
   assert.equal((await call('/contacts.ndjson', { ip: fresh() })).status, 403); assert.equal((await call('/contacts.ndjson', { ip: fresh(), headers: { 'x-mare-mod': 'wrong' } })).status, 403);
@@ -301,6 +320,8 @@ let caught = 0, missed = 0;
 if (!process.argv.includes('--no-controls')) {
   console.log('\nnegative controls: each rule broken in a copy, the proof must fail there');
   const CONTROLS = [
+    ['no line 5 (3.83)', 'node/core.mjs', "d.lines = [...d.lines, `5 Schlüssel", "d.lines_ = [...d.lines, `5 Schlüssel"],
+    ['no upgrade on the free check (3.83)', 'node/core.mjs', "upgrade: upgradeOf('check',", "upgrade_: upgradeOf('check',"],
     ['a key that opened a door stays a probe (3.81)', 'node/contacts.mjs', "if (e.kind === 'probe' && c.rolle !== 'agent_with_key') {", 'if (false) {'],
     ['no next_step in the 402', 'node/core.mjs', 'return new Response(JSON.stringify({ ...body, next_step }), { status: 402,', 'return res; new Response(JSON.stringify({ ...body, next_step }), { status: 402,'],
     ['the session step without as=key (the key cannot be kept from the answer)', 'node/core.mjs', "const open = { method: 'GET', url: `${base}/session?as=key`, keep: 'key' };", "const open = { method: 'GET', url: `${base}/session`, keep: 'key' };"],

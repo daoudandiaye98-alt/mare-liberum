@@ -23,8 +23,13 @@
 //            counted (session:paid:<day>, each key once a day) for the open numbers
 //   grace    (since 3.82) a key whose probe calls are spent gets one taste at the route before the 402: grace(h) marks it once
 //            for this round of probe calls (a topup starts a new round); the door then answers 200 with the first 3 paths
+//   counts   (since 3.83) per UTC day the keys given (session:open), the keys whose first door was that day (session:used) and
+//            the keys that paid that day (session:paid: a topup, or a paid door with the key sent along), each key once a day
+//   callback (since 3.83) kept with the key (given at the start or with a topup) and called once: one POST at the first payment
+//            of the key (its id, calls_left, the next step; never the key), 2 s, never again, never waited for; the bookmark
+//            says when and how it went
 //   never    a key in clear anywhere (state, books, logs, answers after the first); a probe call spent twice or for nothing;
-//            money: probe calls are no sale, the till's books stay as they are; a call to a callback.
+//            money: probe calls are no sale, the till's books stay as they are; a second call to a callback.
 // The state lives in the node's state (session:…), like the reader credit (node/credit.mjs): no table, no migration. The
 // count of new sessions per network lies under an HMAC of the network with a key of the day (as the toll's accounts do).
 import { createHash, createHmac, hkdfSync, randomBytes } from 'node:crypto';
@@ -86,7 +91,7 @@ export function createSessions({ kv, now = () => Date.now(), secret = randomByte
     calls: rec.calls, last: rec.last.map((c) => ({ door: c.door, at: c.at, ...(c.back ? { given_back: true } : {}) })),
     ...(rec.topups?.length ? { topups: rec.topups.map((x) => ({ at: x.at, status: x.status })) } : {}),
     ...(rec.agent ? { agent: rec.agent } : {}),
-    callback: rec.cb ? { host: rec.cb.host, state: 'kept, not called: calls start once the host proves it wants them' } : null,
+    callback: rec.cb ? { host: rec.cb.host, state: rec.cb.called ? `called once at ${rec.cb.called.at}: ${rec.cb.called.state}` : 'kept: called once, at the first payment of this key' } : null,
   });
   return {
     // a new session: { key, id, doc } or { refuse: { status, retry, message } }
@@ -118,9 +123,11 @@ export function createSessions({ kv, now = () => Date.now(), secret = randomByte
         const g = await count(gk, 1, 2 * DAY);
         if (g > SESSION.probeDay) { await count(gk, -1, 2 * DAY); return { ok: false, why: 'empty', budget: true, id, left: rec.probe.left, used: rec.calls }; }
         rec.probe.left -= 1; rec.calls += 1; rec.rate = { m, n: rec.rate?.m === m ? rec.rate.n + 1 : 1 };
+        const door1 = !rec.door1; if (door1) rec.door1 = new Date(t).toISOString();
         const tag = randomBytes(6).toString('hex');
         rec.last = [{ door: String(door).slice(0, 16), at: new Date(t).toISOString(), day, tag }, ...rec.last].slice(0, SESSION.last);
         await kv.set(R(id), rec, ttlOf(rec));
+        if (door1) await count(`session:used:${day}`, 1, 40 * DAY);
         return { ok: true, left: rec.probe.left, used: rec.calls, id, until: rec.probe.until, tag, day };
       });
     },
@@ -139,6 +146,33 @@ export function createSessions({ kv, now = () => Date.now(), secret = randomByte
         await count(`session:probe:${c?.day || taken.day || dayOf(now())}`, -1, 2 * DAY);
         return { ok: true, left: rec.probe.left, used: rec.calls };
       });
+    },
+    // (since 3.83) a paid answer of this key (a topup, or a paid door with the key sent along): its day counted once; the first
+    // payment of the key hands back its callback, once ({ url, host, id, left, used }), marked as being called
+    paid(h) {
+      const id = idOf(h);
+      return serial(id, async () => {
+        const t = now(), rec = await kv.get(R(id)); if (!rec || rec.h !== h) return { ok: false };
+        const day = dayOf(t), today = !(rec.paidDays || []).includes(day), first = !rec.paidAt;
+        if (!today && !first) return { ok: true, first: false, call: null };
+        rec.paidDays = [day, ...(rec.paidDays || []).filter((d) => d !== day)].slice(0, 31); if (first) rec.paidAt = new Date(t).toISOString();
+        let call = null;
+        if (first && rec.cb?.url && !rec.cb.called) { rec.cb = { ...rec.cb, called: { at: new Date(t).toISOString(), state: 'calling' } }; call = { url: rec.cb.url, host: rec.cb.host, id, left: Date.parse(rec.probe.until) > t ? rec.probe.left : 0, used: rec.calls }; }
+        await kv.set(R(id), rec, ttlOf(rec));
+        if (today) await count(`session:paid:${day}`, 1, 40 * DAY);
+        return { ok: true, first, call };
+      });
+    },
+    // (since 3.83) how the one call to the callback went ("HTTP 200", "timeout (2 s)", "no answer")
+    called(h, state) {
+      const id = idOf(h);
+      return serial(id, async () => { const rec = await kv.get(R(id)); if (!rec || rec.h !== h || !rec.cb?.called) return { ok: false }; rec.cb.called.state = String(state).slice(0, 60); await kv.set(R(id), rec, ttlOf(rec)); return { ok: true }; });
+    },
+    // (since 3.83) a callback given with a topup: kept (as at the start: https, a public host by name, 443), never twice called
+    setCallback(h, raw) {
+      const cb = callbackOf(raw); if (!cb) return Promise.resolve({ ok: true, none: true }); if (cb.bad) return Promise.resolve({ ok: false, bad: cb.bad });
+      const id = idOf(h);
+      return serial(id, async () => { const rec = await kv.get(R(id)); if (!rec || rec.h !== h) return { ok: false, bad: 'unknown key' }; if (rec.cb?.called) return { ok: true, kept: 'the callback was called before: it is not replaced' }; rec.cb = { url: cb.url, host: cb.host, at: new Date(now()).toISOString() }; await kv.set(R(id), rec, ttlOf(rec)); return { ok: true }; });
     },
     // (since 3.82) the topups of a key as the state keeps them ({ at, sale, status, before }), for the checks of a receipt
     async topups(h) { const rec = await kv.get(R(idOf(h))); return rec && rec.h === h && Array.isArray(rec.topups) ? rec.topups : []; },
@@ -168,17 +202,15 @@ export function createSessions({ kv, now = () => Date.now(), secret = randomByte
         if (!rec || rec.h !== h) return { ok: false, why: 'unknown' };
         const live = Date.parse(rec.probe.until) > t, before = live ? rec.probe.left : 0;
         if (mark && (rec.topups || []).some((x) => x.sale === mark)) return { ok: true, again: true, before, left: before, used: rec.calls, id, until: rec.probe.until };
-        const day = dayOf(t), first = !(rec.topups || []).some((x) => String(x.at).slice(0, 10) === day);
         rec.probe = { n: SESSION.probe, left: SESSION.probe, until: new Date(t + SESSION.probeDays * DAY * 1000).toISOString() }; rec.round = (rec.round || 0) + 1;
         rec.until = new Date(Math.max(Date.parse(rec.until), t + SESSION.days * DAY * 1000)).toISOString();
         rec.topups = [{ at: new Date(t).toISOString(), sale: mark || null, status: String(status || '').slice(0, 16) || null, before }, ...(rec.topups || [])].slice(0, 20);
         await kv.set(R(id), rec, ttlOf(rec));
-        if (first) await count(`session:paid:${day}`, 1, 40 * DAY);
         return { ok: true, before, left: rec.probe.left, used: rec.calls, id, until: rec.probe.until };
       });
     },
     // probe calls given today (UTC), for the open numbers
-    async today() { const day = dayOf(now()); return { day, opened: Number(await kv.get(`session:open:${day}`)) || 0, probe_calls: Number(await kv.get(`session:probe:${day}`)) || 0, probe_day: SESSION.probeDay, paid_keys: Number(await kv.get(`session:paid:${day}`)) || 0 }; },
+    async today() { const day = dayOf(now()); return { day, opened: Number(await kv.get(`session:open:${day}`)) || 0, probe_calls: Number(await kv.get(`session:probe:${day}`)) || 0, probe_day: SESSION.probeDay, used_keys: Number(await kv.get(`session:used:${day}`)) || 0, paid_keys: Number(await kv.get(`session:paid:${day}`)) || 0 }; },
   };
 }
 

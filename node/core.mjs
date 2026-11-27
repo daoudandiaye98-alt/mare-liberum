@@ -1813,6 +1813,20 @@ export const wayOutOf = (base, price) => ({
 });
 const supplyFields = (s, base, price) => ({ calls_left: s.left, calls_used: s.used, ...(s.left === 3 || s.left === 0 ? { way_out: wayOutOf(base, price) } : {}) });
 const SUPPLY_EXPOSE = 'x-sea-calls-left,x-sea-calls-used';
+// (since 3.83) the one call to a key's callback, at its first payment: one POST, 2 s, never again, never waited for; the key's
+// id and bookmark, never the key; the egress gate of the server (node/guard.mjs) holds for it as for every call out
+function callBackOnce(db, cfg, base, sv, c) {
+  const body = JSON.stringify({ event: 'first_payment', session: c.id, bookmark: `${base}/session/${c.id}`, calls_left: c.left, calls_used: c.used, next: 'send the same request again with the same key: it answers', at: new Date().toISOString(), notice: 'Mare Liberum calls this address once, at the first payment of the key it came with, and never again' });
+  const p = (async () => {
+    let state = 'no answer';
+    try { const r = await fetch(c.url, { method: 'POST', redirect: 'manual', headers: { 'content-type': 'application/json', 'user-agent': 'MareLiberum-Callback/1.0 (+https://mareliberum.dev/session)' }, body, signal: AbortSignal.timeout(2000) }); state = `HTTP ${r.status}`; try { await r.body?.cancel(); } catch {} }
+    catch (e) { state = e?.name === 'TimeoutError' || e?.name === 'AbortError' ? 'timeout (2 s)' : 'no answer'; }
+    console.log('mare_callback', c.id, c.host, state);
+    try { await sessionsOf(db, cfg).called(sv.h, state); } catch {}
+  })();
+  try { cfg.waitUntil?.(p); } catch {}
+  return p;
+}
 // the fields set into a JSON object as it was written (its lines kept: one more line per field where it had lines)
 const spliceFields = (text, fields) => {
   const end = text.trimEnd(); if (!end.endsWith('}')) return null;
@@ -1903,6 +1917,8 @@ async function paywallAfter({ req, copy, res, db, cfg, url }) {
     let usd = null, b = null; try { b = JSON.parse(await res.clone().text()); usd = Number(b?.paid?.amount_usd ?? b?.amount_usd); } catch {}
     if (path === '/settle' && !b?.paid) return supplied(res);
     note({ kind: 'paid', paid: true, paid_usd: Number.isFinite(usd) && usd > 0 ? usd : null, session: keyed ? sv.id : null });
+    // (since 3.83) a key that paid: its day counted, and at its first payment the one call to its callback (behind the answer)
+    if (keyed) { try { const pr = await sessionsOf(db, cfg).paid(sv.h); if (pr.call) callBackOnce(db, cfg, base, sv, pr.call); } catch {} }
   }
   return supplied(res);
 }
@@ -2267,6 +2283,12 @@ async function handleOne(req, db, cfg = {}) {
       return (out.lines ? ajson : json)({ ...out.answer, session }, 200, { ...sx, 'x-sea-session-left': String(s.left) });
     };
     // the words a session gets: how to use the key, on which doors
+    // (since 3.83) the way from a free answer to its paid door: one curl, a key from one GET and the call with it
+    const upgradeOf = (door, paidUrl) => ({
+      what: door === 'deal' ? 'the paid deal check: more offers and the whole memory, the same answer shape' : 'the paid check: the same site, as data, with the paid limits',
+      price: `${SESSION.probe} probe calls free with one key, then 0.01 USDC a call over x402`,
+      curl: `KEY=$(curl -s ${base}/session?as=key) && curl -s ${sq(paidUrl)} -H "x-sea-session: $KEY"`,
+    });
     const sessionUse = () => ({
       get: `curl -s ${base}/session?as=key   (the key alone, one line; POST ${base}/session gives it as JSON with the bookmark)`,
       header: 'x-sea-session: <key>   (or Authorization: Bearer <key>)',
@@ -2391,6 +2413,8 @@ async function handleOne(req, db, cfg = {}) {
       if (!pay) return paymentRequired(t, { base, cors: CORS });
       if (pay.bad) return paymentRequired(t, { base, error: pay.bad, cors: CORS });
       if (tillBusy()) return json({ error: { code: 'RESOURCE_EXHAUSTED', message: 'the till asks this address for a calmer pace (120 paid moves an hour). Nothing was charged.' } }, 429, { ...sx, 'retry-after': '300' });
+      // (since 3.83) a callback given with the topup is kept (called once, at the first payment of the key)
+      if (a.callback_url != null) { const cbk = await store.setCallback(sv.h, a.callback_url); if (!cbk.ok) return json({ error: { code: 'INVALID_ARGUMENT', message: `${cbk.bad}. Nothing was charged.` } }, 422, sx); }
       const before = await tillSums();
       const r = await takePayment({ cfg: payCfg, t, pay, q: `topup of session ${d.id}`, ledger, label: 'topup', work: (sale) => store.topup(sv.h, { sale: sale.id, status: sale.status }), callerHash: caller(), waitUntil: cfg.waitUntil, base });
       if (r.refuse) return paymentRequired(t, { base, error: r.refuse, cors: CORS });
@@ -2427,6 +2451,7 @@ async function handleOne(req, db, cfg = {}) {
       const rc = receiptOf(a);
       if (!rc || rc.test || !rc.tx) return paymentRequired(t, { base, error: 'hand in "tx": the transaction hash of your USDC transfer on Base (the price of one route, to the till\'s wallet)', cors: CORS });
       if (tillBusy()) return json({ error: { code: 'RESOURCE_EXHAUSTED', message: 'the till asks this address for a calmer pace (120 paid moves an hour)' } }, 429, { ...sx, 'retry-after': '300' });
+      if (a.callback_url != null) { const cbk = await store.setCallback(sv.h, a.callback_url); if (!cbk.ok) return json({ error: { code: 'INVALID_ARGUMENT', message: `${cbk.bad}. Nothing was taken.` } }, 422, sx); }
       const mark = `tx:${rc.tx.toLowerCase()}`.slice(0, 40), had = await store.topups(sv.h);
       const seen = await chainSeen(rc.tx, t.atomic), day = new Date().toISOString().slice(0, 10);
       if (!had.some((x) => x.sale === mark) && !seen.ok && had.some((x) => String(x.at).slice(0, 10) === day && x.status === 'unverified'))
@@ -2483,6 +2508,9 @@ async function handleOne(req, db, cfg = {}) {
     // numbers only (no address, no transaction); the till's sums stay on /treasury
     if ((path === '/contacts.json' || path === '/contacts.txt') && (req.method === 'GET' || req.method === 'HEAD')) {
       const d = await contactsOf(db, cfg).dashboard();
+      // (since 3.83) line 5: the keys of the day (given, with at least one door, paid), from the sessions' own counts
+      const kt = await sessionsOf(db, cfg).today().catch(() => null);
+      if (kt) { d.keys = { day: kt.day, given: kt.opened, with_a_door: kt.used_keys, paid: kt.paid_keys }; d.lines = [...d.lines, `5 Schlüssel (${kt.day}): heute ausgegeben ${kt.opened} · mit mindestens einer Tür ${kt.used_keys} · bezahlt ${kt.paid_keys}`]; }
       if (path === '/contacts.txt') return new Response(`${d.lines.join('\n')}\n`, { headers: { 'content-type': 'text/plain; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex', ...CORS } });
       return json(d, 200, { 'cache-control': 'no-store', 'x-robots-tag': 'noindex', ...CORS });
     }
@@ -2952,7 +2980,8 @@ async function handleOne(req, db, cfg = {}) {
       }
       // the links to other stores carry the commission where the operator set one, never for a crawler; the page asked about and
       // the open record stay as they came (node/commission.mjs dealWithCommission)
-      return json(ctx.readOnly ? r : dealWithCommission(r), 200, dlHdr);
+      // (since 3.83) the free answer leads to the paid door: upgrade, the one curl with a key
+      return json({ ...(ctx.readOnly ? r : dealWithCommission(r)), upgrade: upgradeOf('deal', `${base}${DEAL.path}${url.search}`) }, 200, dlHdr);
     }
     if (path === CHECKPAY.path) {
       if (req.method !== 'GET' && req.method !== 'POST' && req.method !== 'HEAD') return json({ error: { code: 'METHOD_NOT_ALLOWED', message: `GET ${base}${CHECKPAY.path}?site=<domain> over x402 (0.01 USDC a check)` } }, 405, paidHdr);
@@ -3311,7 +3340,8 @@ async function handleOne(req, db, cfg = {}) {
         if (!html) throw e; r = { error: e.message, host: String(q).slice(0, 100) };
       }
       if (html) return new Response(checkPage(base, r, typeof r?.score === 'number' && r.host && !(r.offers || []).length ? siteReportHtml(r.host, base) : ''), { status: r?.error && !r.host ? 400 : 200, headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': 'public, max-age=300', ...(r?.notChecked || r?.error ? { 'x-robots-tag': 'noindex' } : {}), ...CORS } });
-      return json(r, 200, { 'cache-control': 'public, max-age=300, s-maxage=600', 'x-robots-tag': 'noindex' });
+      // (since 3.83) the free answer leads to the paid door: upgrade, the one curl with a key
+      return json(r && typeof r === 'object' && typeof r.score === 'number' ? { ...r, upgrade: upgradeOf('check', `${base}${CHECKPAY.path}?site=${encodeURIComponent(r.host || q)}`) } : r, 200, { 'cache-control': 'public, max-age=300, s-maxage=600', 'x-robots-tag': 'noindex' });
     }
     if (path === '/lookup') return json(await sea.lookup((await args()).q, ctx), 200, { 'cache-control': 'no-store', 'x-robots-tag': 'noindex' });
     // the Unibrain: the first stop for agents on the internet — pathways, walks, ratings, minds

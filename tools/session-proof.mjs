@@ -51,7 +51,7 @@ const ARTICLE = `<!doctype html><html lang="en"><head><title>Pier notes</title><
 const productPage = ({ name = 'Trail Runner 3', price = '89.00', gtin = '0123456789012' } = {}) => `<!doctype html><html lang="en"><head><title>${name} · Shop</title><meta name="description" content="${name}"><script type="application/ld+json">${JSON.stringify({ '@context': 'https://schema.org', '@type': 'Product', name, brand: { '@type': 'Brand', name: 'Example' }, gtin13: gtin, offers: { '@type': 'Offer', price, priceCurrency: 'USD', availability: 'https://schema.org/InStock' } })}</script></head><body><main><h1>${name}</h1><p>The ${name} is a shoe for long trails, light and quick on rock and mud, made to last for many seasons of running.</p><p>Price: ${price} USD</p></main></body></html>`;
 const offer = (title, cents, host) => ({ title, price_range: { min: { amount: cents, currency: 'USD' } }, variants: [{ price: { amount: cents, currency: 'USD' }, availability: { available: true }, seller: { url: `https://${host}/products/x`, name: host } }] });
 const RUNNER = [offer('Example Trail Runner 3', 7995, `another.${W}`), offer('Example Trail Runner 3', 8400, `third.${W}`)];
-const fetched = [];
+const fetched = [], hooks = [];
 let facilitator = null;
 const answer = (j, status = 200) => new Response(JSON.stringify(j), { status, headers: { 'content-type': 'application/json' } });
 globalThis.fetch = async (u, o = {}) => {
@@ -60,6 +60,8 @@ globalThis.fetch = async (u, o = {}) => {
   if (s === CATALOG) { const q = String(JSON.parse(o.body)?.params?.arguments?.catalog?.query || ''); return answer({ jsonrpc: '2.0', id: 1, result: { structuredContent: { products: /trail runner 3/i.test(q) ? RUNNER : [] } } }); }
   const url = new URL(s);
   if (!url.hostname.endsWith(`.${W}`)) throw new Error(`the proof does not use the network: ${s.slice(0, 80)}`);
+  // (3.83) the callbacks of the proof: /hook answers at once, /hook-slow after 3 s (the sea waits 2 s, never longer)
+  if (url.hostname.startsWith('cb.') && url.pathname.startsWith('/hook')) { hooks.push({ url: s, method: o.method, body: String(o.body || ''), at: Date.now() }); if (url.pathname === '/hook-slow') await new Promise((r, j) => { const tm = setTimeout(r, 3000); o.signal?.addEventListener?.('abort', () => { clearTimeout(tm); j(o.signal.reason || Object.assign(new Error('aborted'), { name: 'AbortError' })); }); }); return new Response('ok', { status: 200 }); }
   if (url.pathname === '/robots.txt') return new Response(url.hostname.startsWith('closed.') ? 'User-agent: *\nDisallow: /\n' : 'User-agent: *\nAllow: /\n', { status: 200, headers: { 'content-type': 'text/plain' } });
   if (url.pathname === '/llms.txt') return new Response('# Harbour shop\n\nRopes and sails; the catalogue is at /catalogue.\n', { status: 200, headers: { 'content-type': 'text/plain' } });
   if (url.hostname.startsWith('shop.') && url.pathname === '/products/trail-runner-3') return new Response(productPage(), { status: 200, headers: { 'content-type': 'text/html; charset=utf-8' } });
@@ -251,16 +253,16 @@ await proof('the body: not a JSON object 400, an array 400, longer than 4096 cha
   const nf = await call(`/session/${'0'.repeat(24)}`, { ip: fresh() }); assert.equal(nf.status, 404); assert.equal(nf.j.error.code, 'NOT_FOUND');
   assert.equal((await call('/session/not-an-id', { ip: fresh() })).status, 404);
 });
-await proof('callback_url: https on a public host by name is kept (its host on the bookmark) and never called; http, an address, a local name, another port, a user, 301 characters: 422', async () => {
+await proof('callback_url: https on a public host by name is kept (its host on the bookmark) and not called by a probe call (since 3.83 once, at the first payment); http, an address, a local name, another port, a user, 301 characters: 422', async () => {
   const cb = `https://hooks.agent-${randomBytes(3).toString('hex')}.example.com/sea`;
   const r = await open(fresh(), { callback_url: cb, agent: 'Proof agent 1.0 <script>' });
-  assert.equal(r.j.callback.host, new URL(cb).hostname); assert.match(r.j.callback.state, /not called/); assert.equal(r.j.agent, 'Proof agent 1.0 script');
+  assert.equal(r.j.callback.host, new URL(cb).hostname); assert.match(r.j.callback.state, /called once, at the first payment/); assert.equal(r.j.agent, 'Proof agent 1.0 script');
   const rec = await kv.get(`session:${r.j.id}`); assert.equal(rec.cb.url, cb);
   for (const bad of ['http://hooks.example.com/x', 'https://203.0.113.9/x', 'https://[2001:db8::1]/x', 'https://agent.localhost/x', 'https://box.internal/x', 'https://hooks.example.com:8443/x', 'https://u:p@hooks.example.com/x', `https://hooks.example.com/${'a'.repeat(280)}`, 'not a url', 'https://single/x']) {
     const x = await call('/session', { method: 'POST', ip: fresh(), body: { callback_url: bad } }); assert.equal(x.status, 422, bad); assert.match(x.j.error.message, /callback_url/);
   }
   await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: bearer(r.j.key) });
-  assert.ok(!fetched.some((u) => u.includes(new URL(cb).hostname)), 'the callback is never called');
+  assert.ok(!fetched.some((u) => u.includes(new URL(cb).hostname)), 'a probe call does not call the callback');
 });
 await proof('probe calls past their 7 days: the door\'s 402 (the key still known); a key past its 30 days: 410 with the alternatives; the bookmark says so', async () => {
   const k = (await open()).j;
@@ -373,6 +375,31 @@ await proof('a topup paid by a transfer: POST /settle {"a":"topup","tx"} with th
   assert.ok(!g.text.includes(k.key) && !g.text.includes(k2.key), 'never a key');
 });
 
+console.log('the line back (3.83)');
+await proof('a callback is called once, at the first payment of its key: one POST with the id, calls_left and the next step, never the key; 2 s at most and never waited for; never again; the bookmark says how it went', async () => {
+  const P = await open(fresh(), { callback_url: `https://cb.${W}/hook` }); const k = P.j; const rec = await kv.get(`session:${k.id}`); rec.probe.left = 0; await kv.set(`session:${k.id}`, rec, 86_400 * 31);
+  assert.match(k.callback.state, /called once, at the first payment/); hooks.length = 0; waits.length = 0;
+  facilitator = settles();
+  const r = await call('/route?a=topup', { method: 'POST', ip: fresh(), headers: { ...bearer(k.key), ...payment({ value: '20000' }) } }); assert.equal(r.status, 200, r.text.slice(0, 200));
+  await Promise.allSettled(waits.splice(0));
+  assert.equal(hooks.length, 1, 'one POST'); assert.equal(hooks[0].method, 'POST'); assert.equal(hooks[0].url, `https://cb.${W}/hook`);
+  const b = JSON.parse(hooks[0].body); assert.equal(b.event, 'first_payment'); assert.equal(b.session, k.id); assert.equal(b.calls_left, 20); assert.match(b.next, /same request again with the same key/); assert.ok(!hooks[0].body.includes(k.key) && !hooks[0].body.includes(sessionHash(k.key)), 'never the key');
+  const r2 = await call('/route?a=topup', { method: 'POST', ip: fresh(), headers: { ...bearer(k.key), ...payment({ value: '20000' }) } }); assert.equal(r2.status, 200); await Promise.allSettled(waits.splice(0));
+  facilitator = null; assert.equal(hooks.length, 1, 'never again');
+  assert.match((await call(`/session/${k.id}`, { ip: fresh() })).j.callback.state, /^called once at .+: HTTP 200$/);
+  // a slow host: the answer does not wait, the call gives up after 2 s
+  const S = (await open(fresh(), { callback_url: `https://cb.${W}/hook-slow` })).j; facilitator = settles(); hooks.length = 0;
+  const t0 = performance.now(), rs = await call('/route?a=topup', { method: 'POST', ip: fresh(), headers: { ...bearer(S.key), ...payment({ value: '20000' }) } }); const took = performance.now() - t0; facilitator = null;
+  assert.equal(rs.status, 200); assert.ok(took < 1500, `the answer waited ${Math.round(took)} ms`); await Promise.allSettled(waits.splice(0));
+  assert.equal(hooks.length, 1); assert.match((await call(`/session/${S.id}`, { ip: fresh() })).j.callback.state, /timeout \(2 s\)$/);
+  // given with a topup: kept, called at that first payment; a bad one: 422 and nothing charged
+  const T = (await open()).j; facilitator = settles(); hooks.length = 0; const tr0 = await ledger.treasury();
+  const bad = await call('/route?a=topup', { method: 'POST', ip: fresh(), headers: { ...bearer(T.key), ...payment({ value: '20000' }) }, body: { callback_url: 'http://cb.session-proof.dev/hook' } }); assert.equal(bad.status, 422); assert.equal((await ledger.treasury()).total_count, tr0.total_count, 'nothing charged');
+  const good = await call('/route?a=topup', { method: 'POST', ip: fresh(), headers: { ...bearer(T.key), ...payment({ value: '20000' }) }, body: { callback_url: `https://cb.${W}/hook` } }); facilitator = null; assert.equal(good.status, 200); await Promise.allSettled(waits.splice(0));
+  assert.equal(hooks.length, 1); assert.equal(JSON.parse(hooks[0].body).session, T.id);
+  const st = await call('/session', { ip: fresh() }); assert.ok(st.j.today.paid_keys >= 3 && st.j.today.used_keys >= 1);
+});
+
 console.log('books');
 await proof('/openapi.json: POST and GET /session and GET /session/{id}, free (security: []), no price; the sold doors stay seven', async () => {
   const o = (await call('/openapi.json', { ip: '127.0.0.1' })).j;
@@ -407,6 +434,8 @@ if (!process.argv.includes('--no-controls')) {
     ['the network written down in clear', 'node/session.mjs', 'const nk = `session:net:${day}:${netOf(day, net)}`;', 'const nk = `session:net:${day}:${net}`;'],
     ['an empty key gets no x402 terms (403 instead of the door\'s 402)', 'node/core.mjs', "const res = required(); res.headers.set('x-sea-session-left', String(s.left ?? 0));", "const res = json({ error: 'empty' }, 403); res.headers.set('x-sea-session-left', String(s.left ?? 0));"],
     ['a key past its 30 days still works', 'node/session.mjs', "if (Date.parse(rec.until) <= t) return { ok: false, why: 'expired', until: rec.until, left: 0, used: rec.calls };", ''],
+    ['the callback called at every payment (3.83)', 'node/session.mjs', 'if (first && rec.cb?.url && !rec.cb.called) {', 'if (rec.cb?.url) {'],
+    ['the answer waits for the callback (3.83)', 'node/core.mjs', 'if (pr.call) callBackOnce(db, cfg, base, sv, pr.call);', 'if (pr.call) await callBackOnce(db, cfg, base, sv, pr.call);'],
     ['no taste for an empty key (3.82)', 'node/core.mjs', "if (taste && s.why === 'empty' && !s.budget) {", 'if (false) {'],
     ['the taste twice a round (3.82)', 'node/session.mjs', 'if (rec.grace === round) return { ok: false, given: true };', ''],
     ['a receipt believed settled without the books (3.82)', 'node/core.mjs', "if (!e) return { ok: false, why: 'the transfer is not in this node", "if (!e) return { ok: true, why: 'the transfer is not in this node"],
