@@ -57,7 +57,7 @@ export function recordOf(ans, { id, at, base = '', by } = {}) {
   const n = Number.isFinite(ans.elsewhere_found) ? ans.elsewhere_found : offers.length;
   return {
     record: 'price record', id, url: `${b}${SEEN.path}/${id}`, seen_at: at, day: at.slice(0, 10),
-    product: { name: p.name || null, brand: p.brand || null, gtin: p.gtin || null, price: p.price, ...(p.price_is ? { price_is: p.price_is } : {}), list_price: p.list_price ?? null, currency: p.currency, in_stock: p.in_stock ?? null, url },
+    product: { name: p.name || null, brand: p.brand || null, gtin: p.gtin || null, price: p.price, ...(p.price_is ? { price_is: p.price_is } : {}), list_price: p.list_price ?? null, currency: p.currency, in_stock: p.in_stock ?? null, url, ...(p.market ? { market: p.market } : {}) },
     store,
     ...(by === 'sea' ? { by: 'sea', sample: BOOK_SAID } : {}),
     verdict: { word: ans.verdict?.word || null, lines: (ans.verdict?.lines || []).map((l) => String(l).slice(0, 400)).slice(0, 8) },

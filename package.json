@@ -62,7 +62,8 @@
     "proof:checkout": "node tools/checkout-proof.mjs",
     "proof:seen": "node tools/seen-proof.mjs",
     "proof:bots": "node tools/bots-proof.mjs",
-    "proof:dealfirst": "node tools/dealfirst-proof.mjs"
+    "proof:dealfirst": "node tools/dealfirst-proof.mjs",
+    "proof:market": "node tools/market-proof.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.9.0",

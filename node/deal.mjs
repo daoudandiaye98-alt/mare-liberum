@@ -62,6 +62,29 @@ export function remembered(list, { t, p, c }) {
   const top = xs[0]; if (top && top.p === p && top.c === c && Date.parse(t) - Date.parse(top.t) < DEAL.seen.calmMin * 60_000) return xs;
   return [{ t, p, c }, ...xs].slice(0, DEAL.seen.max);
 }
+
+// (since 3.75, "Der Preis in der Heimatwährung") the store's own currency. A Shopify store shows every visitor the prices of the
+// market it places them in; the sea's reader runs in Germany, so a store in St. Louis or Leeds showed it its euro prices (a
+// converted price no person at home sees), and the catalog was then searched in euros, where the same item is rarely listed.
+// A Shopify store names its own currency and country in its /meta.json; a product page in another currency is read once more
+// with ?currency=<its own> (Shopify's own link parameter), and the answer and the record say which currency they hold and why.
+export const MARKET = Object.freeze({ keepDays: 7, meta: '/meta.json' });
+// a Shopify product page (https, a path ending in /products/<handle>, no checkout or cart) → true
+export const shopifyPage = (u) => { try { const x = new URL(u); return x.protocol === 'https:' && /\/products\/[^/]+\/?$/.test(x.pathname) && !/\/(cart|checkouts?)\//.test(x.pathname); } catch { return false; } };
+// the text of a store's /meta.json → { currency, country } (three and two capital letters), or null when it names no currency
+export function homeOf(text) {
+  let j = null; try { j = JSON.parse(String(text ?? '').trim()); } catch { return null; }
+  const c = String(j?.currency ?? ''), k = String(j?.country ?? '');
+  return /^[A-Z]{3}$/.test(c) ? { currency: c, country: /^[A-Z]{2}$/.test(k) ? k : null } : null;
+}
+// the page asked in one currency: the same address with ?currency=<three letters> set (any other part of it kept)
+export function inCurrency(u, cur) { try { const x = new URL(u); x.searchParams.set('currency', cur); return x.href; } catch { return null; } }
+// what the answer says of the currency it holds, when the page came in another one than the store's own (or the one asked
+// for): first, the price the reader was shown; asked, the currency asked for; held, whether the page then came in it
+export function marketOf({ first, asked, home = null, country = null, held }) {
+  return { asked, ...(home ? { home } : {}), ...(country ? { country } : {}), first: { price: first.price, currency: first.currency }, held: !!held,
+    source: held ? `the page read again with ?currency=${asked}` : 'the page as the reader in Germany was shown it' };
+}
 // what the memory says, in one currency: how often, since when, the first, lowest, highest and last price (all of them paid)
 export function seenOf(list, { currency = null, full = false } = {}) {
   const xs = (Array.isArray(list) ? list : []).filter((x) => x && typeof x.t === 'string' && Number.isFinite(x.p) && (!currency || x.c === currency));
@@ -112,6 +135,10 @@ export function dealOf({ product = null, page = null, q = null, offers = [], see
   if (!product && page && !page.read) said(`The page could not be read (${page.error || 'no answer'}), so only other stores were compared.`);
   else if (page && !product) said('The page holds no product data (no schema.org Product, no Shopify product): there is no price on it to compare.');
   if (price != null) said(`On this page: ${from ? 'from ' : ''}${money(price, cur || '')}${from ? ' (its lowest variant)' : ''}${pageStock === false ? ', out of stock' : pageStock ? ', in stock' : ''}.`);
+  const mk = product?.market || null;
+  if (mk && price != null) said(mk.held
+    ? `Currency: the reader in Germany was first shown ${money(mk.first.price, mk.first.currency)}; ${mk.home === mk.asked ? `the store's own currency is ${mk.asked} (its ${MARKET.meta})` : `${mk.asked} was asked for`}, so the page was read again in ${mk.asked}.`
+    : `Currency: ${mk.home === mk.asked ? `the store's own currency is ${mk.asked} (its ${MARKET.meta})` : `${mk.asked} was asked for`}, but the page stayed in ${cur} when asked in it; this is the price the store shows a reader in Germany.`);
   if (was != null) said(`The page states a list price of ${money(was, cur || '')}: ${pct(price, was)} % off by its own words.`);
   let word = 'nothing-to-compare', cheapest = null;
   if (price != null && lowest && lowest.price < price) {
@@ -143,7 +170,7 @@ export function dealOf({ product = null, page = null, q = null, offers = [], see
   if (ask) next.push({ do: 'read the whole page', at: `${b}/r/${ask}` });
   return {
     found,
-    product: product ? { name: product.name || null, brand: product.brand || null, gtin: product.gtin || null, price, ...(from ? { price_is: 'from: the lowest of its variants', high: Number.isFinite(product.high) ? product.high : null } : {}), list_price: was, currency: cur, availability: product.availability || null, in_stock: pageStock, variants: product.variants ? { n: product.variants.n, in_stock: product.variants.inStock } : null, rating: product.rating || null, url: product.url || page?.url || null } : null,
+    product: product ? { name: product.name || null, brand: product.brand || null, gtin: product.gtin || null, price, ...(from ? { price_is: 'from: the lowest of its variants', high: Number.isFinite(product.high) ? product.high : null } : {}), list_price: was, currency: cur, availability: product.availability || null, in_stock: pageStock, variants: product.variants ? { n: product.variants.n, in_stock: product.variants.inStock } : null, rating: product.rating || null, url: product.url || page?.url || null, ...(product.market ? { market: product.market } : {}) } : null,
     page: page ? { url: page.url || null, host: here || null, read: !!page.read, ...(page.blocked ? { blocked: true } : {}), ...(page.error ? { error: page.error } : {}) } : null,
     ...(q ? { q } : {}),
     verdict: { word, lines },
