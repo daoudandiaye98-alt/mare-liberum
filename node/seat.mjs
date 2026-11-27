@@ -32,19 +32,7 @@ import { esc } from './pages.mjs';
 const MAC = 12, DAY = 86_400;
 export const SEAT_ID_RE = /^st_[0-9a-f]{16}$/;
 const KEY_ID = /^[0-9a-f]{24}$/, SRC = /^[a-z]{2,10}$/, CS = /^cs_(live|test)_[A-Za-z0-9]{10,200}$/;
-// the chat host a call comes from, by its program name (an MCP client's clientInfo.name) or its user agent: one of the hosts
-// whose people already keep a card on file, else other (node/installs.mjs counts installations by the same names)
-export const HOSTS = Object.freeze(['chatgpt', 'claude', 'grok', 'gemini', 'cursor', 'copilot', 'other']);
-export function hostOf(ua, name = '') {
-  const s = `${name || ''} ${ua || ''}`;
-  if (/cursor/i.test(s)) return 'cursor';
-  if (/claude|anthropic/i.test(s)) return 'claude';
-  if (/chatgpt|openai|\bgpt(?:bot|s)?\b|oai-/i.test(s)) return 'chatgpt';
-  if (/\bgrok\b|\bxai\b|x\.ai\b/i.test(s)) return 'grok';
-  if (/gemini|\bbard\b|google-cloudvertexbot|googleagent/i.test(s)) return 'gemini';
-  if (/copilot|vscode|visual studio code/i.test(s)) return 'copilot';
-  return 'other';
-}
+export { HOSTS, hostOf } from './hosts.mjs';
 export const isCheckoutSession = (s) => CS.test(String(s || ''));
 const dayOf = (t) => new Date(t).toISOString().slice(0, 10);
 const sha = (s) => createHash('sha256').update(String(s)).digest('hex');

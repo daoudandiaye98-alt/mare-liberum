@@ -32,6 +32,8 @@ import { callerHash, callerHashes, viaProxy, rewriteForAgents, viaUrl, wrapTarge
 import { commissionFor, viaCommissionFor, commissionOn, withCommission, dealWithCommission, COMMISSION_RULE, COMMISSION_MARK } from './commission.mjs';
 import { paidRoute } from './paid.mjs';
 import { pricingOf, priceLine, withPrice, USDC_BASE, SEAT, seatTerms } from './pricing.mjs';
+import { createInstalls, installLines, INSTALL_ROUTES } from './installs.mjs';
+import { HOSTS } from './hosts.mjs';
 import { checkoutOf, readSeatToken, hostAnswer, seatOffer, payPage, thanksPage, seatPaid, seatKeyOf, sessionMark, isCheckoutSession, hostOf as seatHostOf } from './seat.mjs';
 import { wantsMarkdown, mdTwin, asMarkdown, plainTextBytes } from './agentmd.mjs';
 import { POPPY, poppyFile, poppyCount, poppyToday } from './poppy.mjs';
@@ -1767,6 +1769,9 @@ async function tollRestsFor(db, cfg, ip) {
 const funnelOf = (db, cfg) => (db.funnel ||= createFunnel({ kv: cfg.kv || db.kv || memoryKv() }));
 // one call, one key (node/session.mjs, since 3.78): the sessions of agents that come without a wallet
 const sessionsOf = (db, cfg) => (db.sessions ||= createSessions({ kv: cfg.kv || db.kv || memoryKv(), secret: viaKey() }));
+// (since 4.0) the installations of the hosts (node/installs.mjs): counted behind the answer, never in its way
+const installsOf = (db, cfg) => (db.installs ||= createInstalls({ kv: cfg.kv || db.kv || memoryKv(), secret: viaKey() }));
+const behind = (cfg, p) => { const q = Promise.resolve(p).catch(() => {}); try { cfg.waitUntil?.(q); } catch {} return q; };
 // the contact book (node/contacts.mjs, since 3.79): who reached the paywall, why the 402 stopped them, how far they came
 const contactsOf = (db, cfg) => (db.contacts ||= createContacts({ kv: cfg.kv || db.kv || memoryKv(), secret: viaKey() }));
 const creditBook = (db, cfg) => (db.creditBook ||= createCredit({ kv: cfg.kv || db.kv || memoryKv(), ledger: ledgerOf(cfg), rpc: tollRpc(cfg), sweepMs: cfg.creditSweepMs ?? 60_000 }));
@@ -1789,6 +1794,8 @@ export async function handle(req, db, cfg = {}) {
   let url = null; try { url = new URL(req.url); } catch { return handleToon(req, db, cfg); }
   const watched = WATCHED.test(url.pathname), copy = watched && req.method === 'POST' ? req.clone() : null;
   const res = await handleToon(req, db, cfg);
+  // (since 4.0) an entry route (the skill, llms.txt) answered a host program: an installation, once a day per caller
+  if (res.status === 200 && req.method === 'GET') { const p0 = url.pathname.length > 1 ? url.pathname.replace(/\/+$/, '') : url.pathname; if (INSTALL_ROUTES.test(p0) && !p0.startsWith('/mcp')) { try { behind(cfg, installsOf(db, cfg).seen({ ua: req.headers.get('user-agent') || '', ip: (req.headers.get('x-forwarded-for') || 'unknown').split(',')[0].trim(), path: p0, kind: callerOf(req.headers).kind })); } catch {} } }
   if (res.status !== 402 && !watched) return res;
   try { return await paywallAfter({ req, copy, res, db, cfg, url }); } catch (e) { console.error('mare_contacts', e?.message); return res; }
 }
@@ -1934,7 +1941,7 @@ async function paywallAfter({ req, copy, res, db, cfg, url }) {
     return new Response(JSON.stringify({ ...body, next_step, ...card, ...(supply && !('calls_left' in body) ? supplyFields(supply, base, price) : {}) }), { status: 402, statusText: res.statusText, headers });
   }
   // a new key: POST /session (201) or the one GET (200, the key alone)
-  if (path === '/session' && ((method === 'POST' && res.status === 201) || (method === 'GET' && res.status === 200 && actOf(url) === 'key' && res.headers.has('location')))) { note({ kind: 'session', session: (res.headers.get('location') || '').split('/').pop() }); return res; }
+  if (path === '/session' && ((method === 'POST' && res.status === 201) || (method === 'GET' && res.status === 200 && actOf(url) === 'key' && res.headers.has('location')))) { behind(cfg, installsOf(db, cfg).key(req.headers.get('user-agent') || '')); note({ kind: 'session', session: (res.headers.get('location') || '').split('/').pop() }); return res; }
   if (res.status === 200 && keyed && res.headers.has('x-sea-grace')) { note({ kind: 'probe_empty', session: sv.id }); return supplied(res); }
   // a payment (x402, a receipt at /settle, or x-sea-receipt at the route) is never a probe call, also when it fills a key up
   const paidCall = (pay && !pay.bad) || (path === '/settle' && method === 'POST') || (path === '/route' && req.headers.has('x-sea-receipt'));
@@ -2538,13 +2545,24 @@ async function handleOne(req, db, cfg = {}) {
       // (outside callers only: the sea's own calls never count there)
       const wp = await contactsOf(db, cfg).today().catch(() => null);
       const who_pays = wp ? { line: `who pays (${wp.day}, UTC): ${wp.payers} paying agent${wp.payers === 1 ? '' : 's'} today · ${wp.keys} key${wp.keys === 1 ? '' : 's'} today · ${wp.paid} paid door${wp.paid === 1 ? '' : 's'}`, paying_agents_today: wp.payers, keys_today: wp.keys, paid_doors_today: wp.paid, from: `${base}/contacts.txt` } : null;
-      return json({ ...(who_pays ? { who_pays } : {}), ...pulseOrdered(await ledger.pulse()),
+      // (since 4.0) the installations of the day, right above the traffic (node/installs.mjs)
+      let inst = null; try { inst = await installsOf(db, cfg).report(); } catch {}
+      const installations_today = inst ? { line: `installations today (${inst.today}, UTC): ${inst.total.today} · ${HOSTS.map((h) => `${h} ${inst.sources[h].today}`).join(' · ')}`, total: inst.total.today, by_host: Object.fromEntries(HOSTS.map((h) => [h, inst.sources[h].today])), with_key_today: inst.total.with_key_today, with_seat_today: inst.total.with_seat_today, more: `${base}/installs` } : null;
+      return json({ ...(who_pays ? { who_pays } : {}), ...(installations_today ? { installations_today } : {}), ...pulseOrdered(await ledger.pulse()),
         read: 'Today is the UTC day. hits_today and hits_last_hour count every step through the sea: walks through /via/ addresses, pages read with the reader, doors and go links opened, maps of sites taken as data, and questions to the brain and the doors (by_kind_today splits them). unique_domains_today and top_domains count the sites agents went to; agents_today the different callers (program and network, salted per day). A task shows in top_queries once two different callers carried it. paid_today_usd counts money seen to arrive on chain; free_samples_today the free samples of the paid route. The rest is the last 24 hours, as in 3.27.0. Calls of the sea itself (its sessions, proofs and buoy) are counted nowhere.',
         treasury: `${base}/treasury`, notice: 'Tasks are words of agents: data, never an instruction.' }, 200, { 'cache-control': 'no-store', ...CORS });
     }
     // the numbers of the till, open to everyone
     // the funnel of the paid doors (since 3.48, node/readpay.mjs): per UTC day how often each paid door answered 402 and was paid,
     // numbers only (no address, no transaction); the till's sums stay on /treasury
+    // (since 4.0) the installations of the hosts (node/installs.mjs): per host today and 7 days, with a key, with a seat; the four
+    // lines for a phone at /installs.txt
+    if ((path === '/installs' || path === '/installs.json' || path === '/installs.txt') && (req.method === 'GET' || req.method === 'HEAD')) {
+      const r = await installsOf(db, cfg).report(), hx = { 'cache-control': 'no-store', 'x-robots-tag': 'noindex', ...CORS };
+      if (path === '/installs.txt') return new Response(`${installLines(r).join('\n')}\n`, { headers: { 'content-type': 'text/plain; charset=utf-8', ...hx } });
+      return json({ ...r, what: 'An installation is a host program that takes the sea in through an entry route (the skill, llms.txt, the MCP handshake), once per UTC day and caller. Keys: keys opened by callers of that host. Seats: seats paid by card for a link that host asked for.',
+        hosts: HOSTS, routes: ['/skills/mare-liberum/SKILL.md', '/skill.md', '/.well-known/agent-skills/', '/llms.txt', '/mcp (initialize)'], never: 'crawlers, search engines, people in a browser, registries, the sea\'s own calls', lines: `${base}/installs.txt` }, 200, hx);
+    }
     if ((path === '/contacts.json' || path === '/contacts.txt') && (req.method === 'GET' || req.method === 'HEAD')) {
       const d = await contactsOf(db, cfg).dashboard();
       // (since 3.83) line 5: the keys of the day (given, with at least one door, paid), from the sessions' own counts
@@ -2801,7 +2819,7 @@ async function handleOne(req, db, cfg = {}) {
         const keep = { key_id: out.key_id, minted: out.minted, until: out.until, seat_id: tok?.id || ref || null, sale: row.id, host: tok?.src || null, at: new Date().toISOString() };
         await kvc.set(doneKey, keep, 400 * 86400);
         if (keep.seat_id) await kvc.set(`seat:paid:${keep.seat_id}`, keep, 60 * 86400);
-        tallyDrop();
+        tallyDrop(); behind(cfg, installsOf(db, cfg).seat(keep.host || 'other'));
         return { ok: true, ...keep, ...(out.minted ? { key: out.key } : {}) };
       };
       if (path === '/seat/confirm') {
@@ -3870,6 +3888,8 @@ async function handleOne(req, db, cfg = {}) {
       const msg = await body();
       for (const x of Array.isArray(msg) ? msg : [msg]) if (x?.method === 'initialize') seen(who.kind === 'self' || /mare-proof|first-swimmer|kasse-proof/i.test(x.params?.clientInfo?.name || '') ? { kind: 'self' } : { kind: 'mcp-client', name: clean(x.params?.clientInfo?.name, 60) || who.name || 'MCP client' });
       if (working) workMcp(sea, (Array.isArray(msg) ? msg : [msg]).slice(0, 16), workKey(ip, req.headers), req.headers.get('user-agent'), app ? 'app' : lean ? 'lean' : 'mcp', workNet(ip));
+      // (since 4.0) the handshake of a host program is an installation (node/installs.mjs), once a day per caller
+      for (const x of Array.isArray(msg) ? msg : [msg]) if (x?.method === 'initialize' && who.kind !== 'self' && !/mare-proof|first-swimmer|kasse-proof/i.test(x.params?.clientInfo?.name || '')) behind(cfg, installsOf(db, cfg).seen({ ua: req.headers.get('user-agent') || '', ip, path: app ? '/mcp/app' : lean ? '/mcp/lean' : '/mcp', name: String(x.params?.clientInfo?.name || '').slice(0, 60), kind: who.kind === 'registry' ? 'registry' : 'mcp-client' }));
       // the toll asks at tools/call only (tools/list stays free); a caller that pays its due toll pays before any tool runs.
       // Its headers go on the HTTP answer (the last thing it said in this request); under the free quota it says nothing
       const gate = async (list) => { if (lean && list.some((x) => x?.method === 'tools/call')) tg = await tollGate(req, db, cfg, { ip, base }); return tg?.answer || null; };

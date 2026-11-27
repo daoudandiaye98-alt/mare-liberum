@@ -168,7 +168,7 @@ await proof('the pulse of the day: domains, tasks (only once two different calle
   const r = await (await handle(new Request(`${BASE}/pulse`, { headers: { 'user-agent': 'curl/8.5.0' } }), db, { base: BASE, pay: PAY, ledger: createLedger({}), waitUntil: () => {} })).text();
   // (since 3.84) who pays stands above unique_domains_today: the paying agents, the keys and the paid doors of the day
   assert.match(r, /^\{"who_pays":\{"line":"who pays \(\d{4}-\d{2}-\d{2}, UTC\): \d+ paying agents? today · \d+ keys? today · \d+ paid doors?"/, 'the first key, as sent'); const j = JSON.parse(r);
-  assert.deepEqual(Object.keys(j).slice(0, 2), ['who_pays', 'unique_domains_today']); assert.deepEqual(Object.keys(j.who_pays), ['line', 'paying_agents_today', 'keys_today', 'paid_doors_today', 'from']); assert.equal(typeof j.hits_today, 'number'); assert.ok(Array.isArray(j.top_queries) && Array.isArray(j.top_domains)); assert.match(j.read, /two different callers/);
+  assert.deepEqual(Object.keys(j).slice(0, 3), ['who_pays', 'installations_today', 'unique_domains_today'], '(4.0) the installations of the day stand right above the traffic'); assert.deepEqual(Object.keys(j.who_pays), ['line', 'paying_agents_today', 'keys_today', 'paid_doors_today', 'from']); assert.equal(typeof j.hits_today, 'number'); assert.ok(Array.isArray(j.top_queries) && Array.isArray(j.top_domains)); assert.match(j.read, /two different callers/);
 });
 await proof('a question to the brain or the doors answered as data counts as an ask (not for a page, not for a crawler); its task shows once a second caller asked it', async () => {
   const ledger = createLedger({});

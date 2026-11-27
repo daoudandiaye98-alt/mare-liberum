@@ -297,7 +297,7 @@ await proof('the free /check and /deal lead to the paid door: upgrade with the o
 });
 await proof('/pulse says who pays first, above unique_domains_today: the agents that paid today (each once), the keys of the day and the paid doors; the sea\'s own calls never count (3.84)', async () => {
   const pulse = async () => (await call('/pulse.json', { ip: '127.0.0.1' })).j, p0 = await pulse();
-  assert.deepEqual(Object.keys(p0).slice(0, 2), ['who_pays', 'unique_domains_today']);
+  assert.deepEqual(Object.keys(p0).slice(0, 3), ['who_pays', 'installations_today', 'unique_domains_today']);
   const ua = 'harbour-payer/2.0', ip = fresh(); facilitator = settles();
   await call('/session?as=key', { ip, ua, accept: '*/*' });
   for (let i = 0; i < 2; i++) assert.equal((await call(`/x402/check?site=${host()}`, { ip, ua, headers: payment() })).status, 200);
