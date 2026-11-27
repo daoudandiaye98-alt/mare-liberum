@@ -4,6 +4,7 @@
     "A commission never changes an order or a verdict, and every such link says so (commission: true, a marker, the rule).",
     "Amazon (domains, e.g. \"amazon.de\": {\"tag\": \"yourtag-21\"}): always handed out as a direct, visible link with Amazon's sentence beside it, never through /via/. PartnerNet pays nothing after an automatic redirect through a page in between (Verguetungskatalog Ziff. 2(e)); its agent terms apply since 14.04.2026.",
     "Awin first (awin.affid and awin.merchants {\"shop.example\": \"awinmid\"}): name only shops that accepted an agent directory.",
+    "This shipped file may name only shops whose Awin programme accepted publisher 3158732 (Oroboros Design), each with its numeric Awin id, and sets no Amazon tag and no wrapper: tools/commission-proof.mjs (shippedAs) checks it.",
     "Skimlinks or Sovrn (wrap.network, wrap.id or wrap.key): only with \"agentsAllowed\": true, once the network allowed agent traffic in writing; they exclude bot traffic.",
     "Any part may say \"direct\": true: its links are handed out directly and never ride a /via/ redirect."
   ],

@@ -813,6 +813,10 @@ await proof('/status.json gains counts: numbers only (and the day), no address, 
 const firstDiff = (x, y) => { let i = 0; while (i < x.length && x[i] === y[i]) i++; return `at ${i}: ${JSON.stringify(x.slice(Math.max(0, i - 120), i + 120))} <> ${JSON.stringify(y.slice(Math.max(0, i - 120), i + 120))}`; };
 // (the moment each tree's modules were first loaded, runningSince of /open.json, is the only thing told apart: this tree's came first)
 const since0 = (t) => t.replace(/"runningSince":"[^"]*"/g, '"runningSince":"<start>"')
+  // (and the commission links of 3.74, proven by tools/commission-proof.mjs and tools/legal-proof.mjs: the paragraph of the
+  // privacy notice, in German and in English; cut first)
+  .replace(/\n<p>\(\d+\) Provisionslinks: [\s\S]*?<\/p>/g, '')
+  .replace(/\n<p>\(\d+\) Commission links: [\s\S]*?<\/p>/g, '')
   // (and the deal check of 3.64, proven by tools/deal-proof.mjs: its section of llms.txt, its free measure and its paragraph in
   // terms and AGB § 4, its row of /de/preise; cut first)
   .replace(/## Check a deal before you buy \(the deal check, for shopping agents\)\n\n[^\n]*\n\n/g, '')

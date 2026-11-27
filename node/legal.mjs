@@ -11,7 +11,7 @@
 // buttons of node/declare.mjs (withdraw from a contract, cancel a contract) stand in the foot of every page.
 import { SELLER } from './offers.mjs';
 
-export const STAND = '26.11.2026';
+export const STAND = '27.11.2026';
 // every legal page this module answers (the Impressum stays in node/shore.mjs)
 export const LEGAL_PATHS = ['/terms', '/privacy', '/de/agb', '/de/datenschutz', '/de/preise', '/de/widerruf'];
 // the English page and its German original
@@ -375,6 +375,7 @@ const DSE = () => [
   ['d8', '8. Keine Cookies; Anzeige im Browser', [
     'Wir setzen keine Cookies und speichern nichts in Ihrem Browser. Jede Seite trägt am Ende ein kleines Skript: Sobald die Seite sichtbar ist (zwei Sekunden im Blick oder bei der ersten Berührung, Taste oder Bewegung des Mausrads), meldet es dem Meer einmal den Namen der Tür (GET /shown?p=&lt;Tür&gt;), ohne Kennung und ohne die vollständige Adresse. Dafür prüft es nur, ob die Seite sichtbar ist und ob der Browser angibt, von einem Programm gesteuert zu werden; dann schweigt es.',
     'So unterscheidet das Meer Menschen von Programmen, die sich als Browser ausgeben; es verfolgt niemanden von Seite zu Seite. Solange eine Seite auf diese Meldung wartet (höchstens fünf Minuten), hält der Knoten einen Hashwert aus Adresse und Tür im Arbeitsspeicher und speichert ihn nie. Rechtsgrundlage: Art. 6 Abs. 1 lit. f DSGVO (ehrliche Zählung, Schutz vor Programmen unter falschem Namen).',
+    'Provisionslinks: Links zu anderen Shops, die das Meer als Provisionslink kennzeichnet (in Antworten mit commission: true und dem Namen des Partnernetzes), führen über dieses Partnernetz (etwa Awin) zum Shop. Wer einen solchen Link öffnet, verlässt das Meer: Partnernetz und Shop verarbeiten den Aufruf nach ihren eigenen Datenschutzbestimmungen und können Cookies setzen, um einen Kauf dem Link zuzuordnen. Das Meer setzt dabei kein Cookie und erfährt vom Partnernetz nur Summen je Shop (Klicks, Käufe, Provision), nie, wer gekauft hat. Die geprüfte Seite, die Reihenfolge, die Preise und das Urteil tragen nie eine Provision.',
   ]],
   ['d9', '9. Zahlungen in USDC (bezahlter Pfad, Hafenzoll, Fair Share)', [
     'Bei einer Zahlung über x402 sendet Ihr Programm eine signierte Zahlungsfreigabe: die Adresse der zahlenden Wallet, Empfänger, Betrag, Gültigkeit, eine Einmal-Nummer und die Signatur. Wir geben sie zur Prüfung und Abwicklung an einen Facilitator weiter, derzeit PayAI (facilitator.payai.network), der die Transaktion an die Blockchain Base übermittelt. Bei x402 in Version 1 erhält er mit den Zahlungsbedingungen auch die Adresse der bezahlten Leistung, beim bezahlten Pfad samt der Aufgabe in Worten.',
@@ -496,6 +497,7 @@ const PRIVACY = () => [
   ['d8', '8. No cookies; a page shown in a browser', [
     'We set no cookies and store nothing in your browser. Every page carries a small script at its end: once the page is visible (two seconds in view, or at the first touch, key or turn of the mouse wheel) it tells the sea the name of its door once (GET /shown?p=&lt;door&gt;), without any identifier and without the full address. For that it only checks whether the page is visible and whether the browser says it is driven by a program; then it stays silent.',
     'That is how the sea tells a person from a program that wears a browser\'s name; it follows no one from page to page. While a page waits for that word (at most five minutes), the node holds a hash of address and door in memory and never writes it down. Legal basis: Art. 6(1)(f) GDPR (honest counts, protection against programs under a false name).',
+    'Commission links: links to other stores that the sea marks as a commission link (in answers with commission: true and the name of the network) lead through that network (for example Awin) to the store. Whoever opens such a link leaves the sea: the network and the store process the visit under their own privacy policies and may set cookies to attribute a purchase to the link. The sea sets no cookie for this and learns from the network only totals per store (clicks, purchases, commission), never who bought. The page checked, the order, the prices and the verdict never carry a commission.',
   ]],
   ['d9', '9. Payments in USDC (paid route, harbour toll, fair share)', [
     'When you pay over x402, your program sends a signed payment authorisation: the address of the paying wallet, recipient, amount, validity, a one-time number and the signature. We pass it to a facilitator to verify and settle it, currently PayAI (facilitator.payai.network), which submits the transaction to the Base blockchain. With x402 version 1 it also receives, with the payment terms, the address of the service paid for — for the paid route including the task in words.',
