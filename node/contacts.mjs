@@ -16,6 +16,9 @@
 //   numbers   per UTC day: new contacts (and how many of them are probes and indexes by their name), 402 answers by cause,
 //             contacts with a 402 (once or more than once), payments, contacts that paid after a 402, the cohort of the day
 //             (seen again within 7 days); GET /contacts.json, the four lines of the morning at /contacts.txt
+//   rolle     (since 3.81) pruefer (a probe, an index or a registry by its name), agent, or agent_with_key: a contact whose key
+//             took at least one probe call at a door is an agent with a key, not a probe, whatever its name; the day counts
+//             these (with_key) and takes them out of the probes it counted new that day
 //   limits    at most 5,000 new contacts a UTC day (more are counted, not kept); own calls (MareLiberum-session) not at all
 import { createHash, createHmac } from 'node:crypto';
 import { isIP } from 'node:net';
@@ -82,7 +85,7 @@ export function createContacts({ kv, now = () => Date.now(), secret }) {
   const chains = new Map();
   const serial = (k, fn) => { const prev = chains.get(k) || Promise.resolve(); const run = prev.then(fn, fn); const tail = run.then(() => {}, () => {}); chains.set(k, tail); tail.then(() => { if (chains.get(k) === tail) chains.delete(k); }); return run; };
   const C = (cid) => `contact:${cid}`, A = (d) => `contacts:day:${d}`, H = (d) => `contacts:cohort:${d}`;
-  const empty = () => ({ new: 0, new_probe: 0, overflow: 0, p402: 0, types: Object.fromEntries(PAYWALL_TYPES.map((t) => [t, 0])), contacts402: 0, single: 0, multi: 0, sessions: 0, probe: 0, paid: 0, paid_usd_micro: 0, converted: 0 });
+  const empty = () => ({ new: 0, new_probe: 0, with_key: 0, overflow: 0, p402: 0, types: Object.fromEntries(PAYWALL_TYPES.map((t) => [t, 0])), contacts402: 0, single: 0, multi: 0, sessions: 0, probe: 0, paid: 0, paid_usd_micro: 0, converted: 0 });
   const bumpDay = (d, fn) => serial(A(d), async () => { const a = { ...empty(), ...((await kv.get(A(d))) || {}) }; a.types = { ...empty().types, ...(a.types || {}) }; fn(a); await kv.set(A(d), a, CONTACTS.aggDays * DAY); return a; });
   const bumpCohort = (d, fn) => serial(H(d), async () => { const c = { n: 0, back: 0, ...((await kv.get(H(d))) || {}) }; fn(c); await kv.set(H(d), c, CONTACTS.aggDays * DAY); return c; });
   const since = async (d) => { const s = await kv.get('contacts:since'); if (!s || s > d) await kv.set('contacts:since', d, 400 * DAY); return s && s < d ? s : d; };
@@ -101,9 +104,13 @@ export function createContacts({ kv, now = () => Date.now(), secret }) {
         const day = await kv.get(A(d)); const made = (day?.new || 0) + (day?.overflow || 0);
         if (made >= CONTACTS.perDay) { await bumpDay(d, (a) => { a.overflow += 1; if (e.kind === '402') { a.p402 += 1; a.types[causeOf({ paid: e.paid, bad: e.bad, message: e.message })] += 1; } }); return null; }
         fresh = true;
-        c = { v: 1, cid, ua_hash: uaHash, ip_prefix_hash: mac(`net|${prefix}`), agent: String(e.who?.name || '').slice(0, 60) || null, kind: String(e.who?.kind || 'unknown').slice(0, 20), probe: probeLike(e.who), kompetenz: null, preis_usd: null, paywall_hits: 0, paywall_type: null, paywall_types: {}, first_seen: at, last_seen: at, days: [d], versuchte_paths: [], abbruch_phase: null, session: null, paid: 0, paid_usd: '0.000000', wiederkunft_d7: false, wallet: false, hits_by_day: {} };
+        c = { v: 1, cid, ua_hash: uaHash, ip_prefix_hash: mac(`net|${prefix}`), agent: String(e.who?.name || '').slice(0, 60) || null, kind: String(e.who?.kind || 'unknown').slice(0, 20), probe: probeLike(e.who), rolle: probeLike(e.who) ? 'pruefer' : 'agent', kompetenz: null, preis_usd: null, paywall_hits: 0, paywall_type: null, paywall_types: {}, first_seen: at, last_seen: at, days: [d], versuchte_paths: [], abbruch_phase: null, session: null, paid: 0, paid_usd: '0.000000', wiederkunft_d7: false, wallet: false, hits_by_day: {} };
       }
       const wasHits = c.paywall_hits, dayHits = c.hits_by_day?.[d] || 0;
+      // a key that opened a door: an agent with a key, no longer a probe (also when its name says probe)
+      let keyed = false, wasProbe = false;
+      if (e.kind === 'probe' && c.rolle !== 'agent_with_key') { keyed = true; wasProbe = !!c.probe; c.rolle = 'agent_with_key'; c.probe = false; }
+      if (!c.rolle) c.rolle = c.probe ? 'pruefer' : 'agent';
       // came back: another UTC day within 7 days of the first
       let back = false;
       if (!c.days.includes(d)) { c.days = [...c.days, d].slice(-CONTACTS.days); if (!c.wiederkunft_d7 && t - Date.parse(c.first_seen) <= CONTACTS.d7 * DAY_MS) { c.wiederkunft_d7 = true; back = true; } }
@@ -126,7 +133,8 @@ export function createContacts({ kv, now = () => Date.now(), secret }) {
       await kv.set(C(cid), c, ttl);
       // the numbers of the day and of the cohorts
       await bumpDay(d, (a) => {
-        if (fresh) { a.new += 1; if (c.probe) a.new_probe += 1; }
+        if (fresh) { a.new += 1; if (c.probe || (keyed && wasProbe)) a.new_probe += 1; }
+        if (keyed) { a.with_key += 1; if (wasProbe && dayOf(Date.parse(c.first_seen)) === d) a.new_probe = Math.max(0, a.new_probe - 1); }
         if (type) {
           a.p402 += 1; a.types[type] += 1;
           if (dayHits === 0) { a.contacts402 += 1; a.single += 1; } else if (dayHits === 1) { a.single -= 1; a.multi += 1; }
@@ -152,7 +160,7 @@ export function createContacts({ kv, now = () => Date.now(), secret }) {
     const pct = (a, b) => (b > 0 ? `${((a / b) * 100).toFixed(1).replace('.', ',')} %` : '–');
     const r = y.p402 || y.new || y.paid ? y : n;
     const lines = [
-      `1 Neue Agenten an der Bezahlwand (${r.day}): ${r.new} (davon Prüfer und Indizes nach Namen: ${r.new_probe})`,
+      `1 Neue Agenten an der Bezahlwand (${r.day}): ${r.new} (davon Prüfer und Indizes nach Namen: ${r.new_probe}; agent_with_key, ein Schlüssel öffnete eine Tür: ${r.with_key})`,
       `2 402 nach Typ (${r.day}): kein Wallet ${r.types.no_wallet} · Preis ${r.types.price} · Scheme ${r.types.scheme} · Chain ${r.types.chain} · Timeout ${r.types.timeout} (Kontakte mit 402: ${r.contacts402}, davon einmal ${r.single}, mehrmals ${r.multi})`,
       `3 402 zu bezahlt (${r.day}): ${r.p402} → ${r.paid} bezahlt (${pct(r.paid, r.p402)}); Kontakte, die nach einem 402 zahlten: ${r.converted} von ${r.contacts402}`,
       cohort ? `4 Wiederkehr d7 (Kohorte ${cohort.day}): ${cohort.back} von ${cohort.n} (${pct(cohort.back, cohort.n)})` : `4 Wiederkehr d7: erste volle Kohorte am ${addDays(start, CONTACTS.d7 + 1)} (bisher: ${so.back} von ${so.n} kamen an einem anderen Tag wieder)`,

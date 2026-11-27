@@ -16,6 +16,11 @@
 //            the whole sea gives at most 2,000 probe calls a UTC day (then the doors answer 402 until the next UTC day).
 //   errors   401 a key the sea does not know or cannot read; 410 a key past its 30 days, with the alternatives; 429 with
 //            Retry-After; 501 for a method /session does not have, with the call that does it.
+//   supply   (since 3.81) every answer to a call with a key says calls_left and calls_used (take, back and refusals give both);
+//            at 3 and at 0 calls left the door adds way_out: the rest filled up again for 0.02 USDC, the same key
+//   topup    (since 3.81) topup(h, sale): the probe calls back to 20 for 7 more days and the key 30 more days, the same key and
+//            id; only after a payment the till took (POST /route?a=topup), never twice for one sale; the key's paid days are
+//            counted (session:paid:<day>, each key once a day) for the open numbers
 //   never    a key in clear anywhere (state, books, logs, answers after the first); a probe call spent twice or for nothing;
 //            money: probe calls are no sale, the till's books stay as they are; a call to a callback.
 // The state lives in the node's state (session:…), like the reader credit (node/credit.mjs): no table, no migration. The
@@ -77,6 +82,7 @@ export function createSessions({ kv, now = () => Date.now(), secret = randomByte
     id: rec.id, opened: rec.at, expires: rec.until, state: state(rec, t),
     probe: { calls: rec.probe.n, left: Date.parse(rec.probe.until) <= t ? 0 : rec.probe.left, until: rec.probe.until, doors: SESSION_DOORS },
     calls: rec.calls, last: rec.last.map((c) => ({ door: c.door, at: c.at, ...(c.back ? { given_back: true } : {}) })),
+    ...(rec.topups?.length ? { topups: rec.topups.map((x) => ({ at: x.at, status: x.status })) } : {}),
     ...(rec.agent ? { agent: rec.agent } : {}),
     callback: rec.cb ? { host: rec.cb.host, state: 'kept, not called: calls start once the host proves it wants them' } : null,
   });
@@ -102,18 +108,18 @@ export function createSessions({ kv, now = () => Date.now(), secret = randomByte
       return serial(id, async () => {
         const t = now(), rec = await kv.get(R(id));
         if (!rec || rec.h !== h) return { ok: false, why: 'unknown' };
-        if (Date.parse(rec.until) <= t) return { ok: false, why: 'expired', until: rec.until };
+        if (Date.parse(rec.until) <= t) return { ok: false, why: 'expired', until: rec.until, left: 0, used: rec.calls };
         const m = Math.floor(t / 60_000);
-        if (rec.rate?.m === m && rec.rate.n >= SESSION.perMinute) return { ok: false, why: 'slow', retry: Math.max(1, Math.ceil(((m + 1) * 60_000 - t) / 1000)) };
-        if (!(rec.probe.left > 0) || Date.parse(rec.probe.until) <= t) return { ok: false, why: 'empty', id, left: 0 };
+        if (rec.rate?.m === m && rec.rate.n >= SESSION.perMinute) return { ok: false, why: 'slow', retry: Math.max(1, Math.ceil(((m + 1) * 60_000 - t) / 1000)), left: Date.parse(rec.probe.until) <= t ? 0 : rec.probe.left, used: rec.calls };
+        if (!(rec.probe.left > 0) || Date.parse(rec.probe.until) <= t) return { ok: false, why: 'empty', id, left: 0, used: rec.calls };
         const day = dayOf(t), gk = `session:probe:${day}`;
         const g = await count(gk, 1, 2 * DAY);
-        if (g > SESSION.probeDay) { await count(gk, -1, 2 * DAY); return { ok: false, why: 'empty', budget: true, id, left: rec.probe.left }; }
+        if (g > SESSION.probeDay) { await count(gk, -1, 2 * DAY); return { ok: false, why: 'empty', budget: true, id, left: rec.probe.left, used: rec.calls }; }
         rec.probe.left -= 1; rec.calls += 1; rec.rate = { m, n: rec.rate?.m === m ? rec.rate.n + 1 : 1 };
         const tag = randomBytes(6).toString('hex');
         rec.last = [{ door: String(door).slice(0, 16), at: new Date(t).toISOString(), day, tag }, ...rec.last].slice(0, SESSION.last);
         await kv.set(R(id), rec, ttlOf(rec));
-        return { ok: true, left: rec.probe.left, id, until: rec.probe.until, tag, day };
+        return { ok: true, left: rec.probe.left, used: rec.calls, id, until: rec.probe.until, tag, day };
       });
     },
     // the work brought nothing: the probe call that take() gave comes back, by its mark (never above what the session was
@@ -129,14 +135,33 @@ export function createSessions({ kv, now = () => Date.now(), secret = randomByte
         rec.probe.left = Math.min(rec.probe.n, rec.probe.left + 1); rec.calls = Math.max(0, rec.calls - 1);
         await kv.set(R(id), rec, ttlOf(rec));
         await count(`session:probe:${c?.day || taken.day || dayOf(now())}`, -1, 2 * DAY);
-        return { ok: true, left: rec.probe.left };
+        return { ok: true, left: rec.probe.left, used: rec.calls };
       });
     },
     // the bookmark: by its id (no key needed, none shown) → the public state, or null
     async view(id) { if (!ID_RE.test(String(id))) return null; const rec = await kv.get(R(id)); return rec ? doc(rec) : null; },
     async peek(h) { const rec = await kv.get(R(idOf(h))); return rec && rec.h === h ? doc(rec) : null; },
+    // (since 3.81) the rest filled up again after a payment the till took: { ok, before, left, used, id, until, again } or
+    // { ok: false, why: unknown }. The same key and id; the probe calls back to their number for 7 days from now, the key 30 days
+    // from now (never shorter than it was); one sale fills up once (handed in again: again, nothing more)
+    topup(h, { sale = null, status = null } = {}) {
+      const id = idOf(h), mark = String(sale || '').slice(0, 40);
+      return serial(id, async () => {
+        const t = now(), rec = await kv.get(R(id));
+        if (!rec || rec.h !== h) return { ok: false, why: 'unknown' };
+        const live = Date.parse(rec.probe.until) > t, before = live ? rec.probe.left : 0;
+        if (mark && (rec.topups || []).some((x) => x.sale === mark)) return { ok: true, again: true, before, left: before, used: rec.calls, id, until: rec.probe.until };
+        const day = dayOf(t), first = !(rec.topups || []).some((x) => String(x.at).slice(0, 10) === day);
+        rec.probe = { n: SESSION.probe, left: SESSION.probe, until: new Date(t + SESSION.probeDays * DAY * 1000).toISOString() };
+        rec.until = new Date(Math.max(Date.parse(rec.until), t + SESSION.days * DAY * 1000)).toISOString();
+        rec.topups = [{ at: new Date(t).toISOString(), sale: mark || null, status: String(status || '').slice(0, 16) || null, before }, ...(rec.topups || [])].slice(0, 20);
+        await kv.set(R(id), rec, ttlOf(rec));
+        if (first) await count(`session:paid:${day}`, 1, 40 * DAY);
+        return { ok: true, before, left: rec.probe.left, used: rec.calls, id, until: rec.probe.until };
+      });
+    },
     // probe calls given today (UTC), for the open numbers
-    async today() { const day = dayOf(now()); return { day, opened: Number(await kv.get(`session:open:${day}`)) || 0, probe_calls: Number(await kv.get(`session:probe:${day}`)) || 0, probe_day: SESSION.probeDay }; },
+    async today() { const day = dayOf(now()); return { day, opened: Number(await kv.get(`session:open:${day}`)) || 0, probe_calls: Number(await kv.get(`session:probe:${day}`)) || 0, probe_day: SESSION.probeDay, paid_keys: Number(await kv.get(`session:paid:${day}`)) || 0 }; },
   };
 }
 
