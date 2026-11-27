@@ -22,8 +22,9 @@ export const wantsMarkdown = (accept) => {
   const md = qOf(accept, ['text/markdown', 'text/x-markdown']);
   return md > 0 && md >= qOf(accept, ['text/html', 'application/xhtml+xml']);
 };
-// addresses ending in .md that are real documents of their own (the skill, the lessons, a brief, a site's map …)
-const OWN_MD = /^\/(skill|SKILL|learn)\.md$|^\/offers\/sample-report\.md$|^\/\.well-known\/|^\/brief\/[a-z0-9-]+\.md$|^\/site\/[^/]+\.md$/;
+// addresses ending in .md that are real documents of their own (the skill, the lessons, a brief, a site's map …; since 3.69
+// the guide for bot assistants and the deal-check skill at its short address)
+const OWN_MD = /^\/(skill|SKILL|learn)\.md$|^\/offers\/sample-report\.md$|^\/\.well-known\/|^\/brief\/[a-z0-9-]+\.md$|^\/site\/[^/]+\.md$|^\/for\/bots\.md$|^\/skills\/deal-check\/SKILL\.md$/;
 // the HTML page an address with .md stands for, or null (/index.md and /.md are the front page)
 export const mdTwin = (path) => {
   if (!/\.md$/.test(path) || OWN_MD.test(path)) return null;

@@ -142,6 +142,10 @@ GET https://mareliberum.dev/deal?url=<product page> — the page's price, list p
 
 Every deal check of a product page leaves an open price record (field "record" of the answer): https://mareliberum.dev/seen/<id> as a page, /seen/<id>.json as data with the SHA-256 of its canonical JSON. It keeps what the check saw at that minute, unchanged: the page's price, the same item at other stores, the median, the cautions and the verdict, never who asked. Give it to your person as the source of the price you name. The newest records: https://mareliberum.dev/seen · the records that compare 3 or more prices, for search engines: https://mareliberum.dev/sitemaps/seen.xml
 
+## For bot assistants (Grok Bot, xAI API)
+
+Put the deal check into your assistant: https://mareliberum.dev/for/bots (Markdown: /for/bots.md). Grok Bot: paste "Add a custom MCP server called mare-liberum at https://mareliberum.dev/mcp". xAI API: add the tool {"type":"mcp","server_url":"https://mareliberum.dev/mcp","server_label":"mare_liberum","allowed_tools":["ask","decide","read_page"]}. The skill as one file: https://mareliberum.dev/skills/deal-check/SKILL.md. A daily routine calls /deal?url=<page>&via=bot-template; via=bot-template only counts those checks (GET /deal shows today.via_bot_template).
+
 ## Check a website for agents
 
 GET /check?site=example.com&format=json — how AI agents see a website: which assistants and AI crawlers its robots.txt lets in, whether its home page reads without JavaScript, structured data, llms.txt, agent card, sitemap; a score of 100 with plain fixes. People open /check/example.com for a page to share. Read once from the site's own files, kept for an hour. Past 20 checks an hour per network the JSON answer is a 402: an x402 client pays 0.01 USDC and checks on in the same request; GET https://mareliberum.dev/x402/check?site=<domain> sells a check any time.

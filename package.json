@@ -59,7 +59,8 @@
     "proof:pdf": "node tools/pdf-proof.mjs",
     "proof:pack": "node tools/pack-proof.mjs",
     "proof:checkout": "node tools/checkout-proof.mjs",
-    "proof:seen": "node tools/seen-proof.mjs"
+    "proof:seen": "node tools/seen-proof.mjs",
+    "proof:bots": "node tools/bots-proof.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.9.0",

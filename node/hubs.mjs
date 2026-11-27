@@ -17,7 +17,7 @@ export const HUBS = [
   ['/guides/only-the-fields-you-need', 'weekly', 1], ['/guides/compress-litellm-vercel-ai-sdk', 'weekly', 1],
   ['/pricing', 'weekly', 0], ['/claim', 'weekly', 0],
   ['/brain', 'hourly', 1], ['/brain/areas', 'daily', 1], ['/brain/market', 'daily', 1], ['/brain/thinking', 'weekly', 0],
-  ['/mcp-server', 'daily', 1], ['/mcp-servers', 'daily', 1], ['/a2a-agents', 'daily', 1], ['/x402-apis', 'daily', 1], ['/use', 'weekly', 0],
+  ['/mcp-server', 'daily', 1], ['/mcp-servers', 'daily', 1], ['/a2a-agents', 'daily', 1], ['/x402-apis', 'daily', 1], ['/use', 'weekly', 0], ['/for/bots', 'weekly', 0],
   ['/check', 'weekly', 0], ['/routes', 'daily', 1], ['/sites', 'daily', 1], ['/briefs', 'weekly', 0], ['/review', 'monthly', 0], ['/works', 'daily', 1], ['/earn', 'daily', 1],
   ['/offers', 'weekly', 0], ['/teams', 'weekly', 0], ['/business', 'weekly', 0], ['/web-to-markdown', 'weekly', 0],
   ['/ai-crawlers', 'daily', 1], ['/weather', 'daily', 1], ['/web', 'daily', 1], ['/buy', 'daily', 1], ['/current', 'hourly', 1], ['/visitors', 'hourly', 1],
