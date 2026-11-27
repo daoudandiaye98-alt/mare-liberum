@@ -361,7 +361,9 @@ await proof('a topup paid by a transfer: POST /settle {"a":"topup","tx"} with th
   const k = await emptyKey(), tx = TXH(); await book(tx);
   assert.equal((await call('/settle', { method: 'POST', ip: fresh(), body: { a: 'topup', tx } })).status, 400, 'no key');
   assert.equal((await call('/settle', { method: 'POST', ip: fresh(), headers: bearer(k.key), body: { a: 'topup' } })).status, 402, 'no receipt');
+  const c0 = (await call('/contacts.json', { ip: '127.0.0.1' })).j.today; await Promise.allSettled(waits.splice(0));
   const r = await call('/settle', { method: 'POST', ip: fresh(), headers: bearer(k.key), body: { a: 'topup', tx } });
+  await Promise.allSettled(waits.splice(0)); const c1 = (await call('/contacts.json', { ip: '127.0.0.1' })).j.today; assert.equal(c1.paid, c0.paid + 1, 'a topup by transfer is a payment in the contact book, not a probe call');
   assert.equal(r.status, 200, r.text.slice(0, 300)); assert.equal(r.j.topup, 'done'); assert.equal(r.j.calls_left, 20); assert.equal(r.j.paid.status, 'settled'); assert.equal(r.j.paid.treasury, `${BASE}/treasury?a=topup`);
   assert.deepEqual(r.j.sums.changed.calls_left, { before: 0, after: 20 }); assert.equal(r.j.sums.changed.today_paid.after, r.j.sums.changed.today_paid.before + 1); assert.ok(Math.abs(r.j.sums.changed.today_usd.after - r.j.sums.changed.today_usd.before - 0.02) < 1e-9);
   const use = await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: bearer(k.key) }); assert.equal(use.status, 200); assert.equal(use.j.calls_left, 19, 'the same key answers again');
@@ -407,6 +409,7 @@ if (!process.argv.includes('--no-controls')) {
     ['the network written down in clear', 'node/session.mjs', 'const nk = `session:net:${day}:${netOf(day, net)}`;', 'const nk = `session:net:${day}:${net}`;'],
     ['an empty key gets no x402 terms (403 instead of the door\'s 402)', 'node/core.mjs', "const res = required(); res.headers.set('x-sea-session-left', String(s.left ?? 0));", "const res = json({ error: 'empty' }, 403); res.headers.set('x-sea-session-left', String(s.left ?? 0));"],
     ['a key past its 30 days still works', 'node/session.mjs', "if (Date.parse(rec.until) <= t) return { ok: false, why: 'expired', until: rec.until, left: 0, used: rec.calls };", ''],
+    ['a topup by transfer noted as a probe call (3.82)', 'node/core.mjs', "const paidCall = (pay && !pay.bad) || (path === '/settle' && method === 'POST')", "const paidCall = (pay && !pay.bad)"],
     ['no taste for an empty key (3.82)', 'node/core.mjs', "if (taste && s.why === 'empty' && !s.budget) {", 'if (false) {'],
     ['the taste twice a round (3.82)', 'node/session.mjs', 'if (rec.grace === round) return { ok: false, given: true };', ''],
     ['a receipt believed settled without the books (3.82)', 'node/core.mjs', "if (!e) return { ok: false, why: 'the transfer is not in this node", "if (!e) return { ok: true, why: 'the transfer is not in this node"],

@@ -1898,7 +1898,9 @@ async function paywallAfter({ req, copy, res, db, cfg, url }) {
   // a new key: POST /session (201) or the one GET (200, the key alone)
   if (path === '/session' && ((method === 'POST' && res.status === 201) || (method === 'GET' && res.status === 200 && url.searchParams.get('as') === 'key' && res.headers.has('location')))) { note({ kind: 'session', session: (res.headers.get('location') || '').split('/').pop() }); return res; }
   if (res.status === 200 && keyed && res.headers.has('x-sea-grace')) { note({ kind: 'probe_empty', session: sv.id }); return supplied(res); }
-  if (res.status === 200 && keyed && res.headers.has('x-sea-session-left') && !(pay && !pay.bad)) { note({ kind: 'probe', session: sv.id }); return supplied(res); }
+  // a payment (x402, a receipt at /settle, or x-sea-receipt at the route) is never a probe call, also when it fills a key up
+  const paidCall = (pay && !pay.bad) || (path === '/settle' && method === 'POST') || (path === '/route' && req.headers.has('x-sea-receipt'));
+  if (res.status === 200 && keyed && res.headers.has('x-sea-session-left') && !paidCall) { note({ kind: 'probe', session: sv.id }); return supplied(res); }
   if ((res.status === 200 || res.status === 201) && ((pay && !pay.bad) || res.headers.has('payment-receipt') || (path === '/settle' && method === 'POST') || (path === '/route' && req.headers.has('x-sea-receipt')))) {
     let usd = null, b = null; try { b = JSON.parse(await res.clone().text()); usd = Number(b?.paid?.amount_usd ?? b?.amount_usd); } catch {}
     if (path === '/settle' && !b?.paid) return supplied(res);
