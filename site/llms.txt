@@ -156,6 +156,10 @@ Where the operator set a commission, a link to another store in a deal answer ma
 
 Put the deal check into your assistant: https://mareliberum.dev/for/bots (Markdown: /for/bots.md). Grok Bot: paste "Add a custom MCP server called mare-liberum at https://mareliberum.dev/mcp". xAI API: add the tool {"type":"mcp","server_url":"https://mareliberum.dev/mcp","server_label":"mare_liberum","allowed_tools":["ask","decide","read_page"]}. The skill as one file: https://mareliberum.dev/skills/deal-check/SKILL.md. A daily routine calls /deal?url=<page>&via=bot-template; via=bot-template only counts those checks (GET /deal shows today.via_bot_template).
 
+## The Poppy file (Meta Muse and other personal agents)
+
+https://mareliberum.dev/.well-known/poppy.json follows the Personal Agent Protocol (Poppy) 1.0: protocol_version, organization (Mare Liberum, mareliberum.dev), and two APIs a personal agent may call without a login (no auth block): the OpenAPI description https://mareliberum.dev/openapi.json, whose first door for a person is the free deal check, and the MCP server https://mareliberum.dev/mcp. Reads of the file are counted per UTC day by the name each reader gives itself (/open.json, field poppy), never an address.
+
 ## The free deal check first
 
 Any assistant that can open a link can check a price for its person: GET https://mareliberum.dev/deal?url=<product page>, free, no key, no account. Example: https://mareliberum.dev/deal?url=https%3A%2F%2Frandysshoes.com%2Fproducts%2Fwomens-clifton-9-white-white. /earn, /about and the agent card say so in their first lines; /earn.json and /about (JSON) lead with price_check, and the agent card's first skill is deal_check.
