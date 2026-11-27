@@ -112,3 +112,15 @@ ${xs.length ? `<table><thead><tr><th>Product</th><th>Price</th><th>Seen</th></tr
 <p><small>Records hold only the store's public page and the catalog's public offers, never who asked. Mare Liberum vouches for no store. Data: <a href="${SEEN.path}.json">JSON</a> · <a href="/llms.txt">/llms.txt</a></small></p></main></body></html>`;
 }
 export const recordsJson = (list, base) => { const b = String(base || '').replace(/\/+$/, ''); return { what: 'the newest open price records: what the deal check saw on product pages, each unchanged at its own address', records: (Array.isArray(list) ? list : []).slice(0, SEEN.list).map((x) => ({ ...x, url: `${b}${SEEN.path}/${x.id}`, json: `${b}${SEEN.path}/${x.id}.json` })), make_one: `${b}/deal?url=<product page>` }; };
+
+// the records open to search engines as a sitemap of their own (/sitemaps/seen.xml, since 3.66): only those that compare 3 or
+// more prices (the others say noindex, so a map that named them would contradict their pages), each dated by the day it was
+// seen, since a record never changes after; the newest first, at most SEEN.recent, as /seen keeps them
+const okId = (x) => !!x && x.ix === true && /^[0-9a-f]{16}$/.test(String(x.id || ''));
+const dayOf = (x) => (/^\d{4}-\d{2}-\d{2}T/.test(String(x?.at || '')) ? String(x.at).slice(0, 10) : null);
+export function recordsSitemap(list, base) {
+  const b = String(base || '').replace(/\/+$/, ''), xs = (Array.isArray(list) ? list : []).filter(okId).slice(0, SEEN.recent);
+  return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${xs.map((x) => `<url><loc>${esc(`${b}${SEEN.path}/${x.id}`)}</loc>${dayOf(x) ? `<lastmod>${dayOf(x)}</lastmod>` : ''}<changefreq>never</changefreq></url>`).join('')}</urlset>`;
+}
+// the day the newest record open to search engines was seen: the lastmod of seen.xml in the sitemap index, or null
+export const recordsDay = (list) => { const x = (Array.isArray(list) ? list : []).find(okId); return x ? dayOf(x) : null; };
