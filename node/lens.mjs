@@ -7,7 +7,7 @@ import { readUrl, READER_UA } from './reader.mjs';
 import { packOf, packTarget, PACK } from './pack.mjs';
 import { PACKPAY } from './packpay.mjs';
 import { productOf } from './lean.mjs';
-import { DEAL, dealTarget, dealQuery, dealKey, remembered, dealOf, wordsOf } from './deal.mjs';
+import { DEAL, MARKET, dealTarget, dealQuery, dealKey, remembered, dealOf, wordsOf, shopifyPage, homeOf, inCurrency, marketOf } from './deal.mjs';
 import { SEEN, recordKey, recordOf, recordRef, canonical, lineOf } from './seen.mjs';
 import { BOOK, bookHost, freshOf, nextVisit, watchAfter, seriesAfter, bookSays } from './book.mjs';
 
@@ -92,6 +92,23 @@ export function createLens(h) {
         page = { url: final, asked: url, host: hostOf(final), read: !!(r.rawHtml || r.markdown), blocked: r.blocked ? true : undefined,
           error: r.blocked ? 'robots.txt of this site does not let the reader in' : r.error ? String(r.error).slice(0, 200) : !r.rawHtml && !r.markdown ? String(r.note || 'no text').slice(0, 200) : undefined };
         if (r.rawHtml) { try { product = productOf(r.rawHtml, final, { heading: r.title }); } catch { product = null; } }
+        // (since 3.75) a Shopify page in another currency than the one asked for, or else the store's own (its /meta.json), is
+        // read once more with ?currency=<that one>; the price it then states is the one compared and kept, the first one is said
+        const want = /^[A-Za-z]{3}$/.test(String(a.currency || '').trim()) ? String(a.currency).trim().toUpperCase() : null;
+        const shown = Number.isFinite(product?.price) && product.price > 0 ? product.price : Number.isFinite(product?.low) && product.low > 0 ? product.low : null;
+        if (product?.currency && shown != null && shopifyPage(final)) {
+          // the two reads it may take are the sea's own, beside the page the check reads: no read of the day, counted nowhere
+          const own = { ...ctx, dealRead: true, uncounted: true };
+          const home = await lens.homeCurrency(final, own).catch(() => null), asked = want || home?.currency || null;
+          if (asked && asked !== product.currency) {
+            const again = inCurrency(final, asked);
+            const r2 = again ? await lens.read({ url: again, shape: { raw: true } }, own).catch(() => ({})) : {};
+            let p2 = null; if (r2?.rawHtml) { try { p2 = productOf(r2.rawHtml, final, { heading: r2.title }); } catch { p2 = null; } }
+            const held = p2?.currency === asked && ((Number.isFinite(p2.price) && p2.price > 0) || (Number.isFinite(p2.low) && p2.low > 0));
+            const market = marketOf({ first: { price: shown, currency: product.currency }, asked, home: home?.currency, country: home?.country, held });
+            product = held ? { ...p2, url: product.url, market } : { ...product, market };
+          }
+        }
       }
       // the catalog is asked for the brand and the name (the brand only when the name does not carry it already), else the words asked
       const bw = wordsOf(product?.brand || ''), nw = wordsOf(product?.name || '');
@@ -187,6 +204,18 @@ export function createLens(h) {
       return bookSays({ day, tried: Number(tried) || 0, records: Number(records) || 0, watch: Array.isArray(watch) ? watch.length : 0 });
     },
     async bookSeries(url) { const u = String(url || ''); if (!u) return []; const s = await kv.get(`book:series:${(await sha(u)).slice(0, 32)}`).catch(() => null); return Array.isArray(s) ? s : []; },
+    // (since 3.75) a Shopify store's own currency and country, as its /meta.json names them, kept a week per store; a store whose
+    // answer names none is not asked again for a day, one that did not answer is asked again at the next check → { currency,
+    // country } or null
+    async homeCurrency(url, ctx) {
+      let origin = null; try { origin = new URL(url).origin; } catch { return null; }
+      const k = `deal:home:${hostOf(origin)}`, had = await kv.get(k).catch(() => null);
+      if (had && typeof had === 'object') return had.currency ? { currency: had.currency, country: had.country || null } : null;
+      const r = await lens.read({ url: `${origin}${MARKET.meta}`, shape: { raw: true } }, ctx).catch(() => ({}));
+      const home = homeOf(r?.rawHtml ?? r?.markdown);
+      if (home || r?.rawHtml || r?.markdown || r?.blocked) await kv.set(k, home || { currency: null }, (home ? MARKET.keepDays : 1) * DAY).catch(() => {});
+      return home;
+    },
     async dealToday() { const day = now().slice(0, 10); return { day, checks: Number(await kv.get(`deal:count:${day}`)) || 0, via_bot_template: Number(await kv.get(`deal:via:bot-template:${day}`)) || 0 }; },
     // the reader: any public page as Markdown — free for every agent up to a fair daily amount, then Angel reads on
     async read(a = {}, ctx) {
