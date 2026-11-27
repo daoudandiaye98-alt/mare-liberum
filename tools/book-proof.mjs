@@ -15,6 +15,10 @@
 //            series holds both days; a day with 40 visits makes none; the switch "book" (or "deal") in immune:policy rests it,
 //            and a crawler's tide visits nothing
 //   agents   a record an agent's check made carries no by and no sentence of the book: unchanged
+//   seed     (3.76) the start list config/watch-seed.json: only store product pages, at most 2 per store and 20 in all, the
+//            shipped file holds and is read whole; its pages go before the watch and take their places in it; a page that gave
+//            no comparison on 2 days in a row rests 30 days (a start-list page is skipped, a watched page leaves, a new page
+//            waits); POST /tide visits the start list first, /seen.json names seed and dry; a node without a start list is as before
 // Negative controls at the end: each rule broken in a copy of the code, and this proof must fail there.
 // Runs without the network: node tools/book-proof.mjs   (exit code 1 when a proof fails or a control is not caught)
 //   --no-controls   only the proofs (the controls run this file that way in each broken copy)
@@ -36,7 +40,7 @@ class Clock extends D { constructor(...a) { if (a.length) super(...a); else supe
 globalThis.Date = Clock;
 const proof = async (name, fn) => { T0 += 60_000; try { await fn(); passed++; console.log(`  ok   ${name}`); } catch (e) { failed++; console.log(`  FAIL ${name}\n       ${String(e?.stack || e).split('\n').slice(0, 6).join('\n       ')}`); } };
 const imp = (f) => import(pathToFileURL(join(ROOT, 'node', f)).href);
-const { BOOK, bookUrl, nextVisit, watchAfter, seriesAfter, freshOf } = await imp('book.mjs');
+const { BOOK, bookUrl, nextVisit, watchAfter, seriesAfter, freshOf, seedOf, loadWatchSeed, dryAfter, isDry, WATCH_SEED_FILE } = await imp('book.mjs');
 const { SEEN } = await imp('seen.mjs');
 
 // ------------------------------------------------------------------ the world: shops, the catalog, DNS
@@ -49,6 +53,8 @@ const PAGES = {
   'shop.deal-proof.dev/products/trail-runner-3': () => productPage({ price: shopPrice }),
   'second.deal-proof.dev/products/summit-jacket-2': () => productPage({ name: 'Summit Jacket 2', price: '199.00', gtin: '0999999999999' }),
   'gone.deal-proof.dev/products/old-thing': null,
+  'seed.deal-proof.dev/products/trail-runner-3': () => productPage({ price: '85.00' }),
+  'seed.deal-proof.dev/products/own-brand-shovel': () => productPage({ name: 'Own Brand Shovel', price: '49.00', gtin: '0888888888888' }),
 };
 const read = []; // every page of a shop that was read: host and path
 const offer = (title, cents, cur, host, { name = null } = {}) => ({ title, price_range: { min: { amount: cents, currency: cur } }, variants: [{ price: { amount: cents, currency: cur }, availability: { available: true }, seller: { url: `https://${host}`, name: name || host }, url: `https://${host}/products/x`, checkout_url: `https://${host}/cart/c/1` }] });
@@ -181,8 +187,65 @@ await proof('a record an agent\'s check made carries no by and no sentence of th
   const page = (await call(`${SEEN.path}/${r.j.record.id}`, { accept: 'text/html' })).text; assert.ok(!page.includes('daily sample'), 'no sentence of the book');
   const line = (await call('/seen.json')).j.records.find((x) => x.id === r.j.record.id); assert.equal(line.by, undefined);
 });
+console.log('seed');
+await proof('the start list holds only store product pages, at most 2 per store and 20 in all; a broken file is an empty list', async () => {
+  const r = seedOf({ pages: ['https://a.example/products/1?utm_source=x', 'https://a.example/products/2', 'https://a.example/products/3', 'https://a.example/products/1', 'https://www.amazon.de/products/x', 'https://b.example/cart/c/1', 'http://c.example/products/1', 'https://d.example/pages/about', 42] });
+  assert.deepEqual(r.pages, ['https://a.example/products/1', 'https://a.example/products/2']);
+  assert.equal(r.skipped.length, 7); assert.ok(r.skipped.some((x) => /more than 2 pages of a\.example/.test(x.why))); assert.ok(r.skipped.some((x) => x.why === 'twice'));
+  const many = seedOf({ pages: Array.from({ length: 30 }, (_, i) => `https://s${i}.example/products/x`) }); assert.equal(many.pages.length, 20, 'never more than the watch holds');
+  assert.deepEqual(seedOf('{ not json').pages, []); assert.deepEqual(seedOf(null).pages, []);
+  const dir2 = mkdtempSync(join(tmpdir(), 'mare-seed-')); try { writeFileSync(join(dir2, 'x.json'), '{ broken'); assert.deepEqual(loadWatchSeed(join(dir2, 'x.json')), []); assert.deepEqual(loadWatchSeed(join(dir2, 'none.json')), []); } finally { rmSync(dir2, { recursive: true, force: true }); }
+});
+await proof('the shipped config/watch-seed.json holds: every line a store product page, none skipped, never Amazon, at most 2 per store', async () => {
+  const raw = readFileSync(WATCH_SEED_FILE, 'utf8'), j = JSON.parse(raw), r = seedOf(raw);
+  assert.ok(Array.isArray(j.pages) && j.pages.length >= 1, 'pages'); assert.deepEqual(r.skipped, [], 'nothing skipped');
+  assert.equal(r.pages.length, j.pages.length); assert.deepEqual(loadWatchSeed(), r.pages);
+  for (const u of j.pages) { assert.ok(!/amazon\.|[?&](tag|utm_|awc|clickref)=/i.test(u), u); }
+  assert.ok(typeof j.what === 'string' && j.what.includes('never carries a commission'), 'the file says what it is');
+  const sv = readFileSync(join(ROOT, 'serve.mjs'), 'utf8'); assert.ok(sv.includes('const watchSeed = loadWatchSeed();'), 'the node reads the start list once'); assert.ok(/handle\(request, db, \{[^}]*\bwatchSeed\b/.test(sv), 'and hands it to every request');
+});
+await proof('the start list goes before the watch and takes its places in it; a dry page rests: skipped, leaves the watch, a new one waits', async () => {
+  const S = 'https://s.example/products/1', A = 'https://a.example/products/1', B = 'https://b.example/products/2';
+  assert.deepEqual(nextVisit({ seed: [S], watch: [A], fresh: [B] }), { url: S, kind: 'seed' });
+  assert.deepEqual(nextVisit({ seed: [S], watch: [S, A], done: [S], fresh: [B] }), { url: A, kind: 'watch' }, 'a start-list page in the watch is no second visit');
+  assert.deepEqual(nextVisit({ seed: [S], watch: [A], fresh: [S, B], done: [A, S] }), { url: B, kind: 'new' });
+  assert.deepEqual(nextVisit({ seed: [S], watch: [A], fresh: [B], dry: (u) => u === S || u === A }), { url: B, kind: 'new' }, 'dry pages rest');
+  assert.equal(nextVisit({ seed: [S], fresh: [B], busy: (h) => h === 's.example', dry: (u) => u === B }), null);
+  const w = Array.from({ length: 13 }, (_, i) => `https://w${i}.example/products/x`);
+  assert.equal(watchAfter(w, { url: B, kind: 'new' }, true, { seeded: 7 }).length, 13, 'room is 20 less the start list');
+  assert.equal(watchAfter(w.slice(1), { url: B, kind: 'new' }, true, { seeded: 7 }).length, 13);
+  assert.deepEqual(watchAfter(w, { url: S, kind: 'seed' }, false), w, 'a start-list visit leaves the watch as it is');
+  assert.deepEqual(watchAfter(w, { url: w[0], kind: 'watch' }, true, { dry: true }), w.slice(1), 'a watched page that rests dry leaves');
+  assert.deepEqual(watchAfter(w.slice(1), { url: B, kind: 'new' }, true, { dry: true }), w.slice(1), 'a dry page joins no watch');
+  let d = dryAfter({}, A, '2026-11-27', false); assert.deepEqual(d[A], { d: '2026-11-27', n: 1 }); assert.equal(isDry(d, A, '2026-11-27'), false, 'one day is not dry');
+  d = dryAfter(d, A, '2026-11-27', false); assert.equal(d[A].n, 1, 'the same day twice is one day');
+  d = dryAfter(d, A, '2026-11-28', false); assert.equal(d[A].n, 2); assert.equal(isDry(d, A, '2026-11-28'), true, 'two days in a row');
+  assert.equal(isDry(d, A, '2026-12-28'), true); assert.equal(isDry(d, A, '2026-12-29'), false, 'rests 30 days');
+  assert.equal(dryAfter(d, A, '2026-12-30', false)[A].n, 1, 'after the rest it starts again');
+  assert.equal(dryAfter(dryAfter({}, B, '2026-11-25', false), B, '2026-11-27', false)[B].n, 1, 'a gap of a day: not in a row');
+  assert.equal(dryAfter(d, A, '2026-11-29', true)[A], undefined, 'compared: no longer dry');
+  assert.equal(BOOK.seedPerStore, 2); assert.equal(BOOK.dryDays, 2); assert.equal(BOOK.dryRestDays, 30);
+});
+await proof('POST /tide visits the start list first; /seen.json names seed and dry; a start-list page without comparison rests after 2 days', async () => {
+  const SR = 'https://seed.deal-proof.dev/products/trail-runner-3', SH = 'https://seed.deal-proof.dev/products/own-brand-shovel';
+  cfg.watchSeed = [SH, SR];
+  try {
+    T0 = D.parse(`${new Date(T0 + 86_400_000).toISOString().slice(0, 10)}T06:00:00.000Z`); read.length = 0; await seed(['run', 'jacket']);
+    await tide(); assert.deepEqual(pages(), ['seed.deal-proof.dev/products/own-brand-shovel'], 'the start list first');
+    let b = (await call('/seen.json')).j.book; assert.equal(b.seed, 2, 'one day without comparison is not dry'); const dry0 = b.dry || 0; assert.ok(b.watch >= b.seed + 1, 'watch counts the start list beside the watched pages');
+    T0 += 6 * 60_000; read.length = 0; await tide(); assert.ok(!pages().includes('seed.deal-proof.dev/products/trail-runner-3'), 'the second page of the same store waits the hour');
+    T0 += 61 * 60_000; read.length = 0; await tide(); assert.deepEqual(pages(), ['seed.deal-proof.dev/products/trail-runner-3'], 'then the second start-list page');
+    const sp = (await call('/seen', { accept: 'text/html' })).text; assert.ok(sp.includes('2 from its fixed start list'), '/seen names the start list');
+    T0 = D.parse(`${new Date(T0 + 86_400_000).toISOString().slice(0, 10)}T06:00:00.000Z`); read.length = 0; await tide();
+    assert.deepEqual(pages(), ['seed.deal-proof.dev/products/own-brand-shovel'], 'the next day the start list first again');
+    b = (await call('/seen.json')).j.book; assert.equal(b.seed, 1, 'the shovel found no other store two days in a row: it rests'); assert.equal(b.dry, dry0 + 1, 'and is counted as resting');
+    T0 += 61 * 60_000; read.length = 0; await tide(); assert.deepEqual(pages(), ['seed.deal-proof.dev/products/trail-runner-3'], 'the compared page stays, the dry one is skipped');
+    T0 += 61 * 60_000; read.length = 0; await tide(); assert.ok(!pages().includes('seed.deal-proof.dev/products/own-brand-shovel'), 'the dry page is not visited again');
+  } finally { delete cfg.watchSeed; }
+  const b = (await call('/seen.json')).j.book; assert.equal(b.seed, undefined, 'a node without a start list says what it said before');
+});
 await proof('llms.txt names the record book; proof:book in package.json', async () => {
-  const l = readFileSync(join(ROOT, 'site/llms.txt'), 'utf8'); for (const x of ['The record book:', '"by": "sea"', 'field "book" of https://mareliberum.dev/seen.json']) assert.ok(l.includes(x), x);
+  const l = readFileSync(join(ROOT, 'site/llms.txt'), 'utf8'); for (const x of ['The record book:', '"by": "sea"', 'field "book" of https://mareliberum.dev/seen.json', 'The start list of the record book:', 'config/watch-seed.json', 'Fields "seed" (pages of the start list watched) and "dry"']) assert.ok(l.includes(x), x);
   assert.equal(JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).scripts['proof:book'], 'node tools/book-proof.mjs');
 });
 
@@ -195,15 +258,24 @@ if (!process.argv.includes('--no-controls')) {
   const CONTROLS = [
     ['an Amazon page visited', 'node/book.mjs', 'if (!host || AMAZON.test(host)) return null;', 'if (!host) return null;'],
     ['a checkout or any page visited, not only product pages', 'node/book.mjs', "return /\\/products\\/[^/]+\\/?$/.test(path) && !/\\/(cart|checkouts?)\\//.test(path) ? c : null;", 'return c;'],
-    ['new pages before the watch', 'node/book.mjs', "for (const url of w) if (!d.has(url) && !busy(bookHost(url))) return { url, kind: 'watch' };", ''],
-    ['the same store visited again within the hour', 'node/lens.mjs', 'busy: (x) => busy.has(x) });', 'busy: () => false });'],
+    ['new pages before the watch', 'node/book.mjs', "for (const url of w) if (!ss.has(url) && ok(url)) return { url, kind: 'watch' };", ''],
+    ['the same store visited again within the hour', 'node/lens.mjs', 'busy: (x) => busy.has(x), dry: resting });', 'busy: () => false, dry: resting });'],
     ['no cap of visits a day', 'node/book.mjs', 'if (!(tried < BOOK.perDay)) return null;', ''],
     ['a visit counted as an agent\'s deal check', 'node/lens.mjs', 'if (!ctx?.uncounted && !book) { const day = now().slice(0, 10);', 'if (!ctx?.uncounted) { const day = now().slice(0, 10);'],
     ['a visit left as a look in the memory of agents', 'node/lens.mjs', '!ctx?.uncounted && !book) await kv.set(k, remembered(', '!ctx?.uncounted) await kv.set(k, remembered('],
     ['a record of the book not marked', 'node/lens.mjs', "book ? { by: 'sea' } : {});", '{});'],
-    ['the tide without the book', 'node/core.mjs', "cfg.waitUntil?.(sea.bookStep(base).catch(", "cfg.waitUntil?.(Promise.resolve(base).catch("],
+    ['the tide without the book', 'node/core.mjs', "cfg.waitUntil?.(sea.bookStep(base, cfg.watchSeed).catch(", "cfg.waitUntil?.(Promise.resolve(base).catch("],
     ['the book not resting with the deal check', 'node/core.mjs', "!immune.atRest?.('book') && !immune.atRest?.('deal') && sea.bookStep", "!immune.atRest?.('book') && sea.bookStep"],
-    ['a watched page without a record kept forever', 'node/book.mjs', 'return made ? w : w.filter((u) => u !== visit.url);', 'return w;'],
+    ['a watched page without a record kept forever', 'node/book.mjs', 'return made && !dry ? w : w.filter((u) => u !== visit.url);', 'return w;'],
+    ['the start list after the watch', 'node/book.mjs', "for (const url of s) if (ok(url)) return { url, kind: 'seed' };", "for (const url of [...w, ...s]) if (ok(url)) return { url, kind: s.includes(url) ? 'seed' : 'watch' };"],
+    ['more than 2 pages of a store in the start list', 'node/book.mjs', 'else if ((per[h] || 0) >= BOOK.seedPerStore)', 'else if (false)'],
+    ['an Amazon page or any link in the start list', 'node/book.mjs', 'const u = bookUrl(p), h = u && bookHost(u);', 'const u = typeof p === \'string\' ? p : null, h = u && bookHost(u);'],
+    ['a dry page visited again', 'node/book.mjs', 'ok = (url) => !d.has(url) && !dry(url) && !busy(bookHost(url));', 'ok = (url) => !d.has(url) && !busy(bookHost(url));'],
+    ['dry after one day', 'node/book.mjs', '(Number(x.n) || 0) >= BOOK.dryDays &&', '(Number(x.n) || 0) >= 1 &&'],
+    ['dry days counted with a gap', 'node/book.mjs', 'n: x && x.d === dayBefore(day) ? x.n + 1 : 1', 'n: x ? x.n + 1 : 1'],
+    ['a dry page resting forever', 'node/book.mjs', '(!day || daysBetween(x.d, day) <= BOOK.dryRestDays)', 'true'],
+    ['the start list not handed to the book', 'node/core.mjs', 'sea.bookStep(base, cfg.watchSeed).catch(', 'sea.bookStep(base).catch('],
+    ['the node not reading the start list', 'serve.mjs', 'const out = await handle(request, db, { kv, seed, site, watchSeed, waitUntil,', 'const out = await handle(request, db, { kv, seed, site, waitUntil,'],
   ];
   for (const [name, f, from, to] of CONTROLS) {
     const d2 = mkdtempSync(join(tmpdir(), 'mare-book-ctl-'));

@@ -25,6 +25,7 @@ import { carryIn } from './node/carry.mjs';
 import { installEgressGuard } from './node/guard.mjs';
 import { immune } from './node/immune.mjs';
 import { createLedger } from './node/ledger.mjs';
+import { loadWatchSeed } from './node/book.mjs';
 
 const root = dirname(fileURLToPath(import.meta.url));
 const port = Number(process.argv[2] || process.env.PORT || 8787);
@@ -45,6 +46,8 @@ const data = (f) => { try { return JSON.parse(readFileSync(join(root, 'data', f)
 const seed = (name) => data(`flow-${name}.json`);
 const indexnowKey = data('indexnow.json')?.key || null, geoIndex = data('geo-index.json'), download = data('download.json');
 const geoOf = loadGeo(join(root, 'data', 'geo-ip.bin.gz'));
+// the start list of the record book (config/watch-seed.json, node/book.mjs): read once, here, when the node starts
+const watchSeed = loadWatchSeed();
 
 const later = new Set();
 const waitUntil = (p) => { const x = Promise.resolve(p).catch(() => {}).finally(() => later.delete(x)); later.add(x); };
@@ -116,7 +119,7 @@ const server = createServer(async (req, res) => {
     // HEAD is answered like GET, without the body
     const request = new Request(base + req.url, { method: req.method === 'HEAD' ? 'GET' : req.method, headers, body: chunks.length ? Buffer.concat(chunks) : undefined });
     // (a HEAD sends no body: it is counted in no ledger of savings and carries no receipt; head tells the node)
-    const out = await handle(request, db, { kv, seed, site, waitUntil, geoIndex, indexnowKey, shelf, download, ledger, ...(geoOf ? { geoOf } : {}), ...(disk ? { stateSave: saveSoon } : {}), ...(req.method === 'HEAD' ? { head: true } : {}) });
+    const out = await handle(request, db, { kv, seed, site, watchSeed, waitUntil, geoIndex, indexnowKey, shelf, download, ledger, ...(geoOf ? { geoOf } : {}), ...(disk ? { stateSave: saveSoon } : {}), ...(req.method === 'HEAD' ? { head: true } : {}) });
     if (!out.headers.has('link')) out.headers.set('link', AGENT_LINK);
     out.headers.set('x-agent-hint', AGENT_HINT);
     if (stopping) out.headers.set('connection', 'close');
