@@ -1897,8 +1897,9 @@ async function paywallAfter({ req, copy, res, db, cfg, url }) {
   }
   // a new key: POST /session (201) or the one GET (200, the key alone)
   if (path === '/session' && ((method === 'POST' && res.status === 201) || (method === 'GET' && res.status === 200 && url.searchParams.get('as') === 'key' && res.headers.has('location')))) { note({ kind: 'session', session: (res.headers.get('location') || '').split('/').pop() }); return res; }
+  if (res.status === 200 && keyed && res.headers.has('x-sea-grace')) { note({ kind: 'probe_empty', session: sv.id }); return supplied(res); }
   if (res.status === 200 && keyed && res.headers.has('x-sea-session-left') && !(pay && !pay.bad)) { note({ kind: 'probe', session: sv.id }); return supplied(res); }
-  if ((res.status === 200 || res.status === 201) && ((pay && !pay.bad) || res.headers.has('payment-receipt') || (path === '/settle' && method === 'POST'))) {
+  if ((res.status === 200 || res.status === 201) && ((pay && !pay.bad) || res.headers.has('payment-receipt') || (path === '/settle' && method === 'POST') || (path === '/route' && req.headers.has('x-sea-receipt')))) {
     let usd = null, b = null; try { b = JSON.parse(await res.clone().text()); usd = Number(b?.paid?.amount_usd ?? b?.amount_usd); } catch {}
     if (path === '/settle' && !b?.paid) return supplied(res);
     note({ kind: 'paid', paid: true, paid_usd: Number.isFinite(usd) && usd > 0 ? usd : null, session: keyed ? sv.id : null });
@@ -2233,7 +2234,9 @@ async function handleOne(req, db, cfg = {}) {
     // one call, one key (node/session.mjs, since 3.78): a paid door asked with a session key and no payment takes one probe
     // call, makes the work as the paid door makes it, gives the call back when the work brought nothing, and answers as the
     // paid door does, with "session" where "paid" stands; with no probe call left the door's own 402 (its x402 terms) stands
-    const sessionDoor = async (sv, door, required, run) => {
+    // (since 3.82) taste: for a key whose probe calls are spent, one answer before the 402 (the route: its first 3 paths and
+    // paid_full), once per round of probe calls; then the door's 402 as before
+    const sessionDoor = async (sv, door, required, run, taste = null) => {
       const rests = tillRests(); if (rests) return rests;
       if (req.method === 'HEAD') return required(); // a HEAD takes no probe call: it would carry no answer
       const sx = { ...paidHdr, ...SESSION_CORS };
@@ -2242,6 +2245,13 @@ async function handleOne(req, db, cfg = {}) {
       const store = sessionsOf(db, cfg), s = await store.take(sv.h, door);
       if (!s.ok) {
         const r = sessionRefusal(s, base); if (r) return json(r.body, r.status, { ...sx, ...(r.headers || {}) });
+        if (taste && s.why === 'empty' && !s.budget) {
+          const g = await store.grace(sv.h);
+          if (g.ok) {
+            let out = null; try { out = await taste(); } catch {}
+            if (out?.answer) { tallyDrop(); return (out.lines ? ajson : json)({ ...out.answer, session: { used: 'no probe call: none was left, this is the one taste after the trial', left: 0, bookmark: `${base}/session/${g.id}`, then: `the next call is paid over x402 (${base}/.well-known/x402), or fill the key up: POST ${base}/route?a=topup` } }, 200, { ...sx, 'x-sea-session-left': '0', 'x-sea-grace': 'one taste after the trial' }); }
+          }
+        }
         funnelOf(db, cfg).asked(door);
         const res = required(); res.headers.set('x-sea-session-left', String(s.left ?? 0)); res.headers.set('access-control-expose-headers', SESSION_CORS['access-control-expose-headers']);
         if (s.budget) res.headers.set('x-sea-session', 'the probe calls of the day are given out; this door is paid over x402');
@@ -2293,10 +2303,29 @@ async function handleOne(req, db, cfg = {}) {
       const rests = tillRests(); if (rests) return rests;
       const t = termsFor(payCfg, { base, q, path: '/route' }), pay = paymentOf(req.headers, a);
       if (!pay) {
+        // (since 3.82) the same call again with the receipt of a transfer (header x-sea-receipt): checked against the books of
+        // the chain as at /settle and delivered; handed in again, the same sale (nothing counted twice)
+        const rx = String(req.headers.get('x-sea-receipt') || '').trim();
+        if (rx) {
+          if (!q) return json({ error: { code: 'INVALID_ARGUMENT', message: 'say the task: POST /route?q=<your task>. Nothing was charged.' } }, 400, paidHdr);
+          const rc = receiptOf({ tx: rx.slice(0, 200) });
+          if (!rc || !rc.tx) return paymentRequired(t, { base, error: 'x-sea-receipt: the transaction hash of your USDC transfer on Base', cors: CORS });
+          if (tillBusy()) return json({ error: { code: 'RESOURCE_EXHAUSTED', message: 'the till asks this address for a calmer pace (120 paid moves an hour). Nothing was charged.' } }, 429, { ...paidHdr, 'retry-after': '300' });
+          const { sale, reason } = await receiptSale({ q, t, rc, method: rc.method });
+          return delivered(t, { answer: await product(q), sale, reason });
+        }
         const sv = sessionOf(req.headers);
         if (sv) {
           if (!q && !sv.bad) return json({ error: { code: 'INVALID_ARGUMENT', message: 'say the task: POST /route?q=<your task>. Nothing was taken.' } }, 400, paidHdr);
-          return sessionDoor(sv, 'route', () => paymentRequired(t, { base, cors: CORS }), async () => { const answer = await product(q); return answer?.count > 0 ? { answer, lines: true } : { res: json({ error: { code: 'UNAVAILABLE', message: 'the sea knows no path for this task yet. The probe call was given back.' }, ...answer }, 422, paidHdr) }; });
+          return sessionDoor(sv, 'route', () => paymentRequired(t, { base, cors: CORS }), async () => { const answer = await product(q); return answer?.count > 0 ? { answer, lines: true } : { res: json({ error: { code: 'UNAVAILABLE', message: 'the sea knows no path for this task yet. The probe call was given back.' }, ...answer }, 422, paidHdr) }; }, async () => {
+            // (since 3.82) the taste after the trial: the first 3 paths, what the full list costs; written down as a free sample
+            const r = await product(q), paths = (r.paths || []).slice(0, 3), p = pricingOf(payCfg, base);
+            if (!paths.length) return null;
+            if (!ctx.own) ledger.sale({ q, amount_cents: 0, status: 'free_sample', agent_ua_hash: caller(), method: 'grace' });
+            return { lines: true, answer: { task: q, paths, count: paths.length, of: Math.max(r.count || 0, paths.length), taste: true,
+              paid_full: `the full 10 paths cost ${p.amount_usd} USDC, one call: POST ${base}/route?q=${encodeURIComponent(q)} with an x402 payment (its 402 holds the terms), or send ${p.amount_usd} USDC to ${p.payTo} and the same call again with the header x-sea-receipt: <transaction hash>`,
+              ranking: r.ranking, notice: r.notice } };
+          });
         }
         funnelOf(db, cfg).asked('route'); return paymentRequired(t, { base, cors: CORS });
       }
@@ -2337,6 +2366,20 @@ async function handleOne(req, db, cfg = {}) {
       const outputSchema = { input: { type: 'http', method: 'POST', discoverable: false, queryParams: { a: { type: 'string', required: true, description: 'topup' } }, headerFields: { 'x-sea-session': { type: 'string', required: true, description: 'the session key to fill up' } } }, output: { type: 'object', properties: { calls_left: { type: 'number' }, calls_used: { type: 'number' } } } };
       return { ...t, resource, description, v1: { ...t.v1, resource, description, outputSchema } };
     };
+    // (since 3.82) the sums a topup changes, before and after: the key's calls and the till's numbers (/treasury), each one
+    // that moved; written to the node's short log of topups (GET /treasury?a=topup), the session's id only, never the key
+    const tillSums = async () => { try { const tr = await ledger.treasury(); return { today_paid: tr.today_paid ?? 0, today_usd: tr.today_usd ?? 0, today_usd_unconfirmed: tr.today_usd_unconfirmed ?? 0, total_count: tr.total_count ?? 0, total_usd: tr.total_usd ?? 0, total_usd_unconfirmed: tr.total_usd_unconfirmed ?? 0 }; } catch { return null; } };
+    const changedOf = (b, a) => Object.fromEntries(Object.keys(a || {}).filter((k) => b && b[k] !== a[k]).map((k) => [k, { before: b[k], after: a[k] }]));
+    const topupDone = async ({ d, f, sale, t, reason, headers = {}, before }) => {
+      const after = await tillSums(), till = changedOf(before, after), sx = { ...paidHdr, ...SESSION_CORS };
+      const calls = f.ok && !f.again ? { calls_left: { before: f.before ?? 0, after: f.left ?? 0 } } : {};
+      const line = { at: new Date().toISOString(), session: d.id, sale: sale.id, method: sale.method || null, status: sale.status, amount_usd: t.usd, ...(f.ok && !f.again ? { calls_left: [f.before ?? 0, f.left ?? 0] } : { again: true }), till };
+      try { const log = (await (cfg.kv || db.kv)?.get?.('topup:log')) || []; await (cfg.kv || db.kv)?.set?.('topup:log', [line, ...(Array.isArray(log) ? log : [])].slice(0, 50), 40 * 86_400); } catch {}
+      return json({ topup: f.ok ? (f.again ? 'done before: this payment filled the key up once' : 'done') : 'not done', key: 'the same key: no new key, no new id, the same bookmark', before: { calls_left: f.before ?? null }, bookmark: `${base}/session/${d.id}`,
+        paid: { status: sale.status, amount_usd: t.usd, sale: sale.id, tx: sale.tx || undefined, again: sale.again || undefined, note: SAID[sale.status] || undefined, why: reason || undefined, treasury: `${base}/treasury?a=topup` },
+        sums: { changed: { ...calls, ...till }, read: 'every sum this topup changed, before and after: the key\'s calls and the till\'s numbers of /treasury (today is the UTC day); a sale not yet settled counts in *_unconfirmed' },
+        next: 'send the same request as before with the same key: it answers again', calls_left: f.left ?? 0, calls_used: f.used ?? 0 }, 200, { ...sx, ...headers, 'x-sea-session-left': String(f.left ?? 0) });
+    };
     const topup = async (a) => {
       const rests = tillRests(); if (rests) return rests;
       const sx = { ...paidHdr, ...SESSION_CORS }, sv = sessionOf(req.headers), t = topupTerms();
@@ -2348,13 +2391,52 @@ async function handleOne(req, db, cfg = {}) {
       if (!pay) return paymentRequired(t, { base, cors: CORS });
       if (pay.bad) return paymentRequired(t, { base, error: pay.bad, cors: CORS });
       if (tillBusy()) return json({ error: { code: 'RESOURCE_EXHAUSTED', message: 'the till asks this address for a calmer pace (120 paid moves an hour). Nothing was charged.' } }, 429, { ...sx, 'retry-after': '300' });
+      const before = await tillSums();
       const r = await takePayment({ cfg: payCfg, t, pay, q: `topup of session ${d.id}`, ledger, label: 'topup', work: (sale) => store.topup(sv.h, { sale: sale.id, status: sale.status }), callerHash: caller(), waitUntil: cfg.waitUntil, base });
       if (r.refuse) return paymentRequired(t, { base, error: r.refuse, cors: CORS });
       tallyDrop();
-      const f = r.answer || {};
-      return json({ topup: f.ok ? (f.again ? 'done before: this payment filled the key up once' : 'done') : 'not done', key: 'the same key: no new key, no new id, the same bookmark', before: { calls_left: f.before ?? null }, bookmark: `${base}/session/${d.id}`,
-        paid: { status: r.sale.status, amount_usd: t.usd, sale: r.sale.id, tx: r.sale.tx || undefined, again: r.sale.again || undefined, note: SAID[r.sale.status] || undefined, why: r.reason || undefined, treasury: `${base}/treasury` },
-        calls_left: f.left ?? 0, calls_used: f.used ?? 0 }, 200, { ...sx, ...(r.headers || {}), 'x-sea-session-left': String(f.left ?? 0) });
+      return topupDone({ d, f: r.answer || {}, sale: r.sale, t, reason: r.reason, headers: r.headers || {}, before });
+    };
+    // (since 3.82) a receipt checked against the books of the chain: the transfers into the till's wallet this node has read
+    // (node/books.mjs, about two minutes behind the head; nothing is asked of the chain while the agent waits). There and
+    // enough: settled. Not there yet, or less: delivered all the same and written down as unverified (the hard rule of the till)
+    const chainSeen = async (tx, atomic) => {
+      if (!/^0x[0-9a-fA-F]{64}$/.test(String(tx || ''))) return { ok: false, why: 'it is no transaction hash (0x and 64 hex characters)' };
+      try {
+        const to = new Date().toISOString().slice(0, 10), from = new Date(Date.now() - 3 * 86_400_000).toISOString().slice(0, 10);
+        const e = (await booksOf(db, cfg).entries({ from, to })).find((x) => String(x.tx || '').toLowerCase() === String(tx).toLowerCase());
+        if (!e) return { ok: false, why: 'the transfer is not in this node\'s books of the chain yet (read about two minutes behind the head)' };
+        if (BigInt(e.value) < BigInt(atomic)) return { ok: false, why: `the transfer in the books of the chain is ${e.usd} USDC, less than the price` };
+        return { ok: true, from: e.from, usd: e.usd };
+      } catch { return { ok: false, why: 'the books of the chain could not be read' }; }
+    };
+    const receiptSale = async ({ q, t, rc, method }) => {
+      const seen = rc.test ? null : await chainSeen(rc.tx, t.atomic);
+      const sale = ledger.sale({ q, amount_cents: t.cents, status: rc.test ? 'test' : seen?.ok ? 'settled' : 'unverified', agent_ua_hash: caller(), method: rc.test ? 'test' : method, tx: rc.tx || null, network: 'eip155:8453', ...(seen?.ok ? { payer: seen.from, settled_at: new Date().toISOString() } : {}) });
+      return { sale, reason: rc.test ? null : seen?.ok ? 'the transfer stands in the books of the chain: checked and settled' : `a receipt handed in by the agent; ${seen?.why || 'it could not be checked'}: delivered all the same, written down as unverified` };
+    };
+    // (since 3.82) the topup paid by a transfer: POST /settle {"a":"topup","tx":"<hash>"} with the key. Checked as every receipt;
+    // one a key a UTC day on a receipt the books do not show yet (then: hand it in again later, or the x402 way). A receipt
+    // buys once: handed in again it fills nothing more
+    const settleTopup = async (a) => {
+      const sx = { ...paidHdr, ...SESSION_CORS }, sv = sessionOf(req.headers), t = topupTerms();
+      if (!sv) return json({ error: { code: 'INVALID_ARGUMENT', message: 'a topup fills up a session key: send it with the header x-sea-session: <key>. Nothing was taken.' } }, 400, sx);
+      if (sv.bad) { const r = sessionRefusal(sv, base); return json(r.body, r.status, sx); }
+      const store = sessionsOf(db, cfg), d = await store.peek(sv.h);
+      if (!d) { const r = sessionRefusal({ why: 'unknown' }, base); return json(r.body, r.status, sx); }
+      const rc = receiptOf(a);
+      if (!rc || rc.test || !rc.tx) return paymentRequired(t, { base, error: 'hand in "tx": the transaction hash of your USDC transfer on Base (the price of one route, to the till\'s wallet)', cors: CORS });
+      if (tillBusy()) return json({ error: { code: 'RESOURCE_EXHAUSTED', message: 'the till asks this address for a calmer pace (120 paid moves an hour)' } }, 429, { ...sx, 'retry-after': '300' });
+      const mark = `tx:${rc.tx.toLowerCase()}`.slice(0, 40), had = await store.topups(sv.h);
+      const seen = await chainSeen(rc.tx, t.atomic), day = new Date().toISOString().slice(0, 10);
+      if (!had.some((x) => x.sale === mark) && !seen.ok && had.some((x) => String(x.at).slice(0, 10) === day && x.status === 'unverified'))
+        return json({ error: { code: 'RESOURCE_EXHAUSTED', message: `one topup a key a UTC day on a receipt the books of the chain do not show yet (${seen.why}). Hand it in again in a few minutes, or pay the topup over x402: POST ${base}/route?a=topup` } }, 429, { ...sx, 'retry-after': '300' });
+      const before = await tillSums();
+      const sale = ledger.sale({ q: `topup of session ${d.id}`, amount_cents: t.cents, status: seen.ok ? 'settled' : 'unverified', agent_ua_hash: caller(), method: `topup-${rc.method}`, tx: rc.tx, network: 'eip155:8453', ...(seen.ok ? { payer: seen.from, settled_at: new Date().toISOString() } : {}) });
+      if (sale.again && sale.q !== `topup of session ${d.id}`) return paymentRequired(t, { base, error: 'this receipt was handed in before, for another purchase: a payment buys once', cors: CORS });
+      const f = await store.topup(sv.h, { sale: mark, status: sale.status });
+      tallyDrop();
+      return topupDone({ d, f, sale, t, reason: seen.ok ? 'the transfer stands in the books of the chain: checked and settled' : `a receipt handed in by the agent; ${seen.why}: the key is filled up all the same, the sale written down as unverified`, before });
     };
     // x402 discovery of this origin, the shape of the Bazaar catalogs (node/shore.mjs)
     if (path === '/discovery/resources' && req.method === 'GET') {
@@ -2375,16 +2457,18 @@ async function handleOne(req, db, cfg = {}) {
     if (path === '/settle') {
       if (req.method !== 'POST') return json({ what: 'Hand in the receipt of a payment and get the paid route at once. No account.', post: `POST ${base}/settle {"q":"<your task>","tx":"<transaction hash of your USDC transfer on Base>"}`, x402: `POST ${base}/settle {"q":"<your task>","payment":"<base64 x402 payment payload>"}`, try_free: `POST ${base}/route?q=<your task>&free=true gives the first 3 paths without payment`, how_to_pay: `${base}/pay/howto`, prices: `${base}/job`, pay: howToPay(termsFor(payCfg, { base }), base) }, 200, paidHdr);
       const rests = tillRests(); if (rests) return rests;
-      const a = await args(), q = clean(a.q ?? a.task, 300), t = termsFor(payCfg, { base, q, path: '/route' });
+      const a = await args(); if (a.a === 'topup') return settleTopup(a);
+      const q = clean(a.q ?? a.task, 300), t = termsFor(payCfg, { base, q, path: '/route' });
       if (!q) return json({ error: { code: 'INVALID_ARGUMENT', message: 'q is needed: the task the paid route is for. Nothing was charged.' }, settle: `POST ${base}/settle {"q":"<your task>","tx":"<transaction hash>"}` }, 400, paidHdr);
       const pay = paymentOf(req.headers, a);
       if (pay) return sell(q, a);
       const rc = receiptOf(a);
       if (!rc) return paymentRequired(t, { base, error: 'hand in a receipt: "tx" (the transaction hash of your USDC transfer on Base) or "payment" (an x402 payment payload); "test": true for a test', cors: CORS });
       if (tillBusy()) return json({ error: { code: 'RESOURCE_EXHAUSTED', message: 'the till asks this address for a calmer pace (120 paid moves an hour)' } }, 429, { ...paidHdr, 'retry-after': '300' });
-      // the hard rule: a receipt the sea cannot check yet is believed, delivered at once and written down as unverified
-      const sale = ledger.sale({ q, amount_cents: t.cents, status: rc.test ? 'test' : 'unverified', agent_ua_hash: caller(), method: rc.test ? 'test' : rc.method, tx: rc.tx || null, network: 'eip155:8453' });
-      return delivered(t, { answer: await product(q), sale, reason: rc.test ? null : 'a receipt handed in by the agent; the sea does not look the transaction up on chain yet' });
+      // the hard rule: a receipt the sea cannot check yet is believed, delivered at once and written down as unverified; since
+      // 3.82 it is checked against the books of the chain first (there and enough: settled)
+      const { sale, reason } = await receiptSale({ q, t, rc, method: rc.method });
+      return delivered(t, { answer: await product(q), sale, reason });
     }
     // the pulse of the via addresses: how many agents walk through the sea right now, where to, for what, and what was paid
     if (path === '/pulse' || path === '/pulse.json') {
@@ -2406,6 +2490,19 @@ async function handleOne(req, db, cfg = {}) {
       const rows = await contactsOf(db, cfg).rows(); return new Response(rows.map((r) => JSON.stringify(r)).join('\n') + (rows.length ? '\n' : ''), { headers: { 'content-type': 'application/x-ndjson; charset=utf-8', 'cache-control': 'no-store', 'x-robots-tag': 'noindex' } });
     }
     if (path === '/funnel.json' && (req.method === 'GET' || req.method === 'HEAD')) return json({ ...(await funnelOf(db, cfg).today()), doors: { route: `POST ${base}/route?q=<task>`, credit: `POST ${base}/reader/credit`, read: `GET ${base}${READPAY.path}?url=<the page>`, check: `GET ${base}${CHECKPAY.path}?site=<domain>`, pack: `GET ${base}${PACKPAY.path}?url=<site>&q=<question>`, deal: `GET ${base}${DEAL.path}?url=<product page>` }, treasury: `${base}/treasury` }, 200, { 'cache-control': 'no-store', ...CORS });
+    // (since 3.82) the topups of session keys: what each one changed (the key's calls, the till's sums), newest first, with the
+    // statuses as they stand now; one command shows that money came in through a key
+    if ((path === '/treasury' || path === '/treasury.json') && url.searchParams.get('a') === 'topup') {
+      const kvx = cfg.kv || db.kv; let log = []; try { const l = await kvx?.get?.('topup:log'); if (Array.isArray(l)) log = l; } catch {}
+      const st = await ledger.saleStatuses(log.map((x) => x.sale).filter(Boolean)).catch(() => ({}));
+      log = log.map((x) => (st[x.sale]?.status && st[x.sale].status !== x.status ? { ...x, status: st[x.sale].status, was: x.status } : x));
+      const day = new Date().toISOString().slice(0, 10), now1 = log.filter((x) => String(x.at).slice(0, 10) === day && !x.again);
+      const sum = (l, set) => Math.round(l.filter((x) => set.includes(x.status)).reduce((n, x) => n + (Number(x.amount_usd) || 0), 0) * 1e6) / 1e6;
+      return json({ what: `the topups of session keys (POST ${base}/route?a=topup over x402, or POST ${base}/settle {"a":"topup","tx":…} with the key): each with every sum it changed, before and after`,
+        today: { day, topups: now1.length, usd: sum(now1, ['settled']), usd_unconfirmed: sum(now1, ['pending', 'unverified', 'unsettled']) },
+        till: await tillSums(), log: log.slice(0, 20), treasury: `${base}/treasury`,
+        read: 'today is the UTC day; usd counts topups seen settled, usd_unconfirmed those delivered before the money was seen; till is /treasury now. The log is this node\'s own (the last 50), with the session\'s public id, never a key' }, 200, paidHdr);
+    }
     if (path === '/treasury' || path === '/treasury.json') {
       // the toll (since 3.37): its own books in this node's state (node/toll.mjs), exact to the millionth; a toll payment is never
       // a sale of the paid move and never enters the database's sales, so the numbers above are the paid route's alone

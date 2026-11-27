@@ -196,6 +196,8 @@ await proof('the last probe call says what then; the next call is the door\'s ow
   assert.equal(r.status, 402); assert.equal(r.h['x-sea-session-left'], '0'); const v2 = JSON.parse(Buffer.from(r.h['payment-required'], 'base64').toString('utf8'));
   assert.equal(v2.accepts[0].amount, '10000'); assert.equal(v2.accepts[0].payTo, WALLET); assert.equal((await funnel()).asked.check, f0 + 1);
   const rr = await call(`/x402/read?url=${URLQ(`https://${host()}/pier`)}`, { ip: fresh(), headers: bearer(k.key) }); assert.equal(rr.status, 402); assert.ok(rr.h['payment-required']);
+  // (since 3.82) the route gives an empty key one taste first, then its 402
+  const ro0 = await call('/route?q=find+usdc+price', { method: 'POST', ip: fresh(), headers: bearer(k.key) }); assert.equal(ro0.status, 200); assert.equal(ro0.j.taste, true);
   const ro = await call('/route?q=find+usdc+price', { method: 'POST', ip: fresh(), headers: bearer(k.key) }); assert.equal(ro.status, 402);
 });
 await proof('a payment sent with a key buys as always: the key is not looked at, no probe call taken, the sale in the books', async () => {
@@ -324,6 +326,53 @@ await proof('POST /route?a=topup: no key 400, nothing charged; the key without a
   assert.ok((await store.today()).paid_keys >= 1);
 });
 
+console.log('the first payment without pressure (3.82)');
+const TXH = () => `0x${randomBytes(32).toString('hex')}`;
+const book = async (tx, value = '20000') => { const d = today(), days = (await kv.get('books:days')) || []; if (!days.includes(d)) await kv.set('books:days', [...days, d], 86_400 * 400); const l = (await kv.get(`books:d:${d}`)) || [];
+  await kv.set(`books:d:${d}`, [...l, { k: `${tx}:0`, block: 100 + l.length, log: 0, tx, from: PAYER, to: WALLET.toLowerCase(), value, usd: (Number(value) / 1e6).toFixed(6), nonce: null, time: new Date(T0).toISOString(), seen: new Date(T0).toISOString() }], 86_400 * 400); };
+const emptyKey = async () => { const k = (await open()).j; const rec = await kv.get(`session:${k.id}`); rec.probe.left = 0; rec.calls = 20; await kv.set(`session:${k.id}`, rec, 86_400 * 31); return k; };
+await proof('a key whose probe calls are spent gets one taste at the route before the 402: 200 with the first 3 paths and paid_full (the full 10 paths cost 0.02 USDC, one call), written down as a free sample; then the 402; a topup starts a new round', async () => {
+  const k = await emptyKey(), t0 = await ledger.treasury();
+  const r = await call('/route?q=' + URLQ('find usdc price'), { method: 'POST', ip: fresh(), headers: bearer(k.key) });
+  assert.equal(r.status, 200, r.text.slice(0, 300)); assert.equal(r.j.taste, true); assert.ok(r.j.paths.length > 0 && r.j.paths.length <= 3); assert.ok(r.j.of >= r.j.paths.length);
+  assert.match(r.j.paid_full, /^the full 10 paths cost 0\.02 USDC, one call: POST https:\/\/mare\.test\/route\?q=find%20usdc%20price with an x402 payment/); assert.match(r.j.paid_full, /x-sea-receipt: <transaction hash>/);
+  assert.equal(r.j.calls_left, 0); assert.equal(r.j.calls_used, 20); assert.ok(r.j.way_out); assert.equal(r.j.session.left, 0); assert.match(r.h['x-sea-grace'], /one taste/);
+  const t1 = await ledger.treasury(); assert.equal(t1.today_free, (t0.today_free || 0) + 1, 'a free sample'); assert.equal(t1.total_count, t0.total_count, 'no sale');
+  const again = await call('/route?q=' + URLQ('find usdc price'), { method: 'POST', ip: fresh(), headers: bearer(k.key) }); assert.equal(again.status, 402); assert.equal(again.j.calls_left, 0);
+  const other = await emptyKey(); const c = await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: bearer(other.key) }); assert.equal(c.status, 402, 'the taste is the route\'s');
+  const store = createSessions({ kv, secret: randomBytes(32) }), k2 = await store.open({ net: 'n2' }), h2 = sessionHash(k2.key), rec = await kv.get(`session:${k2.id}`); rec.probe.left = 0; await kv.set(`session:${k2.id}`, rec, 86_400 * 31);
+  assert.equal((await store.grace(h2)).ok, true); assert.equal((await store.grace(h2)).ok, false, 'once a round');
+  await store.topup(h2, { sale: 's-round' }); const r2 = await kv.get(`session:${k2.id}`); r2.probe.left = 0; await kv.set(`session:${k2.id}`, r2, 86_400 * 31);
+  assert.equal((await store.grace(h2)).ok, true, 'a topup starts a new round');
+});
+await proof('/settle checks the receipt against the books of the chain: there and enough, settled; not there, less, or no hash: delivered all the same, unverified; the same call again with x-sea-receipt answers, the same sale', async () => {
+  const q = 'find usdc price', tx1 = TXH(), tx3 = TXH(); await book(tx1); await book(tx3, '10000');
+  const a = await call('/settle', { method: 'POST', ip: fresh(), body: { q, tx: tx1 } }); assert.equal(a.status, 200, a.text.slice(0, 200)); assert.equal(a.j.paid.status, 'settled'); assert.match(a.j.paid.why, /books of the chain: checked and settled/); assert.ok(a.j.count > 0);
+  const b = await call('/settle', { method: 'POST', ip: fresh(), body: { q, tx: TXH() } }); assert.equal(b.j.paid.status, 'unverified'); assert.match(b.j.paid.why, /not in this node's books of the chain yet/); assert.ok(b.j.count > 0, 'delivered all the same');
+  const c = await call('/settle', { method: 'POST', ip: fresh(), body: { q, tx: tx3 } }); assert.equal(c.j.paid.status, 'unverified'); assert.match(c.j.paid.why, /0\.010000 USDC, less than the price/);
+  const t0 = await ledger.treasury(), tx4 = TXH();
+  const r = await call('/route?q=' + URLQ(q), { method: 'POST', ip: fresh(), headers: { 'x-sea-receipt': tx4 } }); assert.equal(r.status, 200, r.text.slice(0, 200)); assert.equal(r.j.paid.status, 'unverified'); assert.ok(r.j.count > 0);
+  const r2 = await call('/route?q=' + URLQ(q), { method: 'POST', ip: fresh(), headers: { 'x-sea-receipt': tx4 } }); assert.equal(r2.status, 200); assert.equal(r2.j.paid.again, true); assert.equal(r2.j.paid.sale, r.j.paid.sale);
+  const t1 = await ledger.treasury(); assert.equal(t1.total_count, t0.total_count + 1, 'one sale for one receipt');
+  const tx5 = TXH(); await book(tx5); const s5 = await call('/route?q=' + URLQ(q), { method: 'POST', ip: fresh(), headers: { 'x-sea-receipt': tx5 } }); assert.equal(s5.j.paid.status, 'settled');
+  const none = await call('/route', { method: 'POST', ip: fresh(), headers: { 'x-sea-receipt': TXH() } }); assert.equal(none.status, 400);
+});
+await proof('a topup paid by a transfer: POST /settle {"a":"topup","tx"} with the key; checked against the books (settled) or once a key a UTC day unverified; a receipt buys once; every sum it changed, before and after, in the answer and in GET /treasury?a=topup', async () => {
+  const k = await emptyKey(), tx = TXH(); await book(tx);
+  assert.equal((await call('/settle', { method: 'POST', ip: fresh(), body: { a: 'topup', tx } })).status, 400, 'no key');
+  assert.equal((await call('/settle', { method: 'POST', ip: fresh(), headers: bearer(k.key), body: { a: 'topup' } })).status, 402, 'no receipt');
+  const r = await call('/settle', { method: 'POST', ip: fresh(), headers: bearer(k.key), body: { a: 'topup', tx } });
+  assert.equal(r.status, 200, r.text.slice(0, 300)); assert.equal(r.j.topup, 'done'); assert.equal(r.j.calls_left, 20); assert.equal(r.j.paid.status, 'settled'); assert.equal(r.j.paid.treasury, `${BASE}/treasury?a=topup`);
+  assert.deepEqual(r.j.sums.changed.calls_left, { before: 0, after: 20 }); assert.equal(r.j.sums.changed.today_paid.after, r.j.sums.changed.today_paid.before + 1); assert.ok(Math.abs(r.j.sums.changed.today_usd.after - r.j.sums.changed.today_usd.before - 0.02) < 1e-9);
+  const use = await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: bearer(k.key) }); assert.equal(use.status, 200); assert.equal(use.j.calls_left, 19, 'the same key answers again');
+  const twice = await call('/settle', { method: 'POST', ip: fresh(), headers: bearer(k.key), body: { a: 'topup', tx } }); assert.equal(twice.status, 200); assert.match(twice.j.topup, /done before/); assert.equal(twice.j.calls_left, 19); assert.equal(twice.j.sums.changed.today_paid, undefined, 'nothing counted twice');
+  const k2 = await emptyKey(); const other = await call('/settle', { method: 'POST', ip: fresh(), headers: bearer(k2.key), body: { a: 'topup', tx } }); assert.equal(other.status, 402); assert.match(other.j.error.message ?? other.j.error, /handed in before/);
+  const u1 = await call('/settle', { method: 'POST', ip: fresh(), headers: bearer(k2.key), body: { a: 'topup', tx: TXH() } }); assert.equal(u1.status, 200); assert.equal(u1.j.paid.status, 'unverified'); assert.equal(u1.j.calls_left, 20); assert.equal(u1.j.sums.changed.today_usd_unconfirmed.after - u1.j.sums.changed.today_usd_unconfirmed.before > 0.0199, true);
+  const u2 = await call('/settle', { method: 'POST', ip: fresh(), headers: bearer(k2.key), body: { a: 'topup', tx: TXH() } }); assert.equal(u2.status, 429); assert.match(u2.j.error.message, /one topup a key a UTC day/);
+  const g = await call('/treasury?a=topup', { ip: fresh() }); assert.equal(g.status, 200); assert.ok(g.j.today.topups >= 2); assert.equal(g.j.log[0].session, k2.id); assert.ok(g.j.log[0].till && g.j.log[0].calls_left); assert.ok(g.j.till && typeof g.j.till.today_paid === 'number');
+  assert.ok(!g.text.includes(k.key) && !g.text.includes(k2.key), 'never a key');
+});
+
 console.log('books');
 await proof('/openapi.json: POST and GET /session and GET /session/{id}, free (security: []), no price; the sold doors stay seven', async () => {
   const o = (await call('/openapi.json', { ip: '127.0.0.1' })).j;
@@ -358,6 +407,11 @@ if (!process.argv.includes('--no-controls')) {
     ['the network written down in clear', 'node/session.mjs', 'const nk = `session:net:${day}:${netOf(day, net)}`;', 'const nk = `session:net:${day}:${net}`;'],
     ['an empty key gets no x402 terms (403 instead of the door\'s 402)', 'node/core.mjs', "const res = required(); res.headers.set('x-sea-session-left', String(s.left ?? 0));", "const res = json({ error: 'empty' }, 403); res.headers.set('x-sea-session-left', String(s.left ?? 0));"],
     ['a key past its 30 days still works', 'node/session.mjs', "if (Date.parse(rec.until) <= t) return { ok: false, why: 'expired', until: rec.until, left: 0, used: rec.calls };", ''],
+    ['no taste for an empty key (3.82)', 'node/core.mjs', "if (taste && s.why === 'empty' && !s.budget) {", 'if (false) {'],
+    ['the taste twice a round (3.82)', 'node/session.mjs', 'if (rec.grace === round) return { ok: false, given: true };', ''],
+    ['a receipt believed settled without the books (3.82)', 'node/core.mjs', "if (!e) return { ok: false, why: 'the transfer is not in this node", "if (!e) return { ok: true, why: 'the transfer is not in this node"],
+    ['one receipt buys for two keys (3.82)', 'node/core.mjs', 'if (sale.again && sale.q !== `topup of session ${d.id}`)', 'if (false)'],
+    ['no cap on topups by unchecked receipts (3.82)', 'node/core.mjs', "had.some((x) => String(x.at).slice(0, 10) === day && x.status === 'unverified')", 'false'],
     ['no supply on the answers (3.81)', 'node/core.mjs', 'const out = spliceFields(text, supplyFields(s, base, price));', 'const out = null;'],
     ['no way_out at 3 calls left (3.81)', 'node/core.mjs', '...(s.left === 3 || s.left === 0 ? { way_out:', '...(s.left === 0 ? { way_out:'],
     ['one sale fills a key up twice (3.81)', 'node/session.mjs', "if (mark && (rec.topups || []).some((x) => x.sale === mark)) return", 'if (false) return'],
