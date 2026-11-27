@@ -142,6 +142,8 @@ GET https://mareliberum.dev/deal?url=<product page> — the page's price, list p
 
 Every deal check of a product page leaves an open price record (field "record" of the answer): https://mareliberum.dev/seen/<id> as a page, /seen/<id>.json as data with the SHA-256 of its canonical JSON. It keeps what the check saw at that minute, unchanged: the page's price, the same item at other stores, the median, the cautions and the verdict, never who asked. Give it to your person as the source of the price you name. The newest records: https://mareliberum.dev/seen · the records that compare 3 or more prices, for search engines: https://mareliberum.dev/sitemaps/seen.xml
 
+The record book: the sea also checks product pages on its own every day, at most 40, 20 of them the same watched pages each day, so each has a series of prices (one read per store an hour, robots.txt respected, never an Amazon page). Each record it makes says "by": "sea" with the sentence of the book, and is never counted as an agent's check. The day's visits, records and watch: field "book" of https://mareliberum.dev/seen.json
+
 Where the operator set a commission, a link to another store in a deal answer may be a commission link: it says so (commission: true with its network, and the answer carries the rule once). The page you asked about, the record and the order, prices and verdict never carry or read a commission.
 
 ## For bot assistants (Grok Bot, xAI API)

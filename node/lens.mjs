@@ -9,6 +9,7 @@ import { PACKPAY } from './packpay.mjs';
 import { productOf } from './lean.mjs';
 import { DEAL, dealTarget, dealQuery, dealKey, remembered, dealOf, wordsOf } from './deal.mjs';
 import { SEEN, recordKey, recordOf, recordRef, canonical } from './seen.mjs';
+import { BOOK, bookHost, freshOf, nextVisit, watchAfter, seriesAfter, bookSays } from './book.mjs';
 
 const FEED = new Set(['read', 'whale', 'brevet', 'seal', 'buoy', 'path', 'knock', 'enter', 'answer', 'ask', 'tide', 'job', 'job_done', 'note', 'mark', 'reflex', 'learn', 'course', 'outcome']);
 export const TAG = /^[a-z0-9]{4,12}$/;
@@ -80,10 +81,13 @@ export function createLens(h) {
       const url = a.url != null && String(a.url).trim() !== '' ? dealTarget(a.url) : null, q = dealQuery(a.q ?? a.query ?? a.name);
       if (!url && !q) throw new SeaError('INVALID_ARGUMENT', `give a product page: ${DEAL.free}?url=https://shop.example.com/products/… (or a product name or GTIN: ${DEAL.free}?q=…)`);
       const paid = !!ctx?.paidDeal;
+      // (since 3.72) a visit of the record book (node/book.mjs) is the sea's own check: its page read is no read of the day, it is
+      // no deal check of the day, it leaves no look in the memory of what agents saw, and its record says by: "sea"
+      const book = !!ctx?.book;
       if (!paid) { try { await allow(ctx, 'deal', DEAL.perHour, 3600); } catch (e) { if (e instanceof SeaError) e.dealLimit = true; throw e; } }
       let page = null, product = null;
       if (url) {
-        const r = await lens.read({ url, shape: { raw: true } }, { ...ctx, dealRead: true }).catch((e) => ({ error: String(e?.message || e) }));
+        const r = await lens.read({ url, shape: { raw: true } }, { ...ctx, dealRead: true, ...(book ? { uncounted: true } : {}) }).catch((e) => ({ error: String(e?.message || e) }));
         const final = r.final || r.url || url;
         page = { url: final, asked: url, host: hostOf(final), read: !!(r.rawHtml || r.markdown), blocked: r.blocked ? true : undefined,
           error: r.blocked ? 'robots.txt of this site does not let the reader in' : r.error ? String(r.error).slice(0, 200) : !r.rawHtml && !r.markdown ? String(r.note || 'no text').slice(0, 200) : undefined };
@@ -99,29 +103,29 @@ export function createLens(h) {
       let before = [];
       if (key) {
         const k = `deal:seen:${(await sha(key)).slice(0, 32)}`; before = (await kv.get(k)) || [];
-        if (price != null && product?.currency && !ctx?.uncounted) await kv.set(k, remembered(before, { t: now(), p: price, c: product.currency }), DEAL.seen.keepDays * DAY);
+        if (price != null && product?.currency && !ctx?.uncounted && !book) await kv.set(k, remembered(before, { t: now(), p: price, c: product.currency }), DEAL.seen.keepDays * DAY);
       }
-      if (!ctx?.uncounted) { const day = now().slice(0, 10); await kv.set(`deal:count:${day}`, (Number(await kv.get(`deal:count:${day}`)) || 0) + 1, 3 * DAY); }
+      if (!ctx?.uncounted && !book) { const day = now().slice(0, 10); await kv.set(`deal:count:${day}`, (Number(await kv.get(`deal:count:${day}`)) || 0) + 1, 3 * DAY); }
       // (since 3.69) a check made by the routine of /for/bots is counted once more, apart: one number a day, nothing else
       if (!ctx?.uncounted && ctx?.via === 'bot-template') { const day = now().slice(0, 10); await kv.set(`deal:via:bot-template:${day}`, (Number(await kv.get(`deal:via:bot-template:${day}`)) || 0) + 1, 3 * DAY); }
       const ans = dealOf({ product, page, q, offers, seen: before, paid, base: a.base || '' });
       // the open price record (node/seen.mjs): only for a page read with its price, never for words someone typed, never for a
       // crawler's call; the same look on the same day is the same record, a record never changes
-      if (url && !ctx?.uncounted) { try { const ref = await lens.keepRecord(ans, a.base || ''); if (ref) { ans.record = ref; const at = ans.next.findIndex((x) => x.do === 'check the store before paying'); ans.next.splice(at + 1, 0, { do: 'show your person the open record', at: ref.url, note: 'what this check saw, unchanged at its own address: the source of the price you name' }); } } catch {} }
+      if (url && !ctx?.uncounted) { try { const ref = await lens.keepRecord(ans, a.base || '', book ? { by: 'sea' } : {}); if (ref) { ans.record = ref; const at = ans.next.findIndex((x) => x.do === 'check the store before paying'); ans.next.splice(at + 1, 0, { do: 'show your person the open record', at: ref.url, note: 'what this check saw, unchanged at its own address: the source of the price you name' }); } } catch {} }
       return ans;
     },
     // a deal check's answer → its open price record kept (new) or found (the same look today) → the line the answer carries, or
     // null (no record for this answer, or the day's records are made)
-    async keepRecord(ans, base = '') {
+    async keepRecord(ans, base = '', { by } = {}) {
       const t = now(), day = t.slice(0, 10), key = recordKey(ans, day); if (!key) return null;
       const id = (await sha(`seen|${key}`)).slice(0, 16), k = `seen:rec:${id}`;
       const had = await kv.get(k).catch(() => null); if (had?.id) return recordRef(had, had.sha256);
       const made = Number(await kv.get(`seen:new:${day}`).catch(() => 0)) || 0; if (made >= SEEN.perDay) return null;
-      const rec = recordOf(ans, { id, at: t, base }), sha256 = await sha(canonical(rec)), kept = { ...rec, sha256 };
+      const rec = recordOf(ans, { id, at: t, base, by }), sha256 = await sha(canonical(rec)), kept = { ...rec, sha256 };
       await kv.set(k, kept, SEEN.keepDays * DAY);
       await kv.set(`seen:new:${day}`, made + 1, 3 * DAY);
       const recent = (await kv.get('seen:recent').catch(() => null)) || [];
-      const line = { id, at: t, name: rec.product.name, store: rec.store, price: rec.product.price, currency: rec.product.currency, word: rec.verdict.word, n: rec.elsewhere_found, ix: rec.indexable };
+      const line = { id, at: t, name: rec.product.name, store: rec.store, price: rec.product.price, currency: rec.product.currency, word: rec.verdict.word, n: rec.elsewhere_found, ix: rec.indexable, ...(rec.by ? { by: rec.by } : {}) };
       await kv.set('seen:recent', [line, ...(Array.isArray(recent) ? recent : []).filter((x) => x?.id !== id)].slice(0, SEEN.recent), SEEN.keepDays * DAY);
       return recordRef(kept, sha256);
     },
@@ -131,6 +135,41 @@ export function createLens(h) {
     async seenListed() { return (await lens.seenRecent()).filter((x) => x?.ix && /^[0-9a-f]{16}$/.test(x.id)).map((x) => `${SEEN.path}/${x.id}`); },
     // how many deal checks this node made today (UTC), free and paid: the number GET /deal shows beside how to call it; since
     // 3.69 also how many of them came from the routine of /for/bots
+    // the record book (node/book.mjs, since 3.72): one visit per step, called after a tide; the state it keeps is its own: the
+    // visits and records of the day, the pages visited today, the watch, the cursor over the current's picks, the stores visited
+    // within the gap and one series of prices per page
+    async bookStep(base = '') {
+      const day = now().slice(0, 10), tried = Number(await kv.get(`book:tried:${day}`).catch(() => 0)) || 0;
+      if (!(tried < BOOK.perDay)) return { calm: true, day, tried };
+      const arr = (x) => (Array.isArray(x) ? x : []);
+      const [watch, done, recent, cur0] = await Promise.all(['book:watch', `book:done:${day}`, 'tide:recent', 'book:cursor'].map((k) => kv.get(k).catch(() => null)));
+      const slugs = arr(recent), cur = (Number(cur0) || 0) % Math.max(slugs.length, 1), take = slugs.length ? Array.from({ length: Math.min(BOOK.scan, slugs.length) }, (_, i) => slugs[(cur + i) % slugs.length]) : [];
+      const fresh = freshOf(await Promise.all(take.map((s) => kv.get(`tide:${s}`).catch(() => null))));
+      if (slugs.length) await kv.set('book:cursor', (cur + take.length) % slugs.length, BOOK.keepDays * DAY);
+      const hosts = [...new Set([...arr(watch), ...fresh].map(bookHost).filter(Boolean))];
+      const busy = new Set((await Promise.all(hosts.map(async (x) => ((await kv.get(`book:host:${x}`).catch(() => null)) ? x : null)))).filter(Boolean));
+      const visit = nextVisit({ tried, watch: arr(watch), done: arr(done), fresh, busy: (x) => busy.has(x) });
+      if (!visit) return { calm: true, day, tried };
+      // the visit is counted before the page is read, so a page that hangs or fails still uses its place of the day
+      await kv.set(`book:tried:${day}`, tried + 1, 3 * DAY);
+      await kv.set(`book:done:${day}`, [...arr(done), visit.url].slice(-BOOK.perDay * 2), 3 * DAY);
+      await kv.set(`book:host:${bookHost(visit.url)}`, 1, BOOK.hostGapS);
+      let ans = null; try { ans = await lens.deal({ url: visit.url, base }, { ip: 'sea-book', who: 'the sea', whoKind: 'sea', book: true }); } catch {}
+      const rec = ans?.record || null;
+      await kv.set('book:watch', watchAfter(arr(watch), visit, !!rec), 400 * DAY);
+      if (rec) {
+        await kv.set(`book:records:${day}`, (Number(await kv.get(`book:records:${day}`).catch(() => 0)) || 0) + 1, 3 * DAY);
+        const sk = `book:series:${(await sha(visit.url)).slice(0, 32)}`;
+        await kv.set(sk, seriesAfter(await kv.get(sk).catch(() => null), { day, price: ans.product?.price, currency: ans.product?.currency, record: rec.id }), BOOK.keepDays * DAY);
+      }
+      return { day, url: visit.url, kind: visit.kind, record: rec?.id || null };
+    },
+    // the book's numbers of today (UTC) and one page's series of prices (oldest first), as /seen says them
+    async bookToday() {
+      const day = now().slice(0, 10), [tried, records, watch] = await Promise.all([`book:tried:${day}`, `book:records:${day}`, 'book:watch'].map((k) => kv.get(k).catch(() => null)));
+      return bookSays({ day, tried: Number(tried) || 0, records: Number(records) || 0, watch: Array.isArray(watch) ? watch.length : 0 });
+    },
+    async bookSeries(url) { const u = String(url || ''); if (!u) return []; const s = await kv.get(`book:series:${(await sha(u)).slice(0, 32)}`).catch(() => null); return Array.isArray(s) ? s : []; },
     async dealToday() { const day = now().slice(0, 10); return { day, checks: Number(await kv.get(`deal:count:${day}`)) || 0, via_bot_template: Number(await kv.get(`deal:via:bot-template:${day}`)) || 0 }; },
     // the reader: any public page as Markdown — free for every agent up to a fair daily amount, then Angel reads on
     async read(a = {}, ctx) {
