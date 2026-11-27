@@ -1,7 +1,8 @@
 SPEC  GET /session?as=key (first choice) · POST /session (the same key as JSON)  ·  Mare Liberum 3.78.0 (key), 3.79.0 (server-timing,
       next_step, contact book), 3.80.0 (the key by GET, x-sea-session first, the no-wallet words first in every 402),
-      3.81.0 (calls_left and calls_used in every keyed answer, way_out at 3 and 0, the topup POST /route?a=topup)
-Code: node/session.mjs, node/core.mjs (route /session, sessionDoor)  ·  Proof: tools/session-proof.mjs (25 proofs, 16 controls),
+      3.81.0 (calls_left and calls_used in every keyed answer, way_out at 3 and 0, the topup POST /route?a=topup),
+      3.82.0 (one taste for an empty key, receipts checked against the chain books, the topup by transfer, the sums)
+Code: node/session.mjs, node/core.mjs (route /session, sessionDoor)  ·  Proof: tools/session-proof.mjs (28 proofs, 21 controls),
 tools/contacts-proof.mjs (K2 proof)  ·  Live since 27.11.2026 15:50 (3.78.0)
 
 SUCCESS BAR (K2)
@@ -45,6 +46,14 @@ SUPPLY (3.81, every answer to a call with a key)
                          x402 payment → 200 {topup: done, before.calls_left, calls_left 20, calls_used, paid {status, sale}}:
                          20 probe calls for 7 more days, the key 30 more days, the same key/id/bookmark; a sale of the till
                          (method topup-x402-v<n>); one sale fills up once; bookmark lists topups {at, status}
+  topup by transfer    (3.82) POST /settle {"a":"topup","tx":"<hash>"} with x-sea-session: <key>: checked against the books
+                         of the chain (there and enough: settled; else unverified, one such topup a key a UTC day, then 429);
+                         a receipt buys once (again: "done before"; for another key: 402); answer sums.changed {calls_left,
+                         today_paid, today_usd, …: {before, after}}; GET /treasury?a=topup lists the last topups with their sums
+  taste (3.82)         an empty key at POST /route gets once a round (a topup starts a new one) 200 with the first 3 paths,
+                         taste: true and paid_full ("the full 10 paths cost 0.02 USDC, one call: …"); then the 402
+  receipt (3.82)       POST /route?q=<task> with x-sea-receipt: <tx hash> = /settle {"q","tx"}: checked, delivered, the same
+                         sale when sent again
 
 READ
   GET /session            without key: what it is, limits, today {opened, probe_calls, probe_day}; with key: the key's own state

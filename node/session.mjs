@@ -21,6 +21,8 @@
 //   topup    (since 3.81) topup(h, sale): the probe calls back to 20 for 7 more days and the key 30 more days, the same key and
 //            id; only after a payment the till took (POST /route?a=topup), never twice for one sale; the key's paid days are
 //            counted (session:paid:<day>, each key once a day) for the open numbers
+//   grace    (since 3.82) a key whose probe calls are spent gets one taste at the route before the 402: grace(h) marks it once
+//            for this round of probe calls (a topup starts a new round); the door then answers 200 with the first 3 paths
 //   never    a key in clear anywhere (state, books, logs, answers after the first); a probe call spent twice or for nothing;
 //            money: probe calls are no sale, the till's books stay as they are; a call to a callback.
 // The state lives in the node's state (session:…), like the reader credit (node/credit.mjs): no table, no migration. The
@@ -138,6 +140,21 @@ export function createSessions({ kv, now = () => Date.now(), secret = randomByte
         return { ok: true, left: rec.probe.left, used: rec.calls };
       });
     },
+    // (since 3.82) the topups of a key as the state keeps them ({ at, sale, status, before }), for the checks of a receipt
+    async topups(h) { const rec = await kv.get(R(idOf(h))); return rec && rec.h === h && Array.isArray(rec.topups) ? rec.topups : []; },
+    // (since 3.82) one taste after the trial: { ok, used } once per round of probe calls of an empty key, else { ok: false }
+    grace(h) {
+      const id = idOf(h);
+      return serial(id, async () => {
+        const t = now(), rec = await kv.get(R(id));
+        if (!rec || rec.h !== h || Date.parse(rec.until) <= t) return { ok: false };
+        if (rec.probe.left > 0 && Date.parse(rec.probe.until) > t) return { ok: false };
+        const round = rec.round || 0;
+        if (rec.grace === round) return { ok: false, given: true };
+        rec.grace = round; await kv.set(R(id), rec, ttlOf(rec));
+        return { ok: true, used: rec.calls, id };
+      });
+    },
     // the bookmark: by its id (no key needed, none shown) → the public state, or null
     async view(id) { if (!ID_RE.test(String(id))) return null; const rec = await kv.get(R(id)); return rec ? doc(rec) : null; },
     async peek(h) { const rec = await kv.get(R(idOf(h))); return rec && rec.h === h ? doc(rec) : null; },
@@ -152,7 +169,7 @@ export function createSessions({ kv, now = () => Date.now(), secret = randomByte
         const live = Date.parse(rec.probe.until) > t, before = live ? rec.probe.left : 0;
         if (mark && (rec.topups || []).some((x) => x.sale === mark)) return { ok: true, again: true, before, left: before, used: rec.calls, id, until: rec.probe.until };
         const day = dayOf(t), first = !(rec.topups || []).some((x) => String(x.at).slice(0, 10) === day);
-        rec.probe = { n: SESSION.probe, left: SESSION.probe, until: new Date(t + SESSION.probeDays * DAY * 1000).toISOString() };
+        rec.probe = { n: SESSION.probe, left: SESSION.probe, until: new Date(t + SESSION.probeDays * DAY * 1000).toISOString() }; rec.round = (rec.round || 0) + 1;
         rec.until = new Date(Math.max(Date.parse(rec.until), t + SESSION.days * DAY * 1000)).toISOString();
         rec.topups = [{ at: new Date(t).toISOString(), sale: mark || null, status: String(status || '').slice(0, 16) || null, before }, ...(rec.topups || [])].slice(0, 20);
         await kv.set(R(id), rec, ttlOf(rec));
