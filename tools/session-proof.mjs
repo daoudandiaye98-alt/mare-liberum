@@ -287,7 +287,7 @@ console.log('the supply in sight (3.81)');
 const keysOf = (j) => Object.keys(j);
 await proof('every answer to a call with a key says calls_left and calls_used, as its last two fields: the door, the route, the answer that gave the call back, the key\'s own state; the key answers say 20 and 0', async () => {
   const P = await open(); assert.equal(P.j.calls_left, 20); assert.equal(P.j.calls_used, 0); const k = P.j.key;
-  const g = await call('/session?as=key', { ip: fresh(), accept: '*/*' }); assert.equal(g.status, 200); assert.match(g.text, /^mls_[A-Za-z0-9_-]{32}\n$/); assert.equal(g.h['x-sea-calls-left'], '20'); assert.equal(g.h['x-sea-calls-used'], '0'); assert.match(g.h['access-control-expose-headers'], /x-sea-calls-left,x-sea-calls-used/);
+  const g = await call('/session?as=key', { ip: fresh(), accept: '*/*' }); assert.equal(g.status, 200); assert.match(g.text, /^\{\"key\":\"mls_[A-Za-z0-9_-]{32}\",\"calls_left\":20,\"seat_state\":\"none\",\"price_usd\":24,\"buy_line\":\"this key can buy: POST \/seat with header x-sea-session, no card needed\"\}\n$/, '(4.1) the key answer is JSON'); assert.equal(g.h['x-sea-calls-left'], '20'); assert.equal(g.h['x-sea-calls-used'], '0'); assert.match(g.h['access-control-expose-headers'], /x-sea-calls-left,x-sea-calls-used/);
   const c = await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: bearer(k) }); assert.equal(c.status, 200, c.text.slice(0, 200));
   assert.equal(c.j.calls_left, 19); assert.equal(c.j.calls_used, 1); assert.deepEqual(keysOf(c.j).slice(-4), ['calls_left', 'calls_used', 'seat_state', 'price_per_path']); assert.equal(c.j.seat_state, 'none'); assert.equal(c.j.price_per_path, 0.02); assert.equal(c.j.way_out, undefined);
   const r = await call('/route?q=' + URLQ('find usdc price'), { method: 'POST', ip: fresh(), headers: { 'x-sea-session': k } }); assert.equal(r.status, 200);
@@ -333,7 +333,7 @@ await proof('POST /route?a=topup: no key 400, nothing charged; the key without a
   const unknown = await call('/route?a=topup', { method: 'POST', ip: fresh(), headers: { 'x-sea-session': `mls_${'A'.repeat(32)}`, ...payment({ value: '20000' }) } }); assert.equal(unknown.status, 401);
   const ask = await call('/route?a=topup', { method: 'POST', ip: fresh(), headers: bearer(k.key) }); assert.equal(ask.status, 402);
   const v2 = JSON.parse(Buffer.from(ask.h['payment-required'], 'base64').toString('utf8')); assert.equal(v2.accepts[0].amount, '20000'); assert.equal(v2.accepts[0].payTo, WALLET); assert.equal(v2.resource?.url ?? v2.resource, `${BASE}/route?a=topup`);
-  assert.match(ask.j.error.message ?? ask.j.error, new RegExp(`^no wallet needed: run  curl -s ${BASE.replace(/\./g, '\\.')}/session\\?as=key  for a new key`)); assert.match(ask.j.next_step.note, /topup is paid/); assert.equal(ask.j.calls_left, 0); assert.ok(ask.j.way_out);
+  assert.match(ask.j.error.message ?? ask.j.error, new RegExp(`^no wallet needed: run  curl -s ${BASE.replace(/\./g, '\\.')}/session\\?as=key \\| jq -r \\.key  for a new key`)); assert.match(ask.j.next_step.note, /topup is paid/); assert.equal(ask.j.calls_left, 0); assert.ok(ask.j.way_out);
   facilitator = settles(); const t0 = await ledger.treasury();
   const paid = await call('/route?a=topup', { method: 'POST', ip: fresh(), headers: { ...bearer(k.key), ...payment({ value: '20000' }) } });
   facilitator = null;

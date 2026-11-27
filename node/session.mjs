@@ -55,7 +55,10 @@ const untilDay = (t) => Math.max(1, Math.ceil((Date.parse(`${dayOf(t)}T00:00:00Z
 export function sessionOf(headers) {
   const own = headers?.get?.('x-sea-session'), auth = headers?.get?.('authorization');
   let raw = own != null ? String(own).trim() : null;
-  if (raw == null && auth != null) { const m = /^Bearer\s+(mls_\S*)\s*$/i.exec(String(auth).trim()); if (m) raw = m[1]; }
+  if (raw == null && auth != null) { const m = /^Bearer\s+(mls_\S*|\{.*\})\s*$/i.exec(String(auth).trim()); if (m) raw = m[1]; }
+  // (since 4.1) GET /session?as=key answers JSON; a shell that kept the whole answer (KEY=$(curl -s …?as=key)) sends that JSON:
+  // its field key is the key
+  if (raw != null && raw.startsWith('{')) { const m = /"key"\s*:\s*"(mls_[A-Za-z0-9_-]{32})"/.exec(raw); raw = m ? m[1] : raw; }
   if (raw == null || raw === '') return null;
   if (!SESSION_RE.test(raw)) return { bad: 'the session key could not be read: it is mls_ and 32 characters of base64url, as POST /session gave it' };
   const h = sessionHash(raw);
