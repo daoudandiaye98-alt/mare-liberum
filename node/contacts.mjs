@@ -157,7 +157,8 @@ export function createContacts({ kv, now = () => Date.now(), secret }) {
   }
 
   // the numbers: today and yesterday (UTC), the cohort for d7, and the four lines of the morning
-  async function dashboard() {
+  // (since 4.1) credits(day): the purchases on credit by agents on that UTC day (node/session.mjs credit:list), for line 3
+  async function dashboard({ credits = null } = {}) {
     const t = now(), today = dayOf(t), yesterday = addDays(today, -1), start = (await kv.get('contacts:since')) || today;
     const day = async (d) => { const a = { ...empty(), ...((await kv.get(A(d))) || {}) }; return { day: d, ...a, types: { ...empty().types, ...(a.types || {}) } }; };
     const [y, n] = [await day(yesterday), await day(today)];
@@ -166,10 +167,12 @@ export function createContacts({ kv, now = () => Date.now(), secret }) {
     let so = { n: 0, back: 0 }; for (let d = start; d <= today; d = addDays(d, 1)) { const h = (await kv.get(H(d))) || {}; so = { n: so.n + (h.n || 0), back: so.back + (h.back || 0) }; if (so.n > 1e9) break; }
     const pct = (a, b) => (b > 0 ? `${((a / b) * 100).toFixed(1).replace('.', ',')} %` : '–');
     const r = y.p402 || y.new || y.paid ? y : n;
+    const cr = (d) => { try { return Math.max(0, Number(credits?.(d)) || 0); } catch { return 0; } };
     const lines = [
       `1 Neue Agenten an der Bezahlwand (${r.day}): ${r.new} (davon Prüfer und Indizes nach Namen: ${r.new_probe}; agent_with_key, ein Schlüssel öffnete eine Tür: ${r.with_key})`,
       `2 402 nach Typ (${r.day}): kein Wallet ${r.types.no_wallet} · Preis ${r.types.price} · Scheme ${r.types.scheme} · Chain ${r.types.chain} · Timeout ${r.types.timeout} (Kontakte mit 402: ${r.contacts402}, davon einmal ${r.single}, mehrmals ${r.multi})`,
-      `3 402 zu bezahlt (${r.day}): ${r.p402} → ${r.paid} bezahlt (${pct(r.paid, r.p402)}); Kontakte, die nach einem 402 zahlten: ${r.converted} von ${r.contacts402}`,
+      // (since 4.1) the brief's words: 402 to paid, and beside the paid the purchases on credit; the percent counts both
+      `3 402 zu bezahlt: ${r.p402} -> bezahlt ${r.paid}, auf Kredit ${cr(r.day)}, ${pct(r.paid + cr(r.day), r.p402)} (${r.day}; Kontakte, die nach einem 402 zahlten: ${r.converted} von ${r.contacts402})`,
       cohort ? `4 Wiederkehr d7 (Kohorte ${cohort.day}): ${cohort.back} von ${cohort.n} (${pct(cohort.back, cohort.n)})` : `4 Wiederkehr d7: erste volle Kohorte am ${addDays(start, CONTACTS.d7 + 1)} (bisher: ${so.back} von ${so.n} kamen an einem anderen Tag wieder)`,
     ];
     // (where each contact stopped, abbruch_phase, is in its line: the operator's export, never counted here from all lines, so
