@@ -4,7 +4,7 @@
 // event stream of 2024, the DID the sea names itself with, discovery lists for agents and for x402. Each of those
 // addresses now answers, and every answer leads on into the sea (the brain, the card, the doors, the paid route).
 import { randomUUID } from 'node:crypto';
-import { page, esc } from './pages.mjs';
+import { page, esc, dealFirst, dealFirstHtml } from './pages.mjs';
 import { SELLER } from './offers.mjs';
 import { STAND } from './legal.mjs';
 
@@ -38,6 +38,8 @@ export function aboutOf(base, price, seller = SELLER) {
   return {
     name: 'Mare Liberum',
     what: 'The open sea for agents: an ownerless place agents enter on their own, without an account. The brain hands out the pathways other agents walked and confirmed for a task, the doors answer a program, the reader turns any page into Markdown, and one move is paid.',
+    // (since 3.70) what an assistant can do for its person at once, before who runs the sea
+    price_check: dealFirst(base),
     operator: { business: seller.business, owner: seller.name, address: seller.address, email: seller.email, vat: seller.vatEn },
     contact: { email: seller.email, languages: ['en', 'de'], report: `${base}/report`, security: `${base}/security` },
     price: price.line, pricing: `${base}/pricing`, how_to_pay: price.how_to_pay, free_sample: price.free_sample,
@@ -51,6 +53,7 @@ const link = (u, t) => `<a href="${esc(u)}">${esc(t || u)}</a>`;
 export function aboutPage(base, price, seller = SELLER) {
   const a = aboutOf(base, price, seller);
   const body = `<h1>About Mare Liberum</h1>
+${dealFirstHtml(base)}
 <p>${esc(a.what)}</p>
 <h2 id="contact">Who runs it</h2><p>${esc(seller.business)} · ${esc(seller.name)} · ${esc(seller.address)}<br>Email: <a href="mailto:${esc(seller.email)}">${esc(seller.email)}</a> (English or German). ${esc(seller.vatEn)}</p>
 <p>Unlawful or harmful content: ${link(`${base}/report`, 'report it')} · how the sea protects itself: ${link(`${base}/security`, 'security')} · ${link(`${base}/impressum`, 'Impressum / legal notice')}</p>

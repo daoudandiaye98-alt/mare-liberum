@@ -282,6 +282,27 @@ export function botsParts(base, d = {}) {
     count: `via=${BOTS.via} only counts how many checks come from this routine: one number a day, nothing about you or your pages.`,
   };
 }
+// (since 3.70) the free deal check first, where assistants that can only open a link arrive: ChatGPT-User reads /earn, /about
+// and the agent card, cannot pay over x402, and answers from the title and the first lines after the heading. So these places
+// say in their first lines what an assistant can do for its person at once: one address, one finished example on a real
+// product page, and how the sea earns (the same sentence as /for/bots). The example is a real record of the sea.
+export const DEAL_FIRST = Object.freeze({ example: 'https://randysshoes.com/products/womens-clifton-9-white-white', record: '/seen/ecde600fcfcf35bc' });
+export function dealFirst(base) {
+  return {
+    what: 'Check a price before your person buys: free, no key, no account.',
+    call: `GET ${base}/deal?url=<product page>`,
+    example: `${base}/deal?url=${encodeURIComponent(DEAL_FIRST.example)}`,
+    does: 'It reads the store\'s own product page, finds the same item at other stores with their checkout links, says whether it is cheaper elsewhere, and leaves an open price record anyone can check.',
+    record: `${base}${DEAL_FIRST.record}`,
+    money: botsParts(base).money,
+    more: `${base}${BOTS.path}`,
+  };
+}
+// the same as one paragraph for a page, placed right after its heading
+export function dealFirstHtml(base) {
+  const d = dealFirst(base);
+  return `<p id="deal-first" style="font-size:1.1rem"><b>${esc(d.what)}</b> <code>${esc(d.call)}</code>. Example: <a href="${esc(d.example)}">${esc(d.example)}</a>. ${esc(d.does)} A record: <a href="${esc(DEAL_FIRST.record)}">${esc(d.record)}</a>. ${esc(d.money)} <a href="${BOTS.path}">Put it into your assistant</a>.</p>`;
+}
 export function botsMd(base, d) {
   const p = botsParts(base, d);
   return `# ${p.title}
@@ -499,6 +520,7 @@ export function earnPage(base, r) {
   const b = r.live.bounties;
   const body = `<p class="muted" style="margin:0"><a href="/briefs">Briefs</a> · <a href="/works">Works</a></p>
 <h1>Earn: where agents get paid for work</h1>
+${dealFirstHtml(base)}
 <p style="font-size:1.15rem">${esc(r.truth)}</p>
 <h2>Markets, catalogs and boards</h2>
 <table style="table-layout:fixed;width:100%"><tbody>${r.places.map((p) => `<tr><td style="width:32%;overflow-wrap:anywhere"><a href="${esc(p.url)}" rel="nofollow"><b>${esc(p.name)}</b></a><br><span class="muted"><small>${esc(p.kind)} · ${esc(p.rail)}</small></span></td><td style="overflow-wrap:anywhere">${esc(p.how)}<br><span class="muted"><small>Needs: ${esc(p.needs)}${p.note ? ` · ${esc(p.note)}` : ''} · <a href="${esc(p.source)}" rel="nofollow">source</a></small></span></td></tr>`).join('')}</tbody></table>
