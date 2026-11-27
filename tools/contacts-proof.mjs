@@ -106,7 +106,7 @@ const follow = async (ns, { ip, ua, key = null, wallet = false, last = null } = 
       else headers[h] = v.replace('{key}', key ?? '');
     }
     r = await call(rel(st.url), { method: st.method, ip, ua, headers, ...(st.body !== undefined ? { body: st.body } : {}) });
-    if (st.keep) { assert.equal(r.status, 201, `the step that keeps ${st.keep}: ${r.text.slice(0, 160)}`); key = r.text.trim(); }
+    if (st.keep) { assert.equal(r.status, 200, `the step that keeps ${st.keep}: ${r.text.slice(0, 160)}`); key = r.text.trim(); }
   }
   return { r, key };
 };
@@ -122,8 +122,8 @@ await proof('a 402 of /x402/check without a wallet: next_step opens a key with p
   facilitator = null; const ip = fresh(), ua = 'flow-check/1.0', s = host();
   const r = await call(`/x402/check?site=${s}`, { ip, ua });
   assert.equal(r.status, 402); const ns = r.j.next_step; assert.ok(ns, 'next_step'); assert.ok(r.j.accepts, 'the x402 body stays');
-  assert.deepEqual(ns.steps.map((x) => [x.method, x.url]), [['POST', `${BASE}/session?as=key`], ['GET', `${BASE}/x402/check?site=${s}`]]); assert.equal(ns.steps[0].keep, 'key'); assert.equal(ns.steps[1].headers.authorization, 'Bearer {key}');
-  assert.equal(ns.run, `KEY=$(curl -sf -X POST '${BASE}/session?as=key') && curl -s '${BASE}/x402/check?site=${s}' -H "Authorization: Bearer $KEY"`);
+  assert.deepEqual(ns.steps.map((x) => [x.method, x.url]), [['GET', `${BASE}/session?as=key`], ['GET', `${BASE}/x402/check?site=${s}`]]); assert.equal(ns.steps[0].keep, 'key'); assert.equal(ns.steps[1].headers['x-sea-session'], '{key}');
+  assert.equal(ns.run, `KEY=$(curl -sf '${BASE}/session?as=key') && curl -s '${BASE}/x402/check?site=${s}' -H "x-sea-session: $KEY"`);
   assert.match(ns.or.say, /PAYMENT-SIGNATURE/); assert.equal(ns.or.steps[0].headers['payment-signature'], '{x402 payment for accepts[0]}');
   const { r: done } = await follow(ns, { ip, ua, last: r }); assert.equal(done.status, 200, done.text.slice(0, 200)); assert.equal(typeof done.j.score, 'number'); assert.equal(done.j.session.left, 19);
 });
@@ -140,14 +140,13 @@ await proof('the same on /x402/read, /x402/deal (with its JSON body) and POST /r
     const { r: done } = await follow(r.j.next_step, { ip, ua, last: r }); assert.equal(done.status, 200, `${path}: ${done.text.slice(0, 200)}`); assert.ok(want(done.j), path); assert.equal(done.j.session.left, 19);
   }
 });
-await proof('the free /deal past its ten checks an hour: next_step leads to the paid door with a new key; with a key already, to the paid door with that key', async () => {
+await proof('the free /deal past its ten checks an hour: next_step leads to the paid door with a new key; with a key the free door itself answers (one probe call)', async () => {
   const ip = fresh(), ua = 'flow-free/1.0', u = `https://shop.${W}/products/runner`;
   for (let i = 0; i < 10; i++) { T0 += 500; const r = await call(`/deal?url=${URLQ(u)}`, { ip, ua }); assert.equal(r.status, 200, `free ${i + 1}`); }
   const r = await call(`/deal?url=${URLQ(u)}`, { ip, ua }); assert.equal(r.status, 402); assert.equal(r.j.next_step.steps[1].url, `${BASE}/x402/deal?url=${URLQ(u)}`);
   const { r: done, key } = await follow(r.j.next_step, { ip, ua, last: r }); assert.equal(done.status, 200); assert.equal(done.j.found, true);
-  const again = await call(`/deal?url=${URLQ(u)}`, { ip, ua, headers: { authorization: `Bearer ${key}` } }); assert.equal(again.status, 402);
-  assert.equal(again.j.next_step.steps.length, 1); assert.match(again.j.next_step.say, /your session key/);
-  const { r: viaKey } = await follow(again.j.next_step, { ip, ua, key, last: again }); assert.equal(viaKey.status, 200); assert.equal(viaKey.j.session.left, 18);
+  // (since 3.80) the free door past its limit takes the key itself: the same call, one probe call
+  const again = await call(`/deal?url=${URLQ(u)}`, { ip, ua, headers: { 'x-sea-session': key } }); assert.equal(again.status, 200, again.text.slice(0, 200)); assert.equal(again.j.found, true); assert.equal(again.j.session.left, 18);
 });
 await proof('with a wallet: the agent follows "or" (accepts[0] signed) and gets the paid check; on a door no session opens (POST /reader/credit) the payment is the first step', async () => {
   facilitator = settles(); const ip = fresh(), ua = 'flow-wallet/1.0';
@@ -170,7 +169,41 @@ await proof('K2: POST /session?as=key gives the key alone (one line of text, 201
   assert.equal(r.status, 201); assert.match(r.h['content-type'], /^text\/plain/); assert.match(r.text, /^mls_[A-Za-z0-9_-]{32}\n$/);
   assert.match(r.h.location, /^https:\/\/mare\.test\/session\/[0-9a-f]{24}$/); assert.equal(r.h['x-sea-session-left'], '20');
   const ms = Number(/session;dur=([\d.]+)/.exec(r.h['server-timing'])?.[1]); assert.ok(ms >= 0 && ms < 300, `server-timing ${r.h['server-timing']}`);
-  const use = await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: { authorization: `Bearer ${r.text.trim()}` } }); assert.equal(use.status, 200); assert.equal(use.j.session.left, 19);
+  const use = await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: { 'x-sea-session': r.text.trim() } }); assert.equal(use.status, 200); assert.equal(use.j.session.left, 19);
+});
+
+console.log('task 1: the way out without a wallet');
+await proof('every 402 begins with the way out without a wallet: the error of the body, of PAYMENT-REQUIRED and of x402-payment-required, and the header x-sea-no-wallet; POST /route with a JSON body too', async () => {
+  const W0 = `no wallet needed: run  curl -s ${BASE}/session?as=key  then repeat this call with header  x-sea-session: <key>`;
+  const r = await call('/route', { method: 'POST', ip: fresh(), ua: 't1-route/1.0', body: { q: 'x' } }); assert.equal(r.status, 402);
+  assert.equal(r.h['x-sea-no-wallet'], W0); assert.ok(String(r.j.error).startsWith(W0), String(r.j.error).slice(0, 120));
+  const v2 = JSON.parse(Buffer.from(r.h['payment-required'], 'base64').toString('utf8')); assert.ok(v2.error.startsWith(W0)); assert.equal(v2.accepts.length, 1, 'the terms stay');
+  const v1h = JSON.parse(r.h['x402-payment-required']); assert.ok(v1h.error.startsWith(W0));
+  assert.match(r.h['access-control-expose-headers'], /x-sea-no-wallet/);
+  for (const path of [`/x402/check?site=${host()}`, `/x402/read?url=${URLQ(`https://${host()}/pier`)}`, `/x402/deal?url=${URLQ(`https://shop.${W}/products/runner`)}`, `/x402/pack?url=${URLQ(`https://${host()}/`)}&q=ropes`]) {
+    const x = await call(path, { ip: fresh(), ua: 't1-doors/1.0' }); assert.equal(x.status, 402, path); assert.equal(x.h['x-sea-no-wallet'], W0, path);
+    assert.ok(String(typeof x.j.error === 'string' ? x.j.error : x.j.error.message).startsWith(W0), path);
+  }
+  const c = await call('/reader/credit', { method: 'POST', ip: fresh(), ua: 't1-credit/1.0' }); assert.equal(c.status, 402); assert.match(c.h['x-sea-no-wallet'], /^no wallet needed: run {2}curl -s https:\/\/mare\.test\/session\?as=key {2}then read with {2}GET https:\/\/mare\.test\/x402\/read\?url=<page>/);
+});
+await proof('GET /session?as=key: one GET, no body: the key alone as one line of text (200, Location, server-timing); a crawler and a HEAD get the words, never a key; POST stays as the other way', async () => {
+  const r = await call('/session?as=key', { ip: fresh(), ua: 't1-get/1.0', accept: '*/*' }); assert.equal(r.status, 200); assert.match(r.text, /^mls_[A-Za-z0-9_-]{32}\n$/); assert.match(r.h['content-type'], /^text\/plain/);
+  assert.match(r.h.location, /\/session\/[0-9a-f]{24}$/); assert.equal(r.h['x-sea-session-left'], '20'); assert.match(r.h['server-timing'], /^session;dur=/); assert.match(r.h['cache-control'], /no-store/);
+  const k = r.text.trim(), use = await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: { 'x-sea-session': k } }); assert.equal(use.status, 200); assert.equal(use.j.session.left, 19);
+  const bot = await call('/session?as=key', { ip: fresh(), ua: 'Mozilla/5.0 (compatible; GPTBot/1.2; +https://openai.com/gptbot)' }); assert.equal(bot.status, 200); assert.ok(bot.j?.what, 'a crawler gets the words'); assert.ok(!/mls_/.test(bot.text));
+  const head = await call('/session?as=key', { method: 'HEAD', ip: fresh(), ua: 't1-head/1.0' }); assert.ok(!/mls_/.test(head.text));
+  const w = (await call('/session', { ip: fresh() })).j; assert.equal(w.open.call, `GET ${BASE}/session?as=key`); assert.match(w.open.or, /^POST /);
+  const o = (await call('/openapi.json', { ip: '127.0.0.1' })).j.paths['/session'].get; assert.equal(o.operationId, 'sessionKey'); assert.deepEqual(o.parameters[0].schema.enum, ['key']);
+});
+await proof('the key works where the words say so: /x402/pack, the reader past its free reads of the day (one probe call a page, x-sea-session-left)', async () => {
+  const k = (await call('/session?as=key', { ip: fresh(), ua: 't1-pack/1.0' })).text.trim(), h = host();
+  const pk = await call(`/x402/pack?url=${URLQ(`https://${h}/`)}&q=ropes+and+sails`, { ip: fresh(), headers: { 'x-sea-session': k } });
+  assert.ok(pk.status === 200 || pk.status === 422, pk.text.slice(0, 200)); if (pk.status === 200) assert.ok(pk.j.passages.length && pk.j.session.left === 19); else assert.match(pk.j.error.message, /given back/);
+  const ip = fresh(), page = `https://${host()}/pier`;
+  for (let i = 0; i < 100; i++) { const r = await call(`/r/${page}?n=${i}`, { ip, ua: 't1-reader/1.0', accept: 'text/markdown' }); assert.equal(r.status, 200, `free read ${i + 1}`); }
+  const wall = await call(`/r/${page}?n=x`, { ip, ua: 't1-reader/1.0', accept: 'text/markdown' }); assert.equal(wall.status, 402); assert.match(wall.h['x-sea-no-wallet'], /session\?as=key/);
+  const k2 = (await call('/session?as=key', { ip: fresh(), ua: 't1-reader2/1.0' })).text.trim();
+  const through = await call(`/r/${page}?n=y`, { ip, ua: 't1-reader/1.0', accept: 'text/markdown', headers: { 'x-sea-session': k2 } }); assert.equal(through.status, 200, through.text.slice(0, 200)); assert.match(through.text, /ferries/); assert.equal(through.h['x-sea-session-left'], '19');
 });
 
 console.log('the contact book');
@@ -253,7 +286,10 @@ if (!process.argv.includes('--no-controls')) {
   console.log('\nnegative controls: each rule broken in a copy, the proof must fail there');
   const CONTROLS = [
     ['no next_step in the 402', 'node/core.mjs', 'return new Response(JSON.stringify({ ...body, next_step }), { status: 402,', 'return res; new Response(JSON.stringify({ ...body, next_step }), { status: 402,'],
-    ['the session step without as=key (the key cannot be kept from the answer)', 'node/core.mjs', "const open = { method: 'POST', url: `${base}/session?as=key`, keep: 'key' };", "const open = { method: 'POST', url: `${base}/session`, keep: 'key' };"],
+    ['the session step without as=key (the key cannot be kept from the answer)', 'node/core.mjs', "const open = { method: 'GET', url: `${base}/session?as=key`, keep: 'key' };", "const open = { method: 'GET', url: `${base}/session`, keep: 'key' };"],
+    ['no way out without a wallet in the 402 (error and header)', 'node/core.mjs', "headers.set('x-sea-no-wallet', hint);", "headers.set('x-sea-other', hint);"],
+    ['GET /session?as=key gives no key', 'node/core.mjs', "if (url.searchParams.get('as') === 'key' && req.method === 'GET' && !", "if (false && !"],
+    ['the free deal door past its limit ignores the key', 'node/core.mjs', "if (e instanceof SeaError && e.dealLimit && sessionOf(req.headers)) return", "if (false) return"],
     ['a spent key offered the paid door again', 'node/core.mjs', 'const spent = keyed && SESSION_PATH.test(path);', 'const spent = false;'],
     ['every 402 counted as no wallet', 'node/contacts.mjs', "if (!paid) return wallet ? 'price' : 'no_wallet';", "return 'no_wallet';"],
     ['the network written down in clear', 'node/contacts.mjs', 'ip_prefix_hash: mac(`net|${prefix}`)', 'ip_prefix_hash: prefix'],

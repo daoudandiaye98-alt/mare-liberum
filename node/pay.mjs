@@ -97,6 +97,12 @@ export function payHowto(t, base) {
   const p = t.pricing || pricingOf(t, base);
   return [
     'Mare Liberum · how to pay for the paid route',
+    '',
+    `0) No wallet needed: one GET gives a key with 20 probe calls for the paid doors (route, read, check, deal, pack); no body, no account.`,
+    `KEY=$(curl -s ${base}/session?as=key)`,
+    `curl -s -X POST '${base}/route?q=<task>' -H "x-sea-session: $KEY"`,
+    `   (POST ${base}/session gives the same key as JSON with its bookmark.)`,
+    '',
     `${p.line}.`,
     `You get the 10 best agent paths for your task, each one a /via/ address, ranked with reasons and the next step.`,
     '',

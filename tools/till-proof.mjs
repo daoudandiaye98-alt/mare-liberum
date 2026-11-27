@@ -287,11 +287,13 @@ await proof('the 402 says the price in dollars and words beside maxAmountRequire
   assert.equal(r.h.get('link'), `<${BASE}/pay/howto>; rel="describedby"`);
   const s = await call('/settle', { method: 'POST', body: { q: 'x' } }); assert.equal(s.status, 402); assert.equal(s.h.get('link'), `<${BASE}/pay/howto>; rel="describedby"`); assert.equal(s.j.amount_usd, '0.02');
 });
-await proof('/pay/howto: plain text under 60 lines, the three commands in their order, what 20000 means, and that a payment not yet verified is still delivered', async () => {
+await proof('/pay/howto: plain text under 60 lines, the way without a wallet first (one GET for a key, since 3.80), then the three commands in their order, what 20000 means, and that a payment not yet verified is still delivered', async () => {
   const res = await handle(new Request(`${BASE}/pay/howto`, { headers: { 'user-agent': 'curl/8.5.0' } }), db, { base: BASE, pay: PAY, ledger: createLedger({}), waitUntil: () => {} });
   assert.equal(res.status, 200); assert.match(res.headers.get('content-type'), /^text\/plain/);
   const txt = await res.text(), lines = txt.trimEnd().split('\n'), curls = lines.filter((l) => l.startsWith('curl '));
-  assert.ok(lines.length <= 60, `${lines.length} lines`); assert.equal(curls.length, 3);
+  assert.ok(lines.length <= 60, `${lines.length} lines`); assert.equal(curls.length, 4);
+  assert.ok(lines.indexOf(`KEY=$(curl -s ${BASE}/session?as=key)`) > 0 && lines.indexOf(`KEY=$(curl -s ${BASE}/session?as=key)`) < lines.indexOf(curls[0]), 'the one GET for a key comes first');
+  assert.equal(curls[0], `curl -s -X POST '${BASE}/route?q=<task>' -H "x-sea-session: $KEY"`); curls.shift();
   assert.equal(curls[0], `curl -s -X POST '${BASE}/route?q=test&free=true'`); assert.equal(curls[1], `curl -si -X POST '${BASE}/route?q=<task>'`); assert.match(curls[2], /^curl -s -X POST '.+\/settle' -H 'content-type: application\/json' -d '\{"q":"<task>","tx":"0x<transaction hash>"\}'$/);
   assert.ok(txt.includes('POST /route costs 0.02 USDC on Base, no account, settle with POST /settle.')); assert.match(txt, /USDC has 6 decimals/); assert.match(txt, /20000 means 0\.020000 USDC, that is 0\.02 US dollars or 2 cents/);
   assert.match(lines[lines.length - 1], /still accepted and delivered at once/); assert.ok(txt.includes(HOUSE_WALLET));

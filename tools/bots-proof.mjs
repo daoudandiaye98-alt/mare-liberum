@@ -204,7 +204,7 @@ if (!process.argv.includes('--no-controls')) {
   const CONTROLS = [
     ['any value of via counted as the routine', 'node/core.mjs', "const viaOf = (u) => (u.searchParams.get('via') === BOTS.via ? { via: BOTS.via } : {});", "const viaOf = (u) => (u.searchParams.has('via') ? { via: BOTS.via } : {});"],
     ['a crawler\'s check counted as the routine', 'node/lens.mjs', "if (!ctx?.uncounted && ctx?.via === 'bot-template')", "if (ctx?.via === 'bot-template')"],
-    ['the paid door forgetting the mark', 'node/core.mjs', '{ ...ctx, paidDeal: true, ...viaOf(url) }', '{ ...ctx, paidDeal: true }'],
+    ['the paid door forgetting the mark', 'node/core.mjs', 'const dealCtx = () => ({ ...ctx, paidDeal: true, ...viaOf(url) });', 'const dealCtx = () => ({ ...ctx, paidDeal: true });'],
     ['the app door given to paste', 'node/pages.mjs', 'mcp = `${base}/mcp`;', 'mcp = `${base}/mcp/app`;'],
     ['the first sentence left out of the page', 'node/pages.mjs', '<p class="lead" style="font-size:1.1rem">${esc(p.lead)}</p>\n', ''],
     ['the Markdown made from the HTML again', 'node/agentmd.mjs', '|^\\/for\\/bots\\.md$', ''],

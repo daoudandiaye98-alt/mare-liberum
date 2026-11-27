@@ -164,15 +164,18 @@ await proof('a non-payer past the free limit: since 3.54 a 402 with the terms of
   assert.equal(a.status, 402, 'since 3.54 the limit asks with 402'); assert.equal(b.status, 429); assert.equal(a.j.error.code, b.j.error.code); assert.equal(a.j.accepts[0].maxAmountRequired, '10000');
   // (since 3.61) the sea's own ways first: this page over x402, then credit; the word on Angel (the reference's words after their first sentence) last
   const LIMIT1 = '100 free reads a day from one address are used.'; assert.ok(b.j.error.message.startsWith(`${LIMIT1} Angel`), b.j.error.message);
+  // (since 3.80) every 402 begins with the way out without a wallet: one GET for a key, then this call again with it
+  const NOWALLET = `no wallet needed: run  curl -s ${BASE}/session?as=key  then repeat this call with header  x-sea-session: <key> · `;
+  assert.ok(a.j.error.message.startsWith(NOWALLET), a.j.error.message); const amsg = a.j.error.message; a.j.error.message = a.j.error.message.slice(NOWALLET.length); assert.equal(a.h['x-sea-no-wallet'], NOWALLET.slice(0, -3));
   assert.ok(a.j.error.message.startsWith(`${LIMIT1} Read on now: this answer is the x402 payment request for this page (0.01 USDC on Base, paid in the same request), or with prepaid reader credit: POST ${BASE}/reader/credit`), a.j.error.message);
   assert.ok(a.j.error.message.endsWith(` A credit page counts only when the read brings Markdown back. ${b.j.error.message.slice(LIMIT1.length + 1)}`), a.j.error.message);
   assert.equal(a.h['x-sea-credit-buy'], `${BASE}/reader/credit`); assert.equal(a.h.link, `<${BASE}/reader#credit>; rel="payment"`);
   assert.equal(a.h['x-sea-credit-buy-card'], `${BASE}/reader/credit/stripe`); assert.ok(a.j.error.message.includes(`or by card or Link: POST ${BASE}/reader/credit/stripe over MPP (0.50 USD for 500 pages, 30 days; for agents with a Link wallet also ?pack=10, ?pack=49 or ?pack=99: 10,000, 100,000 or 250,000 pages for 10, 49 or 99 USD, paid with mpp pay once their person approves; what a page saves, measured: ${BASE}/reader/credit/stripe)`), a.j.error.message);
   assert.equal(a.h['x-sea-credit-buy-business'], `${BASE}/c/reader?from=limit`); assert.ok(a.j.error.message.includes(`or as a business by card in the browser: ${BASE}/c/reader?from=limit (EUR 10 for 10,000 pages, 30 days)`), a.j.error.message);
-  const extra = new Set(['x-sea-credit-buy', 'x-sea-credit-buy-card', 'x-sea-credit-buy-business', 'link', 'access-control-expose-headers', 'content-length', 'payment-required', 'x402-payment-required', 'x-pay-to', 'x-settle-window', 'cache-control', 'x-robots-tag']);
+  const extra = new Set(['x-sea-no-wallet', 'x-sea-credit-buy', 'x-sea-credit-buy-card', 'x-sea-credit-buy-business', 'link', 'access-control-expose-headers', 'content-length', 'payment-required', 'x402-payment-required', 'x-pay-to', 'x-settle-window', 'cache-control', 'x-robots-tag']);
   for (const k of new Set([...Object.keys(a.h), ...Object.keys(b.h)])) if (!extra.has(k)) assert.equal(a.h[k], b.h[k], k);
   const s = await node.call('/v2/scrape', { method: 'POST', accept: 'application/json', ip, body: { url: nextPage() } }); assert.equal(s.status, 402); assert.match(s.j.error, /reader\/credit/); assert.equal(s.h['x-sea-credit-buy'], `${BASE}/reader/credit`);
-  const fc = await node.call(`/r/${nextPage()}`, { ip, headers: { authorization: 'Bearer fc-not-credit-123' } }); assert.equal(fc.j.error.message, a.j.error.message, 'an Authorization without mlc_ is not read');
+  const fc = await node.call(`/r/${nextPage()}`, { ip, headers: { authorization: 'Bearer fc-not-credit-123' } }); assert.equal(fc.j.error.message, amsg, 'an Authorization without mlc_ is not read');
 });
 
 console.log('buying: x402, the till\'s own path, strict, exactly 0.05 USDC');
