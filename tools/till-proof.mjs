@@ -296,7 +296,8 @@ await proof('/pay/howto: plain text under 60 lines, the way without a wallet fir
   const res = await handle(new Request(`${BASE}/pay/howto`, { headers: { 'user-agent': 'curl/8.5.0' } }), db, { base: BASE, pay: PAY, ledger: createLedger({}), waitUntil: () => {} });
   assert.equal(res.status, 200); assert.match(res.headers.get('content-type'), /^text\/plain/);
   const txt = await res.text(), lines = txt.trimEnd().split('\n'), curls = lines.filter((l) => l.startsWith('curl '));
-  assert.ok(lines.length <= 60, `${lines.length} lines`); assert.equal(curls.length, 5);
+  assert.ok(lines.length <= 60, `${lines.length} lines`); assert.equal(curls.length, 6);
+  assert.equal(curls.shift(), `curl -s -X POST '${BASE}/seat?as=host'`, '(since 4.0) the card way for a host without a wallet stands first');
   assert.ok(lines.indexOf(`KEY=$(curl -s ${BASE}/session?as=key)`) > 0 && lines.indexOf(`KEY=$(curl -s ${BASE}/session?as=key)`) < lines.indexOf(curls[0]), 'the one GET for a key comes first');
   assert.equal(curls[0], `curl -s -X POST '${BASE}/route?q=<task>' -H "x-sea-session: $KEY"`); curls.shift();
   assert.equal(curls[0], `curl -s '${BASE}/x402/check?site=example.com' -H "x-sea-session: $KEY"`, '(since 4.0) the check door as it answers: GET with ?site= and the key'); curls.shift();

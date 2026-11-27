@@ -19,6 +19,7 @@ import { siteOf, leftOut } from './atlas.mjs';
 import { registrable } from './areas.mjs';
 import { payUrl } from './offers.mjs';
 import { OFFER } from './seo.mjs';
+import { seatLine } from './pricing.mjs';
 import { countable } from './connect.mjs';
 
 export const ATTENTION = { keepDays: 31, siteDays: 8, sites: 10_000, recordMax: 900_000, perCaller: 3, slots: 1 << 18, top: 25, siteLen: 64, cacheMs: 60_000, marketMs: 600_000 };
@@ -83,6 +84,9 @@ export const CTA = {
   agent10: { name: 'Reader credit for agents, pack 10', price: '10 USD, once, for 10,000 pages (30 days)', to: () => OFFER.agent10, everyone: true },
   agent49: { name: 'Reader credit for agents, pack 49', price: '49 USD, once, for 100,000 pages (30 days)', to: () => OFFER.agent49, everyone: true },
   agent99: { name: 'Reader credit for agents, pack 99', price: '99 USD, once, for 250,000 pages (30 days)', to: () => OFFER.agent99, everyone: true },
+  // (since 4.0) the seat (node/seat.mjs): for everyone, as the agent packs; its reference is the seat's signed link, so the payment
+  // names the seat it was made for (client_reference_id)
+  seat: { name: 'Seat for an agent', price: `${seatLine()}, once`, to: (ref) => (/^[A-Za-z0-9_-]{40,200}$/.test(String(ref || '')) ? `${OFFER.seat}?client_reference_id=${ref}` : OFFER.seat), everyone: true },
   kutter: { name: 'Reader pack Kutter for operators', price: '49 €, once, for 100,000 pages (30 days)', to: () => OFFER.kutter },
   kutterjahr: { name: 'Reader pack Kutter for operators, one year', price: '490 €, once, for 1,200,000 pages (365 days)', to: () => OFFER.kutterjahr },
   fregatte: { name: 'Reader pack Fregatte for operators', price: '199 €, once, for 500,000 pages (30 days)', to: () => OFFER.fregatte },

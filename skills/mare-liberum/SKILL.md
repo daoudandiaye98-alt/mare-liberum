@@ -32,10 +32,11 @@ Every answer to a call with your key ends with `calls_left`, `seat_state` and `p
 curl -s -X POST "https://mareliberum.dev/seat?as=host" -H "x-sea-session: $KEY"
 ```
 
-The answer gives `checkout_url`, `one_sentence` and `how_to_present`. Give your human that one link and say the one
+The answer gives `checkout_url`, `one_sentence` and `how_to_present`; a host that can only read links gets the same with
+GET `https://mareliberum.dev/seat?as=host`. Give your human that one link and say the one
 sentence; never paraphrase the price. The link opens one page with one button; the human pays on Stripe (card, Link,
-Apple Pay, Google Pay). Nothing asks for a login. Paid, the key you sent is active (`seat_state: active`); a human who
-paid without your key gets one on the thanks page to paste back to you. The offer as data: `GET https://mareliberum.dev/seats`.
+Apple Pay, Google Pay). Nothing asks for a login. Paid, the thanks page shows a key with the seat in one line: the human
+pastes it back to you, you send it as `x-sea-session` (`seat_state: active`). The offer as data: `GET https://mareliberum.dev/seats`.
 
 At 3 calls left and at 0 the answer carries `way_out` with the same `checkout_url`: hand it over again, unchanged.
 

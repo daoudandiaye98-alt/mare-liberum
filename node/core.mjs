@@ -31,7 +31,8 @@ import { createLedger, pulseOrdered } from './ledger.mjs';
 import { callerHash, callerHashes, viaProxy, rewriteForAgents, viaUrl, wrapTarget, ADDRESS_KEYS, isPerson, viaKey } from './via.mjs';
 import { commissionFor, viaCommissionFor, commissionOn, withCommission, dealWithCommission, COMMISSION_RULE, COMMISSION_MARK } from './commission.mjs';
 import { paidRoute } from './paid.mjs';
-import { pricingOf, priceLine, withPrice, USDC_BASE } from './pricing.mjs';
+import { pricingOf, priceLine, withPrice, USDC_BASE, SEAT, seatTerms } from './pricing.mjs';
+import { checkoutOf, readSeatToken, hostAnswer, seatOffer, payPage, thanksPage, seatPaid, seatKeyOf, sessionMark, isCheckoutSession, hostOf as seatHostOf } from './seat.mjs';
 import { wantsMarkdown, mdTwin, asMarkdown, plainTextBytes } from './agentmd.mjs';
 import { POPPY, poppyFile, poppyCount, poppyToday } from './poppy.mjs';
 import { areasPage, areasJson, marketPage, thinkingPage } from './areas.mjs';
@@ -55,7 +56,7 @@ import { engineData, enginePage, engineBenchFile } from './engine-ui.mjs';
 import { guidesAnswer } from './guides.mjs';
 import { readerOpenApi } from './readerapi.mjs';
 import { tallyDrop } from './tally.mjs';
-import { createSessions, sessionOf, sessionRefusal, SESSION, SESSION_EXPOSE } from './session.mjs';
+import { createSessions, sessionOf, sessionRefusal, sessionHash, seatStateOf, SESSION, SESSION_EXPOSE } from './session.mjs';
 import { createContacts, doorOf } from './contacts.mjs';
 import { compressDoor, pressRead, readerParams, createVersions, counter, useCors } from './press.mjs';
 import { savingOf } from './engine.mjs';
@@ -1636,7 +1637,8 @@ function liveLine(d, base) {
 }
 // the pages of the sea an assistant reading for a person gets as Markdown: all of them but the via addresses, which
 // carry another site's page and are no page of the sea
-export const mdForAgent = (path) => !/^\/via\//.test(path);
+// (since 4.0) the seat's receipts (/pay/<token>, /thanks) stay pages for the person who pays: never turned into Markdown for an assistant
+export const mdForAgent = (path) => !/^\/(?:via\/|pay\/(?!howto$)|thanks$|seat\/)/.test(path);
 const UTF8 = new TextEncoder(), bytesOf = (s) => UTF8.encode(String(s || '')).length;
 // the plain text of a page, in bytes, taken once per page and kept ten minutes (at most 500 pages)
 const TEXT_CACHE = new Map();
@@ -2547,7 +2549,7 @@ async function handleOne(req, db, cfg = {}) {
     if (path === '/funnel.json' && (req.method === 'GET' || req.method === 'HEAD')) return json({ ...(await funnelOf(db, cfg).today()), doors: { route: `POST ${base}/route?q=<task>`, credit: `POST ${base}/reader/credit`, read: `GET ${base}${READPAY.path}?url=<the page>`, check: `GET ${base}${CHECKPAY.path}?site=<domain>`, pack: `GET ${base}${PACKPAY.path}?url=<site>&q=<question>`, deal: `GET ${base}${DEAL.path}?url=<product page>` }, treasury: `${base}/treasury` }, 200, { 'cache-control': 'no-store', ...CORS });
     // (since 3.82) the topups of session keys: what each one changed (the key's calls, the till's sums), newest first, with the
     // statuses as they stand now; one command shows that money came in through a key
-    if ((path === '/treasury' || path === '/treasury.json') && url.searchParams.get('a') === 'topup') {
+    if ((path === '/treasury' || path === '/treasury.json') && actOf(url) === 'topup') {
       const kvx = cfg.kv || db.kv; let log = []; try { const l = await kvx?.get?.('topup:log'); if (Array.isArray(l)) log = l; } catch {}
       const st = await ledger.saleStatuses(log.map((x) => x.sale).filter(Boolean)).catch(() => ({}));
       log = log.map((x) => (st[x.sale]?.status && st[x.sale].status !== x.status ? { ...x, status: st[x.sale].status, was: x.status } : x));
@@ -2728,6 +2730,95 @@ async function handleOne(req, db, cfg = {}) {
     if (path === NODE.door && (req.method === 'GET' || req.method === 'HEAD')) {
       const paid = url.searchParams.get('paid') === '1';
       return new Response(nodePage(base, paid), { headers: { 'content-type': 'text/html; charset=utf-8', 'cache-control': paid ? 'no-store' : 'public, max-age=300', ...(paid ? { 'x-robots-tag': 'noindex, nofollow', 'referrer-policy': 'no-referrer' } : {}), ...CORS } });
+    }
+    // (since 4.0) the seat (node/seat.mjs): a chat host buys for its human, by card, with one link. POST /seat?as=host gives the
+    // link (nothing written: a signed token), GET /pay/<token> is the receipt with one button to Stripe, Stripe sends the browser
+    // to /seat/confirm, which gives the seat only for a payment Stripe confirmed, writes the sale once and goes on to /thanks.
+    // /seat?as=key (or ?a=key) is /session?as=key; /seats and /licence say the offer, the card first
+    if (path === '/seat' && actOf(url) === 'key') path = '/session';
+    if (path === '/seats' || path === '/licence' || path === '/seat' || path === '/seat/confirm' || path === '/thanks' || (path.startsWith('/pay/') && path !== '/pay/howto')) {
+      const sh = { 'cache-control': 'no-store', 'x-robots-tag': 'noindex, nofollow', 'referrer-policy': 'no-referrer', ...CORS };
+      const routeUsd = pricingOf(payCfg, base).amount_usd, act = actOf(url);
+      // a host that can only read links (the web fetch of ChatGPT, Claude, Gemini) gets the link with a GET as well: it writes nothing
+      const asks = path === '/seat' && (act === 'host' || act === 'topup');
+      if (path === '/seats' || path === '/licence' || (path === '/seat' && !asks && (req.method === 'GET' || req.method === 'HEAD'))) {
+        if (req.method !== 'GET' && req.method !== 'HEAD') return json({ error: { code: 'METHOD_NOT_ALLOWED', message: `GET ${base}${path} says the offer; POST ${base}/seat?as=host buys it` } }, 405, sh);
+        return json({ ...seatOffer(base, routeUsd), buy: `POST ${base}/seat?as=host`, ...(act && act !== 'host' && path !== '/seat' ? { note_on_query: `${path} takes no ?as= or ?a=; the offer is the same` } : {}) }, 200, { ...sh, 'cache-control': 'public, max-age=300' });
+      }
+      if (path === '/seat') {
+        if (req.method !== 'POST' && req.method !== 'GET') return json({ error: { code: 'METHOD_NOT_ALLOWED', message: `POST ${base}/seat?as=host (GET works too)` } }, 405, sh);
+        if (act !== 'host' && act !== 'topup') return json({ error: { code: 'INVALID_ARGUMENT', message: `POST ${base}/seat?as=host (or ?a=host) gives the link for a human; ?as=topup the same for the key you send; ?as=key a key with ${SESSION.probe} probe calls` }, offer: `${base}/seats` }, 400, sh);
+        const sv = sessionOf(req.headers);
+        if (sv?.bad) { const r = sessionRefusal(sv, base); return json(r.body, r.status, sh); }
+        let k = null; if (sv) { const d = await sessionsOf(db, cfg).peek(sv.h); if (!d) { const r = sessionRefusal({ why: 'unknown' }, base); return json(r.body, r.status, sh); } k = d.id; }
+        if (act === 'topup' && !k) return json({ error: { code: 'INVALID_ARGUMENT', message: 'a topup is for the key you send: x-sea-session: <key>. Without a key: POST /seat?as=host' } }, 400, sh);
+        const c = checkoutOf(base, { k, src: seatHostOf(req.headers.get('user-agent')) });
+        try { const kvs = cfg.kv || db.kv; const day = new Date().toISOString().slice(0, 10); if (kvs) { const n = Number(await kvs.get(`seat:asked:${day}`)) || 0; await kvs.set(`seat:asked:${day}`, n + 1, 40 * 86400); } } catch {}
+        const a = hostAnswer(base, c, { keyed: !!k });
+        return json(act === 'topup' ? { ...a, topup_by_wallet: `POST ${base}/route?a=topup with the same key and an x402 payment of ${routeUsd} USDC: 20 probe calls again` } : a, req.method === 'POST' ? 201 : 200, { ...sh, location: c.checkout_url });
+      }
+      if (path.startsWith('/pay/')) {
+        if (req.method !== 'GET' && req.method !== 'HEAD') return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'open this link in a browser' } }, 405, sh);
+        const t = readSeatToken(path.slice('/pay/'.length));
+        const plain = (status, msg) => new Response(`<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>Mare Liberum</title></head><body style="font:18px/1.5 system-ui,sans-serif;max-width:32rem;margin:10vh auto;padding:0 1.2rem"><p>${esc(msg)}</p><p><small><a href="${base}/seats">The offer</a></small></p></body></html>`, { status, headers: { 'content-type': 'text/html; charset=utf-8', ...sh } });
+        if (!t) return plain(404, 'This is not a link of Mare Liberum.');
+        if (!t.ok) return plain(t.expired ? 410 : 404, t.why);
+        const html = payPage(base, t, routeUsd);
+        return new Response(req.method === 'HEAD' ? null : html, { headers: { 'content-type': 'text/html; charset=utf-8', ...sh } });
+      }
+      // the payment: once per Checkout Session, only when Stripe confirms it; the same answer on every later visit
+      const confirm = async (session) => {
+        const kvc = cfg.kv || db.kv || memoryKv(), mark = sessionMark(session), doneKey = `seat:done:${mark}`;
+        const done = await kvc.get(doneKey); if (done) return { ok: true, again: true, ...done, ...(done.minted ? { key: seatKeyOf(session) } : {}) };
+        const kc = cfg.checkout || {}, env = globalThis.process?.env || {};
+        if (env.MARE_CHECKOUT === 'off') return { ok: false, status: 503, why: 'the till rests: nothing is given at the moment. Your payment is safe with Stripe; write to oroborosdesign@gmail.com with its time' };
+        const r = await checkoutSession(session, { url: kc.url ?? env.MARE_DB_URL, anon: kc.anon ?? env.MARE_DB_KEY, secret: kc.secret ?? env.MARE_DB_SECRET, fetchFn: kc.fetch || fetch });
+        if (!r.ok) return { ok: false, status: r.status === 404 ? 404 : r.status === 503 ? 503 : 502, why: `the payment could not be read (${r.why})` };
+        const why = seatPaid(r.s); if (why) return { ok: false, status: 409, why };
+        // the payment names its seat by the token it carried (client_reference_id), once the Edge Function hands it back; a token
+        // that ran out still names the seat it was made for (now: 0)
+        const store = sessionsOf(db, cfg), t = r.s.client_reference_id ? readSeatToken(r.s.client_reference_id, { now: 0 }) : null;
+        const tok = t?.ok ? t : null, ref = tok?.id || null, sale = r.s.payment_intent || r.s.id;
+        let out = null;
+        if (tok?.k) { const d = await store.view(tok.k); if (d) { const g = await store.grant(null, { seat: tok.id, sale, byId: tok.k }); if (g.ok) out = { key_id: tok.k, minted: false, until: g.until }; } }
+        if (!out) { const key = seatKeyOf(session), g = await store.grant(sessionHash(key), { seat: tok?.id || ref || 'st_card', sale, create: true }); out = { key_id: g.id, minted: true, until: g.until, key }; }
+        const row = ledger.sale({ id: `seat${mark.slice(0, 24)}`, q: `host_seat: ${SEAT.days} days, ${SEAT.paths} agent paths, key ${out.key_id}${tok?.src ? `, host ${tok.src}` : ''}`, amount_cents: r.s.amount_total, status: 'settled', method: 'host_link', tx: sale, network: 'stripe', settled_at: new Date().toISOString() });
+        const keep = { key_id: out.key_id, minted: out.minted, until: out.until, seat_id: tok?.id || ref || null, sale: row.id, host: tok?.src || null, at: new Date().toISOString() };
+        await kvc.set(doneKey, keep, 400 * 86400);
+        if (keep.seat_id) await kvc.set(`seat:paid:${keep.seat_id}`, keep, 60 * 86400);
+        tallyDrop();
+        return { ok: true, ...keep, ...(out.minted ? { key: out.key } : {}) };
+      };
+      if (path === '/seat/confirm') {
+        const back = (r) => ({ status: r.ok ? 'active' : 'not_confirmed', ...(r.ok ? { key_id: r.key_id, seat_id: r.seat_id, until: r.until, seat_state: 'active', paths_included: SEAT.paths, ...(r.key ? { key: r.key, once: 'paste this key to your agent; it opens the paid doors as x-sea-session' } : { key: 'the key your agent sent is active now' }), sale: r.sale, treasury: `${base}/treasury` } : { error: { code: r.status === 409 ? 'FAILED_PRECONDITION' : r.status === 404 ? 'NOT_FOUND' : 'UNAVAILABLE', message: r.why } }) });
+        if (req.method === 'GET' || req.method === 'HEAD') {
+          const session = url.searchParams.get('session') || '';
+          if (!session && url.searchParams.get('token')) return seatState(String(url.searchParams.get('token')).replace(/^.*\/pay\//, ''));
+          if (!isCheckoutSession(session)) return json({ error: { code: 'INVALID_ARGUMENT', message: `GET ${base}/seat/confirm?session=<id of the Stripe Checkout Session> (Stripe sends the browser here after paying) · POST ${base}/seat/confirm {"token":"…"} says whether a seat is paid` } }, 400, sh);
+          const r = await confirm(session);
+          if (/application\/json/.test(req.headers.get('accept') || '') && !/text\/html/.test(req.headers.get('accept') || '')) return json(back(r), r.ok ? 200 : r.status || 502, sh);
+          return new Response(null, { status: 303, headers: { ...sh, location: `${base}/thanks?session=${encodeURIComponent(session)}` } });
+        }
+        if (req.method !== 'POST') return json({ error: { code: 'METHOD_NOT_ALLOWED', message: `POST ${base}/seat/confirm {"token":"…"} or {"session":"cs_…"}` } }, 405, sh);
+        const a = await args(), session = String(a.session || ''), token = String(a.token || '').replace(/^.*\/pay\//, '');
+        if (isCheckoutSession(session)) { const r = await confirm(session); return json(back(r), r.ok ? 200 : r.status || 502, sh); }
+        return seatState(token);
+      }
+      // whether a seat is paid, by its token (POST /seat/confirm {"token"} or GET /seat/confirm?token=): 200 active, 202 awaiting_human
+      async function seatState(token) {
+        const t = readSeatToken(token);
+        if (!t || (!t.ok && !t.expired)) return json({ error: { code: 'INVALID_ARGUMENT', message: 'token: the part of checkout_url after /pay/ (or session: the Stripe Checkout Session id)' } }, 400, sh);
+        const kvc = cfg.kv || db.kv || memoryKv(), paid = await kvc.get(`seat:paid:${t.id}`);
+        if (paid) return json({ status: 'active', seat_id: t.id, key_id: paid.key_id, until: paid.until, seat_state: 'active', paths_included: SEAT.paths, key: paid.minted ? 'a key was made for the payment: the human sees it on the thanks page' : 'the key your agent sent is active now', sale: paid.sale, treasury: `${base}/treasury` }, 200, sh);
+        const again = checkoutOf(base, { k: t.k, src: t.src });
+        // 202, not 402: nothing is to be paid to this address; the human pays on Stripe through checkout_url (an x402 client must not try)
+        return json({ status: 'awaiting_human', seat_id: t.id, note: 'nothing is paid for this seat yet: it turns active only after a payment Stripe confirms; hand the human checkout_url', checkout_url: t.ok ? `${base}/pay/${token}` : again.checkout_url, one_sentence: hostAnswer(base, again).one_sentence, ...seatTerms() }, 202, sh);
+      }
+      // /thanks?session=…: the key in one line to copy (a payment that came without a key), or that the agent's key is active
+      if (req.method !== 'GET' && req.method !== 'HEAD') return json({ error: { code: 'METHOD_NOT_ALLOWED', message: 'open this page in a browser' } }, 405, sh);
+      const session = url.searchParams.get('session') || '';
+      const r = isCheckoutSession(session) ? await confirm(session) : { ok: false, why: 'this page needs the session Stripe gave' };
+      return new Response(req.method === 'HEAD' ? null : thanksPage(base, r), { status: r.ok ? 200 : r.status || 400, headers: { 'content-type': 'text/html; charset=utf-8', ...sh } });
     }
     // one call, one key (node/session.mjs, since 3.78): POST /session gives an agent without a wallet a key with probe calls for
     // the paid doors; GET /session/<id> is its bookmark; GET /session says what it is (with the key: the key's own state)

@@ -249,8 +249,9 @@ await proof(`every payment link in the code is either a sale (${SALE_LINKS.size}
   assert.equal(donations.size, 1, 'one link for the voluntary support');
   for (const u of donations) assert.ok(!SALE_LINKS.has(u));
 });
-await proof('(3.63) the sales for everyone are exactly the agent packs in USD (agent10, agent49, agent99); their order pages lead straight to the payment link', async () => {
-  assert.deepEqual(OPEN_SALES, ['agent10', 'agent49', 'agent99']);
+await proof('(3.63) the sales for everyone are exactly the agent packs in USD (agent10, agent49, agent99) and (4.0) the seat; their order pages lead straight to the payment link; AGB, terms and both price lists name the seat', async () => {
+  assert.deepEqual(OPEN_SALES, ['agent10', 'agent49', 'agent99', 'seat']);
+  for (const p of ['/de/agb', '/terms', '/de/preise', '/pricing']) { const r = await node.call(p, { accept: 'text/html', ...BROWSER }); assert.equal(r.status, 200, p); assert.match(r.text, /\/c\/seat/, `${p} names the order door of the seat`); assert.match(r.text, /24 USD|USD 24/, `${p} names its price`); }
   for (const id of OPEN_SALES) { assert.match(CTA[id].price, /USD/, id); const go = await node.call(`/c/${id}?from=pricing`, { accept: 'text/html', ...BROWSER }); assert.equal(go.status, 302, id); assert.equal(go.headers.get('location'), ctaTarget(id), id); }
 });
 for (const [from, lang] of [['pricing', 'en'], ['law', 'de']]) {
