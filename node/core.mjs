@@ -2228,8 +2228,9 @@ async function handleOne(req, db, cfg = {}) {
       after: `no probe call left: the same doors without the key, paid over x402 (${base}/.well-known/x402)`,
     });
     // (since 3.80) the work of a session door, the same at the paid door and at its free twin past the free limit
+    const dealCtx = () => ({ ...ctx, paidDeal: true, ...viaOf(url) }); // the paid limits and the mark of the bot template, at both deal doors
     const dealRun = (a) => async () => {
-      let r; try { r = await sea.deal({ ...a, base }, { ...ctx, paidDeal: true, ...viaOf(url) }); } catch (e) { r = { error: String(e?.message || e).slice(0, 200) }; }
+      let r; try { r = await sea.deal({ ...a, base }, dealCtx()); } catch (e) { r = { error: String(e?.message || e).slice(0, 200) }; }
       if (!r || r.error || !r.found) return { res: json({ error: { code: 'UNAVAILABLE', message: `nothing to compare was found (${String(r?.error || r?.verdict?.lines?.[0] || 'no product on the page, no matching offer').slice(0, 200)}). The probe call was given back.` }, page: r?.page, verdict: r?.verdict }, 422, paidHdr) };
       return { answer: ctx.readOnly ? r : dealWithCommission(r) };
     };
@@ -2669,7 +2670,7 @@ async function handleOne(req, db, cfg = {}) {
       if (tillBusy()) return { res: json({ error: { code: 'RESOURCE_EXHAUSTED', message: 'the till asks this address for a calmer pace (120 paid moves an hour). Nothing was charged.' } }, 429, { ...paidHdr, 'retry-after': '300' }) };
       const book = creditBook(db, cfg), claim = await book.claim(pay);
       if (claim.used) return { res: dealRequired(t, { base, error: 'this payment was used before: a payment buys once', cors: CORS }) };
-      let r; try { r = await sea.deal({ ...a, base }, { ...ctx, paidDeal: true, ...viaOf(url) }); } catch (e) { r = { error: String(e?.message || e).slice(0, 200) }; }
+      let r; try { r = await sea.deal({ ...a, base }, dealCtx()); } catch (e) { r = { error: String(e?.message || e).slice(0, 200) }; }
       if (!r || r.error || !r.found) {
         await book.release(claim);
         return { res: json({ error: { code: 'UNAVAILABLE', message: `nothing to compare was found (${String(r?.error || r?.verdict?.lines?.[0] || 'no product on the page, no matching offer').slice(0, 200)}). Nothing was charged: the payment was not taken.` }, page: r?.page, verdict: r?.verdict }, 422, paidHdr) };
