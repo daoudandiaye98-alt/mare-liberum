@@ -24,7 +24,7 @@ import { createHash, createHmac, hkdfSync, randomBytes } from 'node:crypto';
 
 export const SESSION = Object.freeze({ prefix: 'mls_', probe: 20, probeDays: 7, days: 30, perMinute: 30, perNetDay: 10, probeDay: 2000, last: 10 });
 export const SESSION_RE = /^mls_[A-Za-z0-9_-]{32}$/;
-export const SESSION_DOORS = Object.freeze(['deal', 'check', 'read', 'route']);
+export const SESSION_DOORS = Object.freeze(['deal', 'check', 'read', 'route', 'pack']);
 export const SESSION_EXPOSE = 'x-sea-session-left,x-sea-session';
 const DAY = 86_400, ID_RE = /^[0-9a-f]{24}$/;
 export const sessionHash = (key) => createHash('sha256').update(String(key)).digest('hex');

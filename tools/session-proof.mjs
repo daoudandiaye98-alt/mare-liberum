@@ -116,8 +116,8 @@ await proof('POST /session without a body: 201, a key mls_ with 192 random bits 
   assert.match(A.id, /^[0-9a-f]{24}$/); assert.equal(A.id, sessionHash(A.key).slice(0, 24), 'the id is the head of the hash');
   assert.equal(r.h.location, `${BASE}/session/${A.id}`); assert.equal(A.bookmark, r.h.location);
   assert.equal(A.probe.calls, SESSION.probe); assert.equal(A.probe.left, 20); assert.equal(Date.parse(A.probe.until) - T0, 7 * 86_400_000); assert.equal(Date.parse(A.expires) - T0, 30 * 86_400_000);
-  assert.deepEqual(A.probe.doors, ['deal', 'check', 'read', 'route']); assert.equal(A.state, 'ok'); assert.equal(A.calls, 0); assert.deepEqual(A.last, []); assert.equal(A.callback, null);
-  assert.match(A.once, /shown this one time/); assert.equal(A.use.doors.length, 4); assert.match(A.use.header, /Authorization: Bearer <key>/);
+  assert.deepEqual(A.probe.doors, ['deal', 'check', 'read', 'route', 'pack']); assert.equal(A.state, 'ok'); assert.equal(A.calls, 0); assert.deepEqual(A.last, []); assert.equal(A.callback, null);
+  assert.match(A.once, /shown this one time/); assert.equal(A.use.doors.length, 6); assert.match(A.use.header, /^x-sea-session: <key>/); assert.match(A.use.get, /session\?as=key/);
   assert.equal(A.limits.calls_a_minute, 30); assert.equal(A.limits.sessions_a_network_a_day, 10); assert.equal(A.limits.probe_calls_of_the_sea_a_day, 2000);
   assert.equal(r.h['cache-control'], 'no-store'); assert.match(r.h['access-control-expose-headers'], /x-sea-session-left,x-sea-session,location$/); assert.match(r.h['access-control-allow-headers'], /authorization/);
   const plain = await call(`/x402/check?site=${host()}`, { ip: fresh() }); assert.equal(plain.status, 402); assert.ok(!/x-sea-session/.test(plain.h['access-control-expose-headers']), 'an answer without a key keeps its headers');
@@ -131,7 +131,7 @@ await proof('the key is never kept in clear: the state holds its SHA-256 only; t
   assert.ok(!b.text.includes(A.key) && !b.text.includes(sessionHash(A.key)), 'no key, no hash'); assert.ok(!/"tag"|"h"|"rate"/.test(b.text), 'no marks, no hash field, no pace');
 });
 await proof('GET /session says what it is with today\'s count; with the key the key\'s own state; HEAD takes nothing', async () => {
-  const g = await call('/session', { ip: fresh() }); assert.equal(g.status, 200); assert.match(g.j.what, /20 probe calls/); assert.equal(g.j.open.call, `POST ${BASE}/session`);
+  const g = await call('/session', { ip: fresh() }); assert.equal(g.status, 200); assert.match(g.j.what, /20 probe calls/); assert.equal(g.j.open.call, `GET ${BASE}/session?as=key`); assert.match(g.j.open.or, /^POST /);
   assert.equal(g.j.today.day, today()); assert.ok(g.j.today.opened >= 2); assert.equal(g.j.today.probe_day, 2000); assert.ok(g.j.errors['429'] && g.j.errors['501']);
   const k = await call('/session', { ip: fresh(), headers: { 'x-sea-session': A.key } }); assert.equal(k.status, 200); assert.equal(k.j.id, A.id); assert.equal(k.j.bookmark, A.bookmark);
   const h = await call(`/x402/check?site=${host()}`, { method: 'HEAD', ip: fresh(), headers: bearer(A.key) }); assert.equal(h.status, 402); assert.equal(await left(A.key), 20);
@@ -244,7 +244,7 @@ await proof('the body: not a JSON object 400, an array 400, longer than 4096 cha
   assert.equal((await call('/session', { method: 'POST', ip: fresh(), raw: '{nope' })).status, 400);
   assert.equal((await call('/session', { method: 'POST', ip: fresh(), raw: '[1,2]' })).status, 400);
   assert.equal((await call('/session', { method: 'POST', ip: fresh(), raw: JSON.stringify({ agent: 'x'.repeat(5000) }) })).status, 413);
-  const put = await call('/session', { method: 'PUT', ip: fresh() }); assert.equal(put.status, 501); assert.equal(put.j.error.code, 'UNIMPLEMENTED'); assert.equal(put.j.alternatives[0].do, `POST ${BASE}/session`);
+  const put = await call('/session', { method: 'PUT', ip: fresh() }); assert.equal(put.status, 501); assert.equal(put.j.error.code, 'UNIMPLEMENTED'); assert.equal(put.j.alternatives[0].do, `GET ${BASE}/session?as=key`);
   const del = await call(`/session/${A.id}`, { method: 'DELETE', ip: fresh() }); assert.equal(del.status, 501);
   const nf = await call(`/session/${'0'.repeat(24)}`, { ip: fresh() }); assert.equal(nf.status, 404); assert.equal(nf.j.error.code, 'NOT_FOUND');
   assert.equal((await call('/session/not-an-id', { ip: fresh() })).status, 404);
@@ -288,10 +288,10 @@ await proof('/openapi.json: POST and GET /session and GET /session/{id}, free (s
 });
 await proof('llms.txt says how (one call, the doors, the header, the bookmark, the limits); the privacy notice says what is kept, in German and in English', async () => {
   const l = (await call('/llms.txt', { ip: '127.0.0.1', accept: 'text/plain' })).text;
-  for (const w of ['One call, one key', 'POST https://mareliberum.dev/session', 'Authorization: Bearer <key>', '20 probe calls for 7 days', '/session/<id>', '10 new keys a day per network']) assert.ok(l.includes(w), w);
+  for (const w of ['One call, one key', 'GET https://mareliberum.dev/session?as=key', 'POST https://mareliberum.dev/session', 'x-sea-session: <key>', '20 probe calls for 7 days', '/session/<id>', '10 new keys a day per network']) assert.ok(l.includes(w), w);
   const de = (await call('/de/datenschutz', { ip: '127.0.0.1', accept: 'text/html' })).text, en = (await call('/privacy', { ip: '127.0.0.1', accept: 'text/html' })).text;
-  assert.match(de, /<p>\(\d+\) Sitzungen: Für Sitzungen \(<code>POST \/session<\/code>, seit 3\.78\) bewahrt der Knoten je Schlüssel nur dessen Hashwert \(SHA-256\)/);
-  assert.match(en, /<p>\(\d+\) Sessions: for sessions \(<code>POST \/session<\/code>, since 3\.78\) the node keeps per key only its hash \(SHA-256\)/);
+  assert.match(de, /<p>\(\d+\) Sitzungen: Für Sitzungen \(<code>GET \/session\?as=key<\/code> oder <code>POST \/session<\/code>, seit 3\.78\) bewahrt der Knoten je Schlüssel nur dessen Hashwert \(SHA-256\)/);
+  assert.match(en, /<p>\(\d+\) Sessions: for sessions \(<code>GET \/session\?as=key<\/code> or <code>POST \/session<\/code>, since 3\.78\) the node keeps per key only its hash \(SHA-256\)/);
   assert.ok(de.includes('<tr><td>Sitzungen (POST /session)</td>') && en.includes('<tr><td>Sessions (POST /session)</td>'));
 });
 
