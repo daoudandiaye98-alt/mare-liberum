@@ -67,3 +67,17 @@ export function withPrice(text, p) {
   if (p.payTo !== d.payTo) s = s.replaceAll(d.payTo, p.payTo);
   return s;
 }
+
+// (since 4.0) the seat (node/seat.mjs): a chat host buys for its human, by card, with one link. Every place that names its
+// price reads it here: the host's answer, /seats, the pay page, the thanks page, the supply fields of a key and the treasury's
+// overage; the skill, llms.txt and /pay/howto say seatLine, and tools/seat-proof.mjs holds their text to it.
+// Stripe, account Oroboros: price price_1UgSRp4IVkazyZLzskyl4UUo, payment link plink_1UgSRw4IVkazyZLzKznJ8lhO (the link itself stands
+// in node/seo.mjs OFFER.seat, reached only through its order door /c/seat); after paying, Stripe sends the browser to
+// /seat/confirm?session={CHECKOUT_SESSION_ID}
+export const SEAT = Object.freeze({
+  cents: 2400, currency: 'usd', days: 30, paths: 5000, overCents: 1, tokenDays: 7,
+  linkId: 'plink_1UgSRw4IVkazyZLzKznJ8lhO',
+});
+export const seatTerms = (s = SEAT) => ({ price_usd: s.cents / 100, period_days: s.days, paths_included: s.paths, price_per_path_over: s.overCents / 100 });
+export const seatLine = (s = SEAT) => `${s.cents / 100} USD for ${s.days} days, ${s.paths.toLocaleString('en-US')} agent paths included, then ${(s.overCents / 100).toFixed(2)} USD per path`;
+export const seatSentence = (s = SEAT) => `Give Mare Liberum ${s.cents / 100} USD for a month, ${s.paths} agent paths included`;

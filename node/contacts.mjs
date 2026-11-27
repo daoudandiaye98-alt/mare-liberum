@@ -24,6 +24,7 @@
 //   limits    at most 5,000 new contacts a UTC day (more are counted, not kept); own calls (MareLiberum-session) not at all
 import { createHash, createHmac } from 'node:crypto';
 import { isIP } from 'node:net';
+import { hostOf } from './hosts.mjs';
 
 export const CONTACTS = Object.freeze({ days: 31, perDay: 5000, paths: 20, aggDays: 40, d7: 7 });
 export const PAYWALL_TYPES = Object.freeze(['no_wallet', 'price', 'scheme', 'chain', 'timeout']);
@@ -106,7 +107,8 @@ export function createContacts({ kv, now = () => Date.now(), secret }) {
         const day = await kv.get(A(d)); const made = (day?.new || 0) + (day?.overflow || 0);
         if (made >= CONTACTS.perDay) { await bumpDay(d, (a) => { a.overflow += 1; if (e.kind === '402') { a.p402 += 1; a.types[causeOf({ paid: e.paid, bad: e.bad, message: e.message })] += 1; } }); return null; }
         fresh = true;
-        c = { v: 1, cid, ua_hash: uaHash, ip_prefix_hash: mac(`net|${prefix}`), agent: String(e.who?.name || '').slice(0, 60) || null, kind: String(e.who?.kind || 'unknown').slice(0, 20), probe: probeLike(e.who), rolle: probeLike(e.who) ? 'pruefer' : 'agent', kompetenz: null, preis_usd: null, paywall_hits: 0, paywall_type: null, paywall_types: {}, first_seen: at, last_seen: at, days: [d], versuchte_paths: [], abbruch_phase: null, session: null, paid: 0, paid_usd: '0.000000', wiederkunft_d7: false, wallet: false, hits_by_day: {} };
+        // (since 4.0) install_source: the host by its program and the route it came in by (chatgpt:/x402/check), kept from the first contact
+        c = { v: 1, cid, install_source: `${hostOf(ua, e.who?.name)}:${String(e.path || '/').slice(0, 60)}`, ua_hash: uaHash, ip_prefix_hash: mac(`net|${prefix}`), agent: String(e.who?.name || '').slice(0, 60) || null, kind: String(e.who?.kind || 'unknown').slice(0, 20), probe: probeLike(e.who), rolle: probeLike(e.who) ? 'pruefer' : 'agent', kompetenz: null, preis_usd: null, paywall_hits: 0, paywall_type: null, paywall_types: {}, first_seen: at, last_seen: at, days: [d], versuchte_paths: [], abbruch_phase: null, session: null, paid: 0, paid_usd: '0.000000', wiederkunft_d7: false, wallet: false, hits_by_day: {} };
       }
       const wasHits = c.paywall_hits, dayHits = c.hits_by_day?.[d] || 0;
       // a key that opened a door: an agent with a key, no longer a probe (also when its name says probe)
@@ -181,7 +183,7 @@ export function createContacts({ kv, now = () => Date.now(), secret }) {
     const out = [];
     for (const k of ks) { const c = await kv.get(k); if (c?.cid) out.push(c); }
     out.sort((a, b) => (a.last_seen < b.last_seen ? 1 : -1));
-    return out.slice(0, limit).map(({ v, hits_by_day, wallet, probe, paid_day, ...c }) => ({ ...c, probe: !!probe }));
+    return out.slice(0, limit).map(({ v, hits_by_day, wallet, probe, paid_day, ...c }) => ({ ...c, install_source: c.install_source ?? null, probe: !!probe }));
   }
 
   // (since 3.84) the numbers of today alone (one read): for the line "who pays" of /pulse

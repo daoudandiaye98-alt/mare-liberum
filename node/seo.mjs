@@ -426,6 +426,7 @@ export const OFFER = {
   agent10: 'https://buy.stripe.com/8x27sEeqc7F238X4jbes00C',         // Agent pack 10, 10 USD once, 10,000 pages, 30 days, for everyone (plink_1Ug9FH4IVkazyZLzN99vL87I)
   agent49: 'https://buy.stripe.com/9B6eV63Ly3oM6l916Zes00D',         // Agent pack 49, 49 USD once, 100,000 pages, 30 days, for everyone (plink_1Ug9FI4IVkazyZLzO4TDxrN7)
   agent99: 'https://buy.stripe.com/8x2fZafug0cAdNBbLDes00E',         // Agent pack 99, 99 USD once, 250,000 pages, 30 days, for everyone (plink_1Ug9FJ4IVkazyZLzo8xRWbNc)
+  seat: 'https://buy.stripe.com/3cIcMYeqce3qeRF3f7es00F',            // (4.0) a seat for an agent, 24 USD once, 30 days, 5,000 agent paths, for everyone (plink_1UgSRw4IVkazyZLzKznJ8lhO; node/seat.mjs)
   kutter: 'https://buy.stripe.com/bJeeV6fug3oMfVJaHzes00u',          // Kutter, 49 € once, 100,000 pages, 30 days (plink_1Ug6ai4IVkazyZLzsS3UkFKX)
   kutterjahr: 'https://buy.stripe.com/4gMeV66XK9NacJx2b3es00v',      // Kutter, one year, 490 € once, 1,200,000 pages, 365 days (plink_1Ug6aj4IVkazyZLz39fIvFiV)
   fregatte: 'https://buy.stripe.com/aFa5kwdm82kI9xl2b3es00w',        // Fregatte, 199 € once, 500,000 pages, 30 days (plink_1Ug6ak4IVkazyZLz8nNglOqX)

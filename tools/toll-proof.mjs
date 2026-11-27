@@ -950,7 +950,7 @@ const BREAK = [
   ['I3 taken back: any payment header taken as the toll\'s', 'node/core.mjs', 'const mine = carries && T.claims(req.headers, a, payCfg.payTo),', 'const mine = carries,'],
   ['I3 taken back: the payment the toll took goes on to the door', 'node/core.mjs', 'g.req = withoutPayment(req);', 'g.req = req;'],
   ['F2b/I3 taken back: /via/ forwards the toll\'s payment', 'node/core.mjs', 'if (ta && T.claims(req.headers, ta, (cfg.pay || payConfig()).payTo)) {', 'if (false) {'],
-  ['F11/I2 taken back: a toll payment counted with the paid move on /treasury', 'node/core.mjs', 'return json({ ...tr, toll, price:', 'return json({ ...tr, total_usd: (tr.total_usd || 0) + tt.settledMicro / 1e6, toll, price:'],
+  ['F11/I2 taken back: a toll payment counted with the paid move on /treasury', 'node/core.mjs', 'return json({ ...tr, overage_paths: ov.paths, overage_usd: ov.usd, seats, toll, price:', 'return json({ ...tr, total_usd: (tr.total_usd || 0) + tt.settledMicro / 1e6, overage_paths: ov.paths, overage_usd: ov.usd, seats, toll, price:'],
   ['I2 taken back: a toll settled (and its sum told) from another network', 'node/toll.mjs', 'const day = key.slice(7, 17); if (keyOf(day, tollNet(ip)) !== key) return null;', 'const day = key.slice(7, 17);'],
   ['F8/I5 taken back: the state of a payment waits for the next copy', 'node/toll.mjs', "if (soon && typeof kv.setNow === 'function') { kv.setNow(k, v, ttl); return; }", 'if (false) {}'],
   ['I5 taken back: the copy written last when a node stops', 'serve.mjs', '  try { await disk?.save(); } catch {}\n', ''],

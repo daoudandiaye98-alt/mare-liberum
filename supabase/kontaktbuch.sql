@@ -20,6 +20,7 @@ create table if not exists mare.contacts (
   kind            text check (char_length(kind) <= 20),                       -- the census kind: assistant, mcp-client, tool, registry, unknown …
   probe           boolean not null default false,                             -- an index, a registry or a probe by its name or kind
   rolle           text not null default 'agent' check (rolle in ('pruefer', 'agent', 'agent_with_key')), -- (3.81) a key that opened a door: agent_with_key
+  install_source  text check (char_length(install_source) <= 80),             -- (4.0) the host by its program and the route it came in by: chatgpt:/x402/check
   kompetenz       text check (kompetenz in ('route', 'read', 'check', 'deal', 'pack', 'credit', 'session', 'fair')), -- the door of the last paywall hit
   preis_usd       numeric(12, 6) check (preis_usd >= 0),                       -- its price
   paywall_hits    integer not null default 0 check (paywall_hits >= 0),       -- 402 answers to this contact
@@ -37,6 +38,7 @@ create table if not exists mare.contacts (
   check (last_seen >= first_seen)
 );
 alter table mare.contacts add column if not exists rolle text not null default 'agent' check (rolle in ('pruefer', 'agent', 'agent_with_key'));
+alter table mare.contacts add column if not exists install_source text check (char_length(install_source) <= 80);
 create index if not exists contacts_first_seen on mare.contacts (first_seen desc);
 create index if not exists contacts_last_seen on mare.contacts (last_seen desc);
 create index if not exists contacts_paywall_type on mare.contacts (paywall_type);
@@ -52,10 +54,10 @@ begin
     raise exception 'not allowed';
   end if;
   if i is null or i !~ '^[0-9a-f]{24}$' then raise exception 'cid: 24 hex characters'; end if;
-  insert into mare.contacts (cid, ua_hash, ip_prefix_hash, agent, kind, probe, rolle, kompetenz, preis_usd, paywall_hits, paywall_type, paywall_types,
+  insert into mare.contacts (cid, ua_hash, ip_prefix_hash, agent, kind, probe, rolle, install_source, kompetenz, preis_usd, paywall_hits, paywall_type, paywall_types,
                              first_seen, last_seen, days, versuchte_paths, abbruch_phase, session, paid, paid_usd, wiederkunft_d7)
   values (i, c->>'ua_hash', c->>'ip_prefix_hash', left(c->>'agent', 60), left(c->>'kind', 20), coalesce((c->>'probe')::boolean, false),
-          coalesce(nullif(c->>'rolle', ''), 'agent'),
+          coalesce(nullif(c->>'rolle', ''), 'agent'), left(c->>'install_source', 80),
           c->>'kompetenz', (c->>'preis_usd')::numeric, coalesce((c->>'paywall_hits')::int, 0), c->>'paywall_type', coalesce(c->'paywall_types', '{}'::jsonb),
           (c->>'first_seen')::timestamptz, (c->>'last_seen')::timestamptz,
           coalesce(array(select jsonb_array_elements_text(c->'days'))::date[], '{}'), coalesce(array(select left(x, 60) from jsonb_array_elements_text(c->'versuchte_paths') x limit 20), '{}'),

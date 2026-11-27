@@ -30,9 +30,15 @@
 //            says when and how it went
 //   never    a key in clear anywhere (state, books, logs, answers after the first); a probe call spent twice or for nothing;
 //            money: probe calls are no sale, the till's books stay as they are; a second call to a callback.
+//   seat     (since 4.0, node/seat.mjs) grant(h, seat): a payment Stripe confirmed gives the key a seat: 30 days and 5,000 paths of
+//            the paid doors. While the seat runs, take() counts its paths, never the probe calls and never the sea's probe budget;
+//            past the 5,000 the doors go on answering and each path is counted as overage (seat:over:<day>, seat:over:all) at
+//            0.01 USD, owed and shown apart on /treasury, never booked as money. back() gives a path back as it gives a probe call.
+//            A paid key the sea has no line for (a payment that came without a key) gets a line of its own.
 // The state lives in the node's state (session:…), like the reader credit (node/credit.mjs): no table, no migration. The
 // count of new sessions per network lies under an HMAC of the network with a key of the day (as the toll's accounts do).
 import { createHash, createHmac, hkdfSync, randomBytes } from 'node:crypto';
+import { SEAT } from './pricing.mjs';
 
 export const SESSION = Object.freeze({ prefix: 'mls_', probe: 20, probeDays: 7, days: 30, perMinute: 30, perNetDay: 10, probeDay: 2000, last: 10 });
 export const SESSION_RE = /^mls_[A-Za-z0-9_-]{32}$/;
@@ -75,6 +81,10 @@ export function callbackOf(raw) {
 // what an agent may call itself: letters, digits and a few signs, 60 at most; anything else is dropped
 const agentOf = (v) => { const s = String(v ?? '').replace(/[^A-Za-z0-9 ._/()+:-]/g, '').trim().slice(0, 60); return s || null; };
 
+// (since 4.0) the state of a key's seat: none (no seat or one that ended), active, overage (past its paths, still answering)
+export const seatStateOf = (seat, t = Date.now()) => (!seat || Date.parse(seat.until) <= t ? 'none' : seat.used > seat.paths ? 'overage' : 'active');
+const seatDoc = (seat, t) => (seat ? { id: seat.id, state: seatStateOf(seat, t), paths: seat.paths, used: seat.used, left: Math.max(0, seat.paths - seat.used), overage_paths: seat.over || 0, from: seat.at, until: seat.until } : null);
+
 export function createSessions({ kv, now = () => Date.now(), secret = randomBytes(32) }) {
   const chains = new Map(), dayKeys = new Map();
   // the network is never written down: its count of new sessions lies under an HMAC of the network with a key of the day
@@ -90,6 +100,7 @@ export function createSessions({ kv, now = () => Date.now(), secret = randomByte
     probe: { calls: rec.probe.n, left: Date.parse(rec.probe.until) <= t ? 0 : rec.probe.left, until: rec.probe.until, doors: SESSION_DOORS },
     calls: rec.calls, last: rec.last.map((c) => ({ door: c.door, at: c.at, ...(c.back ? { given_back: true } : {}) })),
     ...(rec.topups?.length ? { topups: rec.topups.map((x) => ({ at: x.at, status: x.status })) } : {}),
+    seat: seatDoc(rec.seat, t),
     ...(rec.agent ? { agent: rec.agent } : {}),
     callback: rec.cb ? { host: rec.cb.host, state: rec.cb.called ? `called once at ${rec.cb.called.at}: ${rec.cb.called.state}` : 'kept: called once, at the first payment of this key' } : null,
   });
@@ -118,6 +129,18 @@ export function createSessions({ kv, now = () => Date.now(), secret = randomByte
         if (Date.parse(rec.until) <= t) return { ok: false, why: 'expired', until: rec.until, left: 0, used: rec.calls };
         const m = Math.floor(t / 60_000);
         if (rec.rate?.m === m && rec.rate.n >= SESSION.perMinute) return { ok: false, why: 'slow', retry: Math.max(1, Math.ceil(((m + 1) * 60_000 - t) / 1000)), left: Date.parse(rec.probe.until) <= t ? 0 : rec.probe.left, used: rec.calls };
+        // (since 4.0) a seat that runs: one of its paths, never a probe call; past its paths the door answers all the same
+        if (rec.seat && Date.parse(rec.seat.until) > t) {
+          const day = dayOf(t), tag = randomBytes(6).toString('hex');
+          rec.seat.used += 1; const over = rec.seat.used > rec.seat.paths; if (over) rec.seat.over = (rec.seat.over || 0) + 1;
+          rec.calls += 1; rec.rate = { m, n: rec.rate?.m === m ? rec.rate.n + 1 : 1 };
+          const door1 = !rec.door1; if (door1) rec.door1 = new Date(t).toISOString();
+          rec.last = [{ door: String(door).slice(0, 16), at: new Date(t).toISOString(), day, tag, seat: true, ...(over ? { over: true } : {}) }, ...rec.last].slice(0, SESSION.last);
+          await kv.set(R(id), rec, ttlOf(rec));
+          if (door1) await count(`session:used:${day}`, 1, 40 * DAY);
+          if (over) { await count(`seat:over:${day}`, 1, 400 * DAY); await count('seat:over:all', 1, 4000 * DAY); }
+          return { ok: true, left: Math.max(0, rec.seat.paths - rec.seat.used), used: rec.calls, id, until: rec.seat.until, tag, day, seat: over ? 'overage' : 'active', over };
+        }
         if (!(rec.probe.left > 0) || Date.parse(rec.probe.until) <= t) return { ok: false, why: 'empty', id, left: 0, used: rec.calls };
         const day = dayOf(t), gk = `session:probe:${day}`;
         const g = await count(gk, 1, 2 * DAY);
@@ -141,6 +164,15 @@ export function createSessions({ kv, now = () => Date.now(), secret = randomByte
         const c = rec.last.find((x) => x.tag === tag);
         if (c?.back || (rec.backs || []).includes(tag)) return { ok: false };
         if (c) c.back = true; else rec.backs = [tag, ...(rec.backs || [])].slice(0, 50);
+        if (c?.seat || taken?.seat) {
+          // (since 4.0) a path of the seat comes back, and the overage it counted with it
+          const over = !!(c?.over || taken?.over);
+          if (rec.seat) { rec.seat.used = Math.max(0, rec.seat.used - 1); if (over) rec.seat.over = Math.max(0, (rec.seat.over || 0) - 1); }
+          rec.calls = Math.max(0, rec.calls - 1);
+          await kv.set(R(id), rec, ttlOf(rec));
+          if (over) { await count(`seat:over:${c?.day || taken.day || dayOf(now())}`, -1, 400 * DAY); await count('seat:over:all', -1, 4000 * DAY); }
+          return { ok: true, left: rec.seat ? Math.max(0, rec.seat.paths - rec.seat.used) : 0, used: rec.calls, seat: true };
+        }
         rec.probe.left = Math.min(rec.probe.n, rec.probe.left + 1); rec.calls = Math.max(0, rec.calls - 1);
         await kv.set(R(id), rec, ttlOf(rec));
         await count(`session:probe:${c?.day || taken.day || dayOf(now())}`, -1, 2 * DAY);
@@ -209,6 +241,32 @@ export function createSessions({ kv, now = () => Date.now(), secret = randomByte
         return { ok: true, before, left: rec.probe.left, used: rec.calls, id, until: rec.probe.until };
       });
     },
+    // (since 4.0) a seat after a payment Stripe confirmed (node/seat.mjs): { ok, id, until, again? } or { ok: false, why: unknown }.
+    // A key the sea has a line for gets the seat on that line (the same key, the same id); create: a key it has none for (a
+    // payment that came without a key) gets a line of its own. One payment gives one seat (handed in again: again, nothing more);
+    // a new seat replaces one that still runs, with its full term and paths from now
+    grant(h, { seat, sale = null, create = false, byId = null, days = SEAT.days, paths = SEAT.paths } = {}) {
+      // by the key's hash, or (byId) by the public id a seat's link named: the key itself is never needed to give it a seat
+      const id = h ? idOf(h) : String(byId || ''), mark = String(sale || '').slice(0, 64);
+      if (!ID_RE.test(id)) return Promise.resolve({ ok: false, why: 'unknown' });
+      return serial(id, async () => {
+        const t = now(); let rec = await kv.get(R(id));
+        if (rec && h && rec.h !== h) return { ok: false, why: 'unknown' };
+        if (!rec) {
+          if (!create || !h) return { ok: false, why: 'unknown' };
+          rec = { v: 1, h, id, at: new Date(t).toISOString(), until: new Date(t + SESSION.days * DAY * 1000).toISOString(), probe: { n: 0, left: 0, until: new Date(t).toISOString() }, calls: 0, last: [], rate: { m: 0, n: 0 }, paid: true };
+        }
+        if (mark && (rec.seats || []).some((x) => x.sale === mark)) return { ok: true, again: true, id, until: rec.seat?.until || null };
+        const until = new Date(t + days * DAY * 1000).toISOString();
+        rec.seat = { id: String(seat || '').slice(0, 24), at: new Date(t).toISOString(), until, paths, used: 0, over: 0 };
+        rec.seats = [{ id: rec.seat.id, sale: mark || null, at: rec.seat.at }, ...(rec.seats || [])].slice(0, 20);
+        rec.until = new Date(Math.max(Date.parse(rec.until), Date.parse(until))).toISOString();
+        await kv.set(R(id), rec, ttlOf(rec));
+        return { ok: true, id, until };
+      });
+    },
+    // (since 4.0) the overage of all seats, for the treasury: paths past a seat's 5,000, today and in all, and what they are worth
+    async overage() { const day = dayOf(now()), today = Number(await kv.get(`seat:over:${day}`)) || 0, all = Number(await kv.get('seat:over:all')) || 0; return { day, today_paths: today, paths: all, usd: Math.round(all * SEAT.overCents) / 100, today_usd: Math.round(today * SEAT.overCents) / 100 }; },
     // probe calls given today (UTC), for the open numbers
     async today() { const day = dayOf(now()); return { day, opened: Number(await kv.get(`session:open:${day}`)) || 0, probe_calls: Number(await kv.get(`session:probe:${day}`)) || 0, probe_day: SESSION.probeDay, used_keys: Number(await kv.get(`session:used:${day}`)) || 0, paid_keys: Number(await kv.get(`session:paid:${day}`)) || 0 }; },
   };

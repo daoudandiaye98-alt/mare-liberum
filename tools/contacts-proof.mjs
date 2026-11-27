@@ -297,7 +297,7 @@ await proof('the free /check and /deal lead to the paid door: upgrade with the o
 });
 await proof('/pulse says who pays first, above unique_domains_today: the agents that paid today (each once), the keys of the day and the paid doors; the sea\'s own calls never count (3.84)', async () => {
   const pulse = async () => (await call('/pulse.json', { ip: '127.0.0.1' })).j, p0 = await pulse();
-  assert.deepEqual(Object.keys(p0).slice(0, 2), ['who_pays', 'unique_domains_today']);
+  assert.deepEqual(Object.keys(p0).slice(0, 3), ['who_pays', 'installations_today', 'unique_domains_today']);
   const ua = 'harbour-payer/2.0', ip = fresh(); facilitator = settles();
   await call('/session?as=key', { ip, ua, accept: '*/*' });
   for (let i = 0; i < 2; i++) assert.equal((await call(`/x402/check?site=${host()}`, { ip, ua, headers: payment() })).status, 200);
@@ -337,10 +337,10 @@ if (!process.argv.includes('--no-controls')) {
     ['no line 5 (3.83)', 'node/core.mjs', "d.lines = [...d.lines, `5 Schlüssel", "d.lines_ = [...d.lines, `5 Schlüssel"],
     ['no upgrade on the free check (3.83)', 'node/core.mjs', "upgrade: upgradeOf('check',", "upgrade_: upgradeOf('check',"],
     ['a key that opened a door stays a probe (3.81)', 'node/contacts.mjs', "if (e.kind === 'probe' && c.rolle !== 'agent_with_key') {", 'if (false) {'],
-    ['no next_step in the 402', 'node/core.mjs', 'return new Response(JSON.stringify({ ...body, next_step, ...(supply', 'return res; new Response(JSON.stringify({ ...body, next_step, ...(supply'],
+    ['no next_step in the 402', 'node/core.mjs', 'return new Response(JSON.stringify({ ...body, next_step, ...card, ...(supply', 'return res; new Response(JSON.stringify({ ...body, next_step, ...card, ...(supply'],
     ['the session step without as=key (the key cannot be kept from the answer)', 'node/core.mjs', "const open = { method: 'GET', url: `${base}/session?as=key`, keep: 'key' };", "const open = { method: 'GET', url: `${base}/session`, keep: 'key' };"],
     ['no way out without a wallet in the 402 (error and header)', 'node/core.mjs', "headers.set('x-sea-no-wallet', hint);", "headers.set('x-sea-other', hint);"],
-    ['GET /session?as=key gives no key', 'node/core.mjs', "if (url.searchParams.get('as') === 'key' && req.method === 'GET' && !", "if (false && !"],
+    ['GET /session?as=key gives no key', 'node/core.mjs', "if (actOf(url) === 'key' && req.method === 'GET' && !", "if (false && !"],
     ['the free deal door past its limit ignores the key', 'node/core.mjs', "if (e instanceof SeaError && e.dealLimit && sessionOf(req.headers)) return", "if (false) return"],
     ['a spent key offered the paid door again', 'node/core.mjs', 'const spent = keyed && SESSION_PATH.test(path);', 'const spent = false;'],
     ['every 402 counted as no wallet', 'node/contacts.mjs', "if (!paid) return wallet ? 'price' : 'no_wallet';", "return 'no_wallet';"],
