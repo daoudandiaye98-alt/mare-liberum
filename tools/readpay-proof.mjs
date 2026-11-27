@@ -281,7 +281,7 @@ if (!process.argv.includes('--no-controls')) {
     ['another amount taken', 'node/readpay.mjs', "if (v !== BigInt(t.atomic)) return", "if (false) return"],
     ['an unreadable page charged (the claim not given back, the payment taken)', 'node/core.mjs', "      if (!page?.markdown || page.blocked || page.error) {\n        await book.release(claim);", "      if (false) {\n        await book.release(claim);"],
     ['a paid read counted against the free reads', 'node/lens.mjs', "      if (!hit && !ctx?.paidRead && !ctx?.packRead && !ctx?.dealRead) {", "      if (!hit && !ctx?.packRead && !ctx?.dealRead) {"],
-    ['no 402 without a payment (the door gives the page away)', 'node/core.mjs', "      if (!pay) { funnelOf(db, cfg).asked('read'); return readRequired(t, { base, cors: CORS }); }", "      if (!pay) { funnelOf(db, cfg).asked('read'); return json({ markdown: 'free' }); }"],
+    ['no 402 without a payment (the door gives the page away)', 'node/core.mjs', "        funnelOf(db, cfg).asked('read'); return readRequired(t, { base, cors: CORS });", "        funnelOf(db, cfg).asked('read'); return json({ markdown: 'free' });"],
     ['the reader past its free reads answers without terms (429 as before 3.54)', 'node/core.mjs', "if (e instanceof SeaError && e.readLimit) return { res: readLimit402(e, readRes) };", "if (false) return { res: readLimit402(e, readRes) };"],
     ['a payment of one cent at the reader is not taken (the reader ignores it)', 'node/core.mjs', "rp = req.method === 'HEAD' ? null : readPayOf(readRes);", "rp = null;"],
     ['the scrape doors past their free reads answer without terms', 'node/core.mjs', "if (e.readLimit) return readLimit402(e, `${base}${path}`, 'scrape', 'RATE_LIMIT_EXCEEDED'); ", ""],

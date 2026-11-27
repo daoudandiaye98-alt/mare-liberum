@@ -303,7 +303,7 @@ if (!process.argv.includes('--no-controls')) {
     ['an offer out of stock compared', 'node/deal.mjs', "o.currency && o.in_stock && o.match >= DEAL.match", "o.currency && o.match >= DEAL.match"],
     ['a check with nothing to compare charged (the claim not given back)', 'node/core.mjs', "      if (!r || r.error || !r.found) {\n        await book.release(claim);", "      if (false) {\n        await book.release(claim);"],
     ['a paid check counted against the free checks', 'node/lens.mjs', "if (!paid) { try { await allow(ctx, 'deal', DEAL.perHour, 3600); }", "if (true) { try { await allow(ctx, 'deal', DEAL.perHour, 3600); }"],
-    ['no 402 without a payment (the door gives the check away)', 'node/core.mjs', "        if (!pay) { funnelOf(db, cfg).asked('deal'); return dealRequired(t, { base, cors: CORS }); }", "        if (!pay) { funnelOf(db, cfg).asked('deal'); return json({ found: true }); }"],
+    ['no 402 without a payment (the door gives the check away)', 'node/core.mjs', "          funnelOf(db, cfg).asked('deal'); return dealRequired(t, { base, cors: CORS });", "          funnelOf(db, cfg).asked('deal'); return json({ found: true });"],
     ['the free door past its limit without terms (429 as before)', 'node/core.mjs', "if (e instanceof SeaError && e.dealLimit) {", "if (false) {"],
     ['delivered without a verdict (strict off)', 'node/core.mjs', "label: 'deal', strict: true });", "label: 'deal', strict: false });"],
     ['the page of a deal check counted as a free read', 'node/lens.mjs', "&& !ctx?.packRead && !ctx?.dealRead) {", "&& !ctx?.packRead) {"],
