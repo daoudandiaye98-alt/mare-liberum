@@ -108,7 +108,7 @@ Nach dem Merge reicht ein Befehl: `node tools/acceptance-credit.mjs https://mare
   - seat-credit 12/0, day 5/0, paths 6/0, seat 10/0, session 30/0, contacts 20/0, till 35/0, legal 35/0, installs 6/0
   - doors: 62 halten (das Deploy-Tor)
   - credit-proof: 6 Fehler, dieselben wie auf `main`. Ihm fehlt der Referenzbaum `4c64553` im flachen Klon.
-- **`npm run build`:** Das baut die See aus den öffentlichen Seen (`tools/build.mjs`), nicht den Code. Der Lauf lädt `node/core.mjs` dieses Baums ohne Fehler. Nach 15 Minuten waren 14 Seen gelesen (mcp-registry 75.082 Zeilen, ucp-stores 23.471, erc8004 5.000), und er lief noch bei „paid lakes“ (Preislisten von 5.013 Hosts). Sein Ende ist hier **nicht belegt**. Der vorige Lauf in Mission 1 brach nach 15 Minuten am Zeitlimit ab.
+- **`npm run build`:** Das baut die See aus den öffentlichen Seen (`tools/build.mjs`), nicht den Code. Der Lauf auf diesem Baum endete mit **exit 0** und `sea built: 476654 entries` nach etwa 21 Minuten. Er lud dabei `node/core.mjs` ohne Fehler und las unter anderem mcp-registry (75.082 Zeilen), ucp-stores (23.471) und erc8004 (5.000). Seine Datendatei `store-pages.json` habe ich nicht eingecheckt, weil sie nicht zu den Tasks gehört.
 - **`npm run lint`:** Das Skript fehlt (`npm error Missing script: "lint"`). Ersatz: `node --check` auf allen 190 Modulen, alle sauber.
 - **Antwortzeit:** Jede neue Tür antwortet lokal in 2 bis 13 ms. Geloggt wird nie im Antwortpfad.
 
