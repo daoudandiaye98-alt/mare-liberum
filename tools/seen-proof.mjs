@@ -9,6 +9,7 @@
 //   fixed    the same look on the same day is the same record, unchanged; a new price is a new record; /seen lists the newest first
 //   index    a record that compares fewer than 3 prices says noindex (header and page); the addresses open to search engines
 //            are only those of records that compare 3 or more; an unknown or malformed record is a 404
+//   sitemap  (3.66) /sitemaps/seen.xml names exactly those records, each dated by its day, and the sitemap index names it
 // Negative controls at the end: each rule broken in a copy of the code, and this proof must fail there.
 // Runs without the network: node tools/seen-proof.mjs   (exit code 1 when a proof fails or a control is not caught)
 //   --no-controls   only the proofs (the controls run this file that way in each broken copy)
@@ -171,6 +172,19 @@ await proof('the addresses open to search engines are those of records that comp
   const llms = readFileSync(join(ROOT, 'site/llms.txt'), 'utf8'); assert.ok(llms.includes('https://mareliberum.dev/seen') && llms.includes('open price record'));
   for (const f of ['skills/deal-check/SKILL.md', 'site/deal-check.md']) assert.ok(readFileSync(join(ROOT, f), 'utf8').includes('`record`'), f);
 });
+console.log('sitemap');
+await proof('/sitemaps/seen.xml lists only the records that compare 3 or more prices, dated by their day; the sitemap index names it with that day', async () => {
+  const r = await call('/sitemaps/seen.xml', { ip: fresh(), accept: 'application/xml' }); assert.equal(r.status, 200); assert.match(r.h['content-type'], /^application\/xml/);
+  const locs = [...r.text.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1]);
+  assert.ok(locs.includes(`${BASE}${SEEN.path}/${first.id}`), 'a record of 3 or more prices is named');
+  assert.ok(!locs.includes(`${BASE}${SEEN.path}/${thin.id}`), 'a record that says noindex is not named');
+  for (const l of locs) assert.match(l, new RegExp(`^${BASE}${SEEN.path}/[0-9a-f]{16}$`), l);
+  assert.deepEqual(locs.map((l) => l.slice(-16)), (await db.flow.seenListed()).map((x) => x.slice(-16)), 'the same records the engines hear of, newest first');
+  assert.ok(r.text.includes(`<lastmod>${new Date(T0).toISOString().slice(0, 10)}</lastmod>`), 'dated by the day it was seen');
+  const idx = await call('/sitemap.xml', { ip: fresh(), accept: 'application/xml' }); assert.equal(idx.status, 200);
+  assert.ok(idx.text.includes(`<sitemap><loc>${BASE}/sitemaps/seen.xml</loc><lastmod>${new Date(T0).toISOString().slice(0, 10)}</lastmod></sitemap>`), 'the index names it with its day');
+  assert.ok(readFileSync(join(ROOT, 'site/llms.txt'), 'utf8').includes('https://mareliberum.dev/sitemaps/seen.xml'), 'llms.txt names it');
+});
 await Promise.allSettled(waits.splice(0));
 console.log(`\n${passed} proofs held, ${failed} failed`);
 
@@ -183,6 +197,8 @@ if (!process.argv.includes('--no-controls')) {
     ['a record of fewer than 3 prices open to search engines', 'node/seen.mjs', 'indexable: n >= SEEN.index,', 'indexable: true,'],
     ['the hash taken of the JSON as written, not of its canonical form', 'node/lens.mjs', 'sha256 = await sha(canonical(rec))', 'sha256 = await sha(JSON.stringify(rec))'],
     ['the page address kept with its campaign and session', 'node/seen.mjs', "${/^\\d{1,20}$/.test(v || '') ? `?variant=${v}` : ''}`.slice(0, 600);", "${x.search}`.slice(0, 600);"],
+    ['a record that says noindex named in seen.xml', 'node/seen.mjs', "const okId = (x) => !!x && x.ix === true && ", "const okId = (x) => !!x && "],
+    ['seen.xml left out of the sitemap index', 'node/core.mjs', "maps = ['hubs', 'seen', 'site',", "maps = ['hubs', 'site',"],
     ['the record not named among the next steps', 'node/lens.mjs', "ans.next.splice(at + 1, 0, { do: 'show your person the open record'", "ans.next.splice(at + 1, 0, { do: 'see the record'"],
   ];
   for (const [name, f, from, to] of CONTROLS) {

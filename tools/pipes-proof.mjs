@@ -115,7 +115,9 @@ if (CLAUDE) {
     const d = cc(['plugin', 'details', 'mare-lean@mare-liberum'], dir).stdout; assert.match(d, /MCP servers \(1\)\s+mare-lean\b/); assert.match(d, /Skills \(1\)\s+token-levers/);
     const j = cc(['plugin', 'install', 'mare-liberum@mare-liberum', '--json'], dir); assert.equal(JSON.parse(j.stdout.trim().split('\n').pop()).outcome, 'ok', j.stdout + j.stderr);
     const e = cc(['plugin', 'details', 'mare-liberum@mare-liberum'], dir).stdout; assert.match(e, /MCP servers \(1\)\s+mare-liberum\b/);
-    const list = JSON.parse(cc(['plugin', 'list', '--json'], dir).stdout); assert.deepEqual(list.map((p) => p.id).sort(), ['mare-lean@mare-liberum', 'mare-liberum@mare-liberum']);
+    // Newer versions of the CLI list the plugins they ship inside themselves (ids ending in @builtin) in every config, even an
+    // empty one; they are not installed from any marketplace, so the proof counts only the plugins an install put there.
+    const list = JSON.parse(cc(['plugin', 'list', '--json'], dir).stdout); assert.deepEqual(list.map((p) => p.id).filter((id) => !/@builtin$/.test(id)).sort(), ['mare-lean@mare-liberum', 'mare-liberum@mare-liberum']);
   });
 } else console.log('  note: no claude CLI on this machine: the plugins are held to their documented fields above only');
 
