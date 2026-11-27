@@ -144,6 +144,8 @@ Every deal check of a product page leaves an open price record (field "record" o
 
 The record book: the sea also checks product pages on its own every day, at most 40, 20 of them the same watched pages each day, so each has a series of prices (one read per store an hour, robots.txt respected, never an Amazon page). Each record it makes says "by": "sea" with the sentence of the book, and is never counted as an agent's check. The day's visits, records and watch: field "book" of https://mareliberum.dev/seen.json
 
+The quote of the records: how often a checked product page was cheaper elsewhere (of the pages compared with other stores), the median saving at the lowest other store without a caution, and how many pages state a list price of their own above the price charged, counted from the newest records, apart for agents' checks and the sea's own sample: https://mareliberum.dev/seen/quote (page) · https://mareliberum.dev/seen/quote.json (data, CC BY 4.0).
+
 Where the operator set a commission, a link to another store in a deal answer may be a commission link: it says so (commission: true with its network, and the answer carries the rule once). The page you asked about, the record and the order, prices and verdict never carry or read a commission.
 
 ## For bot assistants (Grok Bot, xAI API)

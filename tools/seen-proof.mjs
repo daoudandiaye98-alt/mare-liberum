@@ -13,6 +13,12 @@
 //   words    (3.67) the verdict stands where AI answers quote a page: in the title, in the heading and in the first sentence
 //            after it, as plain HTML, within the first 200 characters from the heading on; the links back to the sea stand
 //            after the record; /seen says in its heading how many of the newest were cheaper elsewhere, and its newest first
+//   quote    (3.73) /seen/quote and /seen/quote.json count the newest records: of the pages compared with other stores how many
+//            were cheaper elsewhere (in the heading and the first sentence), the median saving at the lowest other offer without
+//            a caution, how many pages state a list price of their own, apart for agents' checks and the sea's own sample; a line
+//            kept before 3.73 is counted from its record; noindex until 10 pages were compared; /seen, llms.txt and IndexNow name it
+//   indexed  (3.73) /sitemaps/seen.xml names every record open to search engines that is still kept, from a list of its own,
+//            also once it left the newest of /seen, and none older than the records are kept
 // Negative controls at the end: each rule broken in a copy of the code, and this proof must fail there.
 // Runs without the network: node tools/seen-proof.mjs   (exit code 1 when a proof fails or a control is not caught)
 //   --no-controls   only the proofs (the controls run this file that way in each broken copy)
@@ -36,7 +42,7 @@ globalThis.Date = Clock;
 const proof = async (name, fn) => { T0 += 60_000; try { await fn(); passed++; console.log(`  ok   ${name}`); } catch (e) { failed++; console.log(`  FAIL ${name}\n       ${String(e?.stack || e).split('\n').slice(0, 6).join('\n       ')}`); } };
 const imp = (f) => import(pathToFileURL(join(ROOT, 'node', f)).href);
 const { DEAL } = await imp('deal.mjs');
-const { SEEN, canonical, canonOf } = await imp('seen.mjs');
+const { SEEN, canonical, canonOf, savingOf } = await imp('seen.mjs');
 
 // ------------------------------------------------------------------ the world: shops, the catalog, DNS, a facilitator
 const FAC = 'https://facilitator.deal-proof.dev', CATALOG = 'https://catalog.shopify.com/api/ucp/mcp';
@@ -183,6 +189,7 @@ await proof('/sitemaps/seen.xml lists only the records that compare 3 or more pr
   assert.ok(!locs.includes(`${BASE}${SEEN.path}/${thin.id}`), 'a record that says noindex is not named');
   for (const l of locs) assert.match(l, new RegExp(`^${BASE}${SEEN.path}/[0-9a-f]{16}$`), l);
   assert.deepEqual(locs.map((l) => l.slice(-16)), (await db.flow.seenListed()).map((x) => x.slice(-16)), 'the same records the engines hear of, newest first');
+  assert.deepEqual(locs.map((l) => l.slice(-16)), (await db.flow.seenIndexed()).map((x) => x.id), 'the list of its own');
   assert.ok(r.text.includes(`<lastmod>${new Date(T0).toISOString().slice(0, 10)}</lastmod>`), 'dated by the day it was seen');
   const idx = await call('/sitemap.xml', { ip: fresh(), accept: 'application/xml' }); assert.equal(idx.status, 200);
   assert.ok(idx.text.includes(`<sitemap><loc>${BASE}/sitemaps/seen.xml</loc><lastmod>${new Date(T0).toISOString().slice(0, 10)}</lastmod></sitemap>`), 'the index names it with its day');
@@ -219,6 +226,76 @@ await proof('/seen says in its heading how many of the newest records were cheap
   assert.ok(words.includes(`The newest, seen`) && words.includes(`${list[0].name} at ${list[0].store}`), words);
   assert.ok(r.text.indexOf('<a href="/">Mare Liberum</a>') > r.text.indexOf('<h1'), 'the links back to the sea after the heading');
 });
+console.log('quote');
+// the quote as this proof counts it, from the records themselves (their JSON), never from the code under proof
+const expectQuote = async () => {
+  const ids = (await call(`${SEEN.path}.json`, { ip: fresh() })).j.records.map((x) => x.id), recs = [];
+  for (const id of ids) recs.push((await call(`${SEEN.path}/${id}.json`, { ip: fresh() })).j);
+  const tally = (xs) => {
+    const cmp = xs.filter((r) => r.verdict.word === 'cheaper-elsewhere' || r.verdict.word === 'lowest-found'), ch = xs.filter((r) => r.verdict.word === 'cheaper-elsewhere');
+    const saves = ch.map((r) => r.elsewhere.find((o) => !o.caution && Number.isFinite(o.below_page_pct))?.below_page_pct).filter((v) => Number.isFinite(v) && v > 0).sort((a, b) => a - b);
+    const med = saves.length ? Math.round((saves.length % 2 ? saves[saves.length >> 1] : (saves[saves.length / 2 - 1] + saves[saves.length / 2]) / 2) * 10) / 10 : null;
+    return { records: xs.length, compared: cmp.length, cheaper_elsewhere: ch.length, median_saving_pct: med, list_price_stated: xs.filter((r) => Number.isFinite(r.product.list_price) && r.product.list_price > r.product.price).length };
+  };
+  return { of: recs.length, all: tally(recs), agent: tally(recs.filter((r) => r.by !== 'sea')), sea: tally(recs.filter((r) => r.by === 'sea')) };
+};
+const pick = (t) => ({ records: t.records, compared: t.compared, cheaper_elsewhere: t.cheaper_elsewhere, median_saving_pct: t.median_saving_pct, list_price_stated: t.list_price_stated });
+await proof('the saving of a record is the lowest other offer without a caution; an offer flagged as far below the others never makes it', async () => {
+  assert.equal(savingOf({ verdict: { word: 'cheaper-elsewhere' }, elsewhere: [{ caution: 'far below the median', below_page_pct: 40 }, { below_page_pct: 5.5 }] }), 5.5);
+  assert.equal(savingOf({ verdict: { word: 'cheaper-elsewhere' }, elsewhere: [{ caution: 'far below the median', below_page_pct: 40 }] }), null);
+  assert.equal(savingOf({ verdict: { word: 'lowest-found' }, elsewhere: [{ below_page_pct: -3 }] }), null);
+});
+let seaRec = null;
+await proof('/seen/quote.json counts the newest records: pages compared, cheaper elsewhere, median saving, list prices, apart for agents and the sea', async () => {
+  shopPrice = '86.00'; const sea = await db.flow.deal({ url: 'https://shop.deal-proof.dev/products/trail-runner-3', base: BASE }, { ip: 'sea-book', who: 'the sea', whoKind: 'sea', book: true }); shopPrice = '89.00';
+  assert.ok(sea?.record?.id, 'the sea\'s own check left a record'); seaRec = sea.record;
+  assert.equal((await call(`${SEEN.path}/${seaRec.id}.json`, { ip: fresh() })).j.by, 'sea');
+  const want = await expectQuote(), r = await call(`${SEEN.path}/quote.json`, { ip: fresh() }); assert.equal(r.status, 200, r.text.slice(0, 200));
+  assert.equal(r.j.of, want.of); assert.deepEqual(pick(r.j.all), want.all); assert.deepEqual(pick(r.j.by.agent), want.agent); assert.deepEqual(pick(r.j.by.sea), want.sea);
+  assert.ok(want.sea.records === 1 && want.agent.records >= 3 && want.all.compared < want.all.records, 'a sea record, agents\' records and one not compared');
+  assert.ok(Number.isFinite(want.all.median_saving_pct) && want.all.list_price_stated >= 1, 'a saving and a list price to count');
+  assert.equal(r.j.all.cheaper_share_pct, Math.round((want.all.cheaper_elsewhere / want.all.compared) * 1000) / 10, 'the share of the pages compared');
+  assert.equal(r.j.page, `${BASE}${SEEN.path}/quote`); assert.equal(r.j.records, `${BASE}${SEEN.path}.json`);
+  const text = JSON.stringify(r.j); for (const w of ['198.51.100.', 'sea-book', '"ip"']) assert.ok(!text.includes(w), `nothing of who asked: ${w}`);
+});
+await proof('/seen/quote says the share in its heading and the median saving and the list prices in the first sentence; noindex while fewer than 10 pages were compared', async () => {
+  const q = (await call(`${SEEN.path}/quote.json`, { ip: fresh() })).j, a = q.all, r = await call(`${SEEN.path}/quote`, { ip: fresh(), accept: 'text/html' }); assert.equal(r.status, 200); assert.match(r.h['content-type'], /^text\/html/);
+  const h1 = /<h1>([^<]*)<\/h1>/.exec(r.text)?.[1] || ''; assert.equal(h1, `How often a product page was not the lowest price: ${a.cheaper_elsewhere} of ${a.compared} (${a.cheaper_share_pct} %) cheaper elsewhere`);
+  const words = fromH1(r.text, 420);
+  for (const s of [`Of the newest ${q.of} open price records`, `${a.compared} compared the page with other stores and ${a.cheaper_elsewhere} found it cheaper elsewhere`, `median saving at the lowest other store without a caution was ${a.median_saving_pct} %`, `${a.list_price_stated} of ${q.of} pages stated a list price`]) assert.ok(words.includes(s), `${s}: ${words}`);
+  assert.ok(r.text.includes('the sea&#39;s daily sample') && r.text.includes(`<link rel="canonical" href="${BASE}${SEEN.path}/quote">`), 'the sample apart, the canonical address');
+  assert.ok(a.compared < SEEN.quoteMin); assert.equal(q.indexable, false); assert.equal(r.h['x-robots-tag'], 'noindex'); assert.ok(r.text.includes('<meta name="robots" content="noindex,follow">'));
+});
+await proof('a line kept before 3.73 (without saving or list price) is counted from its record, the same as a new line', async () => {
+  const before = (await call(`${SEEN.path}/quote.json`, { ip: fresh() })).j, lines = await kv.get('seen:recent');
+  await kv.set('seen:recent', lines.map(({ save, lp, ...old }) => old), 3600);
+  try { const after = (await call(`${SEEN.path}/quote.json`, { ip: fresh() })).j; assert.deepEqual(after.all, before.all); assert.deepEqual(after.by, before.by); }
+  finally { await kv.set('seen:recent', lines, 3600); }
+});
+await proof('with 10 or more pages compared the quote is open to search engines; /seen, llms.txt and IndexNow name it', async () => {
+  for (let i = 0; i < 10; i++) { shopPrice = `${70 + i}.50`; const r = await call(`/deal?url=${RUN}`, { ip: fresh() }); assert.ok(r.j.record, `record ${i}`); }
+  shopPrice = '89.00';
+  const q = (await call(`${SEEN.path}/quote.json`, { ip: fresh() })).j; assert.ok(q.all.compared >= SEEN.quoteMin); assert.equal(q.indexable, true);
+  const want = await expectQuote(); assert.deepEqual(pick(q.all), want.all, 'still the records\' own count');
+  const r = await call(`${SEEN.path}/quote`, { ip: fresh(), accept: 'text/html' }); assert.ok(!r.h['x-robots-tag'] && !/noindex/.test(r.text), 'open to search engines');
+  assert.ok((await call(SEEN.path, { ip: fresh(), accept: 'text/html' })).text.includes(`<a href="${SEEN.path}/quote">`), '/seen links the quote');
+  assert.ok(readFileSync(join(ROOT, 'site/llms.txt'), 'utf8').includes('https://mareliberum.dev/seen/quote'), 'llms.txt names it');
+  assert.ok(/'\/seen', '\/seen\/quote'\];/.test(readFileSync(join(ROOT, 'node/core.mjs'), 'utf8')), 'among the lists IndexNow hears of');
+  assert.equal((await call(`${SEEN.path}/quote`, { ip: fresh(), method: 'POST', body: {} })).status, 405);
+});
+console.log('indexed');
+await proof('/sitemaps/seen.xml names every record open to search engines that is still kept, also once it left the newest of /seen; none older than the records are kept', async () => {
+  const lines = await kv.get('seen:recent'), ix = await kv.get('seen:ix');
+  await kv.set('seen:recent', [], 3600);
+  await kv.set('seen:ix', [...ix, { id: 'abcdefabcdefabcd', at: new Date(T0 - (SEEN.keepDays + 1) * 86_400_000).toISOString(), ix: true }], 3600);
+  try {
+    const r = await call('/sitemaps/seen.xml', { ip: fresh(), accept: 'application/xml' }), locs = [...r.text.matchAll(/<loc>([^<]+)<\/loc>/g)].map((m) => m[1].slice(-16));
+    assert.ok(locs.includes(first.id), 'a record no more among the newest of /seen is still named');
+    assert.ok(!locs.includes(thin.id), 'never a record that says noindex');
+    assert.ok(!locs.includes('abcdefabcdefabcd'), 'never one older than the records are kept');
+    assert.equal(new Set(locs).size, locs.length, 'each once');
+  } finally { await kv.set('seen:recent', lines, 3600); await kv.set('seen:ix', ix, 3600); }
+});
 await Promise.allSettled(waits.splice(0));
 console.log(`\n${passed} proofs held, ${failed} failed`);
 
@@ -238,6 +315,14 @@ if (!process.argv.includes('--no-controls')) {
     ['the links back to the sea before the heading', 'node/seen.mjs', '<body><main><h1>${esc(recordHeadline(rec))}</h1>', '<body><main>${NAV()}<h1>${esc(recordHeadline(rec))}</h1>'],
     ['the dive plan back before the heading of a record', 'node/skin.mjs', 'const PLAN_LATE = /^\\/seen(?:\\/|$)/;', 'const PLAN_LATE = /^$/;'],
     ['/seen without its count in the heading', 'node/seen.mjs', "const H = xs.length ? `Open price records: ${cheaper} of", "const H = !xs.length ? `Open price records: ${cheaper} of"],
+    ['the saving taken from an offer flagged as far below the others', 'node/seen.mjs', 'find((x) => !x?.caution && Number.isFinite(x?.below_page_pct))', 'find((x) => Number.isFinite(x?.below_page_pct))'],
+    ['the share of all records, not of the pages compared', 'node/seen.mjs', 'cheaper_share_pct: pct(cheaper.length, compared.length)', 'cheaper_share_pct: pct(cheaper.length, xs.length)'],
+    ['the sea\'s own records counted as agents\' checks', 'node/seen.mjs', "agent: tallyOf(xs.filter((x) => x.by !== 'sea'))", 'agent: tallyOf(xs)'],
+    ['a line kept before 3.73 counted without its record', 'node/lens.mjs', "if ('lp' in x) { out.push(x); continue; }", 'out.push(x); continue;'],
+    ['the quote open to search engines with fewer than 10 pages compared', 'node/seen.mjs', 'indexable: q.all.compared >= SEEN.quoteMin,', 'indexable: true,'],
+    ['the quote without its first sentence', 'node/seen.mjs', '<body><main><h1>${esc(H)}</h1>\n<p class="lead">${esc(lead)}</p>\n<table>', '<body><main><h1>${esc(H)}</h1>\n<table>'],
+    ['seen.xml only from the newest of /seen again', 'node/core.mjs', 'recordsSitemap((await (sea.seenIndexed || sea.seenRecent)?.()', 'recordsSitemap((await (sea.seenRecent)?.()'],
+    ['records older than they are kept left in seen.xml', 'node/lens.mjs', "&& String(x.at || '') >= since &&", '&&'],
     ['the record not named among the next steps', 'node/lens.mjs', "ans.next.splice(at + 1, 0, { do: 'show your person the open record'", "ans.next.splice(at + 1, 0, { do: 'see the record'"],
   ];
   for (const [name, f, from, to] of CONTROLS) {
