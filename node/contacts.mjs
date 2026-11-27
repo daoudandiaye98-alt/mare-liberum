@@ -157,9 +157,9 @@ export function createContacts({ kv, now = () => Date.now(), secret }) {
       `3 402 zu bezahlt (${r.day}): ${r.p402} → ${r.paid} bezahlt (${pct(r.paid, r.p402)}); Kontakte, die nach einem 402 zahlten: ${r.converted} von ${r.contacts402}`,
       cohort ? `4 Wiederkehr d7 (Kohorte ${cohort.day}): ${cohort.back} von ${cohort.n} (${pct(cohort.back, cohort.n)})` : `4 Wiederkehr d7: erste volle Kohorte am ${addDays(start, CONTACTS.d7 + 1)} (bisher: ${so.back} von ${so.n} kamen an einem anderen Tag wieder)`,
     ];
-    // where the contacts of the day stopped (their furthest step), counted from the lines themselves
-    const phases = Object.fromEntries(PHASES.map((p) => [p, 0])); for (const c of await rows()) if (String(c.last_seen).startsWith(r.day) && c.abbruch_phase) phases[c.abbruch_phase] += 1;
-    return { day: today, since: start, lines, abbruch_phase: { day: r.day, ...phases }, yesterday: y, today: n, cohort_d7: cohort, returned_so_far: so, what: 'the contact book (node/contacts.mjs): per UTC day, who reached the paywall, the cause of each 402 and how far each contact came; no identities, no addresses' };
+    // (where each contact stopped, abbruch_phase, is in its line: the operator's export, never counted here from all lines, so
+    // that an open page never walks the whole book)
+    return { day: today, since: start, lines, yesterday: y, today: n, cohort_d7: cohort, returned_so_far: so, what: 'the contact book (node/contacts.mjs): per UTC day, who reached the paywall, the cause of each 402 and how far each contact came; no identities, no addresses' };
   }
 
   // the lines themselves (for the operator's export, in the columns of supabase/kontaktbuch.sql): newest first
