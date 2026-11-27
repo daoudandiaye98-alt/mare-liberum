@@ -10,6 +10,9 @@
 //   index    a record that compares fewer than 3 prices says noindex (header and page); the addresses open to search engines
 //            are only those of records that compare 3 or more; an unknown or malformed record is a 404
 //   sitemap  (3.66) /sitemaps/seen.xml names exactly those records, each dated by its day, and the sitemap index names it
+//   words    (3.67) the verdict stands where AI answers quote a page: in the title, in the heading and in the first sentence
+//            after it, as plain HTML, within the first 200 characters from the heading on; the links back to the sea stand
+//            after the record; /seen says in its heading how many of the newest were cheaper elsewhere, and its newest first
 // Negative controls at the end: each rule broken in a copy of the code, and this proof must fail there.
 // Runs without the network: node tools/seen-proof.mjs   (exit code 1 when a proof fails or a control is not caught)
 //   --no-controls   only the proofs (the controls run this file that way in each broken copy)
@@ -185,6 +188,37 @@ await proof('/sitemaps/seen.xml lists only the records that compare 3 or more pr
   assert.ok(idx.text.includes(`<sitemap><loc>${BASE}/sitemaps/seen.xml</loc><lastmod>${new Date(T0).toISOString().slice(0, 10)}</lastmod></sitemap>`), 'the index names it with its day');
   assert.ok(readFileSync(join(ROOT, 'site/llms.txt'), 'utf8').includes('https://mareliberum.dev/sitemaps/seen.xml'), 'llms.txt names it');
 });
+console.log('words');
+// the text a reader without scripts sees from the heading on, tags removed and spaces folded, as AI answers quote it
+const fromH1 = (html, n = 200) => { const i = html.indexOf('<h1'); assert.ok(i >= 0, 'a heading'); return html.slice(i).replace(/<script[\s\S]*?<\/script>/g, ' ').replace(/<[^>]+>/g, ' ').replace(/&#39;/g, "'").replace(/&amp;/g, '&').replace(/\s+/g, ' ').trim().slice(0, n); };
+await proof('a record says its verdict in its title, its heading and the first sentence after it: store, price, verdict, how many prices and the lowest, within 200 characters', async () => {
+  const r = await call(`${SEEN.path}/${first.id}`, { ip: fresh(), accept: 'text/html' }); assert.equal(r.status, 200);
+  const title = /<title>([^<]*)<\/title>/.exec(r.text)?.[1] || ''; assert.ok(title.includes('cheaper elsewhere') && title.includes('89 USD'), title);
+  const h1 = /<h1>([^<]*)<\/h1>/.exec(r.text)?.[1] || ''; assert.equal(h1, 'Trail Runner 3 at shop.deal-proof.dev: 89 USD, cheaper elsewhere');
+  const words = fromH1(r.text);
+  for (const s of ['cheaper elsewhere', 'prices checked on', 'the lowest is 79.95 USD at Another Shop', '10.2 % below this page']) assert.ok(words.includes(s), `${s} in the first 200 characters: ${words}`);
+  assert.ok(/<\/h1>\s*<p class="lead">\d+ prices checked on /.test(r.text), 'the first sentence right after the heading');
+  const nav = r.text.indexOf('<a href="/">Mare Liberum</a>'); assert.ok(nav > r.text.indexOf('What the deal check found'), 'the links back to the sea after the record');
+  // what stands before the heading in the source (the skip link, the name of the sea, the button of the dive plan, the depth)
+  // is shorter than the verdict; the dive plan itself stands after the page
+  const pre = r.text.slice(r.text.indexOf('<body'), r.text.indexOf('<h1')).replace(/<script[\s\S]*?<\/script>/g, ' ').replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+  assert.ok(pre.length < h1.length, `before the heading only ${pre.length} characters, fewer than the verdict's ${h1.length}: ${pre.slice(0, 300)}`);
+  assert.ok(r.text.indexOf('id="plan"') > r.text.indexOf('</main>'), 'the dive plan after the page');
+});
+await proof('a record without other offers says so in its heading and first sentence; its own list price follows', async () => {
+  const r = await call(`${SEEN.path}/${thin.id}`, { ip: fresh(), accept: 'text/html' }); assert.equal(r.status, 200);
+  const words = fromH1(r.text); assert.ok(words.startsWith('Summit Jacket 2 at shop.deal-proof.dev: 199 USD, no other offer found'), words);
+  assert.ok(words.includes('no matching offer in stock at another Shopify store'), words);
+  const f = await call(`${SEEN.path}/${first.id}`, { ip: fresh(), accept: 'text/html' }); assert.ok(fromH1(f.text, 400).includes('Its own list price: 129 USD.'), 'the list price the page states');
+});
+await proof('/seen says in its heading how many of the newest records were cheaper elsewhere, and names the newest in its first sentence', async () => {
+  const list = (await call(`${SEEN.path}.json`, { ip: fresh() })).j.records, cheaper = list.filter((x) => x.word === 'cheaper-elsewhere').length;
+  const r = await call(SEEN.path, { ip: fresh(), accept: 'text/html' }); assert.equal(r.status, 200);
+  const words = fromH1(r.text, 260);
+  assert.ok(words.startsWith(`Open price records: ${cheaper} of ${list.length} checked product pages cheaper elsewhere`), words);
+  assert.ok(words.includes(`The newest, seen`) && words.includes(`${list[0].name} at ${list[0].store}`), words);
+  assert.ok(r.text.indexOf('<a href="/">Mare Liberum</a>') > r.text.indexOf('<h1'), 'the links back to the sea after the heading');
+});
 await Promise.allSettled(waits.splice(0));
 console.log(`\n${passed} proofs held, ${failed} failed`);
 
@@ -199,6 +233,11 @@ if (!process.argv.includes('--no-controls')) {
     ['the page address kept with its campaign and session', 'node/seen.mjs', "${/^\\d{1,20}$/.test(v || '') ? `?variant=${v}` : ''}`.slice(0, 600);", "${x.search}`.slice(0, 600);"],
     ['a record that says noindex named in seen.xml', 'node/seen.mjs', "const okId = (x) => !!x && x.ix === true && ", "const okId = (x) => !!x && "],
     ['seen.xml left out of the sitemap index', 'node/core.mjs', "maps = ['hubs', 'seen', 'site',", "maps = ['hubs', 'site',"],
+    ['the heading of a record only the product name again', 'node/seen.mjs', '<body><main><h1>${esc(recordHeadline(rec))}</h1>', '<body><main><h1>${esc(name)}</h1>'],
+    ['the first sentence of a record left out', 'node/seen.mjs', '<p class="lead">${esc(lead)}</p>\n<p class="box">', '<p class="box">'],
+    ['the links back to the sea before the heading', 'node/seen.mjs', '<body><main><h1>${esc(recordHeadline(rec))}</h1>', '<body><main>${NAV()}<h1>${esc(recordHeadline(rec))}</h1>'],
+    ['the dive plan back before the heading of a record', 'node/skin.mjs', 'const PLAN_LATE = /^\\/seen(?:\\/|$)/;', 'const PLAN_LATE = /^$/;'],
+    ['/seen without its count in the heading', 'node/seen.mjs', "const H = xs.length ? `Open price records: ${cheaper} of", "const H = !xs.length ? `Open price records: ${cheaper} of"],
     ['the record not named among the next steps', 'node/lens.mjs', "ans.next.splice(at + 1, 0, { do: 'show your person the open record'", "ans.next.splice(at + 1, 0, { do: 'see the record'"],
   ];
   for (const [name, f, from, to] of CONTROLS) {

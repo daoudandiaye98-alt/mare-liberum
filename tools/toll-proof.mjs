@@ -878,14 +878,15 @@ await proof('/engine (a section "The toll" with the example $0.003630), /engine.
     assert.equal(a.status, b.status, path); assert.equal(tmask(norm(a.text), F.version), tmask(norm(b.text), M.version), `${path}: as ${REF}`);
   }
 });
-await proof('3.66.0 in VERSION, server.json, server-dev.json, server-lean.json and gemini-extension.json; RELEASES: 3.66.0 without day and pull request, 3.65.0 on 2026-11-27T00:35:57+01:00 with #60, 3.64.2 on 2026-11-27T00:05:57+01:00 with #59, 3.64.1 on 2026-11-26T23:18:43+01:00 with #58, 3.64.0 on 2026-11-26T22:54:54+01:00 with #57, 3.63.0 on 2026-11-26T22:00:32+01:00 with #56; the registry auth file holds three ed25519 keys; proof:toll in package.json', async () => {
-  assert.equal(ON.version, '3.66.0'); for (const f of ['server.json', 'server-dev.json', 'server-lean.json', 'gemini-extension.json']) assert.equal(JSON.parse(readFileSync(join(ROOT, f), 'utf8')).version, '3.66.0', f);
-  assert.deepEqual([RELEASES[0].version, RELEASES[0].at, RELEASES[0].pr], ['3.66.0', null, undefined]); assert.ok(RELEASES[0].what.length > 40 && !RELEASES[0].what.includes('\n'));
-  assert.deepEqual([RELEASES[1].version, RELEASES[1].at, RELEASES[1].pr], ['3.65.0', '2026-11-27T00:35:57+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/60']);
-  assert.deepEqual([RELEASES[2].version, RELEASES[2].at, RELEASES[2].pr], ['3.64.2', '2026-11-27T00:05:57+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/59']);
-  assert.deepEqual([RELEASES[3].version, RELEASES[3].at, RELEASES[3].pr], ['3.64.1', '2026-11-26T23:18:43+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/58']);
-  assert.deepEqual([RELEASES[4].version, RELEASES[4].at, RELEASES[4].pr], ['3.64.0', '2026-11-26T22:54:54+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/57']);
-  assert.deepEqual([RELEASES[5].version, RELEASES[5].at, RELEASES[5].pr], ['3.63.0', '2026-11-26T22:00:32+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/56']);
+await proof('3.67.0 in VERSION, server.json, server-dev.json, server-lean.json and gemini-extension.json; RELEASES: 3.67.0 without day and pull request, 3.66.0 on 2026-11-27T02:20:54+01:00 with #61, 3.65.0 on 2026-11-27T00:35:57+01:00 with #60, 3.64.2 on 2026-11-27T00:05:57+01:00 with #59, 3.64.1 on 2026-11-26T23:18:43+01:00 with #58, 3.64.0 on 2026-11-26T22:54:54+01:00 with #57, 3.63.0 on 2026-11-26T22:00:32+01:00 with #56; the registry auth file holds three ed25519 keys; proof:toll in package.json', async () => {
+  assert.equal(ON.version, '3.67.0'); for (const f of ['server.json', 'server-dev.json', 'server-lean.json', 'gemini-extension.json']) assert.equal(JSON.parse(readFileSync(join(ROOT, f), 'utf8')).version, '3.67.0', f);
+  assert.deepEqual([RELEASES[0].version, RELEASES[0].at, RELEASES[0].pr], ['3.67.0', null, undefined]); assert.ok(RELEASES[0].what.length > 40 && !RELEASES[0].what.includes('\n'));
+  assert.deepEqual([RELEASES[1].version, RELEASES[1].at, RELEASES[1].pr], ['3.66.0', '2026-11-27T02:20:54+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/61']);
+  assert.deepEqual([RELEASES[2].version, RELEASES[2].at, RELEASES[2].pr], ['3.65.0', '2026-11-27T00:35:57+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/60']);
+  assert.deepEqual([RELEASES[3].version, RELEASES[3].at, RELEASES[3].pr], ['3.64.2', '2026-11-27T00:05:57+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/59']);
+  assert.deepEqual([RELEASES[4].version, RELEASES[4].at, RELEASES[4].pr], ['3.64.1', '2026-11-26T23:18:43+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/58']);
+  assert.deepEqual([RELEASES[5].version, RELEASES[5].at, RELEASES[5].pr], ['3.64.0', '2026-11-26T22:54:54+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/57']);
+  assert.deepEqual([RELEASES[6].version, RELEASES[6].at, RELEASES[6].pr], ['3.63.0', '2026-11-26T22:00:32+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/56']);
   const regKeys = readFileSync(join(ROOT, 'public/.well-known/mcp-registry-auth'), 'utf8').trim().split('\n');
   assert.equal(regKeys.length, 3); for (const k of regKeys) { assert.match(k, /^v=MCPv1; k=ed25519; p=[A-Za-z0-9+/]{43}=$/); assert.equal(Buffer.from(k.split('p=')[1], 'base64').length, 32); }
   assert.equal(new Set(regKeys).size, 3);
