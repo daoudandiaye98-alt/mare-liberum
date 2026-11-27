@@ -7,7 +7,7 @@
 // the paid route.
 // Runs without the network (only this machine): node tools/till-proof.mjs   (exit code 1 when a proof fails)
 import assert from 'node:assert/strict';
-import { handle, lineJson } from '../node/core.mjs';
+import { handle, lineJson, startTop } from '../node/core.mjs';
 import { createMem } from '../node/mem.mjs';
 import { payConfig, termsFor, checkPayment, receiptOf, HOUSE_WALLET, USDC_BASE, FACILITATOR } from '../node/pay.mjs';
 import { createLedger, summarize, pulseOf, pulseOrdered } from '../node/ledger.mjs';
@@ -166,7 +166,9 @@ await proof('the pulse of the day: domains, tasks (only once two different calle
     assert.equal(p.paid_today.count, 2); assert.equal(p.paid_today_usd_unconfirmed, 0.02); assert.deepEqual(p.top_5_queries, [{ q: 'creatine', hits: 2 }]); assert.equal(p.worked_last_24h, 1);
   }
   const r = await (await handle(new Request(`${BASE}/pulse`, { headers: { 'user-agent': 'curl/8.5.0' } }), db, { base: BASE, pay: PAY, ledger: createLedger({}), waitUntil: () => {} })).text();
-  assert.match(r, /^\{"unique_domains_today":/, 'the first key, as sent'); const j = JSON.parse(r); assert.equal(typeof j.hits_today, 'number'); assert.ok(Array.isArray(j.top_queries) && Array.isArray(j.top_domains)); assert.match(j.read, /two different callers/);
+  // (since 3.84) who pays stands above unique_domains_today: the paying agents, the keys and the paid doors of the day
+  assert.match(r, /^\{"who_pays":\{"line":"who pays \(\d{4}-\d{2}-\d{2}, UTC\): \d+ paying agents? today · \d+ keys? today · \d+ paid doors?"/, 'the first key, as sent'); const j = JSON.parse(r);
+  assert.deepEqual(Object.keys(j).slice(0, 2), ['who_pays', 'unique_domains_today']); assert.deepEqual(Object.keys(j.who_pays), ['line', 'paying_agents_today', 'keys_today', 'paid_doors_today', 'from']); assert.equal(typeof j.hits_today, 'number'); assert.ok(Array.isArray(j.top_queries) && Array.isArray(j.top_domains)); assert.match(j.read, /two different callers/);
 });
 await proof('a question to the brain or the doors answered as data counts as an ask (not for a page, not for a crawler); its task shows once a second caller asked it', async () => {
   const ledger = createLedger({});
@@ -266,13 +268,16 @@ await proof('/.well-known/x402 names the price block, the line and the guide to 
 await proof('llms.txt and llms-full.txt name the price in their first section; the static file holds the line, and a node set to another price says that one', async () => {
   const txt = readFileSync(new URL('../site/llms.txt', import.meta.url), 'utf8'), top = txt.split('Copy and run')[0];
   assert.ok(top.includes(priceLine(PRICING)), 'site/llms.txt says the line in its first section');
-  assert.match(top.split('\n\n')[1], /^POST \/route costs 0\.02 USDC on Base, no account, settle with POST \/settle\./); assert.match(top.split('\n\n')[1], /\/via\//);
+  // (since 3.84) before every other paragraph the three lines of the start (startTop), then the price line as before
+  assert.equal(top.split('\n\n')[1], startTop('https://mareliberum.dev'), 'the three lines of the start, as the code says them'); assert.equal(top.split('\n\n')[1].split('\n').length, 3);
+  assert.match(top.split('\n\n')[2], /^POST \/route costs 0\.02 USDC on Base, no account, settle with POST \/settle\./); assert.match(top.split('\n\n')[2], /\/via\//);
   const site = { '/llms.txt': { body: txt, type: 'text/plain; charset=utf-8' } };
   const served = await (await handle(new Request(`${BASE}/llms.txt`, { headers: { 'user-agent': 'proof-agent/1.0' } }), db, { base: BASE, pay: { ...PAY, cents: 3 }, site, ledger: createLedger({}), waitUntil: () => {} })).text();
   assert.ok(served.includes('POST /route costs 0.03 USDC on Base, no account, settle with POST /settle'), 'served with the price of the node'); assert.ok(served.includes('0.03 USDC (3 cents)')); assert.ok(!served.includes('0.02 USDC'));
   assert.equal(withPrice(txt, pricingOf(payConfig({}), BASE)), txt, 'the default price leaves the text as it is');
   const full = await (await handle(new Request(`${BASE}/llms-full.txt`, { headers: { 'user-agent': 'proof-agent/1.0' } }), db, { base: BASE, pay: PAY, ledger: createLedger({}), waitUntil: () => {} })).text();
-  assert.match(full.split('\n\n')[1], /^POST \/route costs 0\.02 USDC on Base, no account, settle with POST \/settle\./);
+  assert.equal(full.split('\n\n')[1], startTop(BASE)); assert.match(full.split('\n\n')[2], /^POST \/route costs 0\.02 USDC on Base, no account, settle with POST \/settle\./);
+  const start = served.split('\n\n')[1]; assert.match(start, /^Start free with one call: curl -s https:\/\/mareliberum\.dev\/session\?as=key gives a key with 20 door probes/); assert.match(start, /the 10 paths of a task 0\.03 USDC \(3 cents\), a check, a read or a deal check 0\.01 USDC, a pack 0\.05 USDC; 20 more probes on the same key 0\.03 USDC \(3 cents\)\./); assert.match(start, /\nEvery payment has a receipt:/);
 });
 
 console.log('the 402 a reader understands (3.28.0)');

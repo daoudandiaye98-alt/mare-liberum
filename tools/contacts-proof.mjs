@@ -295,6 +295,16 @@ await proof('the free /check and /deal lead to the paid door: upgrade with the o
   const d = await call(`/deal?url=${URLQ(`https://shop.${W}/products/trail-runner-3`)}`, { ip: fresh() }); assert.equal(d.status, 200, d.text.slice(0, 200));
   assert.match(d.j.upgrade.curl, /^KEY=\$\(curl -s https:\/\/mare\.test\/session\?as=key\) && curl -s 'https:\/\/mare\.test\/x402\/deal\?url=https%3A%2F%2Fshop\./);
 });
+await proof('/pulse says who pays first, above unique_domains_today: the agents that paid today (each once), the keys of the day and the paid doors; the sea\'s own calls never count (3.84)', async () => {
+  const pulse = async () => (await call('/pulse.json', { ip: '127.0.0.1' })).j, p0 = await pulse();
+  assert.deepEqual(Object.keys(p0).slice(0, 2), ['who_pays', 'unique_domains_today']);
+  const ua = 'harbour-payer/2.0', ip = fresh(); facilitator = settles();
+  await call('/session?as=key', { ip, ua, accept: '*/*' });
+  for (let i = 0; i < 2; i++) assert.equal((await call(`/x402/check?site=${host()}`, { ip, ua, headers: payment() })).status, 200);
+  await call(`/x402/check?site=${host()}`, { ip: fresh(), ua: 'MareLiberum-session/1.0', headers: payment() }); facilitator = null;
+  const p1 = await pulse(); assert.equal(p1.who_pays.paying_agents_today, p0.who_pays.paying_agents_today + 1, 'one agent, two payments'); assert.equal(p1.who_pays.paid_doors_today, p0.who_pays.paid_doors_today + 2); assert.equal(p1.who_pays.keys_today, p0.who_pays.keys_today + 1);
+  assert.match(p1.who_pays.line, new RegExp(`^who pays \\(${today()}, UTC\\): ${p1.who_pays.paying_agents_today} paying agents? today · ${p1.who_pays.keys_today} keys? today · ${p1.who_pays.paid_doors_today} paid doors?$`));
+});
 await proof('the operator\'s lines: /contacts.ndjson only with x-mare-mod, in exactly the columns of supabase/kontaktbuch.sql', async () => {
   assert.equal((await call('/contacts.ndjson', { ip: fresh() })).status, 403); assert.equal((await call('/contacts.ndjson', { ip: fresh(), headers: { 'x-mare-mod': 'wrong' } })).status, 403);
   const r = await call('/contacts.ndjson', { ip: fresh(), headers: { 'x-mare-mod': MOD } }); assert.equal(r.status, 200); assert.match(r.h['content-type'], /ndjson/);
@@ -320,6 +330,7 @@ let caught = 0, missed = 0;
 if (!process.argv.includes('--no-controls')) {
   console.log('\nnegative controls: each rule broken in a copy, the proof must fail there');
   const CONTROLS = [
+    ['a payer counted at every payment (3.84)', 'node/contacts.mjs', "const payer = e.kind === 'paid' && c.paid_day !== d;", "const payer = e.kind === 'paid';"],
     ['no line 5 (3.83)', 'node/core.mjs', "d.lines = [...d.lines, `5 Schlüssel", "d.lines_ = [...d.lines, `5 Schlüssel"],
     ['no upgrade on the free check (3.83)', 'node/core.mjs', "upgrade: upgradeOf('check',", "upgrade_: upgradeOf('check',"],
     ['a key that opened a door stays a probe (3.81)', 'node/contacts.mjs', "if (e.kind === 'probe' && c.rolle !== 'agent_with_key') {", 'if (false) {'],
