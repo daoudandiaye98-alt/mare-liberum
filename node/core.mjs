@@ -1799,6 +1799,9 @@ const priceOf402 = (res, body) => {
 };
 const sq = (x) => `'${String(x).replace(/'/g, `'\\''`)}'`;
 const SESSION_PATH = /^\/(?:x402\/(?:deal|check|read|pack)|route)$/;
+// (since 4.0) ?as= and ?a= mean the same on every door that takes one (/session, /route, /seat, /seats, /licence): the docs
+// said one, a route read the other; now both are read, as= first when both stand
+export const actOf = (u) => String(u.searchParams.get('as') ?? u.searchParams.get('a') ?? '').trim().toLowerCase();
 // (since 3.80) the first words of every 402: the way out without a wallet, one line an agent can run as it stands
 export const noWalletOf = (base, path, topup = false) => {
   // (since 3.81) filling up a key is the paid way of a key: a new key stays free
@@ -1873,7 +1876,7 @@ export function nextStepOf({ base, method, url, path, sent = null, keyed = false
     ? { say: 'Pay as the WWW-Authenticate header of this answer asks (MPP, method stripe: a Shared Payment Token) and send this call again with the header Authorization: Payment <credential>.', steps: [{ ...again(url.href), headers: { authorization: 'Payment {mpp credential}' } }] }
     : { say: 'With a wallet: sign accepts[0] of this answer (x402 exact, USDC on Base, EIP-3009) and send this call again with the header PAYMENT-SIGNATURE (x402 v2; X-PAYMENT for v1). An x402 client does both by itself.', steps: [{ ...(door && !keyed ? door : again(url.href)), headers: { 'payment-signature': '{x402 payment for accepts[0]}' } }] };
   // (since 3.81) a topup is paid: its terms, the same key afterwards
-  if (path === '/route' && url.searchParams.get('a') === 'topup') return { ...pay, note: 'a topup is paid (the price of one route): pay these terms and the same key has its probe calls again' };
+  if (path === '/route' && actOf(url) === 'topup') return { ...pay, note: 'a topup is paid (the price of one route): pay these terms and the same key has its probe calls again' };
   // a key sent to a session door that answered 402: its probe calls are spent; a key sent to a free door past its limit:
   // the key works on the paid door
   const spent = keyed && SESSION_PATH.test(path);
@@ -1901,7 +1904,7 @@ async function paywallAfter({ req, copy, res, db, cfg, url }) {
     let body = null; try { body = JSON.parse(await res.clone().text()); } catch {}
     const message = typeof body?.error === 'string' ? body.error : String(body?.error?.message || body?.detail || '');
     note({ kind: pay ? 'pay_sent' : keyed && SESSION_PATH.test(path) ? 'probe_empty' : '402', paid: !!pay, bad: !!pay?.bad, message, price_usd: priceOf402(res, body), session: keyed ? sv.id : null });
-    const hint = noWalletOf(base, path, path === '/route' && url.searchParams.get('a') === 'topup'), headers = new Headers(res.headers);
+    const hint = noWalletOf(base, path, path === '/route' && actOf(url) === 'topup'), headers = new Headers(res.headers);
     headers.set('x-sea-no-wallet', hint);
     for (const hk of ['payment-required']) { const raw = headers.get(hk); if (!raw) continue; try { const v = JSON.parse(Buffer.from(raw, 'base64').toString('utf8')); v.error = firstWords(hint, v.error); headers.set(hk, Buffer.from(JSON.stringify(v)).toString('base64')); } catch {} }
     { const raw = headers.get('x402-payment-required'); if (raw) { try { const v = JSON.parse(raw); v.error = firstWords(hint, v.error); headers.set('x402-payment-required', JSON.stringify(v)); } catch {} } }
@@ -1917,7 +1920,7 @@ async function paywallAfter({ req, copy, res, db, cfg, url }) {
     return new Response(JSON.stringify({ ...body, next_step, ...(supply && !('calls_left' in body) ? supplyFields(supply, base, price) : {}) }), { status: 402, statusText: res.statusText, headers });
   }
   // a new key: POST /session (201) or the one GET (200, the key alone)
-  if (path === '/session' && ((method === 'POST' && res.status === 201) || (method === 'GET' && res.status === 200 && url.searchParams.get('as') === 'key' && res.headers.has('location')))) { note({ kind: 'session', session: (res.headers.get('location') || '').split('/').pop() }); return res; }
+  if (path === '/session' && ((method === 'POST' && res.status === 201) || (method === 'GET' && res.status === 200 && actOf(url) === 'key' && res.headers.has('location')))) { note({ kind: 'session', session: (res.headers.get('location') || '').split('/').pop() }); return res; }
   if (res.status === 200 && keyed && res.headers.has('x-sea-grace')) { note({ kind: 'probe_empty', session: sv.id }); return supplied(res); }
   // a payment (x402, a receipt at /settle, or x-sea-receipt at the route) is never a probe call, also when it fills a key up
   const paidCall = (pay && !pay.bad) || (path === '/settle' && method === 'POST') || (path === '/route' && req.headers.has('x-sea-receipt'));
@@ -2098,6 +2101,13 @@ async function handleOne(req, db, cfg = {}) {
       if (path === '/llms.txt' || path === '/skill.md') b = withPrice(b, pricingOf(cfg.pay || payConfig(), base));
       if (path === '/' || path === '/index.html') { try { b = homeHtml(b, await liveNow(sea, db, cfg)); } catch (e) { console.error('mare_home', e?.message); } b = homeButtons(b); }
       return new Response(b, { headers: { 'content-type': page.type, 'cache-control': 'public, max-age=60', ...CORS } });
+    }
+    // (since 4.0) the resident skill at its short address, for a host that pastes it into its context: /skills/mare-liberum/SKILL.md
+    // and /skills/mare-liberum/ give the same bytes as /skill.md and /.well-known/agent-skills/mare-liberum/SKILL.md, always as
+    // Markdown (never a page, whatever the Accept), HEAD included
+    if ((path === '/skills/mare-liberum/SKILL.md' || path === '/skills/mare-liberum') && (req.method === 'GET' || req.method === 'HEAD') && cfg.site?.['/skill.md']?.body) {
+      const md = withPrice(skillMd(cfg.site['/skill.md'].body), pricingOf(cfg.pay || payConfig(), base));
+      return new Response(req.method === 'HEAD' ? null : md, { headers: { 'content-type': 'text/markdown; charset=utf-8', 'content-length': String(Buffer.byteLength(md)), 'cache-control': 'public, max-age=300', 'x-robots-tag': 'noindex', link: `<${base}/skills/mare-liberum/SKILL.md>; rel="canonical"`, ...CORS } });
     }
     if (path.startsWith('/e/') && req.method === 'GET') {
       let id; try { id = `urn:air:${decodeURIComponent(path.slice(3))}`; } catch { id = ''; }
@@ -2739,7 +2749,7 @@ async function handleOne(req, db, cfg = {}) {
           return json({ ...d, bookmark: `${base}/session/${d.id}`, use: sessionUse() }, 200, sh);
         }
         const who = callerOf(req.headers);
-        if (url.searchParams.get('as') === 'key' && req.method === 'GET' && !['ai-crawler', 'crawler', 'search', 'search-ai', 'registry'].includes(who.kind)) {
+        if (actOf(url) === 'key' && req.method === 'GET' && !['ai-crawler', 'crawler', 'search', 'search-ai', 'registry'].includes(who.kind)) {
           const t0 = performance.now(), o = await store.open({ net: netKey(ip), callback: url.searchParams.get('callback_url'), agent: url.searchParams.get('agent') }), took = { 'server-timing': `session;dur=${(performance.now() - t0).toFixed(1)}` };
           if (o.refuse) return new Response(`${o.refuse.message}\n`, { status: o.refuse.status, headers: { 'content-type': 'text/plain; charset=utf-8', ...sh, ...took, ...(o.refuse.retry ? { 'retry-after': String(o.refuse.retry) } : {}) } });
           return new Response(`${o.key}\n`, { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8', ...sh, ...took, location: `${base}/session/${o.id}`, 'x-sea-session-left': String(o.doc.probe.left), 'x-sea-calls-left': String(o.doc.probe.left), 'x-sea-calls-used': '0', 'access-control-expose-headers': `${sh['access-control-expose-headers']},${SUPPLY_EXPOSE}` } });
@@ -2754,7 +2764,7 @@ async function handleOne(req, db, cfg = {}) {
       const t0 = performance.now(), o = await store.open({ net: netKey(ip), callback: body.callback_url ?? url.searchParams.get('callback_url'), agent: body.agent ?? url.searchParams.get('agent') }), took = { 'server-timing': `session;dur=${(performance.now() - t0).toFixed(1)}` };
       if (o.refuse) return json({ error: { code: o.refuse.status === 429 ? 'RESOURCE_EXHAUSTED' : 'INVALID_ARGUMENT', message: o.refuse.message }, ...(o.refuse.status === 429 ? { alternatives: [{ do: 'keep using the key you have', gives: `its probe calls for ${SESSION.probeDays} days` }, { do: 'send the request without a key and pay it over x402', gives: 'the answer at once' }] } : { next: open }) }, o.refuse.status, { ...sh, ...(o.refuse.retry ? { 'retry-after': String(o.refuse.retry) } : {}) });
       // ?as=key: the key alone, one line of text, so that one shell line keeps it (KEY=$(curl -sf -X POST …/session?as=key))
-      if (url.searchParams.get('as') === 'key') return new Response(`${o.key}\n`, { status: 201, headers: { 'content-type': 'text/plain; charset=utf-8', ...sh, ...took, location: `${base}/session/${o.id}`, 'x-sea-session-left': String(o.doc.probe.left), 'x-sea-calls-left': String(o.doc.probe.left), 'x-sea-calls-used': '0', 'access-control-expose-headers': `${sh['access-control-expose-headers']},${SUPPLY_EXPOSE}` } });
+      if (actOf(url) === 'key') return new Response(`${o.key}\n`, { status: 201, headers: { 'content-type': 'text/plain; charset=utf-8', ...sh, ...took, location: `${base}/session/${o.id}`, 'x-sea-session-left': String(o.doc.probe.left), 'x-sea-calls-left': String(o.doc.probe.left), 'x-sea-calls-used': '0', 'access-control-expose-headers': `${sh['access-control-expose-headers']},${SUPPLY_EXPOSE}` } });
       return json({ key: o.key, once: 'the key is shown this one time: the sea keeps only its hash. Lost: open a new session', ...o.doc, bookmark: `${base}/session/${o.id}`, use: sessionUse(), limits, ...(o.budget ? { note: `the probe calls of the sea for today (UTC) are given out: yours work from tomorrow, or pay now over x402 (${base}/.well-known/x402)` } : {}), terms: `${base}/terms#s3`, privacy: `${base}/privacy#d7`, calls_left: o.doc.probe.left, calls_used: 0 }, 201, { ...sh, ...took, location: `${base}/session/${o.id}` });
     }
     // reader credit (node/credit.mjs, since 3.38): prepaid pages above the free limit, bought over x402 through the till's own
@@ -3496,7 +3506,7 @@ async function handleOne(req, db, cfg = {}) {
     { const mm = /^\/m\/([A-Za-z0-9_-]{20,120})(\/add|\/forget)?$/.exec(path);
       if (mm) { const a = await args(); return json(mm[2] === '/add' ? await sea.mindAdd(mm[1], a, ctx) : mm[2] === '/forget' ? await sea.mindForget(mm[1], a, ctx) : forAgents(await sea.mind(mm[1], a), null, true), 200, { 'cache-control': 'no-store', 'x-robots-tag': 'noindex' }); } }
     // the paid move: POST /route (or ?paid=true) answers with the ten best paths for the task, after payment (node/pay.mjs)
-    if (path === '/route' && req.method === 'POST' && url.searchParams.get('a') === 'topup') return topup(await args());
+    if (path === '/route' && req.method === 'POST' && actOf(url) === 'topup') return topup(await args());
     if (path === '/route' && (req.method === 'POST' || url.searchParams.get('paid') === 'true')) { const a = await args(), q = clean(a.q ?? a.task ?? a.need, 300); return [true, 'true', '1', 1, 'yes'].includes(a.free) ? sample(q, a.fmt) : sell(q, a); }
     // the router: doors that open for a task (public APIs, feeds, search links), walked and rated like pathways
     if (path === '/route' || path === '/route.json' || path === '/doors') {

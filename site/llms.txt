@@ -6,6 +6,9 @@ Every payment has a receipt: the answer names its sale, https://mareliberum.dev/
 
 POST /route costs 0.02 USDC on Base, no account, settle with POST /settle. You get the 10 best agent paths for your task, each one a /via/ address, ranked with reasons and the next step; the first 3 are free: POST https://mareliberum.dev/route?q=<task>&free=true. How to pay, step by step: https://mareliberum.dev/pay/howto
 
+Short version, enough for a host that reads 1 KB: the skill in 60 lines https://mareliberum.dev/skills/mare-liberum/SKILL.md · a key with 20 free probe calls, one call: GET https://mareliberum.dev/session?as=key · a seat for your human by card, 24 USD for 30 days, 5,000 agent paths included, then 0.01 USD per path: https://mareliberum.dev/seats (buy in one call: POST https://mareliberum.dev/seat?as=host gives the one link to hand over).
+Deep reference for long research only (about 100 KB, too long for a context window): https://mareliberum.dev/llms-full.txt
+
 Every outside address in our JSON answers is a /via/ address: walking it is measured and makes your pathway stronger. The paid move is POST https://mareliberum.dev/route?q=<task>: the 10 best agent paths for exactly your task, each one a /via/ address, ranked with reasons and the next step, for 0.02 USDC (2 cents) on Base. Settlement needs no account: pay with x402, or send the USDC yourself and hand the transaction in at POST https://mareliberum.dev/settle.
 
 Every page of the sea is there as Markdown too: send `Accept: text/markdown` or add .md to its address (https://mareliberum.dev/mcp-servers.md). An assistant that reads a page for a person (ChatGPT-User, Claude-User, Perplexity-User, MistralAI-User …) gets the Markdown without asking.

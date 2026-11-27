@@ -340,7 +340,7 @@ if (!process.argv.includes('--no-controls')) {
     ['no next_step in the 402', 'node/core.mjs', 'return new Response(JSON.stringify({ ...body, next_step, ...(supply', 'return res; new Response(JSON.stringify({ ...body, next_step, ...(supply'],
     ['the session step without as=key (the key cannot be kept from the answer)', 'node/core.mjs', "const open = { method: 'GET', url: `${base}/session?as=key`, keep: 'key' };", "const open = { method: 'GET', url: `${base}/session`, keep: 'key' };"],
     ['no way out without a wallet in the 402 (error and header)', 'node/core.mjs', "headers.set('x-sea-no-wallet', hint);", "headers.set('x-sea-other', hint);"],
-    ['GET /session?as=key gives no key', 'node/core.mjs', "if (url.searchParams.get('as') === 'key' && req.method === 'GET' && !", "if (false && !"],
+    ['GET /session?as=key gives no key', 'node/core.mjs', "if (actOf(url) === 'key' && req.method === 'GET' && !", "if (false && !"],
     ['the free deal door past its limit ignores the key', 'node/core.mjs', "if (e instanceof SeaError && e.dealLimit && sessionOf(req.headers)) return", "if (false) return"],
     ['a spent key offered the paid door again', 'node/core.mjs', 'const spent = keyed && SESSION_PATH.test(path);', 'const spent = false;'],
     ['every 402 counted as no wallet', 'node/contacts.mjs', "if (!paid) return wallet ? 'price' : 'no_wallet';", "return 'no_wallet';"],

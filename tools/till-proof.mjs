@@ -296,9 +296,10 @@ await proof('/pay/howto: plain text under 60 lines, the way without a wallet fir
   const res = await handle(new Request(`${BASE}/pay/howto`, { headers: { 'user-agent': 'curl/8.5.0' } }), db, { base: BASE, pay: PAY, ledger: createLedger({}), waitUntil: () => {} });
   assert.equal(res.status, 200); assert.match(res.headers.get('content-type'), /^text\/plain/);
   const txt = await res.text(), lines = txt.trimEnd().split('\n'), curls = lines.filter((l) => l.startsWith('curl '));
-  assert.ok(lines.length <= 60, `${lines.length} lines`); assert.equal(curls.length, 4);
+  assert.ok(lines.length <= 60, `${lines.length} lines`); assert.equal(curls.length, 5);
   assert.ok(lines.indexOf(`KEY=$(curl -s ${BASE}/session?as=key)`) > 0 && lines.indexOf(`KEY=$(curl -s ${BASE}/session?as=key)`) < lines.indexOf(curls[0]), 'the one GET for a key comes first');
   assert.equal(curls[0], `curl -s -X POST '${BASE}/route?q=<task>' -H "x-sea-session: $KEY"`); curls.shift();
+  assert.equal(curls[0], `curl -s '${BASE}/x402/check?site=example.com' -H "x-sea-session: $KEY"`, '(since 4.0) the check door as it answers: GET with ?site= and the key'); curls.shift();
   assert.equal(curls[0], `curl -s -X POST '${BASE}/route?q=test&free=true'`); assert.equal(curls[1], `curl -si -X POST '${BASE}/route?q=<task>'`); assert.match(curls[2], /^curl -s -X POST '.+\/settle' -H 'content-type: application\/json' -d '\{"q":"<task>","tx":"0x<transaction hash>"\}'$/);
   assert.ok(txt.includes('POST /route costs 0.02 USDC on Base, no account, settle with POST /settle.')); assert.match(txt, /USDC has 6 decimals/); assert.match(txt, /20000 means 0\.020000 USDC, that is 0\.02 US dollars or 2 cents/);
   assert.match(lines[lines.length - 1], /still accepted and delivered at once/); assert.ok(txt.includes(HOUSE_WALLET));
@@ -353,13 +354,31 @@ await proof('the sitemap names the brain, both guides, the agent card and the pu
   for (const p of ['/brain', '/via/howto', '/pay/howto', '/.well-known/agent-card.json', '/pulse']) assert.ok(x.includes(`<loc>${BASE}${p}</loc>`), p);
   for (const p of ['/route', '/treasury']) assert.ok(!x.includes(`<loc>${BASE}${p}</loc>`), `${p} answers noindex`);
 });
-await proof('the resident skill is one file in two places (site, skills/), version 4.1.0, with the price line, the free sample, /pay/howto, /treasury, /pulse and a /via/ walk; the plugin carries a skill of its own (5.0.0)', () => {
+await proof('the resident skill is one file in two places (site, skills/), version 4.2.0, under 80 lines, with the price line, the free sample, /pay/howto, /treasury, /pulse and a /via/ walk; the plugin carries a skill of its own (5.0.0)', () => {
   const read = (f) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
   const site = read('site/skill.md');
   assert.equal(read('skills/mare-liberum/SKILL.md'), site); assert.notEqual(read('plugins/mare-liberum/skills/mare-liberum/SKILL.md'), site);
-  assert.match(site, /^---\nname: mare-liberum\nversion: 4\.1\.0\n/);
+  assert.match(site, /^---\nname: mare-liberum\nversion: 4\.2\.0\n/); assert.ok(site.split('\n').length < 80, 'a host pastes the skill into its context: under 80 lines');
+  for (const w of ['session?as=key', '/brain?q=', '/route?q=', 'POST "https://mareliberum.dev/seat?as=host"', 'checkout_url', '20 probe calls']) assert.ok(site.includes(w), w);
   for (const w of [priceLine(PRICING), '&free=true', '/pay/howto', '/treasury', '/pulse', '/via/<token>']) assert.ok(site.includes(w), w);
-  assert.equal(JSON.parse(read('site/skill.json')).version, '4.1.0'); assert.equal(JSON.parse(read('.claude-plugin/marketplace.json')).plugins[0].version, '5.0.0'); assert.equal(JSON.parse(read('plugins/mare-liberum/.claude-plugin/plugin.json')).version, '5.0.0');
+  assert.equal(JSON.parse(read('site/skill.json')).version, '4.2.0'); assert.equal(JSON.parse(read('.claude-plugin/marketplace.json')).plugins[0].version, '5.0.0'); assert.equal(JSON.parse(read('plugins/mare-liberum/.claude-plugin/plugin.json')).version, '5.0.0');
+});
+// (since 4.0) the short address of the resident skill, always Markdown, HEAD included; ?a= reads as ?as=; llms.txt names the
+// short way in its first 20 lines
+await proof('/skills/mare-liberum/SKILL.md and /skills/mare-liberum/ give the skill as Markdown (GET and HEAD, any Accept); /session?a=key gives a key as ?as=key does; llms.txt names SKILL.md, /seats and llms-full.txt in its first 20 lines', async () => {
+  const read = (f) => readFileSync(new URL(`../${f}`, import.meta.url), 'utf8');
+  const site = { '/skill.md': { body: read('site/skill.md'), type: 'text/markdown; charset=utf-8' } };
+  const get = async (p, init = {}) => handle(new Request(`${BASE}${p}`, { ...init, headers: { 'user-agent': 'proof-agent/1.0', ...(init.headers || {}) } }), db, { base: BASE, pay: PAY, site, ledger: createLedger({}), waitUntil: () => {} });
+  const ref = await (await get('/skill.md')).text();
+  for (const p of ['/skills/mare-liberum/SKILL.md', '/skills/mare-liberum/', '/skills/mare-liberum']) {
+    for (const accept of ['*/*', 'text/html,application/xhtml+xml']) {
+      const r = await get(p, { headers: { accept } }); assert.equal(r.status, 200, p); assert.match(r.headers.get('content-type'), /^text\/markdown/, `${p} ${accept}`); assert.equal(await r.text(), ref, p);
+    }
+    const h = await get(p, { method: 'HEAD' }); assert.equal(h.status, 200); assert.match(h.headers.get('content-type'), /^text\/markdown/, `HEAD ${p}`);
+  }
+  const k1 = await get('/session?as=key', { headers: { 'x-forwarded-for': '198.51.100.71' } }), k2 = await get('/session?a=key', { headers: { 'x-forwarded-for': '198.51.100.72' } });
+  assert.equal(k1.status, 200); assert.equal(k2.status, 200); assert.match((await k2.text()).trim(), /^mls_[A-Za-z0-9_-]{32}$/, '?a=key gives the key'); assert.match((await k1.text()).trim(), /^mls_[A-Za-z0-9_-]{32}$/);
+  const top = read('site/llms.txt').split('\n').slice(0, 20).join('\n'); for (const w of ['/skills/mare-liberum/SKILL.md', '/seats', '/llms-full.txt']) assert.ok(top.includes(w), w);
 });
 // the reading skill (since 3.51 in the index of /.well-known/agent-skills): one file in two places, skills/ for installers that
 // read the repository and site/ for the node, which names it beside the resident skill with the digest of the bytes it serves
