@@ -818,6 +818,9 @@ const since0 = (t) => t.replace(/"runningSince":"[^"]*"/g, '"runningSince":"<sta
   .replace(/\n<p>\(\d+\) Sitzungen: [\s\S]*?<\/p>/g, '')
   .replace(/\n<p>\(\d+\) Sessions: [\s\S]*?<\/p>/g, '')
   .replace(/<tr><td>(?:Sitzungen|Sessions) \(POST \/session\)<\/td><td>[^<]*<\/td><\/tr>\n/g, '')
+  // (and the contact book of 3.79, proven by tools/contacts-proof.mjs and tools/legal-proof.mjs: its paragraph and its row)
+  .replace(/\n<p>\(\d+\) (?:Kontaktbuch|Contact book): [\s\S]*?<\/p>/g, '')
+  .replace(/<tr><td>(?:Kontaktbuch \(Bezahlwand\)|Contact book \(paywall\))<\/td><td>[^<]*<\/td><\/tr>\n/g, '')
   // (and the commission links of 3.74, proven by tools/commission-proof.mjs and tools/legal-proof.mjs: the paragraph of the
   // privacy notice, in German and in English; cut first)
   .replace(/\n<p>\(\d+\) Provisionslinks: [\s\S]*?<\/p>/g, '')

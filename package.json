@@ -65,7 +65,8 @@
     "proof:poppy": "node tools/poppy-proof.mjs",
     "proof:dealfirst": "node tools/dealfirst-proof.mjs",
     "proof:market": "node tools/market-proof.mjs",
-    "proof:session": "node tools/session-proof.mjs"
+    "proof:session": "node tools/session-proof.mjs",
+    "proof:contacts": "node tools/contacts-proof.mjs"
   },
   "dependencies": {
     "@vercel/blob": "^2.9.0",
