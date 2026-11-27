@@ -386,6 +386,7 @@ await proof('a callback is called once, at the first payment of its key: one POS
   await Promise.allSettled(waits.splice(0));
   assert.equal(hooks.length, 1, 'one POST'); assert.equal(hooks[0].method, 'POST'); assert.equal(hooks[0].url, `https://cb.${W}/hook`);
   const b = JSON.parse(hooks[0].body); assert.equal(b.event, 'first_payment'); assert.equal(b.session, k.id); assert.equal(b.calls_left, 20); assert.match(b.next, /same request again with the same key/); assert.ok(!hooks[0].body.includes(k.key) && !hooks[0].body.includes(sessionHash(k.key)), 'never the key');
+  T0 += 86_400_000; // the next payment on another UTC day: the key's day counts again, the callback never again
   const r2 = await call('/route?a=topup', { method: 'POST', ip: fresh(), headers: { ...bearer(k.key), ...payment({ value: '20000' }) } }); assert.equal(r2.status, 200); await Promise.allSettled(waits.splice(0));
   facilitator = null; assert.equal(hooks.length, 1, 'never again');
   assert.match((await call(`/session/${k.id}`, { ip: fresh() })).j.callback.state, /^called once at .+: HTTP 200$/);
@@ -399,7 +400,8 @@ await proof('a callback is called once, at the first payment of its key: one POS
   const bad = await call('/route?a=topup', { method: 'POST', ip: fresh(), headers: { ...bearer(T.key), ...payment({ value: '20000' }) }, body: { callback_url: 'http://cb.session-proof.dev/hook' } }); assert.equal(bad.status, 422); assert.equal((await ledger.treasury()).total_count, tr0.total_count, 'nothing charged');
   const good = await call('/route?a=topup', { method: 'POST', ip: fresh(), headers: { ...bearer(T.key), ...payment({ value: '20000' }) }, body: { callback_url: `https://cb.${W}/hook` } }); facilitator = null; assert.equal(good.status, 200); await Promise.allSettled(waits.splice(0));
   assert.equal(hooks.length, 1); assert.equal(JSON.parse(hooks[0].body).session, T.id);
-  const st = await call('/session', { ip: fresh() }); assert.ok(st.j.today.paid_keys >= 3 && st.j.today.used_keys >= 1);
+  assert.equal((await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: bearer(T.key) })).status, 200);
+  const st = await call('/session', { ip: fresh() }); assert.ok(st.j.today.paid_keys >= 3, 'three keys paid this day'); assert.ok(st.j.today.used_keys >= 1, 'a key took its first door this day');
 });
 
 console.log('books');
