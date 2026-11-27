@@ -586,7 +586,8 @@ export async function readDomain(input, opt = {}) {
   paths.forEach((p, i) => {
     const j = docs[i];
     if (!j || typeof j !== 'object') return;
-    if (p.endsWith('/x402')) { if (Array.isArray(j.resources)) { paid = [...new Set(j.resources.filter((r) => typeof r === 'string' && r.startsWith(`${root}/`)))]; listed = paid.length; paid = paid.slice(0, opt.paidMax || 12); } }
+    // resources are plain URL strings or objects that name their url (the shape the CDP-style manifests use: { url, method, price, ... })
+    if (p.endsWith('/x402')) { if (Array.isArray(j.resources)) { paid = [...new Set(j.resources.map((r) => typeof r === 'string' ? r : (r && typeof r === 'object' && typeof r.url === 'string' ? r.url : null)).filter((r) => typeof r === 'string' && r.startsWith(`${root}/`)))]; listed = paid.length; paid = paid.slice(0, opt.paidMax || 12); } }
     else if (Array.isArray(j.entries)) { found.push(p); for (const e of j.entries.slice(0, 200)) rows.push(normArd(e, host)); }
     else if (p.includes('/mcp/') && (Array.isArray(j.remotes) || j.transport?.endpoint)) { const r = normMcpCard(j, host, root + p); if (r) { found.push(p); rows.push(r); } }
     else if (typeof j.name === 'string' && (Array.isArray(j.skills) || typeof j.url === 'string')) { found.push(p); if (!rows.some((r) => r?.kind === 'a2a' && r.source === 'join' && r.type === 'application/a2a-agent-card+json' && r.publisher === host && r.source_ref?.includes('/agent'))) rows.push(normA2A(j, host, root + p)); }
