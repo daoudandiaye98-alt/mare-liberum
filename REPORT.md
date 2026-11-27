@@ -10,7 +10,7 @@ selbst, denn das ist der Deploy (der Server zieht `main` alle 2 Minuten, `deploy
 | 2 Kaufstraße per Karte | `feat/t2-seat` | `feat(seat)` | #83 |
 | 3 Verbrauch sichtbar | `feat/t3-usage` | `feat(usage)` | #84 |
 | 4 Installationen messen | `feat/t4-installs` | `feat(installs)` | #85 |
-| 5 Listings | `feat/t5-listings` | `docs(listings)` | #86 (alle Commits, Ziel `main`) |
+| 5 Listings | `feat/t5-listings` | `docs(listings)` | #86 (alle Commits und dieser Bericht, Ziel `main`) |
 
 ## Abweichungen vom Auftrag (ANNAHME, je eine Zeile)
 
@@ -20,7 +20,9 @@ selbst, denn das ist der Deploy (der Server zieht `main` alle 2 Minuten, `deploy
 - ANNAHME: Skill-Version 4.2.0 statt 4.0.0, weil live schon 4.1.0 lief und eine kleinere Nummer Installer zurücksetzt.
 - ANNAHME: `calls_used` bleibt in jeder Antwort mit Key. Es gehört zum Vertrag von 3.81, und die Proofs des anderen Teams hängen daran. Neu dazu kommen `seat_state` und `price_per_path`.
 - ANNAHME: `/seat/confirm` antwortet 202 (wartet auf den Menschen) und 409 (Zahlung passt nicht), nie 402. Ein 402 hätte x402-Clients zum Zahlen an diese Adresse eingeladen.
-- ANNAHME: Der Key findet seine Zahlung über ein Cookie (`mare_seat`, Pfad `/seat`, 7 Tage, HttpOnly). Die Änderung an der Edge Function `mare-mpp` (`client_reference_id` zurückgeben) wurde nicht ausgerollt, weil die Freigabe fehlte. Der Code nutzt das Feld, sobald es kommt.
+- ANNAHME: Ohne Cookie, weil die Datenschutztexte „keine Cookies“ versprechen. Nach der Zahlung zeigt `/thanks` einen Key mit Sitz, den der Mensch dem Host gibt. Den Key des Hosts schaltet der Sitz erst selbst frei, wenn die Edge Function `mare-mpp` `client_reference_id` zurückgibt. Diese einzeilige Änderung wurde nicht ausgerollt, weil die Freigabe fehlte; der Code liest das Feld, sobald es kommt.
+- ANNAHME: Der Sitz ist ein Verkauf an alle (wie die Agentenpakete in USD): eigene Bestelltür `/c/seat`, Zahlungslink nur in `node/seo.mjs`, AGB/terms § 5a sowie `/de/preise` und `/pricing` nennen ihn. `tools/legal-proof.mjs` verlangt genau das.
+- ANNAHME: `GET /seat?as=host` und `GET /seat/confirm?token=` gehen auch, denn der Web-Abruf von ChatGPT, Claude und Gemini kann nur lesen, nicht POSTen.
 - ANNAHME: `npm run lint` gibt es in diesem Repo nicht (`Missing script: "lint"`). Ersatz: `node --check` auf jeder geänderten Datei und die Proofs.
 
 ## Task 1 · Die vier Widersprüche (25 Minuten geplant)
@@ -44,7 +46,9 @@ Offen: Produktion nach dem Merge.
 ## Task 2 · Die Kaufstraße über die Karte (60 Minuten geplant)
 
 Dateien: `node/seat.mjs` (neu), `node/pricing.mjs` (`SEAT`, `seatLine`), `node/session.mjs` (`grant`, Sitz-Pfade in
-`take`/`back`), `node/core.mjs` (Routen), `node/pay.mjs`, `tools/seat-proof.mjs` (neu, 10 Proofs, 4 Gegenproben).
+`take`/`back`), `node/core.mjs` (Routen), `node/pay.mjs`, `node/seo.mjs` (`OFFER.seat`), `node/attention.mjs` (`CTA.seat`),
+`node/legal.mjs` und `node/attention-ui.mjs` (AGB § 5a, Preislisten), `tools/seat-proof.mjs` (neu, 10 Proofs, 4 Gegenproben),
+`tools/legal-proof.mjs`.
 Stripe, Konto Oroboros: Preis `price_1UgSRp4IVkazyZLzskyl4UUo`, Zahlungslink `plink_1UgSRw4IVkazyZLzKznJ8lhO`
 (24,00 USD, nach der Zahlung weiter auf `/seat/confirm?session={CHECKOUT_SESSION_ID}`).
 
@@ -52,15 +56,21 @@ Stripe, Konto Oroboros: Preis `price_1UgSRp4IVkazyZLzskyl4UUo`, Zahlungslink `pl
 $ curl -s -X POST '…/seat?as=host'  → 201 {"seat_id":"st_…","checkout_url":"…/pay/<token>","price_usd":24,"period_days":30,
                                        "paths_included":5000,"price_per_path_over":0.01,"how_to_present":"give the human this one link, …",
                                        "one_sentence":"Give Mare Liberum 24 USD for a month, 5000 agent paths included","status":"awaiting_human"}
-$ curl -s -D- "$checkout_url"      → 200 text/html, 8 Zeilen, '24 USD' 3×, 1 Schaltfläche, 0 <form>, 0 <input>, Cookie mare_seat
-                                       href="https://buy.stripe.com/3cIcMYeqce3qeRF3f7es00F?client_reference_id=st_…"
-$ curl -s -X POST …/seat/confirm -d {"token":…}   → 202 awaiting_human
-$ curl -s …/seats                  → ways: card, wallet
+$ curl -s -D- "$checkout_url"      → 200 text/html, 8 Zeilen, '24 USD' 3×, 1 Schaltfläche, 0 <form>, 0 <input>, 0 Cookies
+                                       href="…/c/seat?from=pay&ref=<token>"
+$ curl -s '…/c/seat?from=pay&ref=…'   → 302 https://buy.stripe.com/3cIcMYeqce3qeRF3f7es00F?client_reference_id=<token>
+$ curl -s '…/seat/confirm?token=…'    → 202 awaiting_human
+$ curl -s '…/seat?as=host' (GET)      → 200 awaiting_human 24
+$ curl -s …/seats                     → ways: card, wallet
+$ curl -s …/de/preise | grep -c /c/seat ; …/terms   → 1 ; 1
 ```
 
+Unsere Seite fragt nach nichts. Die Zahlungsseite von Stripe fragt selbst nach Karte und E-Mail (für den Beleg); das ist
+die Zahlung, nicht `/pay/<token>`.
 Der Weg mit Stripe-Rückkehr, Sale, Key auf `/thanks` und dem Key, der eine Tür öffnet, ist in `tools/seat-proof.mjs` mit
 einer nachgebauten Edge Function bewiesen. Echt braucht er das Till-Geheimnis des Servers.
-Status: erledigt, lokal belegt. Offen: die erste echte Zahlung. Sie ist Abnahme 7 und das Ziel des Tages.
+Status: erledigt, lokal belegt. Offen: die erste echte Zahlung. Sie ist Abnahme 7 und das Ziel des Tages. Optional: die
+Edge Function `mare-mpp` mit einer Zeile mehr ausrollen (`client_reference_id`), dann wird der Key des Hosts selbst aktiv.
 
 ## Task 3 · Verbrauch sichtbar (45 Minuten geplant)
 
@@ -141,7 +151,12 @@ curl -s $B/pulse | head -c 400; curl -s $B/llms.txt | head -20 | grep -c 'SKILL.
 ## Prüfläufe dieses Baums
 
 - `node --check` auf jeder geänderten Datei: ohne Fehler.
-- Proofs, gezielt: till 35, seat 10, session 30, installs 6, contacts 18 Gegenproben, immune 26, doors 62 (die Proofs, die
-  den Deploy freigeben), server 36: alle grün.
-- Alle Proofs des Repos, parallel: siehe Abschnitt „Gesamtlauf“ unten. Rot sind dieselben drei Dateien wie auf dem
-  unberührten `main` (credit 6, pipes 3, reader-compat 3; toll 5 braucht einen Git-Baum, den ein flacher Klon nicht hat).
+- Proofs, gezielt auf dem Endstand: seat 10, till 35, legal 35 (20 Gegenproben), session 30, installs 6, contacts 18
+  Gegenproben, checkout 21, attention 21, immune 26, doors 62 und server 36 (diese beiden geben den Deploy frei): alle grün.
+- `npm run build` (`node tools/build.mjs`) zieht jeden See übers Netz. In der Sandbox lief er 15 Minuten und wurde dann
+  von der Zeitgrenze abgebrochen (bei ucp-stores 11.500 von 23.742 Seiten), ohne Fehler bis dahin. Der Server baut selbst,
+  und bei reinen Code-Änderungen trägt er das Meer weiter („only the code is new“).
+- `npm run lint`: `Missing script: "lint"`. Das Repo hat kein Lint-Skript.
+- Alle Proofs des Repos, parallel: rot sind nur dieselben Dateien wie auf dem unberührten `main` (credit 6, pipes 3,
+  reader-compat 3; toll 5 braucht einen Git-Baum, den ein flacher Klon nicht hat). immune fiel unter Parallellast
+  einmal, allein läuft es grün (26), auf diesem Baum wie auf `main`.
