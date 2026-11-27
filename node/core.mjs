@@ -2983,7 +2983,8 @@ async function handleOne(req, db, cfg = {}) {
       // the links to other stores carry the commission where the operator set one, never for a crawler; the page asked about and
       // the open record stay as they came (node/commission.mjs dealWithCommission)
       // (since 3.83) the free answer leads to the paid door: upgrade, the one curl with a key
-      return json({ ...(ctx.readOnly ? r : dealWithCommission(r)), upgrade: upgradeOf('deal', `${base}${DEAL.path}${url.search}`) }, 200, dlHdr);
+      if (r && typeof r === 'object' && !Array.isArray(r)) r = { ...r, upgrade: upgradeOf('deal', `${base}${DEAL.path}${url.search}`) };
+      return json(ctx.readOnly ? r : dealWithCommission(r), 200, dlHdr);
     }
     if (path === CHECKPAY.path) {
       if (req.method !== 'GET' && req.method !== 'POST' && req.method !== 'HEAD') return json({ error: { code: 'METHOD_NOT_ALLOWED', message: `GET ${base}${CHECKPAY.path}?site=<domain> over x402 (0.01 USDC a check)` } }, 405, paidHdr);
