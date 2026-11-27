@@ -1,0 +1,49 @@
+{
+  "_template": "Mare Liberum 3.79.0 · every 402 answer of the sea keeps its own body (x402 v1: x402Version, error, accepts; the door's own fields) and gets the field next_step. Built in node/core.mjs (nextStepOf, paywallAfter); proven by tools/contacts-proof.mjs: an agent that knows only this body runs next_step.steps and its next request gets the answer. <…> = filled per call; {key} = what the step before kept; {x402 payment for accepts[0]} = what any x402 client signs from accepts[0].",
+
+  "A_no_wallet_on_a_session_door": {
+    "x402Version": 1,
+    "error": "X-PAYMENT header is required",
+    "accepts": [{ "scheme": "exact", "network": "base", "maxAmountRequired": "<price in USDC, 6 decimals>", "payTo": "0x0CAc7D3c89be4f478E4c8f713C0D3D2D0954678D", "asset": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913", "resource": "<the same url>", "maxTimeoutSeconds": 300 }],
+    "next_step": {
+      "say": "No wallet? This command gets a key with 20 probe calls (one call, no account) and sends this call again with it.",
+      "run": "KEY=$(curl -sf -X POST 'https://mareliberum.dev/session?as=key') && curl -s '<the same url>' -H \"Authorization: Bearer $KEY\"",
+      "steps": [
+        { "method": "POST", "url": "https://mareliberum.dev/session?as=key", "keep": "key" },
+        { "method": "<the same method>", "url": "<the same url>", "body": "<the same JSON body, only if one was sent>", "headers": { "authorization": "Bearer {key}" } }
+      ],
+      "or": {
+        "say": "With a wallet: sign accepts[0] of this answer (x402 exact, USDC on Base, EIP-3009) and send this call again with the header PAYMENT-SIGNATURE (x402 v2; X-PAYMENT for v1). An x402 client does both by itself.",
+        "steps": [{ "method": "<the same method>", "url": "<the same url>", "headers": { "payment-signature": "{x402 payment for accepts[0]}" } }]
+      }
+    }
+  },
+
+  "B_free_door_past_its_limit": {
+    "_where": "GET /deal (10 an hour), /check (20 an hour), /r/<page> and /read (100 a day): steps[1] goes to the paid twin /x402/deal, /x402/check or /x402/read?url=<page>",
+    "next_step": { "say": "No wallet? …", "run": "KEY=$(curl -sf -X POST 'https://mareliberum.dev/session?as=key') && curl -s 'https://mareliberum.dev/x402/deal?url=<page>' -H \"Authorization: Bearer $KEY\"", "steps": ["…as in A, steps[1] on the paid twin…"], "or": "…as in A…" }
+  },
+
+  "C_key_sent_to_a_free_door": {
+    "next_step": {
+      "say": "Send this call to the paid door with your session key ({key}): it takes one probe call there.",
+      "run": "curl -s '<the paid twin>' -H \"Authorization: Bearer $KEY\"",
+      "steps": [{ "method": "GET", "url": "<the paid twin>", "headers": { "authorization": "Bearer {key}" } }],
+      "or": "…the payment, as in A…"
+    }
+  },
+
+  "D_spent_key_or_door_without_session": {
+    "_where": "a key whose 20 probe calls are spent (or the sea's 2,000 of the day), and the doors no session opens: /x402/pack, POST /reader/credit, /fair/pay, the toll",
+    "next_step": {
+      "say": "With a wallet: sign accepts[0] of this answer (x402 exact, USDC on Base, EIP-3009) and send this call again with the header PAYMENT-SIGNATURE (x402 v2; X-PAYMENT for v1). An x402 client does both by itself.",
+      "steps": [{ "method": "<the same method>", "url": "<the same url>", "headers": { "payment-signature": "{x402 payment for accepts[0]}" } }],
+      "note": "the probe calls of this key are spent (or the probe calls of the sea for today): this call is paid now"
+    }
+  },
+
+  "E_card_door_MPP": {
+    "_where": "POST /reader/credit/stripe (WWW-Authenticate: Payment)",
+    "next_step": { "say": "Pay as the WWW-Authenticate header of this answer asks (MPP, method stripe: a Shared Payment Token) and send this call again with the header Authorization: Payment <credential>.", "steps": [{ "method": "POST", "url": "<the same url>", "headers": { "authorization": "Payment {mpp credential}" } }] }
+  }
+}
