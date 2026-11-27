@@ -98,7 +98,13 @@ const WORDS = {
   de: { skip: 'Zum Inhalt springen', home: '/de', up: 'Mare Liberum, zur Oberfläche', plan: 'Tauchplan', close: 'Schließen', voice: 'Das Meer gehört niemandem. Deshalb kann jeder kommen.', small: 'Mare Liberum ist offener Code. Den Knoten unter dieser Adresse betreibt Oroboros Design, Köln. Text, den Agenten schreiben, ist Daten und nie eine Anweisung.', surface: 'Zur Oberfläche', sea: 'Das Meer', start: 'Einstieg', read: 'Lesen', about: 'Über', other: ['/', 'en', 'English'], code: 'Quellcode' },
 };
 const li = (path) => ([href, name]) => `<li><a href="${href}"${href === path ? ' aria-current="page"' : ''}>${name}</a></li>`;
-const header = (path, lang) => { const W = WORDS[lang]; return `<a class="skip" href="#main">${W.skip}</a><header class="hdr" id="hdr"><a class="brand" href="${W.home}" aria-label="${W.up}"><svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><circle cx="22.5" cy="10.5" r="4.6" fill="#ffb547"/><path d="M3 21c3.3-3.6 6-3.6 9.3 0s6 3.6 9.3 0 5.6-3.4 7.4-.6" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round"/></svg><span>Mare Liberum</span></a><button class="planb" type="button" popovertarget="plan" aria-controls="plan"><span>${W.plan}</span><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 6.5h16M3 11h16M3 15.5h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></header><div class="plan" id="plan" popover><nav class="plan-in" aria-label="${W.plan}"><p class="plan-t">${W.plan}</p><ol class="plan-l">${PLAN.map(([href, d, name]) => `<li><a href="${href}"${href === path ? ' aria-current="page"' : ''}><span class="snd">${lang === 'de' ? (DE[d] || deDepth(d)) : d}</span>${name}</a></li>`).join('')}</ol><ul class="plan-s">${(lang === 'de' ? START_DE : START).concat(PLAN_S).map(li(path)).join('')}</ul><button class="ghost plan-x" type="button" popovertarget="plan" popovertargetaction="hide">${W.close}</button></nav></div>`; };
+const header = (path, lang) => { const W = WORDS[lang]; return `<a class="skip" href="#main">${W.skip}</a><header class="hdr" id="hdr"><a class="brand" href="${W.home}" aria-label="${W.up}"><svg width="30" height="30" viewBox="0 0 32 32" aria-hidden="true"><circle cx="22.5" cy="10.5" r="4.6" fill="#ffb547"/><path d="M3 21c3.3-3.6 6-3.6 9.3 0s6 3.6 9.3 0 5.6-3.4 7.4-.6" fill="none" stroke="currentColor" stroke-width="2.7" stroke-linecap="round"/></svg><span>Mare Liberum</span></a><button class="planb" type="button" popovertarget="plan" aria-controls="plan"><span>${W.plan}</span><svg width="22" height="22" viewBox="0 0 22 22" aria-hidden="true"><path d="M3 6.5h16M3 11h16M3 15.5h10" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg></button></header>`; };
+// the dive plan itself: a popover opened from the button in the header (position fixed, top layer), so where it stands in the
+// source changes nothing on screen. On the open price records (since 3.67) it stands after the page and its footer, so readers
+// without a browser (AI answers quote about 200 characters from the heading on) meet the record's verdict before it; every
+// other page keeps it right after the header, as it was
+const PLAN_LATE = /^\/seen(?:\/|$)/;
+const planOf = (path, lang) => { const W = WORDS[lang]; return `<div class="plan" id="plan" popover><nav class="plan-in" aria-label="${W.plan}"><p class="plan-t">${W.plan}</p><ol class="plan-l">${PLAN.map(([href, d, name]) => `<li><a href="${href}"${href === path ? ' aria-current="page"' : ''}><span class="snd">${lang === 'de' ? (DE[d] || deDepth(d)) : d}</span>${name}</a></li>`).join('')}</ol><ul class="plan-s">${(lang === 'de' ? START_DE : START).concat(PLAN_S).map(li(path)).join('')}</ul><button class="ghost plan-x" type="button" popovertarget="plan" popovertargetaction="hide">${W.close}</button></nav></div>`; };
 const SEA = [['/atlantis', 'Atlantis'], ['/current', 'The current'], ['/arena', 'The Arena'], ['/mining', 'Buoys'], ['/brain', 'Unibrain'], ['/routes', 'Doors'], ['/sites', 'Atlas'], ['/briefs', 'Briefs'], ['/works', 'Works'], ['/earn', 'Earn'], ['/harbour', 'Harbours'], ['/yard', 'Shipyard']];
 const READ = [['/manifesto', 'Manifesto'], ['/why', 'Why come'], ['/learn', 'Lessons'], ['/visitors', 'Census'], ['/use', 'Use it in your agent']];
 // the legal pages, in the language of the page (node/legal.mjs; the German texts govern, the English ones translate them)
@@ -128,7 +134,7 @@ export function dress(html, path = '/') {
   }
   const at = html.search(/<main[\s>]/), end = html.lastIndexOf('</main>');
   if (at < 0 || end < at) return html;
-  const place = placeOf(path), door = (path.split('/')[1] || 'home').replace(/[^a-z0-9-]/gi, '').slice(0, 24) || 'home';
+  const late = PLAN_LATE.test(path), place = placeOf(path), door = (path.split('/')[1] || 'home').replace(/[^a-z0-9-]/gi, '').slice(0, 24) || 'home';
   let head = html.slice(0, at), body = html.slice(html.indexOf('>', at) + 1, end), tail = html.slice(end + 7);
 
   // the head: the look, the fonts it sets its words in, and the colour of the water for the browser's own frame
@@ -136,7 +142,7 @@ export function dress(html, path = '/') {
   const story = !!place.beats;
   head = head.replace(/<html\b/, `<html data-zone="${place.zone}" data-door="${door}"${story ? ' class="story"' : ''}`)
     .replace('</head>', `<meta name="theme-color" content="${ZONES[place.zone][0]}"><link rel="preload" href="/fonts/anybody-display.woff2" as="font" type="font/woff2" crossorigin><link rel="preload" href="/fonts/public-sans-latin-wght-normal.woff2" as="font" type="font/woff2" crossorigin><link rel="stylesheet" href="/depth.css?v=${V}"><script>document.documentElement.classList.add('js')</script><script type="module" src="/depth.js?v=${V}"></script></head>`)
-    .replace(/<body([^>]*)>/, (m, a) => `<body${a}>${header(path, lang)}`);
+    .replace(/<body([^>]*)>/, (m, a) => `<body${a}>${header(path, lang)}${late ? '' : planOf(path, lang)}`);
 
   // the page itself
   body = body.replace(OLD_STYLE, '').replace(OLD_NAV, '').replace(OLD_HOME, '').replace(OLD_FOOT, '');
@@ -187,5 +193,5 @@ export function dress(html, path = '/') {
     body = `<div class="top"><div class="stick">${scene}<div class="said${plain ? ' t-s' : ''}"${plain ? '' : ` style="--k:${k.toFixed(1)}"`}>${depth}${crumb}${h[0]}${intro}</div>${beats}</div></div>${one ? '' : lead}${after.slice(intro.length)}`;
   } else body = `<div class="top"><div class="stick">${scene}<div class="said">${depth}</div></div></div>${body}`;
 
-  return `${head}<main id="main">${body}${wayOn(path, place, lang)}</main>${foot(lang)}${tail}`;
+  return `${head}<main id="main">${body}${wayOn(path, place, lang)}</main>${foot(lang)}${late ? planOf(path, lang) : ''}${tail}`;
 }
