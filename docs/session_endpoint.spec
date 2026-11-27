@@ -1,8 +1,9 @@
 SPEC  GET /session?as=key (first choice) · POST /session (the same key as JSON)  ·  Mare Liberum 3.78.0 (key), 3.79.0 (server-timing,
       next_step, contact book), 3.80.0 (the key by GET, x-sea-session first, the no-wallet words first in every 402),
       3.81.0 (calls_left and calls_used in every keyed answer, way_out at 3 and 0, the topup POST /route?a=topup),
-      3.82.0 (one taste for an empty key, receipts checked against the chain books, the topup by transfer, the sums)
-Code: node/session.mjs, node/core.mjs (route /session, sessionDoor)  ·  Proof: tools/session-proof.mjs (28 proofs, 21 controls),
+      3.82.0 (one taste for an empty key, receipts checked against the chain books, the topup by transfer, the sums),
+      3.83.0 (upgrade on the free doors, line 5 of the keys, the one callback at a key's first payment)
+Code: node/session.mjs, node/core.mjs (route /session, sessionDoor)  ·  Proof: tools/session-proof.mjs (29 proofs, 23 controls),
 tools/contacts-proof.mjs (K2 proof)  ·  Live since 27.11.2026 15:50 (3.78.0)
 
 SUCCESS BAR (K2)
@@ -54,6 +55,14 @@ SUPPLY (3.81, every answer to a call with a key)
                          taste: true and paid_full ("the full 10 paths cost 0.02 USDC, one call: …"); then the 402
   receipt (3.82)       POST /route?q=<task> with x-sea-receipt: <tx hash> = /settle {"q","tx"}: checked, delivered, the same
                          sale when sent again
+  callback (3.83)      callback_url (at the start, or with a topup: POST /route?a=topup or /settle {"a":"topup"} with
+                         "callback_url") is called ONCE, at the key's first payment: POST {event: first_payment, session (the
+                         id, never the key), bookmark, calls_left, calls_used, next}; 2 s, never retried, never waited for;
+                         log line mare_callback <id> <host> <state>; the bookmark says "called once at …: HTTP 200"
+  upgrade (3.83)       the free GET /check (JSON) and GET /deal answers end with upgrade {what, price, curl}: the one curl
+                         KEY=$(curl -s …/session?as=key) && curl -s '<the paid door with the same question>' -H "x-sea-session: $KEY"
+  line 5 (3.83)        /contacts.txt: "5 Schlüssel (<day>): heute ausgegeben N · mit mindestens einer Tür M · bezahlt P"
+                         (keys given, keys whose first door was that day, keys that paid that day; /contacts.json → keys)
 
 READ
   GET /session            without key: what it is, limits, today {opened, probe_calls, probe_day}; with key: the key's own state
