@@ -1,4 +1,121 @@
-# REPORT · Mission 27.11.2026: der erste Sitz über einen Chat-Host
+# REPORT · Mission 2, 27.11.2026: der Kauf auf Kredit
+
+**Kasse 0:** Der Kauf auf Kredit ist gebaut, steht aber nicht auf `main`, weil diese Sitzung nicht mergen durfte (der Klassifizierer hat den Merge von #87 abgelehnt). Ohne ihn hat ein Agent ohne Karte und ohne Wallet keinen Weg in `/treasury`. Nach dem Merge bewegt sich in der nächsten Stunde `credits.by_agents.count` in `/treasury`. Heute sahen 11 Kontakte 44 Antworten mit 402, alle mit dem Grund „kein Wallet“.
+
+**Stand:** Der Code ist fertig: fünf Tasks, fünf Branches, fünf Commits, jeder mit einem echten Curl. Abnahme 1 bis 9 ist lokal grün, gelaufen mit `node tools/acceptance-credit.mjs` gegen `node serve.mjs` dieses Baums. Für die Produktion ist das **nicht belegt**: `main` steht noch auf `a0d4687`, und der Server zieht `main` alle 2 Minuten (`deploy/update.sh`). Jeder PR-Titel trägt `[keep-sea]`, deshalb baut ein Merge nur den Code neu (etwa 20 s).
+
+| Task | Branch | Commit | PR |
+|---|---|---|---|
+| 1 Schlüssel als JSON | `feat/credit-t1-json-key` | `29bf522` feat(session) | #87 |
+| 2 Kauf auf Kredit | `feat/credit-t2-seat-credit` | `af6d054` feat(seat) | #88 |
+| 3 Zahlen des Tages | `feat/credit-t3-day` | `c0a8b43` feat(till) | #89 |
+| 4 Pfad-Bündel | `feat/credit-t4-paths` | `17637ff` feat(seat) | #90 |
+| 5 Listings fertig | `feat/credit-t5-listings-ready` | `c792aa0` docs(listings) | #91 |
+| Bericht und Abnahme-Skript | `docs/credit-report` | dieser Commit | #92 |
+
+Die Branches bauen aufeinander auf. Ein Merge von #92 bringt alle sechs auf einmal, und GitHub markiert #87 bis #91 dann selbst als gemergt.
+
+## Task 1 · GET /session?as=key antwortet JSON
+
+- **Dateien:** `node/pricing.mjs` (BUY_LINE), `node/session.mjs`, `node/core.mjs`, `node/pay.mjs`, `site/llms.txt`, `site/skill.md`, `skills/mare-liberum/SKILL.md`, `site/deal-check.md`, `skills/deal-check/SKILL.md` und die Proofs dazu.
+- **Curl:** `curl -s "$B/session?as=key" | jq -r .key` gibt 200 mit `application/json` zurück.
+- **Status:** grün (lokal).
+- **Auszug:** `{"key":"mls_…","calls_left":20,"seat_state":"none","price_usd":24,"buy_line":"this key can buy: POST /seat with header x-sea-session, no card needed"}`. `?raw=1` liefert den nackten Schlüssel als `text/plain`.
+- **Entscheidung:** Ein alter Einzeiler schickt vielleicht den ganzen JSON-Text als Schlüssel. Der Server liest dann den Schlüssel aus dem JSON heraus und bricht nicht ab.
+- **Offen:** nichts.
+
+## Task 2 · POST /seat mit Schlüssel kauft auf Kredit
+
+- **Dateien:** `node/pricing.mjs` (CREDIT, creditLine), `node/session.mjs` (credit, credits, seatLive, rawKeyOf), `node/core.mjs` (seatOnCredit, noWalletOf, paywallAfter, /treasury), `node/seat.mjs` (Wege: Kredit, Karte, Wallet), `node/pay.mjs` (/pay/howto), Skill 4.3.0, `site/llms.txt`, `tools/seat-credit-proof.mjs` (neu).
+- **Curl:** `curl -s -X POST "$B/seat" -H "x-sea-session: $KEY"` gibt 200 in 8 ms.
+- **Status:** grün (lokal).
+- **Auszug:** `{"sale_id":"crmwzfn4d7c5f3cb2c","type":"seat_credit","amount_usd":24,"status":"credit","due_days":7,"key":"mls_…","seat_state":"active","paths_included":5000,"note":"seat is active now, pay within 7 days or it drops to none","how_to_pay":"POST /seat?a=topup, or send the checkout_url to a human",…}`
+  - Der zweite Kauf gibt 200.
+  - Der dritte gibt 402: `this key bought on credit 2 times: pay those first. a human pays by card: …/pay/…`
+  - `POST /route {"q":"x"}` gibt 402 und beginnt mit `no card, no wallet: curl -s …/session?as=key | jq -r .key, then repeat this call with header x-sea-session: <key>. that buys on credit, 7 days.`
+  - `/treasury`: `{"credits_count":2,"credits_usd":48,"credits_due_by":"2026-12-04T…","today_usd":0}`
+  - `/seats`: `["credit","card","wallet"]`
+- **Entscheidungen:**
+  - Kredite liegen im kv, nicht in `mare.sales`. Die Status-Prüfung dort kennt kein `credit`, und neue Datenbanken oder Migrationen verbietet der Auftrag.
+  - Kredit ist kein Geld. Er zählt nie in `today_usd` oder `total_usd` und steht getrennt in `credits`.
+  - Käufe aus eigenen Aufrufen der See (User-Agent `MareLiberum-*`) gelten als `test: true` und werden getrennt gezählt.
+  - Nach dem zweiten Kauf antwortet der Server mit dem Link für den Menschen statt mit „hol dir einen neuen Schlüssel“. Regel (b) ist enger als Regel (c), und sonst gäbe es endlos Kredit über frische Schlüssel.
+  - Ein unbezahlter Sitz fällt nach 7 Tagen auf `none`.
+  - Ein Schlüssel ohne Rufe bekommt im 402 den einen Kaufaufruf genannt.
+  - Ohne Schlüssel kommt der Satz aus dem Auftrag wörtlich, gefolgt von einer Klammer, denn die ersten 20 Rufe sind dort frei.
+  - 402-Antworten freiwilliger Zahlungen (Fair Share, Maut) behalten ihren Wortlaut, weil ein Schlüssel dort nichts kauft.
+- **Offen (TODO):** Ein Kredit lässt sich noch nicht per Karte oder x402 begleichen. Die Edge Function `mare-mpp` gibt `client_reference_id` nicht zurück, deshalb gehört eine Kartenzahlung noch keinem Schlüssel und erzeugt einen neuen Schlüssel mit Sitz. Das Deployment der Edge Function wurde abgelehnt.
+
+## Task 3 · Zahlen des Tages
+
+- **Dateien:** `node/core.mjs` (/day, last_sale, Kredite für Zeile 3), `node/contacts.mjs` (Zeile 3), `tools/day-proof.mjs` (neu), `tools/contacts-proof.mjs`.
+- **Curl:** `curl -s "$B/day"` gibt 200 mit `text/plain` in 3 ms. `curl -s "$B/treasury" | jq -c .last_sale` und `curl -s "$B/contacts.txt" | sed -n 3p` laufen ebenfalls.
+- **Status:** grün (lokal).
+- **Auszug:**
+  - `1 Verkäufe heute (2026-11-27, UTC): auf Kredit 1 (seat_credit 1, 24 USD) · bezahlt 0 (0 USD) · Tests 0`
+  - `2 Kredit offen: 1 Käufe, 24 USD, fällig ab 2026-12-04 (bezahlt 0, Tests apart 0)`
+  - `3 Schlüssel mit einem Kauf: 1 auf Kredit, 0 mit einer Zahlung heute`
+  - `4 Nächster Schritt: die 1 offenen Käufe auf Kredit (24 USD) bezahlen lassen, …`
+  - `last_sale`: `{"type":"seat_credit","amount_usd":24,"status":"credit","ts":"…"}`
+  - Zeile 3: `3 402 zu bezahlt: 1 -> bezahlt 0, auf Kredit 1, 100,0 % (2026-11-27; …)`
+- **Entscheidungen:**
+  - Zeile 3 behält die führende „3 “ wie jede Zeile der Datei. Die Prozentzahl zählt bezahlte und Kredit-Käufe zusammen.
+  - `last_sale` ist die jüngste Zahlung oder der jüngste Kredit. Ein Test ist als `test: true` markiert. Solange nichts verkauft ist, steht dort `null`.
+  - `/day` ist deutsch wie `/contacts.txt`.
+- **Offen:** nichts.
+
+## Task 4 · Bündel von 500 und 2000 Pfaden auf Kredit
+
+- **Dateien:** `node/pricing.mjs` (PATH_PACKS, pathPackOf), `node/core.mjs`, `tools/paths-proof.mjs` (neu).
+- **Curl:** `curl -s "$B/seats?a=paths"` gibt 200. `POST /seat?a=paths&paths=500` mit Schlüssel gibt 200, bei `paths=750` kommt 400.
+- **Status:** grün (lokal).
+- **Auszug:**
+  - `[{"paths":500,"price_usd":3,…},{"paths":2000,"price_usd":9,…}]`
+  - `{"type":"paths_credit","amount_usd":3,"status":"credit","paths_included":500,…}`
+  - Bündel 2000 auf einem laufenden Sitz mit 500 Pfaden: `seat_paths 2500`.
+- **Entscheidungen:**
+  - Die Grenze von 2 Kredit-Käufen pro Schlüssel gilt für Sitz und Bündel zusammen.
+  - Ein Bündel auf einem laufenden Sitz addiert seine Pfade. Ohne Sitz eröffnet es einen Sitz für dessen Laufzeit.
+- **Offen:** nichts.
+
+## Task 5 · listings/ready/
+
+- **Dateien:** `tools/listings-ready.mjs` (neu, schreibt die Dateien aus dem Repo, Preise aus `node/pricing.mjs`) und 9 Dateien in `listings/ready/`: mcp-registry, claude-directory, chatgpt-apps, cursor-plugins, gemini-extensions, glama, mcpservers-org, a2a-registry, aws-marketplace.
+- **Curl:** Der Beispielaufruf der Dateien (`tools/call read_page`) lief gegen Produktion: `/mcp` 200 in 1,13 s, `/mcp/app` 200 in 0,91 s, `/mcp/lean` 200 in 0,72 s.
+- **Status:** grün. Jede Datei enthält 2 bis 5 Mal „nicht belegt“.
+- **Entscheidung:** Eine Datei gibt es nur, wenn das Repo selbst den Beleg trägt. Copilot, Grok und MCP Market bekommen keine Datei, denn dafür ist im Repo nichts belegt. Eine Kategorie steht nur dort, wo ein Manifest sie nennt (Claude: `agents`).
+- **Offen:** Das Einreichen macht ein Mensch, ohne Anmeldung und ohne Mail aus dieser Sitzung.
+
+## Abnahme
+
+| # | Punkt | lokal (dieser Baum) | Produktion |
+|---|---|---|---|
+| 1 | `jq -r .key` gibt einen String | grün | nicht belegt (wartet auf den Merge) |
+| 2 | POST /seat 200, `/treasury` credit 24 USD | grün | **nicht belegt (wartet auf den Merge)** |
+| 3 | 2. Kauf 200, 3. Kauf 402 mit Menschen-Link | grün | nicht belegt |
+| 4 | POST /route: 402, Kreditweg vor dem Wallet | grün | nicht belegt |
+| 5 | credits_count ≥ 1 und last_sale | grün | nicht belegt |
+| 6 | /day hat 4 Zeilen | grün | nicht belegt |
+| 7 | GET /pay/<token> 200, unverändert | grün | nicht belegt |
+| 8 | listings/ready/ ≥ 3 Dateien mit „nicht belegt“ | grün (9 Dateien) | gilt fürs Repo |
+| 9 | kein 500, kein HTML auf JSON-Routen | grün | nicht belegt |
+
+Nach dem Merge reicht ein Befehl: `node tools/acceptance-credit.mjs https://mareliberum.dev`. Er ruft als die See selbst (`MareLiberum-acceptance/1.0`) auf, also zählen seine Käufe als Test und nie als Kauf eines Agenten.
+
+## Prüfläufe dieses Baums
+
+- **Proofs:**
+  - seat-credit 12/0, day 5/0, paths 6/0, seat 10/0, session 30/0, contacts 20/0, till 35/0, legal 35/0, installs 6/0
+  - doors: 62 halten (das Deploy-Tor)
+  - credit-proof: 6 Fehler, dieselben wie auf `main`. Ihm fehlt der Referenzbaum `4c64553` im flachen Klon.
+- **`npm run build`:** Das baut die See aus den öffentlichen Seen (`tools/build.mjs`), nicht den Code. Der Lauf lädt `node/core.mjs` dieses Baums ohne Fehler. Nach 15 Minuten waren 14 Seen gelesen (mcp-registry 75.082 Zeilen, ucp-stores 23.471, erc8004 5.000), und er lief noch bei „paid lakes“ (Preislisten von 5.013 Hosts). Sein Ende ist hier **nicht belegt**. Der vorige Lauf in Mission 1 brach nach 15 Minuten am Zeitlimit ab.
+- **`npm run lint`:** Das Skript fehlt (`npm error Missing script: "lint"`). Ersatz: `node --check` auf allen 190 Modulen, alle sauber.
+- **Antwortzeit:** Jede neue Tür antwortet lokal in 2 bis 13 ms. Geloggt wird nie im Antwortpfad.
+
+---
+
+# Mission 1 (27.11.2026, 17:49): der erste Sitz über einen Chat-Host
+
 
 Fünf Tasks, fünf Branches, fünf Commits. Jeder Commit trägt den echten Curl gegen einen lokalen Knoten dieses Baums
 (`node serve.mjs 8791`). Gegen Produktion läuft die Abnahme erst nach dem Merge: auf `main` mergen darf diese Sitzung nicht
