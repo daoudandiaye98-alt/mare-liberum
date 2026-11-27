@@ -1,6 +1,7 @@
 SPEC  GET /session?as=key (first choice) · POST /session (the same key as JSON)  ·  Mare Liberum 3.78.0 (key), 3.79.0 (server-timing,
-      next_step, contact book), 3.80.0 (the key by GET, x-sea-session first, the no-wallet words first in every 402)
-Code: node/session.mjs, node/core.mjs (route /session, sessionDoor)  ·  Proof: tools/session-proof.mjs (22 proofs, 12 controls),
+      next_step, contact book), 3.80.0 (the key by GET, x-sea-session first, the no-wallet words first in every 402),
+      3.81.0 (calls_left and calls_used in every keyed answer, way_out at 3 and 0, the topup POST /route?a=topup)
+Code: node/session.mjs, node/core.mjs (route /session, sessionDoor)  ·  Proof: tools/session-proof.mjs (25 proofs, 16 controls),
 tools/contacts-proof.mjs (K2 proof)  ·  Live since 27.11.2026 15:50 (3.78.0)
 
 SUCCESS BAR (K2)
@@ -17,10 +18,12 @@ REQUEST
 
 ANSWER  GET ?as=key: 200 · POST: 201
   ?as=key  text/plain   "mls_<32 base64url>\n"
-           headers      location: https://mareliberum.dev/session/<id> · x-sea-session-left: 20 · server-timing · cache-control: no-store
+           headers      location: https://mareliberum.dev/session/<id> · x-sea-session-left: 20 · x-sea-calls-left: 20 ·
+                        x-sea-calls-used: 0 · server-timing · cache-control: no-store
   JSON     key (shown once; the sea keeps SHA-256 only), once, id (24 hex = head of the hash), opened, expires (+30 d), state,
            probe {calls 20, left 20, until +7 d, doors [deal, check, read, route]}, calls, last[], agent?, callback {host, state}|null,
-           bookmark, use {header, doors[4], probe, after}, limits, note? (sea's probe budget of the day spent), terms, privacy
+           bookmark, use {get, header, doors[6], probe, after}, limits, note? (sea's probe budget of the day spent), terms, privacy,
+           calls_left 20, calls_used 0
 
 USE
   x-sea-session: <key>   (or Authorization: Bearer <key>)   without a payment header, on
@@ -32,6 +35,16 @@ USE
   422/403  the work brought nothing: the probe call is given back
   402  no probe call left (or the sea's 2,000 of the day): the door's own x402 terms + next_step (payment) + x-sea-session-left
   a payment header sent with the key wins: the key is not looked at
+
+SUPPLY (3.81, every answer to a call with a key)
+  JSON object answer   the last two fields: calls_left (probe calls left now), calls_used (taken over the key's life, net of
+                       calls given back); any other answer: headers x-sea-calls-left, x-sea-calls-used
+  at 3 and at 0 left   a third field way_out {what: "the rest filled up again costs 0.02 USDC …", curl, then, key: the same key}
+  topup                POST /route?a=topup with x-sea-session: <key>
+                         no payment → 402, the terms of one route (0.02 USDC, resource /route?a=topup), nothing taken
+                         x402 payment → 200 {topup: done, before.calls_left, calls_left 20, calls_used, paid {status, sale}}:
+                         20 probe calls for 7 more days, the key 30 more days, the same key/id/bookmark; a sale of the till
+                         (method topup-x402-v<n>); one sale fills up once; bookmark lists topups {at, status}
 
 READ
   GET /session            without key: what it is, limits, today {opened, probe_calls, probe_day}; with key: the key's own state

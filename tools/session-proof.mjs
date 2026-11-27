@@ -279,6 +279,51 @@ await proof('the module alone: back() gives a probe call back once, by its mark,
   assert.equal((await s.today()).probe_calls, 10);
 });
 
+console.log('the supply in sight (3.81)');
+const keysOf = (j) => Object.keys(j);
+await proof('every answer to a call with a key says calls_left and calls_used, as its last two fields: the door, the route, the answer that gave the call back, the key\'s own state; the key answers say 20 and 0', async () => {
+  const P = await open(); assert.equal(P.j.calls_left, 20); assert.equal(P.j.calls_used, 0); const k = P.j.key;
+  const g = await call('/session?as=key', { ip: fresh(), accept: '*/*' }); assert.equal(g.status, 200); assert.match(g.text, /^mls_[A-Za-z0-9_-]{32}\n$/); assert.equal(g.h['x-sea-calls-left'], '20'); assert.equal(g.h['x-sea-calls-used'], '0'); assert.match(g.h['access-control-expose-headers'], /x-sea-calls-left,x-sea-calls-used/);
+  const c = await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: bearer(k) }); assert.equal(c.status, 200, c.text.slice(0, 200));
+  assert.equal(c.j.calls_left, 19); assert.equal(c.j.calls_used, 1); assert.deepEqual(keysOf(c.j).slice(-2), ['calls_left', 'calls_used']); assert.equal(c.j.way_out, undefined);
+  const r = await call('/route?q=' + URLQ('find usdc price'), { method: 'POST', ip: fresh(), headers: { 'x-sea-session': k } }); assert.equal(r.status, 200);
+  assert.equal(r.j.calls_left, 18); assert.equal(r.j.calls_used, 2); assert.deepEqual(keysOf(r.j).slice(-2), ['calls_left', 'calls_used']); assert.ok(r.text.split('\n').length > 3, 'the lines of the answer kept');
+  const back = await call(`/x402/check?site=gone.${W}`, { ip: fresh(), headers: bearer(k) }); assert.ok([422, 502].includes(back.status), back.text.slice(0, 200)); assert.equal(back.j.calls_left, 18); assert.equal(back.j.calls_used, 2);
+  const st = await call('/session', { ip: fresh(), headers: bearer(k) }); assert.equal(st.j.probe.left, 18); assert.equal(st.j.calls_left, 18); assert.equal(st.j.calls_used, 2);
+  const plain = await call(`/x402/check?site=${host()}`, { ip: fresh() }); assert.equal(plain.status, 402); assert.equal(plain.j.calls_left, undefined, 'no key, no supply');
+  const hd = await call(`/x402/check?site=${host()}`, { method: 'HEAD', ip: fresh(), headers: bearer(k) }); assert.equal(hd.status, 402); assert.equal(hd.h['x-sea-calls-left'], '18');
+});
+await proof('at 3 and at 0 calls left the answer adds way_out: the rest filled up again costs 0.02 USDC, the curl for it, the same key; at 4, 2 and 1 it does not; the 402 after the last call says it too', async () => {
+  const k = (await open()).j; const rec = await kv.get(`session:${k.id}`); rec.probe.left = 5; await kv.set(`session:${k.id}`, rec, 86_400 * 31);
+  const seen = [];
+  for (let i = 0; i < 5; i++) { const r = await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: bearer(k.key) }); assert.equal(r.status, 200); seen.push([r.j.calls_left, !!r.j.way_out]); if (r.j.way_out) {
+    assert.match(r.j.way_out.what, /^the rest filled up again costs 0\.02 USDC/); assert.equal(r.j.way_out.curl, `curl -si -X POST '${BASE}/route?a=topup' -H "x-sea-session: $KEY"`); assert.match(r.j.way_out.key, /stays the same: no new key, no new id/);
+    assert.deepEqual(keysOf(r.j).slice(-3), ['calls_left', 'calls_used', 'way_out']); } }
+  assert.deepEqual(seen, [[4, false], [3, true], [2, false], [1, false], [0, true]]);
+  const e = await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: bearer(k.key) }); assert.equal(e.status, 402); assert.equal(e.j.calls_left, 0); assert.equal(e.j.calls_used, 5); assert.ok(e.j.way_out && e.j.next_step && e.j.accepts);
+});
+await proof('POST /route?a=topup: no key 400, nothing charged; the key without a payment: 402 with the price of one route (resource ?a=topup), the words without a wallet first; with a payment the same key has 20 probe calls again, a sale of the till (topup-x402-v2); one sale fills up once', async () => {
+  const k = (await open()).j; const rec = await kv.get(`session:${k.id}`); rec.probe.left = 0; rec.calls = 20; await kv.set(`session:${k.id}`, rec, 86_400 * 31);
+  facilitator = null;
+  const nokey = await call('/route?a=topup', { method: 'POST', ip: fresh() }); assert.equal(nokey.status, 400); assert.match(nokey.j.error.message, /session\?as=key/);
+  const unknown = await call('/route?a=topup', { method: 'POST', ip: fresh(), headers: { 'x-sea-session': `mls_${'A'.repeat(32)}`, ...payment({ value: '20000' }) } }); assert.equal(unknown.status, 401);
+  const ask = await call('/route?a=topup', { method: 'POST', ip: fresh(), headers: bearer(k.key) }); assert.equal(ask.status, 402);
+  const v2 = JSON.parse(Buffer.from(ask.h['payment-required'], 'base64').toString('utf8')); assert.equal(v2.accepts[0].amount, '20000'); assert.equal(v2.accepts[0].payTo, WALLET); assert.equal(v2.resource?.url ?? v2.resource, `${BASE}/route?a=topup`);
+  assert.match(ask.j.error.message ?? ask.j.error, new RegExp(`^no wallet needed: run  curl -s ${BASE.replace(/\./g, '\\.')}/session\\?as=key  for a new key`)); assert.match(ask.j.next_step.note, /topup is paid/); assert.equal(ask.j.calls_left, 0); assert.ok(ask.j.way_out);
+  facilitator = settles(); const t0 = await ledger.treasury();
+  const paid = await call('/route?a=topup', { method: 'POST', ip: fresh(), headers: { ...bearer(k.key), ...payment({ value: '20000' }) } });
+  facilitator = null;
+  assert.equal(paid.status, 200, paid.text.slice(0, 300)); assert.equal(paid.j.topup, 'done'); assert.equal(paid.j.before.calls_left, 0); assert.equal(paid.j.calls_left, 20); assert.equal(paid.j.calls_used, 20); assert.match(paid.j.key, /the same key/);
+  assert.ok(['settled', 'pending'].includes(paid.j.paid.status)); assert.equal(paid.j.paid.amount_usd, 0.02);
+  const t1 = await ledger.treasury(); assert.equal(t1.total_count, (t0.total_count || 0) + 1); assert.equal(t1.last_5[0].method, 'topup-x402-v2'); assert.equal(t1.last_5[0].amount_usd, 0.02);
+  const again = await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: bearer(k.key) }); assert.equal(again.status, 200); assert.equal(again.j.calls_left, 19); assert.equal(again.j.calls_used, 21);
+  const b = (await call(`/session/${k.id}`, { ip: fresh() })).j; assert.equal(b.topups.length, 1); assert.deepEqual(Object.keys(b.topups[0]), ['at', 'status']); assert.ok(!JSON.stringify(b).includes(k.key));
+  const store = createSessions({ kv, secret: randomBytes(32) }), k2 = await store.open({ net: 'n1' }), h2 = sessionHash(k2.key);
+  const f1 = await store.topup(h2, { sale: 's1', status: 'settled' }); assert.equal(f1.ok, true); assert.equal(f1.left, 20);
+  await store.take(h2, 'check'); const f2 = await store.topup(h2, { sale: 's1', status: 'settled' }); assert.equal(f2.again, true); assert.equal(f2.left, 19, 'one sale fills up once');
+  assert.ok((await store.today()).paid_keys >= 1);
+});
+
 console.log('books');
 await proof('/openapi.json: POST and GET /session and GET /session/{id}, free (security: []), no price; the sold doors stay seven', async () => {
   const o = (await call('/openapi.json', { ip: '127.0.0.1' })).j;
@@ -312,7 +357,11 @@ if (!process.argv.includes('--no-controls')) {
     ['no limit of new keys per network', 'node/session.mjs', 'if (n > SESSION.perNetDay) {', 'if (false) {'],
     ['the network written down in clear', 'node/session.mjs', 'const nk = `session:net:${day}:${netOf(day, net)}`;', 'const nk = `session:net:${day}:${net}`;'],
     ['an empty key gets no x402 terms (403 instead of the door\'s 402)', 'node/core.mjs', "const res = required(); res.headers.set('x-sea-session-left', String(s.left ?? 0));", "const res = json({ error: 'empty' }, 403); res.headers.set('x-sea-session-left', String(s.left ?? 0));"],
-    ['a key past its 30 days still works', 'node/session.mjs', "if (Date.parse(rec.until) <= t) return { ok: false, why: 'expired', until: rec.until };", ''],
+    ['a key past its 30 days still works', 'node/session.mjs', "if (Date.parse(rec.until) <= t) return { ok: false, why: 'expired', until: rec.until, left: 0, used: rec.calls };", ''],
+    ['no supply on the answers (3.81)', 'node/core.mjs', 'const out = spliceFields(text, supplyFields(s, base, price));', 'const out = null;'],
+    ['no way_out at 3 calls left (3.81)', 'node/core.mjs', '...(s.left === 3 || s.left === 0 ? { way_out:', '...(s.left === 0 ? { way_out:'],
+    ['one sale fills a key up twice (3.81)', 'node/session.mjs', "if (mark && (rec.topups || []).some((x) => x.sale === mark)) return", 'if (false) return'],
+    ['a topup at another price than one route (3.81)', 'node/core.mjs', "const t = termsFor(payCfg, { base, path: '/route' }), resource = `${base}/route?a=topup`", "const t = termsFor({ ...payCfg, cents: 1 }, { base, path: '/route' }), resource = `${base}/route?a=topup`"],
     ['a local callback kept', 'node/session.mjs', '|| LOCAL.test(host) ||', '||'],
     ['the sea\'s probe calls of the day without a cap', 'node/session.mjs', 'if (g > SESSION.probeDay) {', 'if (false) {'],
   ];

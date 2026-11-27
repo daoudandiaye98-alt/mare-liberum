@@ -19,6 +19,7 @@ create table if not exists mare.contacts (
   agent           text check (char_length(agent) <= 60),                      -- the program as the census names it
   kind            text check (char_length(kind) <= 20),                       -- the census kind: assistant, mcp-client, tool, registry, unknown …
   probe           boolean not null default false,                             -- an index, a registry or a probe by its name or kind
+  rolle           text not null default 'agent' check (rolle in ('pruefer', 'agent', 'agent_with_key')), -- (3.81) a key that opened a door: agent_with_key
   kompetenz       text check (kompetenz in ('route', 'read', 'check', 'deal', 'pack', 'credit', 'session', 'fair')), -- the door of the last paywall hit
   preis_usd       numeric(12, 6) check (preis_usd >= 0),                       -- its price
   paywall_hits    integer not null default 0 check (paywall_hits >= 0),       -- 402 answers to this contact
@@ -35,6 +36,7 @@ create table if not exists mare.contacts (
   wiederkunft_d7  boolean not null default false,                             -- seen again on another UTC day within 7 days of first_seen
   check (last_seen >= first_seen)
 );
+alter table mare.contacts add column if not exists rolle text not null default 'agent' check (rolle in ('pruefer', 'agent', 'agent_with_key'));
 create index if not exists contacts_first_seen on mare.contacts (first_seen desc);
 create index if not exists contacts_last_seen on mare.contacts (last_seen desc);
 create index if not exists contacts_paywall_type on mare.contacts (paywall_type);
@@ -50,15 +52,16 @@ begin
     raise exception 'not allowed';
   end if;
   if i is null or i !~ '^[0-9a-f]{24}$' then raise exception 'cid: 24 hex characters'; end if;
-  insert into mare.contacts (cid, ua_hash, ip_prefix_hash, agent, kind, probe, kompetenz, preis_usd, paywall_hits, paywall_type, paywall_types,
+  insert into mare.contacts (cid, ua_hash, ip_prefix_hash, agent, kind, probe, rolle, kompetenz, preis_usd, paywall_hits, paywall_type, paywall_types,
                              first_seen, last_seen, days, versuchte_paths, abbruch_phase, session, paid, paid_usd, wiederkunft_d7)
   values (i, c->>'ua_hash', c->>'ip_prefix_hash', left(c->>'agent', 60), left(c->>'kind', 20), coalesce((c->>'probe')::boolean, false),
+          coalesce(nullif(c->>'rolle', ''), 'agent'),
           c->>'kompetenz', (c->>'preis_usd')::numeric, coalesce((c->>'paywall_hits')::int, 0), c->>'paywall_type', coalesce(c->'paywall_types', '{}'::jsonb),
           (c->>'first_seen')::timestamptz, (c->>'last_seen')::timestamptz,
           coalesce(array(select jsonb_array_elements_text(c->'days'))::date[], '{}'), coalesce(array(select left(x, 60) from jsonb_array_elements_text(c->'versuchte_paths') x limit 20), '{}'),
           c->>'abbruch_phase', c->>'session', coalesce((c->>'paid')::int, 0), coalesce((c->>'paid_usd')::numeric, 0), coalesce((c->>'wiederkunft_d7')::boolean, false))
   on conflict (cid) do update set
-    agent = excluded.agent, kind = excluded.kind, probe = excluded.probe, kompetenz = excluded.kompetenz, preis_usd = excluded.preis_usd,
+    agent = excluded.agent, kind = excluded.kind, probe = excluded.probe, rolle = excluded.rolle, kompetenz = excluded.kompetenz, preis_usd = excluded.preis_usd,
     paywall_hits = excluded.paywall_hits, paywall_type = excluded.paywall_type, paywall_types = excluded.paywall_types,
     last_seen = excluded.last_seen, days = excluded.days, versuchte_paths = excluded.versuchte_paths, abbruch_phase = excluded.abbruch_phase,
     session = excluded.session, paid = excluded.paid, paid_usd = excluded.paid_usd, wiederkunft_d7 = excluded.wiederkunft_d7
@@ -85,7 +88,8 @@ select (first_seen at time zone 'UTC')::date                                   a
        count(*) filter (where paywall_hits = 1)                                 as einmal,
        count(*) filter (where paywall_hits > 1)                                 as mehrmals,
        count(*) filter (where wiederkunft_d7)                                   as wiederkunft_d7,
-       round(100.0 * count(*) filter (where wiederkunft_d7) / nullif(count(*), 0), 1) as wiederkunft_d7_pct
+       round(100.0 * count(*) filter (where wiederkunft_d7) / nullif(count(*), 0), 1) as wiederkunft_d7_pct,
+       count(*) filter (where rolle = 'agent_with_key')                         as agent_with_key
 from mare.contacts
 group by 1;
 revoke all on mare.contacts_morning from anon, authenticated;

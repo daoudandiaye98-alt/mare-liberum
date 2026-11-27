@@ -260,6 +260,22 @@ await proof('back within 7 days: a contact seen on another UTC day is wiederkunf
   assert.match(t.text, /\n2 402 nach Typ \(.*\): kein Wallet \d+ · Preis \d+ · Scheme \d+ · Chain \d+ · Timeout \d+/); assert.match(t.text, /\n3 402 zu bezahlt \(/);
   T0 += 9 * 86_400_000; const k = (await call('/contacts.json', { ip: '127.0.0.1' })).j; assert.ok(k.cohort_d7, 'a full cohort eight days on'); assert.match(k.lines[3], /^4 Wiederkehr d7 \(Kohorte /);
 });
+await proof('a key that opened a door makes its contact agent_with_key, not a probe, whatever its name: line 1 counts it once, and the probes counted new that day lose it; the one GET for a key counts as a session (3.81)', async () => {
+  const ua = 'x402-lint/1.0', ip = fresh(), day = async () => (await call('/contacts.json', { ip: '127.0.0.1' })).j.today;
+  const d0 = await day();
+  const a = await call(`/x402/check?site=${host()}`, { ip, ua }); assert.equal(a.status, 402);
+  let c = await contact(ua, ip); assert.equal(c.probe, true); assert.equal(c.rolle, 'pruefer');
+  const d1 = await day(); assert.equal(d1.new_probe, d0.new_probe + 1);
+  const g = await call('/session?as=key', { ip, ua, accept: '*/*' }); assert.equal(g.status, 200); const key = g.text.trim();
+  const d2 = await day(); assert.equal(d2.sessions, d0.sessions + 1, 'the GET for a key is a session in the book');
+  const r = await call(`/x402/check?site=${host()}`, { ip, ua, headers: { 'x-sea-session': key } }); assert.equal(r.status, 200, r.text.slice(0, 200));
+  c = await contact(ua, ip); assert.equal(c.rolle, 'agent_with_key'); assert.equal(c.probe, false);
+  const d3 = await day(); assert.equal(d3.with_key, (d0.with_key || 0) + 1); assert.equal(d3.new_probe, d0.new_probe, 'taken out of the probes of the day');
+  const r2 = await call(`/x402/check?site=${host()}`, { ip, ua, headers: { 'x-sea-session': key } }); assert.equal(r2.status, 200);
+  assert.equal((await day()).with_key, d3.with_key, 'once per contact');
+  const plain = 'harbour-buyer/1.0', ip2 = fresh(); await call(`/x402/check?site=${host()}`, { ip: ip2, ua: plain }); assert.equal((await contact(plain, ip2)).rolle, 'agent');
+  const t = await call('/contacts.txt', { ip: '127.0.0.1', accept: 'text/plain' }); assert.match(t.text.split('\n')[0], /; agent_with_key, ein Schlüssel öffnete eine Tür: \d+\)$/);
+});
 await proof('the operator\'s lines: /contacts.ndjson only with x-mare-mod, in exactly the columns of supabase/kontaktbuch.sql', async () => {
   assert.equal((await call('/contacts.ndjson', { ip: fresh() })).status, 403); assert.equal((await call('/contacts.ndjson', { ip: fresh(), headers: { 'x-mare-mod': 'wrong' } })).status, 403);
   const r = await call('/contacts.ndjson', { ip: fresh(), headers: { 'x-mare-mod': MOD } }); assert.equal(r.status, 200); assert.match(r.h['content-type'], /ndjson/);
@@ -285,7 +301,8 @@ let caught = 0, missed = 0;
 if (!process.argv.includes('--no-controls')) {
   console.log('\nnegative controls: each rule broken in a copy, the proof must fail there');
   const CONTROLS = [
-    ['no next_step in the 402', 'node/core.mjs', 'return new Response(JSON.stringify({ ...body, next_step }), { status: 402,', 'return res; new Response(JSON.stringify({ ...body, next_step }), { status: 402,'],
+    ['a key that opened a door stays a probe (3.81)', 'node/contacts.mjs', "if (e.kind === 'probe' && c.rolle !== 'agent_with_key') {", 'if (false) {'],
+    ['no next_step in the 402', 'node/core.mjs', 'return new Response(JSON.stringify({ ...body, next_step, ...(supply', 'return res; new Response(JSON.stringify({ ...body, next_step, ...(supply'],
     ['the session step without as=key (the key cannot be kept from the answer)', 'node/core.mjs', "const open = { method: 'GET', url: `${base}/session?as=key`, keep: 'key' };", "const open = { method: 'GET', url: `${base}/session`, keep: 'key' };"],
     ['no way out without a wallet in the 402 (error and header)', 'node/core.mjs', "headers.set('x-sea-no-wallet', hint);", "headers.set('x-sea-other', hint);"],
     ['GET /session?as=key gives no key', 'node/core.mjs', "if (url.searchParams.get('as') === 'key' && req.method === 'GET' && !", "if (false && !"],
