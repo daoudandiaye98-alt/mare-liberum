@@ -20,7 +20,7 @@
 
 // the sentence a record of the record book carries (node/book.mjs names it BOOK.said)
 export const BOOK_SAID = 'Made by the sea\'s own daily sample of product pages (at most 40 a day, the same watched pages every day, one read per store an hour, robots.txt respected), not by an agent\'s check.';
-export const SEEN = Object.freeze({ path: '/seen', keepDays: 90, perDay: 400, recent: 200, list: 60, index: 2, offers: 6 });
+export const SEEN = Object.freeze({ path: '/seen', keepDays: 90, perDay: 400, recent: 200, list: 60, index: 2, offers: 6, indexed: 2000, quoteMin: 10 });
 
 const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const ld = (o) => `<script type="application/ld+json">${JSON.stringify(o).replace(/</g, '\\u003c')}</script>`;
@@ -69,6 +69,69 @@ export function recordOf(ans, { id, at, base = '', by } = {}) {
     notice: 'An open record of what one deal check saw at the time stated, kept unchanged. It is no endorsement of any store and no advice: Mare Liberum vouches for no store, never pays and never holds money. Prices change; the merchant\'s checkout states the final price.',
   };
 }
+// how far below the page the lowest other offer without a caution was, in per cent, when the record says cheaper elsewhere;
+// null otherwise (since 3.73): an offer flagged as far below the others is left out, so a doubtful price never makes the saving
+export function savingOf(rec) {
+  if (rec?.verdict?.word !== 'cheaper-elsewhere') return null;
+  const o = (Array.isArray(rec.elsewhere) ? rec.elsewhere : []).find((x) => !x?.caution && Number.isFinite(x?.below_page_pct));
+  return o && o.below_page_pct > 0 ? o.below_page_pct : null;
+}
+// whether the page states a list price of its own above the price it charges (a crossed-out price)
+export const claimsListPrice = (rec) => Number.isFinite(rec?.product?.list_price) && rec.product.list_price > rec.product.price;
+// the line /seen keeps of a record, newest first; since 3.73 also its saving (save) and its list price claim (lp), which the
+// quote counts
+export function lineOf(rec) {
+  return { id: rec.id, at: rec.seen_at, name: rec.product.name, store: rec.store, price: rec.product.price, currency: rec.product.currency, word: rec.verdict.word,
+    n: rec.elsewhere_found, ix: rec.indexable, save: savingOf(rec), lp: claimsListPrice(rec), ...(rec.by ? { by: rec.by } : {}) };
+}
+
+// the quote of the records (since 3.73, /seen/quote): of the newest records, how many product pages were cheaper elsewhere, the
+// median saving, how many pages state a list price of their own, apart for the records agents made and those of the sea's own
+// daily sample. Counted only from the records themselves: a page that was compared with no other offer is no page that was or
+// was not the lowest, so the share is of the pages compared
+const pct = (a, b) => (b > 0 ? Math.round((a / b) * 1000) / 10 : null);
+const medianOf = (xs) => { const s = xs.filter(Number.isFinite).sort((a, b) => a - b); if (!s.length) return null; const m = s.length >> 1; return Math.round((s.length % 2 ? s[m] : (s[m - 1] + s[m]) / 2) * 10) / 10; };
+function tallyOf(xs) {
+  const compared = xs.filter((x) => x.word === 'cheaper-elsewhere' || x.word === 'lowest-found'), cheaper = xs.filter((x) => x.word === 'cheaper-elsewhere');
+  const saves = cheaper.map((x) => x.save).filter((v) => Number.isFinite(v) && v > 0), lp = xs.filter((x) => x.lp === true).length;
+  return { records: xs.length, compared: compared.length, cheaper_elsewhere: cheaper.length, lowest_here: compared.length - cheaper.length, no_comparison: xs.length - compared.length,
+    cheaper_share_pct: pct(cheaper.length, compared.length), median_saving_pct: medianOf(saves), savings_counted: saves.length, list_price_stated: lp, list_price_share_pct: pct(lp, xs.length) };
+}
+export function quoteOf(list) {
+  const xs = (Array.isArray(list) ? list : []).filter((x) => x && /^[0-9a-f]{16}$/.test(String(x.id || ''))).slice(0, SEEN.recent);
+  const ats = xs.map((x) => String(x.at || '')).filter((t) => /^\d{4}-\d{2}-\d{2}T/.test(t)).sort();
+  return { of: xs.length, from: ats[0] || null, to: ats[ats.length - 1] || null, all: tallyOf(xs), by: { agent: tallyOf(xs.filter((x) => x.by !== 'sea')), sea: tallyOf(xs.filter((x) => x.by === 'sea')) } };
+}
+// the heading and the first sentence of the quote: the share in the heading, the median saving and the list prices after it
+export function quoteHeadline(q) {
+  const a = q.all; if (!a.compared) return 'How often a product page was not the lowest price: no compared record yet';
+  return `How often a product page was not the lowest price: ${a.cheaper_elsewhere} of ${a.compared} (${a.cheaper_share_pct} %) cheaper elsewhere`;
+}
+export function quoteLead(q) {
+  const a = q.all; if (!q.of) return 'No price record yet: the first appears with the next deal check of a product page.';
+  const span = q.from && q.to ? ` (${when(q.from)} to ${when(q.to)})` : '';
+  const save = Number.isFinite(a.median_saving_pct) ? ` The median saving at the lowest other store without a caution was ${a.median_saving_pct} %.` : '';
+  return `Of the newest ${q.of} open price record${q.of === 1 ? '' : 's'}${span}, ${a.compared} compared the page with other stores and ${a.cheaper_elsewhere} found it cheaper elsewhere.${save} ${a.list_price_stated} of ${q.of} page${q.of === 1 ? '' : 's'} stated a list price of their own above the price charged.`;
+}
+const QUOTE_HOW = 'Counted from the newest open price records only, never from who asked: a page is compared when the deal check found the same item in stock at another store; it is cheaper elsewhere when one of them was lower. The saving is how far below the page the lowest other offer without a caution was (an offer flagged as far below the others is left out). A list price is the crossed-out price the page states for itself. Records of the sea\'s own daily sample are counted apart.';
+export const quoteJson = (list, base) => { const b = String(base || '').replace(/\/+$/, ''), q = quoteOf(list); return { what: 'the quote of the open price records: how often a checked product page was cheaper elsewhere, the median saving and how many pages state a list price', ...q, headline: quoteHeadline(q), lead: quoteLead(q), how: QUOTE_HOW, indexable: q.all.compared >= SEEN.quoteMin, records: `${b}${SEEN.path}.json`, page: `${b}${SEEN.path}/quote`, make_one: `${b}/deal?url=<product page>` }; };
+export function quotePage(list, base) {
+  const b = String(base || '').replace(/\/+$/, ''), q = quoteOf(list), H = quoteHeadline(q), lead = quoteLead(q);
+  const robots = q.all.compared >= SEEN.quoteMin ? '' : '<meta name="robots" content="noindex,follow">';
+  const cell = (v, suf = '') => (v == null ? '–' : `${esc(String(v))}${suf}`);
+  const row = (label, t) => `<tr><td>${esc(label)}</td><td class="n">${t.records}</td><td class="n">${t.compared}</td><td class="n">${t.cheaper_elsewhere}${t.compared ? ` <small>(${cell(t.cheaper_share_pct, ' %')})</small>` : ''}</td><td class="n">${cell(t.median_saving_pct, ' %')}</td><td class="n">${t.list_price_stated}</td></tr>`;
+  const data = { '@context': 'https://schema.org', '@type': 'Dataset', name: 'Quote of the open price records · Mare Liberum', description: `${H}. ${lead}`, url: `${b}${SEEN.path}/quote`, license: 'https://creativecommons.org/licenses/by/4.0/', creator: { '@type': 'Organization', name: 'Mare Liberum', url: b || 'https://mareliberum.dev' }, distribution: { '@type': 'DataDownload', encodingFormat: 'application/json', contentUrl: `${b}${SEEN.path}/quote.json` } };
+  return `${head(`${H} | Mare Liberum`, lead, `${b}${SEEN.path}/quote`, `${robots}<link rel="alternate" type="application/json" href="${esc(`${b}${SEEN.path}/quote.json`)}">${ld(data)}`)}
+<body><main><h1>${esc(H)}</h1>
+<p class="lead">${esc(lead)}</p>
+<table><thead><tr><th>Records</th><th>All</th><th>Compared</th><th>Cheaper elsewhere</th><th>Median saving</th><th>List price stated</th></tr></thead><tbody>${row('all', q.all)}${row('made by agents\' checks', q.by.agent)}${row('the sea\'s daily sample', q.by.sea)}</tbody></table>
+<p><small>${esc(QUOTE_HOW)}</small></p>
+<h2>Check a price before your person buys</h2><p>Every deal check of a product page adds a record to this quote:</p>
+<pre>GET ${esc(b)}/deal?url=&lt;product page&gt;</pre>
+<p><small>The records themselves: <a href="${SEEN.path}">the newest</a> · this quote as data: <a href="${SEEN.path}/quote.json">JSON</a> (CC BY 4.0). Mare Liberum vouches for no store, never pays and never holds money.</small></p>
+${NAV()}</main></body></html>`;
+}
+
 // the line the deal check's answer carries: where the record stands and what it is for
 export const recordRef = (rec, sha256) => ({ id: rec.id, url: rec.url, json: `${rec.url}.json`, sha256, note: 'an open record of what this check saw, kept unchanged at this address: give it to your person as the source of the price you name' });
 
@@ -144,6 +207,7 @@ export function recordsPage(list, base, book = null) {
   const site = { '@context': 'https://schema.org', '@type': 'CollectionPage', name: 'Price records · Mare Liberum', url: `${b}${SEEN.path}`, description: d };
   return `${head(`${H} | Mare Liberum`, `${lead} ${d}`, `${b}${SEEN.path}`, `<link rel="alternate" type="application/json" href="${esc(`${b}${SEEN.path}.json`)}">${ld(site)}`)}
 <body><main><h1>${esc(H)}</h1><p class="lead">${esc(lead)}</p><p>${esc(d)}</p>
+<p>How often a checked page was cheaper elsewhere, the median saving and how many pages state a list price: <a href="${SEEN.path}/quote">the quote of the records</a>.</p>
 <p>An agent makes one with every deal check of a product page and can hand it to its person as the source of the price it names:</p>
 <pre>GET ${esc(b)}/deal?url=&lt;product page&gt;</pre>
 ${book ? `<p>The sea adds its own every day: up to ${esc(String(book.per_day))} product pages, ${esc(String(book.watch_max))} of them the same watched pages each day, so each has a series of prices. Today (${esc(String(book.day || ''))} UTC) ${esc(String(book.visits))} visit${book.visits === 1 ? '' : 's'}, ${esc(String(book.records))} record${book.records === 1 ? '' : 's'}, ${esc(String(book.watch))} page${book.watch === 1 ? '' : 's'} watched. Its records say so and are never counted as an agent's check.</p>
@@ -155,11 +219,12 @@ export const recordsJson = (list, base, book = null) => { const b = String(base 
 
 // the records open to search engines as a sitemap of their own (/sitemaps/seen.xml, since 3.66): only those that compare 3 or
 // more prices (the others say noindex, so a map that named them would contradict their pages), each dated by the day it was
-// seen, since a record never changes after; the newest first, at most SEEN.recent, as /seen keeps them
+// seen, since a record never changes after; the newest first, at most SEEN.indexed (since 3.73 from a list of its own, which
+// keeps every record open to search engines for as long as the record is kept, not only the newest SEEN.recent of /seen)
 const okId = (x) => !!x && x.ix === true && /^[0-9a-f]{16}$/.test(String(x.id || ''));
 const dayOf = (x) => (/^\d{4}-\d{2}-\d{2}T/.test(String(x?.at || '')) ? String(x.at).slice(0, 10) : null);
 export function recordsSitemap(list, base) {
-  const b = String(base || '').replace(/\/+$/, ''), xs = (Array.isArray(list) ? list : []).filter(okId).slice(0, SEEN.recent);
+  const b = String(base || '').replace(/\/+$/, ''), xs = (Array.isArray(list) ? list : []).filter(okId).slice(0, SEEN.indexed);
   return `<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${xs.map((x) => `<url><loc>${esc(`${b}${SEEN.path}/${x.id}`)}</loc>${dayOf(x) ? `<lastmod>${dayOf(x)}</lastmod>` : ''}<changefreq>never</changefreq></url>`).join('')}</urlset>`;
 }
 // the day the newest record open to search engines was seen: the lastmod of seen.xml in the sitemap index, or null

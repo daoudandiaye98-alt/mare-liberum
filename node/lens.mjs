@@ -8,7 +8,7 @@ import { packOf, packTarget, PACK } from './pack.mjs';
 import { PACKPAY } from './packpay.mjs';
 import { productOf } from './lean.mjs';
 import { DEAL, dealTarget, dealQuery, dealKey, remembered, dealOf, wordsOf } from './deal.mjs';
-import { SEEN, recordKey, recordOf, recordRef, canonical } from './seen.mjs';
+import { SEEN, recordKey, recordOf, recordRef, canonical, lineOf } from './seen.mjs';
 import { BOOK, bookHost, freshOf, nextVisit, watchAfter, seriesAfter, bookSays } from './book.mjs';
 
 const FEED = new Set(['read', 'whale', 'brevet', 'seal', 'buoy', 'path', 'knock', 'enter', 'answer', 'ask', 'tide', 'job', 'job_done', 'note', 'mark', 'reflex', 'learn', 'course', 'outcome']);
@@ -125,14 +125,31 @@ export function createLens(h) {
       await kv.set(k, kept, SEEN.keepDays * DAY);
       await kv.set(`seen:new:${day}`, made + 1, 3 * DAY);
       const recent = (await kv.get('seen:recent').catch(() => null)) || [];
-      const line = { id, at: t, name: rec.product.name, store: rec.store, price: rec.product.price, currency: rec.product.currency, word: rec.verdict.word, n: rec.elsewhere_found, ix: rec.indexable, ...(rec.by ? { by: rec.by } : {}) };
+      const line = lineOf(rec);
       await kv.set('seen:recent', [line, ...(Array.isArray(recent) ? recent : []).filter((x) => x?.id !== id)].slice(0, SEEN.recent), SEEN.keepDays * DAY);
+      // (since 3.73) a record open to search engines also joins a list of its own, so /sitemaps/seen.xml names it for as long as
+      // it is kept, not only while it is among the newest of /seen
+      if (rec.indexable) { const ix = (await kv.get('seen:ix').catch(() => null)) || []; await kv.set('seen:ix', [{ id, at: t, ix: true }, ...(Array.isArray(ix) ? ix : []).filter((x) => x?.id !== id)].slice(0, SEEN.indexed), SEEN.keepDays * DAY); }
       return recordRef(kept, sha256);
     },
     // one record as it was kept, or null; the newest records (for /seen); the addresses of those open to search engines
     async seenRecord(id) { if (!/^[0-9a-f]{16}$/.test(String(id || ''))) return null; const r = await kv.get(`seen:rec:${id}`).catch(() => null); return r?.id === id ? r : null; },
     async seenRecent() { const r = (await kv.get('seen:recent').catch(() => null)) || []; return Array.isArray(r) ? r : []; },
     async seenListed() { return (await lens.seenRecent()).filter((x) => x?.ix && /^[0-9a-f]{16}$/.test(x.id)).map((x) => `${SEEN.path}/${x.id}`); },
+    // (since 3.73) every record open to search engines that is still kept, newest first: the list of its own and the newest of
+    // /seen (records made before the list existed), each once, none older than SEEN.keepDays
+    async seenIndexed() {
+      const own = (await kv.get('seen:ix').catch(() => null)) || [], since = new Date(Date.parse(now()) - SEEN.keepDays * DAY * 1000).toISOString(), seen = new Set();
+      return [...(Array.isArray(own) ? own : []), ...(await lens.seenRecent()).filter((x) => x?.ix)].filter((x) => x && /^[0-9a-f]{16}$/.test(String(x.id)) && String(x.at || '') >= since && !seen.has(x.id) && seen.add(x.id))
+        .sort((a, b) => String(b.at).localeCompare(String(a.at))).slice(0, SEEN.indexed).map((x) => ({ id: x.id, at: x.at, ix: true }));
+    },
+    // (since 3.73) the newest records as the quote counts them: a line kept before 3.73 has no saving or list price yet, so its
+    // record is read once more and its line made again from it (a record that is gone is left out)
+    async seenQuoteLines() {
+      const xs = await lens.seenRecent(), out = [];
+      for (const x of xs) { if (!x?.id) continue; if ('lp' in x) { out.push(x); continue; } const r = await lens.seenRecord(x.id).catch(() => null); if (r) out.push(lineOf(r)); }
+      return out;
+    },
     // how many deal checks this node made today (UTC), free and paid: the number GET /deal shows beside how to call it; since
     // 3.69 also how many of them came from the routine of /for/bots
     // the record book (node/book.mjs, since 3.72): one visit per step, called after a tide; the state it keeps is its own: the
