@@ -184,6 +184,37 @@ export function withCommission(out) {
   return n && r && !Array.isArray(r) ? { ...r, commission_rule: COMMISSION_RULE } : r;
 }
 
+// a deal check's answer (node/deal.mjs), as it leaves a door for an agent: what it found at other stores (elsewhere, the
+// cheapest when it is another store, and the buy step that leads there) carries the commission where one applies, and says so
+// (commission: true, commission_network); the answer gets the rule once. The page the agent brought stays as it came: the
+// product and the page read, the cheapest when it is this page, the steps to check again and to read it, and the open record
+// (kept before the answer leaves, from the clean answer). An offer that already pays the sea through its catalog (promoted)
+// is left as it is, wherever it stands. The verdict, the order and the numbers never read it. Off, or nothing applies: the
+// same object comes back.
+export function dealWithCommission(ans) {
+  if (!commissionOn() || !ans || typeof ans !== 'object' || Array.isArray(ans)) return ans;
+  const list = Array.isArray(ans.elsewhere) ? ans.elsewhere : [];
+  // the addresses of offers that pay through their catalog: the cheapest and the buy step that point there stay as they are
+  const paid = new Set(list.filter((o) => o && (o.promoted || typeof o.commission === 'number')).flatMap((o) => [o.url, o.checkout]).filter((u) => typeof u === 'string'));
+  let n = 0;
+  const one = (o) => {
+    if (!o || typeof o !== 'object' || Array.isArray(o) || o.promoted || typeof o.commission === 'number' || paid.has(o.url) || paid.has(o.checkout)) return o;
+    let copy = null, net = null, say = null;
+    for (const k of OFFER_KEYS) { if (typeof o[k] !== 'string') continue; const c = commissionFor(o[k]); if (!c) continue; copy ||= { ...o }; copy[k] = c.url; net ||= c.network; say ||= c.disclosure || null; }
+    if (!copy) return o;
+    n += 1; copy.commission = true; copy.commission_network = net; if (say) copy.commission_disclosure = say; return copy;
+  };
+  const away = ans.cheapest?.where === 'another store';
+  const elsewhere = list.map(one), cheapest = away ? one(ans.cheapest) : ans.cheapest;
+  const next = Array.isArray(ans.next) ? ans.next.map((s) => {
+    if (!away || !s || s.do !== 'buy' || typeof s.at !== 'string' || paid.has(s.at)) return s;
+    const c = commissionFor(s.at); if (!c) return s;
+    n++; return { ...s, at: c.url, commission: true, commission_network: c.network, ...(c.disclosure ? { commission_disclosure: c.disclosure } : {}) };
+  }) : ans.next;
+  if (!n) return ans;
+  return { ...ans, ...(Array.isArray(ans.elsewhere) ? { elsewhere } : {}), ...(away ? { cheapest } : {}), ...(Array.isArray(ans.next) ? { next } : {}), commission_rule: COMMISSION_RULE };
+}
+
 // on pages the marker is words a person reads beside the link, never only a sign or an attribute (German law: the commercial
 // purpose must be visible where the link stands, OLG Köln 6 W 102/20); in JSON it is commission: true
 export const COMMISSION_WORDS = 'Commission link — the sea may receive a commission from the shop; it never changes the order.';
