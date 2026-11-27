@@ -19,6 +19,8 @@
 //   rolle     (since 3.81) pruefer (a probe, an index or a registry by its name), agent, or agent_with_key: a contact whose key
 //             took at least one probe call at a door is an agent with a key, not a probe, whatever its name; the day counts
 //             these (with_key) and takes them out of the probes it counted new that day
+//   payers    (since 3.84) per UTC day the contacts that paid (each once a day): the first number of "who pays" on /pulse,
+//             beside the keys of the day (sessions) and the paid answers (paid)
 //   limits    at most 5,000 new contacts a UTC day (more are counted, not kept); own calls (MareLiberum-session) not at all
 import { createHash, createHmac } from 'node:crypto';
 import { isIP } from 'node:net';
@@ -85,7 +87,7 @@ export function createContacts({ kv, now = () => Date.now(), secret }) {
   const chains = new Map();
   const serial = (k, fn) => { const prev = chains.get(k) || Promise.resolve(); const run = prev.then(fn, fn); const tail = run.then(() => {}, () => {}); chains.set(k, tail); tail.then(() => { if (chains.get(k) === tail) chains.delete(k); }); return run; };
   const C = (cid) => `contact:${cid}`, A = (d) => `contacts:day:${d}`, H = (d) => `contacts:cohort:${d}`;
-  const empty = () => ({ new: 0, new_probe: 0, with_key: 0, overflow: 0, p402: 0, types: Object.fromEntries(PAYWALL_TYPES.map((t) => [t, 0])), contacts402: 0, single: 0, multi: 0, sessions: 0, probe: 0, paid: 0, paid_usd_micro: 0, converted: 0 });
+  const empty = () => ({ new: 0, new_probe: 0, with_key: 0, payers: 0, overflow: 0, p402: 0, types: Object.fromEntries(PAYWALL_TYPES.map((t) => [t, 0])), contacts402: 0, single: 0, multi: 0, sessions: 0, probe: 0, paid: 0, paid_usd_micro: 0, converted: 0 });
   const bumpDay = (d, fn) => serial(A(d), async () => { const a = { ...empty(), ...((await kv.get(A(d))) || {}) }; a.types = { ...empty().types, ...(a.types || {}) }; fn(a); await kv.set(A(d), a, CONTACTS.aggDays * DAY); return a; });
   const bumpCohort = (d, fn) => serial(H(d), async () => { const c = { n: 0, back: 0, ...((await kv.get(H(d))) || {}) }; fn(c); await kv.set(H(d), c, CONTACTS.aggDays * DAY); return c; });
   const since = async (d) => { const s = await kv.get('contacts:since'); if (!s || s > d) await kv.set('contacts:since', d, 400 * DAY); return s && s < d ? s : d; };
@@ -126,6 +128,8 @@ export function createContacts({ kv, now = () => Date.now(), secret }) {
         c.hits_by_day = Object.fromEntries(Object.entries({ ...(c.hits_by_day || {}), [d]: dayHits + 1 }).slice(-CONTACTS.days));
         if (door !== 'toll' && door !== 'other') { c.kompetenz = door; if (Number.isFinite(Number(e.price_usd))) c.preis_usd = Number(e.price_usd).toFixed(6); }
       }
+      // (since 3.84) a contact that paid today counts once among the payers of the day
+      const payer = e.kind === 'paid' && c.paid_day !== d; if (e.kind === 'paid') c.paid_day = d;
       if (e.kind === 'paid') { c.paid += 1; c.paid_usd = (Number(c.paid_usd) + (Number(e.paid_usd) || 0)).toFixed(6); if (door !== 'toll' && door !== 'other') c.kompetenz = door; if (Number.isFinite(Number(e.paid_usd))) c.preis_usd = Number(e.paid_usd).toFixed(6); }
       const was = c.abbruch_phase, rank = (x) => (x == null ? -1 : PHASES.indexOf(x));
       if (rank(e.kind) > rank(was)) c.abbruch_phase = e.kind;
@@ -141,6 +145,7 @@ export function createContacts({ kv, now = () => Date.now(), secret }) {
         }
         if (e.kind === 'session') a.sessions += 1;
         if (e.kind === 'probe') a.probe += 1;
+        if (payer) a.payers += 1;
         if (e.kind === 'paid') { a.paid += 1; a.paid_usd_micro += Math.round((Number(e.paid_usd) || 0) * 1e6); if (wasHits > 0 && c.paid === 1) a.converted += 1; }
       });
       if (fresh) { await since(d); await bumpCohort(d, (h) => { h.n += 1; }); }
@@ -176,8 +181,11 @@ export function createContacts({ kv, now = () => Date.now(), secret }) {
     const out = [];
     for (const k of ks) { const c = await kv.get(k); if (c?.cid) out.push(c); }
     out.sort((a, b) => (a.last_seen < b.last_seen ? 1 : -1));
-    return out.slice(0, limit).map(({ v, hits_by_day, wallet, probe, ...c }) => ({ ...c, probe: !!probe }));
+    return out.slice(0, limit).map(({ v, hits_by_day, wallet, probe, paid_day, ...c }) => ({ ...c, probe: !!probe }));
   }
 
-  return { note, dashboard, rows, peek: async (cid) => kv.get(C(cid)) };
+  // (since 3.84) the numbers of today alone (one read): for the line "who pays" of /pulse
+  async function today() { const d = dayOf(now()), a = { ...empty(), ...((await kv.get(A(d))) || {}) }; return { day: d, payers: a.payers, paid: a.paid, keys: a.sessions, p402: a.p402 }; }
+
+  return { note, dashboard, rows, today, peek: async (cid) => kv.get(C(cid)) };
 }

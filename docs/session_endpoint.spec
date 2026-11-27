@@ -2,7 +2,8 @@ SPEC  GET /session?as=key (first choice) · POST /session (the same key as JSON)
       next_step, contact book), 3.80.0 (the key by GET, x-sea-session first, the no-wallet words first in every 402),
       3.81.0 (calls_left and calls_used in every keyed answer, way_out at 3 and 0, the topup POST /route?a=topup),
       3.82.0 (one taste for an empty key, receipts checked against the chain books, the topup by transfer, the sums),
-      3.83.0 (upgrade on the free doors, line 5 of the keys, the one callback at a key's first payment)
+      3.83.0 (upgrade on the free doors, line 5 of the keys, the one callback at a key's first payment),
+      3.84.0 (who pays on /pulse, the three start lines of llms.txt and llms-full.txt)
 Code: node/session.mjs, node/core.mjs (route /session, sessionDoor)  ·  Proof: tools/session-proof.mjs (29 proofs, 23 controls),
 tools/contacts-proof.mjs (K2 proof)  ·  Live since 27.11.2026 15:50 (3.78.0)
 
@@ -63,6 +64,12 @@ SUPPLY (3.81, every answer to a call with a key)
                          KEY=$(curl -s …/session?as=key) && curl -s '<the paid door with the same question>' -H "x-sea-session: $KEY"
   line 5 (3.83)        /contacts.txt: "5 Schlüssel (<day>): heute ausgegeben N · mit mindestens einer Tür M · bezahlt P"
                          (keys given, keys whose first door was that day, keys that paid that day; /contacts.json → keys)
+  who pays (3.84)      /pulse (JSON) begins with who_pays {line: "who pays (<day>, UTC): N paying agents today · K keys
+                         today · P paid doors", paying_agents_today, keys_today, paid_doors_today, from}, above
+                         unique_domains_today; from the contact book (outside callers only)
+  start (3.84)         llms.txt and llms-full.txt begin, before every other paragraph, with three lines: the free start with
+                         one call for a key (20 door probes, no account), the price of each door after them (route 0.02, check,
+                         read, deal 0.01, pack 0.05, 20 more probes 0.02 USDC), the receipt (/treasury, /settle)
 
 READ
   GET /session            without key: what it is, limits, today {opened, probe_calls, probe_day}; with key: the key's own state
