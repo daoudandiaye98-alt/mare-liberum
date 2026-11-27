@@ -87,6 +87,25 @@ const PERSON = { 'user-agent': CHROME, accept: 'text/html,application/xhtml+xml,
 const GOOGLE = { 'user-agent': 'Mozilla/5.0 (compatible; Googlebot/2.1; +http://www.google.com/bot.html)', accept: 'text/html' };
 const CLAUDEBOT = { 'user-agent': 'Mozilla/5.0 AppleWebKit/537.36 (KHTML, like Gecko; compatible; ClaudeBot/1.0; +claudebot@anthropic.com)' };
 const TAGGED = /mareliberum-21|awin1\.com|skimresources\.com|viglink\.com/;
+// the Awin publisher of the sea (Oroboros Design); the shipped config/commission.json may name only shops whose programme
+// accepted it, each with its numeric Awin id, and sets no tag of a shop's own program and no wrapper (Sovrn or Skimlinks
+// only once they allowed agent traffic in writing, by a pull request that changes this rule)
+const PUBLISHER = '3158732';
+function shippedAs(S, file, what) {
+  const st = S.cm.commissionState(), named = Object.entries(file.awin?.merchants ?? {});
+  assert.deepEqual(st.skipped, [], `${what}: nothing skipped`);
+  assert.deepEqual(st.domains, [], `${what}: no tag of a shop's own program`); assert.equal(st.wrap, null, `${what}: no wrapper`);
+  if (!named.length) { assert.equal(st.configured, false, `${what}: empty is off`); assert.equal(st.source, null, what); return; }
+  assert.equal(String(file.awin.affid), PUBLISHER, `${what}: the publisher id of the sea`);
+  assert.equal(st.configured, true, what); assert.equal(st.source, 'config/commission.json', what);
+  assert.deepEqual([...st.awin].sort(), named.map(([h]) => h.toLowerCase().replace(/^www\./, '')).sort(), `${what}: exactly the named shops`);
+  for (const [h, mid] of named) {
+    assert.match(String(mid), /^\d{1,12}$/, `${what}: ${h} has a numeric Awin id`);
+    const c = S.cm.commissionFor(`https://${h}/products/x`);
+    assert.ok(c && c.network === 'awin' && c.url.startsWith(`https://www.awin1.com/cread.php?awinmid=${mid}&awinaffid=${PUBLISHER}&ued=`), `${what}: ${h} carries its Awin link`);
+  }
+  assert.equal(S.cm.commissionFor('https://a-shop-not-named.example/products/x'), null, `${what}: a shop not named carries none`);
+}
 // a commission link back to the shop's own address (the three kinds this proof configures)
 const untag = (s) => {
   if (typeof s !== 'string') return s;
@@ -245,14 +264,24 @@ const checks = {
       const h = (await t.call('/buy/trail-running-shoes', { headers: PERSON })).text; assert.ok(!/sponsored|class="cm"/.test(h));
     } finally { t.rest(false); }
   },
-  // the ids come from config/commission.json (a pull request) or MARE_COMMISSION, which wins; an empty or missing file is off
+  // the ids come from config/commission.json (a pull request) or MARE_COMMISSION, which wins; a missing file is off, and the
+  // shipped file is either empty (off) or names only shops whose Awin programme accepted the publisher of the sea
   async configFile(t) {
     // copies of the code under test (t.dir): with the repository's file, without one, with ids, with the environment set
     const shipped = JSON.parse(readFileSync(join(ROOT, 'config', 'commission.json'), 'utf8')), from = t.dir;
     const S = await copyOf({ from, config: 'shipped' }), M = await copyOf({ from, config: 'missing' });
-    for (const [t, what] of [[S, 'the shipped (empty) file'], [M, 'no file']]) { const st = t.cm.commissionState(); assert.equal(st.configured, false, what); assert.equal(st.source, null, what); assert.deepEqual(st.skipped, [], `${what}: nothing to say`); }
+    shippedAs(S, shipped, 'the shipped file');
+    // the same rule on files written for it, so that it holds before the first shop is named: one accepted shop is on,
+    // another publisher id or a wrapper in the shipped file is refused
+    const one = { ...shipped, awin: { affid: PUBLISHER, merchants: { 'accepted-shop.example': '132057' } } };
+    shippedAs(await copyOf({ from, config: one }), one, 'a file with one accepted shop');
+    for (const [bad, why] of [[{ ...one, awin: { ...one.awin, affid: '1234567' } }, /publisher id/], [{ ...one, wrap: { network: 'skimlinks', id: '123X456', agentsAllowed: true } }, /no wrapper/]]) {
+      const X = await copyOf({ from, config: bad }); assert.throws(() => shippedAs(X, bad, 'a bad file'), why, `refused: ${why}`);
+    }
+    { const st = M.cm.commissionState(); assert.equal(st.configured, false, 'no file'); assert.equal(st.source, null, 'no file'); assert.deepEqual(st.skipped, [], 'no file: nothing to say'); }
+    // no shop of the seven answers is ever named in the shipped file: they answer as with no file
     const a = await asLoaded(S), b = await asLoaded(M);
-    for (const k of Object.keys(a)) assert.equal(JSON.stringify(a[k]), JSON.stringify(b[k]), `${k}: the empty file and no file answer the same`);
+    for (const k of Object.keys(a)) assert.equal(JSON.stringify(a[k]), JSON.stringify(b[k]), `${k}: the shipped file and no file answer the same`);
     assert.ok(!TAGGED.test(JSON.stringify(a)) && !/commission_rule|"commission":true|sponsored|class="cm"/.test(JSON.stringify(a)), 'and carry no commission');
     t.set(null); t.rest(false); const c = await asLoaded(t);
     for (const k of Object.keys(a)) assert.equal(JSON.stringify(a[k]), JSON.stringify(c[k]), `${k}: as this tree with nothing set`);
