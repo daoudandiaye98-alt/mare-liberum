@@ -289,9 +289,9 @@ await proof('every answer to a call with a key says calls_left and calls_used, a
   const P = await open(); assert.equal(P.j.calls_left, 20); assert.equal(P.j.calls_used, 0); const k = P.j.key;
   const g = await call('/session?as=key', { ip: fresh(), accept: '*/*' }); assert.equal(g.status, 200); assert.match(g.text, /^mls_[A-Za-z0-9_-]{32}\n$/); assert.equal(g.h['x-sea-calls-left'], '20'); assert.equal(g.h['x-sea-calls-used'], '0'); assert.match(g.h['access-control-expose-headers'], /x-sea-calls-left,x-sea-calls-used/);
   const c = await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: bearer(k) }); assert.equal(c.status, 200, c.text.slice(0, 200));
-  assert.equal(c.j.calls_left, 19); assert.equal(c.j.calls_used, 1); assert.deepEqual(keysOf(c.j).slice(-2), ['calls_left', 'calls_used']); assert.equal(c.j.way_out, undefined);
+  assert.equal(c.j.calls_left, 19); assert.equal(c.j.calls_used, 1); assert.deepEqual(keysOf(c.j).slice(-4), ['calls_left', 'calls_used', 'seat_state', 'price_per_path']); assert.equal(c.j.seat_state, 'none'); assert.equal(c.j.price_per_path, 0.02); assert.equal(c.j.way_out, undefined);
   const r = await call('/route?q=' + URLQ('find usdc price'), { method: 'POST', ip: fresh(), headers: { 'x-sea-session': k } }); assert.equal(r.status, 200);
-  assert.equal(r.j.calls_left, 18); assert.equal(r.j.calls_used, 2); assert.deepEqual(keysOf(r.j).slice(-2), ['calls_left', 'calls_used']); assert.ok(r.text.split('\n').length > 3, 'the lines of the answer kept');
+  assert.equal(r.j.calls_left, 18); assert.equal(r.j.calls_used, 2); assert.deepEqual(keysOf(r.j).slice(-4), ['calls_left', 'calls_used', 'seat_state', 'price_per_path']); assert.ok(r.text.split('\n').length > 3, 'the lines of the answer kept');
   const back = await call(`/x402/check?site=gone.${W}`, { ip: fresh(), headers: bearer(k) }); assert.ok([422, 502].includes(back.status), back.text.slice(0, 200)); assert.equal(back.j.calls_left, 18); assert.equal(back.j.calls_used, 2);
   const st = await call('/session', { ip: fresh(), headers: bearer(k) }); assert.equal(st.j.probe.left, 18); assert.equal(st.j.calls_left, 18); assert.equal(st.j.calls_used, 2);
   const plain = await call(`/x402/check?site=${host()}`, { ip: fresh() }); assert.equal(plain.status, 402); assert.equal(plain.j.calls_left, undefined, 'no key, no supply');
@@ -302,9 +302,29 @@ await proof('at 3 and at 0 calls left the answer adds way_out: the rest filled u
   const seen = [];
   for (let i = 0; i < 5; i++) { const r = await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: bearer(k.key) }); assert.equal(r.status, 200); seen.push([r.j.calls_left, !!r.j.way_out]); if (r.j.way_out) {
     assert.match(r.j.way_out.what, /^the rest filled up again costs 0\.02 USDC/); assert.equal(r.j.way_out.curl, `curl -si -X POST '${BASE}/route?a=topup' -H "x-sea-session: $KEY"`); assert.match(r.j.way_out.key, /stays the same: no new key, no new id/);
-    assert.deepEqual(keysOf(r.j).slice(-3), ['calls_left', 'calls_used', 'way_out']); } }
+    assert.deepEqual(keysOf(r.j).slice(-5), ['calls_left', 'calls_used', 'seat_state', 'price_per_path', 'way_out']); assert.ok(r.j.way_out.checkout_url.startsWith(`${BASE}/pay/`), '(4.0) the seat\'s link first'); } }
   assert.deepEqual(seen, [[4, false], [3, true], [2, false], [1, false], [0, true]]);
   const e = await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: bearer(k.key) }); assert.equal(e.status, 402); assert.equal(e.j.calls_left, 0); assert.equal(e.j.calls_used, 5); assert.ok(e.j.way_out && e.j.next_step && e.j.accepts);
+});
+// (4.0) the seat in sight: its state and the price of one more path in every keyed answer, the same link in way_out as the
+// host got from POST /seat?as=host, past its paths the doors answer on and the overage is counted apart on /treasury
+await proof('(4.0) a key with a seat: seat_state active and price_per_path 0.01 in every keyed answer; at 0 paths left way_out with the seat\'s link; past its paths the door answers 200 with seat_state overage, nothing refused; /treasury says overage_paths and overage_usd apart; GET /session with the key says all three', async () => {
+  const k = (await open()).j, h = sessionHash(k.key);
+  const host1 = await call('/seat?as=host', { method: 'POST', ip: fresh(), headers: { 'x-sea-session': k.key } }); assert.equal(host1.status, 201);
+  const g = await db.sessions.grant(h, { seat: host1.j.seat_id, sale: 'pi_proof_seat_1', paths: 2 }); assert.equal(g.ok, true);
+  const before = await call('/treasury', { ip: fresh() }); const ov0 = before.j.overage_paths;
+  const seen = [];
+  for (let i = 0; i < 3; i++) {
+    const r = await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: bearer(k.key) }); assert.equal(r.status, 200, r.text.slice(0, 200));
+    seen.push([r.j.calls_left, r.j.seat_state, r.j.price_per_path, !!r.j.way_out]);
+    if (r.j.way_out) assert.equal(r.j.way_out.checkout_url, host1.j.checkout_url, 'the same link the host got, unchanged');
+  }
+  assert.deepEqual(seen, [[1, 'active', 0.01, false], [0, 'active', 0.01, true], [0, 'overage', 0.01, true]]);
+  const tr = await call('/treasury', { ip: fresh() }); assert.equal(tr.j.overage_paths, ov0 + 1); assert.equal(tr.j.overage_usd, Math.round((ov0 + 1)) / 100); assert.equal(tr.j.seats.overage_paths, ov0 + 1); assert.equal(tr.j.seats.price_per_path_over, 0.01);
+  const st = await call('/session', { ip: fresh(), headers: bearer(k.key) }); assert.equal(st.status, 200); assert.equal(st.j.seat_state, 'overage'); assert.equal(st.j.price_per_path, 0.01); assert.equal(st.j.calls_left, 0); assert.equal(st.j.seat.overage_paths, 1);
+  const k2 = (await open()).j; const tp = await call('/route?a=topup', { method: 'POST', ip: fresh(), headers: { 'x-sea-session': k2.key } }); assert.equal(tp.status, 402);
+  assert.ok(tp.j.checkout_url.startsWith(`${BASE}/pay/`), 'the topup by wallet names the same link by card'); assert.ok(tp.j.accepts, 'the x402 terms stay');
+  const st2 = await call('/session', { ip: fresh(), headers: bearer(k2.key) }); assert.equal(st2.j.seat_state, 'none'); assert.equal(st2.j.price_per_path, 0.02); assert.equal(st2.j.calls_left, 20);
 });
 await proof('POST /route?a=topup: no key 400, nothing charged; the key without a payment: 402 with the price of one route (resource ?a=topup), the words without a wallet first; with a payment the same key has 20 probe calls again, a sale of the till (topup-x402-v2); one sale fills up once', async () => {
   const k = (await open()).j; const rec = await kv.get(`session:${k.id}`); rec.probe.left = 0; rec.calls = 20; await kv.set(`session:${k.id}`, rec, 86_400 * 31);

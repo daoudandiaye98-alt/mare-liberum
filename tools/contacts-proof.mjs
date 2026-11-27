@@ -337,7 +337,7 @@ if (!process.argv.includes('--no-controls')) {
     ['no line 5 (3.83)', 'node/core.mjs', "d.lines = [...d.lines, `5 Schlüssel", "d.lines_ = [...d.lines, `5 Schlüssel"],
     ['no upgrade on the free check (3.83)', 'node/core.mjs', "upgrade: upgradeOf('check',", "upgrade_: upgradeOf('check',"],
     ['a key that opened a door stays a probe (3.81)', 'node/contacts.mjs', "if (e.kind === 'probe' && c.rolle !== 'agent_with_key') {", 'if (false) {'],
-    ['no next_step in the 402', 'node/core.mjs', 'return new Response(JSON.stringify({ ...body, next_step, ...(supply', 'return res; new Response(JSON.stringify({ ...body, next_step, ...(supply'],
+    ['no next_step in the 402', 'node/core.mjs', 'return new Response(JSON.stringify({ ...body, next_step, ...card, ...(supply', 'return res; new Response(JSON.stringify({ ...body, next_step, ...card, ...(supply'],
     ['the session step without as=key (the key cannot be kept from the answer)', 'node/core.mjs', "const open = { method: 'GET', url: `${base}/session?as=key`, keep: 'key' };", "const open = { method: 'GET', url: `${base}/session`, keep: 'key' };"],
     ['no way out without a wallet in the 402 (error and header)', 'node/core.mjs', "headers.set('x-sea-no-wallet', hint);", "headers.set('x-sea-other', hint);"],
     ['GET /session?as=key gives no key', 'node/core.mjs', "if (actOf(url) === 'key' && req.method === 'GET' && !", "if (false && !"],
