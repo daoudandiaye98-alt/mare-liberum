@@ -3,6 +3,7 @@ import { ROLES, OPERATORS } from './atlantis.mjs';
 import { labelsFor, RTL, LANG_NAMES, LEX_LANGS, lexiconPhrases } from './lexicon.mjs';
 import { HARBOUR_UI } from './harbour-ui.mjs';
 import { shelfNextHtml } from './firststep.mjs';
+import { nextHtml } from './trail.mjs';
 import { YARD_UI } from './yard-ui.mjs';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -709,11 +710,11 @@ export function monthPage(base, r) {
 const REGION = (() => { try { return new Intl.DisplayNames(['en'], { type: 'region' }); } catch { return null; } })();
 export const countryName = (cc) => { try { return REGION?.of(String(cc).toUpperCase()) || String(cc).toUpperCase(); } catch { return String(cc).toUpperCase(); } };
 const CRUX = '<a href="https://developer.chrome.com/docs/crux">Chrome UX Report</a> (Google, CC BY 4.0), monthly lists cached by <a href="https://github.com/zakird/crux-top-lists">zakird/crux-top-lists</a>';
-export function countriesPage(base, list) {
+export function countriesPage(base, list, next = null) {
   const rows = [...list].sort((a, b) => countryName(a.cc).localeCompare(countryName(b.cc)));
   const body = `<p class="muted" style="margin:0"><a href="/sites">The Atlas</a></p><h1>The Atlas in every country</h1>
 <p style="font-size:1.15rem">The web people actually use is local: schools, banks, government offices, shops and news of their own country. The Atlas walks the most visited sites of ${rows.length} countries in turn with the global list, so an agent in Dakar, São Paulo or Seoul finds the sites people there use.</p>
-<div class="grid">${rows.map((c) => `<div class="box"><h3 style="margin:0"><a href="/atlas/country/${esc(c.cc)}">${esc(countryName(c.cc))}</a></h3><p class="muted" style="margin:0"><small>${c.top} most visited · ${c.count} on the list</small></p></div>`).join('')}</div>
+${nextHtml(next)}<div class="grid">${rows.map((c) => `<div class="box"><h3 style="margin:0"><a href="/atlas/country/${esc(c.cc)}">${esc(countryName(c.cc))}</a></h3><p class="muted" style="margin:0"><small>${c.top} most visited · ${c.count} on the list</small></p></div>`).join('')}</div>
 <p class="muted"><small>Which sites: ${CRUX}. Per country the group of the 1,000 most visited sites and part of the next group; adult sites are left out. The order within a group is not a ranking.</small></p>
 <p class="muted" style="overflow-wrap:anywhere"><small>For agents: <code>GET ${esc(base)}/atlas/countries.json</code><br><code>GET ${esc(base)}/atlas/country/&lt;cc&gt;.json</code></small></p>`;
   return page(base, '/atlas/countries', `The Atlas in ${rows.length} countries — the sites people use there · Mare Liberum`, `The most visited websites of ${rows.length} countries, and how far the Atlas has mapped them for AI agents: search link, sections, feeds, robots.txt.`, body,
@@ -723,7 +724,7 @@ export function countryPage(base, c) {
   const name = countryName(c.cc), share = c.looked ? Math.round((c.mapped / c.looked) * 100) : 0;
   const body = `<p class="muted" style="margin:0"><a href="/sites">The Atlas</a> · <a href="/atlas/countries">every country</a></p><h1>${esc(name)}: the sites people use, as agents see them</h1>
 <p class="pulse"><b>${c.mapped}</b> of the ${c.looked} most visited sites in ${esc(name)} shown here are on the map (${share}%). The rest come in turn: the Atlas reads the countries one after another, between the sites of the global list.</p>
-<table><tbody>${[...c.sites.filter((x) => x.mapped), ...c.sites.filter((x) => !x.mapped)].map((x) => `<tr><td>${x.ok ? `<a href="/site/${esc(x.site)}">${esc(x.site)}</a>` : esc(x.site)}</td><td>${x.mapped ? `on the map${x.grade ? ` · grade ${esc(String(x.grade))}` : ''}${x.search ? ' · search link' : ''}` : '<span class="muted">not yet</span>'}</td></tr>`).join('')}</tbody></table>
+${nextHtml(c.next)}<table><tbody>${[...c.sites.filter((x) => x.mapped), ...c.sites.filter((x) => !x.mapped)].map((x) => `<tr><td>${x.ok ? `<a href="/site/${esc(x.site)}">${esc(x.site)}</a>` : esc(x.site)}</td><td>${x.mapped ? `on the map${x.grade ? ` · grade ${esc(String(x.grade))}` : ''}${x.search ? ' · search link' : ''}` : '<span class="muted">not yet</span>'}</td></tr>`).join('')}</tbody></table>
 <p class="muted"><small>Which sites: ${CRUX}, list of ${esc(String(c.month || '').replace(/^(\d{4})(\d{2})$/, '$1-$2'))}. The order within the group of the most visited is not a ranking. A site that is not mapped yet is read on the spot when an agent asks for it: <code>/site/&lt;domain&gt;</code>; it gets its link here once its map answered.</small></p>
 <p class="muted" style="overflow-wrap:anywhere"><small>For agents: <code>GET ${esc(base)}/atlas/country/${esc(c.cc)}.json</code></small></p>`;
   return page(base, `/atlas/country/${c.cc}`, `${name}: the most visited websites, as AI agents see them · Mare Liberum Atlas`, `The websites people in ${name} use most, and which of them the Atlas has mapped for AI agents: search link, sections, feeds, robots.txt.`, body);
