@@ -48,6 +48,21 @@ export function summarize(all, t = Date.now()) {
   };
 }
 
+// an unfilled placeholder in a task (since 3.86): "example", "<words>", "{q}", "%3Cwords%3E" and the bare names of a search
+// field. Programs that walk the maps of the sea call the example addresses as they are; such a word is no demand, so it
+// never becomes a task in the pulse, and the node counts it apart (template_hits_today on /pulse).
+const PLACEHOLDER_WORDS = new Set(['example', 'q', 'query', 'search', 'test', 'searchterms']);
+export function placeholderQ(q) {
+  if (typeof q !== 'string') return false;
+  let t = q.trim(); try { t = decodeURIComponent(t.replace(/\+/g, ' ')); } catch {}
+  t = t.trim().toLowerCase();
+  if (!t) return false;
+  return PLACEHOLDER_WORDS.has(t) || /^<[^<>]{1,40}>$/.test(t) || /^\{[^{}]{1,40}\}$/.test(t);
+}
+// the name a placeholder is counted under: the word itself, short
+const placeholderKey = (q) => { let t = String(q).trim(); try { t = decodeURIComponent(t.replace(/\+/g, ' ')); } catch {} return t.trim().toLowerCase().slice(0, 24); };
+export const TEMPLATE_KEYS = 8;
+
 // the same numbers the database gives (mare_pulse), from the hits of the last day and the sales. Today is the UTC day.
 // A task is put on show only once two different callers carried it: one agent's words alone never are.
 export const PULSE_FIRST = ['unique_domains_today', 'top_queries', 'top_domains', 'agents_today', 'hits_today', 'hits_last_hour', 'paid_today_usd', 'free_samples_today'];
@@ -103,7 +118,14 @@ export function createLedger({ url, key, secret, fetch: get = (...a) => fetch(..
   const hold = (p) => { try { waitUntil?.(p); } catch {} return p; };
 
   // ---- the node's own copy of the last day
-  const mem = { sales: [], hits: [] };
+  const mem = { sales: [], hits: [], templates: { day: null, n: 0, by: {} } };
+  // a placeholder counted for the UTC day (since 3.86): at most TEMPLATE_KEYS names, the rest under "other"
+  const template = (q) => {
+    const day = dayOf(now()), t = mem.templates;
+    if (t.day !== day) { t.day = day; t.n = 0; t.by = {}; }
+    const k = placeholderKey(q), key = k in t.by || Object.keys(t.by).filter((x) => x !== 'other').length < TEMPLATE_KEYS ? k : 'other';
+    t.n++; t.by[key] = (t.by[key] || 0) + 1;
+  };
   const prune = () => {
     const cut = now() - DAYMS;
     let i = 0; while (i < mem.hits.length && Date.parse(mem.hits[i].ts) < cut) i++;
@@ -162,7 +184,9 @@ export function createLedger({ url, key, secret, fetch: get = (...a) => fetch(..
     // one walk through a /via/ address; never awaited by the one who walks
     hit(row) {
       // kind: walk (through /via/), read (the reader), door (/d/…), go (a pathway's go link), site (/site/<domain> as data), ask (a question to the brain)
-      const h = { ts: new Date(now()).toISOString(), kind: KINDS.has(row.kind) ? row.kind : 'walk', target_domain: row.target_domain ?? null, q: row.q ?? null, ua_hash: row.ua_hash ?? null, token_host: row.token_host ?? null, outcome: row.outcome ?? null, status: Number.isInteger(row.status) ? row.status : null };
+      // an unfilled placeholder keeps its line (kind, site and caller still count), but never as a task
+      const ph = placeholderQ(row.q); if (ph) template(row.q);
+      const h = { ts: new Date(now()).toISOString(), kind: KINDS.has(row.kind) ? row.kind : 'walk', target_domain: row.target_domain ?? null, q: ph ? null : row.q ?? null, ua_hash: row.ua_hash ?? null, token_host: row.token_host ?? null, outcome: row.outcome ?? null, status: Number.isInteger(row.status) ? row.status : null };
       mem.hits.push(h); if (mem.hits.length % 500 === 0) prune();
       if (on) { queue.hits.push(h); if (queue.hits.length > 5000) { queue.hits.splice(0, queue.hits.length - 5000); dropped++; } if (queue.hits.length >= 200) soon(5); else soon(1000); }
     },
@@ -192,6 +216,8 @@ export function createLedger({ url, key, secret, fetch: get = (...a) => fetch(..
       if (on && !down()) { try { await flush(); return { ...(await rpc('mare_pulse', {}, READ_MS)), source: 'database' }; } catch (e) { failed(e); } }
       return { ...pulseOf(mem.hits, mem.sales, now()), source: on ? 'this node: the database did not answer, so these are only the walks since the node started' : 'this node (no database): the walks since the node started' };
     },
+    // the unfilled placeholders of the UTC day, since the node started (since 3.86); null on a new day before the first
+    templates() { const t = mem.templates; return t.day === dayOf(now()) && t.n ? { day: t.day, n: t.n, by: { ...t.by } } : null; },
     // everything that waits goes out now (the end of a run, the proofs)
     async settle() { for (let i = 0; i < 6 && on && waiting() && !down(); i++) { if (timer) { clearTimeout(timer); timer = null; } await (flushing || flush()); } return waiting(); },
     state() { return { on, resting: down(), waiting: waiting(), dropped, lastWrite, lastError, kept: { sales: mem.sales.length, hits: mem.hits.length } }; },

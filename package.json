@@ -28,6 +28,7 @@
     "proof:legal": "node tools/legal-proof.mjs",
     "proof:seed": "node tools/seed-proof.mjs",
     "proof:find": "node tools/find-proof.mjs",
+    "proof:placeholder": "node tools/placeholder-proof.mjs",
     "proof:areas": "node tools/areas-proof.mjs",
     "proof:open": "node tools/open-proof.mjs",
     "proof:bench": "node tools/bench-proof.mjs",
