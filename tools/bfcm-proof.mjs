@@ -11,6 +11,8 @@
 //   honest   never an Amazon page, never a forecast, never /mcp/app; open to search engines only with 10 pages counted and
 //            Cyber Monday measured; the start list, the watch and the resting pages of the book are all read
 //   found    /seen and llms.txt name the balance; the JSON is CC BY 4.0 and names each page's record
+//   again    (3.88) on a day of measuring again the second sentence (and again.line in the JSON) says how many Black Friday
+//            pages were measured again today; without the book's numbers for today the page is as before
 // Negative controls at the end: each rule broken in a copy of the code, and this proof must fail there.
 // Runs without the network: node tools/bfcm-proof.mjs   (exit code 1 when a proof fails or a control is not caught)
 //   --no-controls   only the proofs (the controls run this file that way in each broken copy)
@@ -32,7 +34,7 @@ class Clock extends D { constructor(...a) { if (a.length) super(...a); else supe
 globalThis.Date = Clock;
 const proof = async (name, fn) => { try { await fn(); passed++; console.log(`  ok   ${name}`); } catch (e) { failed++; console.log(`  FAIL ${name}\n       ${String(e?.stack || e).split('\n').slice(0, 6).join('\n       ')}`); } };
 const imp = (f) => import(pathToFileURL(join(ROOT, 'node', f)).href);
-const { BFCM, bfcmOf, bfcmJson, bfcmHtml, bfcmHeadline, bfcmLead } = await imp('bfcm.mjs');
+const { BFCM, bfcmOf, bfcmJson, bfcmHtml, bfcmHeadline, bfcmLead, bfcmAgainLine } = await imp('bfcm.mjs');
 
 // ------------------------------------------------------------------ the pages: series as node/book.mjs writes them ({d, p, c, r})
 const P = (h, n) => `https://${h}/products/${n}`;
@@ -91,6 +93,15 @@ await proof('honest: no forecast, no /mcp/app, no paid door on the page; CC BY 4
   for (const w of ['Adobe', 'forecast:', '/mcp/app', '/x402/', 'amazon.com']) assert.ok(!h.toLowerCase().includes(w.toLowerCase()), w);
   assert.match(h, /"@type":"Dataset"/); assert.match(h, /"temporalCoverage":"2026-11-27\/2026-11-30"/); assert.match(h, /creativecommons\.org\/licenses\/by\/4\.0/);
   assert.match(h, /GET https:\/\/mare\.test\/deal\?url=&lt;product page&gt;/);
+});
+await proof('again: the second sentence says how many Black Friday pages were measured again today, right after the first; none without it', async () => {
+  const a = { day: '2026-11-29', pages: 34, measured_today: 12, pending: 22, until: '2026-11-30' };
+  assert.equal(bfcmAgainLine(a), '12 of the 34 product pages with a Black Friday price were measured again today (29 Nov 2026); each is measured again every day until Cyber Monday.');
+  assert.equal(bfcmAgainLine(null), null); assert.equal(bfcmAgainLine({ ...a, pages: 0 }), null);
+  const early = ROWS.map((r) => ({ ...r, series: r.series.filter((x) => x.d < '2026-11-30') }));
+  const h = bfcmHtml(early, '', '2026-11-29', a); assert.match(h, /<p class="lead">Measured on Black Friday[^\n]*<\/p>\n<p id="again">12 of the 34 product pages/);
+  const j = bfcmJson(early, '', '2026-11-29', a); assert.equal(j.again.line, bfcmAgainLine(a)); assert.equal(j.again.pending, 22);
+  assert.ok(!('again' in bfcmJson(early, '', '2026-11-29')) && !bfcmHtml(early, '', '2026-11-29').includes('id="again"'), 'as before without it');
 });
 await proof('index: open to search engines only with 10 pages counted and Cyber Monday measured', async () => {
   const ten = Array.from({ length: 10 }, (_, i) => ({ url: P(`s${i}.shop.test`, 'x'), name: `Item ${i}`, series: s([['2026-11-27', 10 + i], ['2026-11-30', 9 + i]]) }));
@@ -163,10 +174,11 @@ if (!process.argv.includes('--no-controls')) {
     ['an Amazon page counted', 'node/bfcm.mjs', ' && !AMAZON.test(u.hostname.toLowerCase())', ''],
     ['open to search engines under 10 pages', 'node/bfcm.mjs', 'b.pages >= BFCM.min && ', ''],
     ['the largest rise first', 'node/bfcm.mjs', 'a.counted ? a.change_pct - b.change_pct', 'a.counted ? b.change_pct - a.change_pct'],
-    ['the first sentence left out of the page', 'node/bfcm.mjs', '<p class="lead">${esc(lead)}</p>\n${b.lines', '${b.lines'],
+    ['the first sentence left out of the page', 'node/bfcm.mjs', '<p class="lead">${esc(lead)}</p>\n${aline', '${aline'],
     ['the pages left out not said', 'node/bfcm.mjs', 'const out = b.left_out ?', 'const out = false ?'],
     ['the start list of the book not read', 'node/lens.mjs', '...(Array.isArray(seed) ? seed : []), ...(Array.isArray(watch)', '...(Array.isArray(watch)'],
     ['unchanged taken as dearer', 'node/bfcm.mjs', "cents(cm.p) > cents(bf.p) ? 'dearer' : 'unchanged'", "'dearer'"],
+    ['the second sentence left out of the page', 'node/bfcm.mjs', "${aline ? `<p id=\"again\">${esc(aline)}</p>\\n` : ''}", ''],
     ['/seen without the link', 'node/seen.mjs', ' Black Friday or Cyber Monday, measured on the same pages: <a href="${SEEN.path}/bfcm-2026">the weekend balance</a>.', ''],
   ];
   for (const [name, f, from, to] of CONTROLS) {

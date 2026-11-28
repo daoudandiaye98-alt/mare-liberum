@@ -10,6 +10,8 @@
 //            Cyber Monday, the change, and the lowest price measured after Cyber Monday until 15 Jan 2027 (the price-match
 //            windows), ordered by the change, the largest fall first; each links its open record
 //   index    noindex until 10 pages count and Cyber Monday is measured; never an Amazon page; CC BY 4.0
+//   again    (since 3.88) from Saturday to Cyber Monday the book measures every page with a Black Friday price again each day
+//            (node/book.mjs AGAIN); the second sentence says how many of them were measured again today
 // Everything here is pure: node/lens.mjs gathers the rows (bfcmRows), node/core.mjs serves the page and its JSON.
 import { SEEN, pageKit } from './seen.mjs';
 import { AMAZON } from './commission.mjs';
@@ -73,21 +75,27 @@ export function bfcmLead(b) {
   const next = String(b.day || '') >= BFCM.cm ? `the Cyber Monday measurement runs today (${LONG(BFCM.cm)})` : `the Cyber Monday measurement follows on ${LONG(BFCM.cm)}`;
   return `Measured on Black Friday (${LONG(BFCM.bf)}): ${pages(b.measured_black_friday)} on the store's own page; ${next}, then this page says which were cheaper.`;
 }
+// (since 3.88) the second sentence on a day of measuring again: how many Black Friday pages gave a record again today; null when
+// the book says nothing for today
+export function bfcmAgainLine(a) {
+  if (!a || !(a.pages > 0) || !/^\d{4}-\d{2}-\d{2}$/.test(String(a.day || ''))) return null;
+  return `${a.measured_today} of the ${pages(a.pages)} with a Black Friday price ${a.measured_today === 1 ? 'was' : 'were'} measured again today (${LONG(a.day)}); each is measured again every day until Cyber Monday.`;
+}
 export const bfcmIndexable = (b) => b.pages >= BFCM.min && String(b.day || '') >= BFCM.cm;
 
 const HOW = 'Counted only from the sea\'s own daily sample of product pages: the price each store\'s own product page asked, read once a day (UTC), the same pages every day. A page counts when it was measured on both Black Friday and Cyber Monday in the same currency; unchanged means the same price to the cent. No forecast, no estimate and no Amazon page is in these numbers.';
 
-export function bfcmJson(rows, base, day) {
-  const b0 = String(base || '').replace(/\/+$/, ''), b = bfcmOf(rows, day);
+export function bfcmJson(rows, base, day, again = null) {
+  const b0 = String(base || '').replace(/\/+$/, ''), b = bfcmOf(rows, day), aline = bfcmAgainLine(again);
   return {
     what: 'Black Friday or Cyber Monday, measured: the same product pages on the store\'s own page on both days', days: { black_friday: BFCM.bf, saturday: BFCM.sat, sunday: BFCM.sun, cyber_monday: BFCM.cm, after_until: BFCM.until },
-    headline: bfcmHeadline(b), lead: bfcmLead(b), ...b, lines: b.lines.map((x) => ({ ...x, ...(x.record ? { record: `${b0}${SEEN.path}/${x.record}` } : {}) })),
+    headline: bfcmHeadline(b), lead: bfcmLead(b), ...(aline ? { again: { ...again, line: aline } } : {}), ...b, lines: b.lines.map((x) => ({ ...x, ...(x.record ? { record: `${b0}${SEEN.path}/${x.record}` } : {}) })),
     how: HOW, indexable: bfcmIndexable(b), license: 'https://creativecommons.org/licenses/by/4.0/', page: `${b0}${BFCM.path}`, records: `${b0}${SEEN.path}`, check_one: `${b0}/deal?url=<product page>`,
   };
 }
 
-export function bfcmHtml(rows, base, day) {
-  const b0 = String(base || '').replace(/\/+$/, ''), b = bfcmOf(rows, day), H = bfcmHeadline(b), lead = bfcmLead(b);
+export function bfcmHtml(rows, base, day, again = null) {
+  const b0 = String(base || '').replace(/\/+$/, ''), b = bfcmOf(rows, day), H = bfcmHeadline(b), lead = bfcmLead(b), aline = bfcmAgainLine(again);
   const robots = bfcmIndexable(b) ? '' : '<meta name="robots" content="noindex,follow">';
   const sat = b.lines.some((x) => 'saturday' in x), sun = b.lines.some((x) => 'sunday' in x), after = b.lines.some((x) => x.lowest_after_cyber_monday);
   const p = (v, c) => (v == null ? '–' : esc(money(v, c)));
@@ -96,7 +104,7 @@ export function bfcmHtml(rows, base, day) {
   return `${head(`${H} | Mare Liberum`, lead, `${b0}${BFCM.path}`, `${robots}<link rel="alternate" type="application/json" href="${esc(`${b0}${BFCM.path}.json`)}">${ld(data)}`)}
 <body><main><h1>${esc(H)}</h1>
 <p class="lead">${esc(lead)}</p>
-${b.lines.length ? `<table><thead><tr><th>Product</th><th>Black Friday</th>${sat ? '<th>Sat</th>' : ''}${sun ? '<th>Sun</th>' : ''}<th>Cyber Monday</th><th>Change</th>${after ? `<th>Lowest since</th>` : ''}</tr></thead><tbody>${b.lines.map(row).join('')}</tbody></table>` : ''}
+${aline ? `<p id="again">${esc(aline)}</p>\n` : ''}${b.lines.length ? `<table><thead><tr><th>Product</th><th>Black Friday</th>${sat ? '<th>Sat</th>' : ''}${sun ? '<th>Sun</th>' : ''}<th>Cyber Monday</th><th>Change</th>${after ? `<th>Lowest since</th>` : ''}</tr></thead><tbody>${b.lines.map(row).join('')}</tbody></table>` : ''}
 <p><small>${esc(HOW)}</small></p>
 <h2>Check a price before your person buys</h2><p>The same check, for any product page, free and without an account:</p>
 <pre>GET ${esc(b0)}/deal?url=&lt;product page&gt;</pre>

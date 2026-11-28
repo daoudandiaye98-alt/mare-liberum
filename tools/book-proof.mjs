@@ -19,6 +19,10 @@
 //            shipped file holds and is read whole; its pages go before the watch and take their places in it; a page that gave
 //            no comparison on 2 days in a row rests 30 days (a start-list page is skipped, a watched page leaves, a new page
 //            waits); POST /tide visits the start list first, /seen.json names seed and dry; a node without a start list is as before
+//   again    (3.88, "Die Nachmessung") on 28 to 30 Nov 2026 every page with a Black Friday price (visited on Black Friday, of the
+//            start list, the watch or resting) is visited again first, also when it rests dry; such a visit changes neither the
+//            dry pages nor the watch; past 40 a day only such pages, up to 100, and only with more than 800 MB free; from
+//            1 Dec 2026 as before; /seen.json and the weekend balance say how many were measured again today
 // Negative controls at the end: each rule broken in a copy of the code, and this proof must fail there.
 // Runs without the network: node tools/book-proof.mjs   (exit code 1 when a proof fails or a control is not caught)
 //   --no-controls   only the proofs (the controls run this file that way in each broken copy)
@@ -30,17 +34,18 @@ import { join, dirname } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { createRequire } from 'node:module';
 import { Buffer } from 'node:buffer';
+import { createHash } from 'node:crypto';
 
 const ROOT = join(dirname(fileURLToPath(import.meta.url)), '..');
 for (const k of ['MARE_TOLL', 'MARE_ENGINE', 'MARE_FAIR', 'MARE_X402_FACILITATOR', 'MARE_PAY_TO', 'MARE_ROUTE_PRICE_CENTS', 'MARE_STATE', 'MARE_DB_URL', 'MARE_DB_KEY', 'MARE_DB_SECRET', 'MARE_BASE_RPC', 'MARE_CATALOG_ID']) delete process.env[k];
 process.env.MARE_VIA_SECRET = 'book-proof-via-key, a test value';
 let passed = 0, failed = 0;
-const D = globalThis.Date; let T0 = D.parse('2026-11-27T09:00:00.000Z');
+const D = globalThis.Date; let T0 = D.parse('2026-11-21T09:00:00.000Z'); // (since 3.88) before the days of measuring again, which have proofs of their own
 class Clock extends D { constructor(...a) { if (a.length) super(...a); else super(T0); } static now() { return T0; } }
 globalThis.Date = Clock;
 const proof = async (name, fn) => { T0 += 60_000; try { await fn(); passed++; console.log(`  ok   ${name}`); } catch (e) { failed++; console.log(`  FAIL ${name}\n       ${String(e?.stack || e).split('\n').slice(0, 6).join('\n       ')}`); } };
 const imp = (f) => import(pathToFileURL(join(ROOT, 'node', f)).href);
-const { BOOK, bookUrl, nextVisit, watchAfter, seriesAfter, freshOf, seedOf, loadWatchSeed, dryAfter, isDry, WATCH_SEED_FILE } = await imp('book.mjs');
+const { BOOK, AGAIN, bookUrl, nextVisit, watchAfter, seriesAfter, freshOf, seedOf, loadWatchSeed, dryAfter, isDry, againOn, againOf, perDayOn, WATCH_SEED_FILE } = await imp('book.mjs');
 const { SEEN } = await imp('seen.mjs');
 
 // ------------------------------------------------------------------ the world: shops, the catalog, DNS
@@ -244,6 +249,57 @@ await proof('POST /tide visits the start list first; /seen.json names seed and d
   } finally { delete cfg.watchSeed; }
   const b = (await call('/seen.json')).j.book; assert.equal(b.seed, undefined, 'a node without a start list says what it said before');
 });
+console.log('again');
+await proof('the days of measuring again are 28 to 30 Nov 2026, the days of the weekend balance; past 40 a day only then and only with more than 800 MB free', async () => {
+  const { BFCM } = await imp('bfcm.mjs');
+  assert.deepEqual([AGAIN.bf, AGAIN.from, AGAIN.to], [BFCM.bf, BFCM.sat, BFCM.cm]);
+  assert.deepEqual(['2026-11-27', '2026-11-28', '2026-11-30', '2026-12-01'].map(againOn), [false, true, true, false]);
+  assert.equal(perDayOn('2026-11-29', 2000), 100); assert.equal(perDayOn('2026-11-29', 800), 40); assert.equal(perDayOn('2026-11-29', NaN), 40, 'unknown memory is too little');
+  assert.equal(perDayOn('2026-12-01', 4000), 40); assert.equal(perDayOn('2026-11-27', 4000), 40);
+});
+await proof('a page to measure again goes first, also when it rests dry; past 40 visits only such a page, up to the pace of the day; it leaves the watch as it is', async () => {
+  const A = 'https://a.deal-proof.dev/products/x', S = 'https://s.deal-proof.dev/products/y', W = 'https://w.deal-proof.dev/products/z';
+  assert.deepEqual(nextVisit({ again: [A], seed: [S], watch: [W], dry: (u) => u === A }), { url: A, kind: 'again' }, 'first, though it rests');
+  assert.deepEqual(nextVisit({ again: [A], seed: [S], done: [A] }), { url: S, kind: 'seed' }, 'once a day');
+  assert.deepEqual(nextVisit({ again: [A], seed: [S], busy: (h) => h === 'a.deal-proof.dev' }), { url: S, kind: 'seed' }, 'its store waits the hour too');
+  assert.deepEqual(nextVisit({ tried: 40, again: [A], seed: [S], max: 100 }), { url: A, kind: 'again' }, 'past 40 with the pace of the day');
+  assert.equal(nextVisit({ tried: 40, seed: [S], watch: [W], max: 100 }), null, 'past 40 nothing else');
+  assert.equal(nextVisit({ tried: 100, again: [A], max: 100 }), null, 'never past the pace of the day');
+  assert.equal(nextVisit({ tried: 40, again: [A] }), null, 'without the higher pace 40 stays the cap');
+  assert.deepEqual(watchAfter([W], { url: A, kind: 'again' }, true), [W], 'it joins no watch'); assert.deepEqual(watchAfter([W, A], { url: A, kind: 'again' }, false, { dry: true }), [W, A], 'and leaves none');
+});
+await proof('the pages to measure again: store product pages with a measured Black Friday price, each once, never Amazon', async () => {
+  const bf = [{ d: '2026-11-27', p: 10, c: 'USD' }];
+  const S = { 'https://a.deal-proof.dev/products/x': bf, 'https://b.deal-proof.dev/products/y': [{ d: '2026-11-26', p: 10, c: 'USD' }], 'https://www.amazon.com/products/z': bf, 'https://c.deal-proof.dev/pages/about': bf, 'https://d.deal-proof.dev/products/n': [{ d: '2026-11-27', p: null, c: 'USD' }] };
+  assert.deepEqual(againOf([...Object.keys(S), 'https://a.deal-proof.dev/products/x'], (u) => S[u]), ['https://a.deal-proof.dev/products/x']);
+});
+await proof('POST /tide on 29 Nov measures the Black Friday page again first though it rests, changes neither the dry pages nor the watch; /seen.json and the balance say so', async () => {
+  const sk = `book:series:${createHash('sha256').update(RUN).digest('hex').slice(0, 32)}`;
+  T0 = D.parse('2026-11-27T20:00:00.000Z');
+  await kv.set('book:done:2026-11-27', [RUN, GONE], 3 * 86400); await kv.set(sk, [{ d: '2026-11-27', p: 89, c: 'USD' }], 30 * 86400);
+  const dry0 = { [RUN]: { d: '2026-11-27', n: 2 } }; await kv.set('book:dry', dry0, 30 * 86400); await kv.set('book:watch', [JACKET], 30 * 86400); await kv.set('book:again', null);
+  T0 = D.parse('2026-11-29T06:00:00.000Z'); read.length = 0; shopPrice = '79.00'; await seed(['jacket']); await tide();
+  assert.deepEqual(pages(), ['shop.deal-proof.dev/products/trail-runner-3'], 'the resting Black Friday page first');
+  assert.deepEqual(await kv.get('book:again'), [RUN], 'the list: the pages of Black Friday with a price (the page that is gone has none)');
+  assert.deepEqual(await kv.get('book:dry'), dry0, 'the dry pages as they were'); assert.deepEqual(await kv.get('book:watch'), [JACKET], 'the watch as it was');
+  assert.deepEqual((await sea.bookSeries(RUN)).map((x) => x.d), ['2026-11-27', '2026-11-29'], 'the series has Sunday');
+  assert.deepEqual((await call('/seen.json')).j.book.again, { day: '2026-11-29', pages: 1, measured_today: 1, pending: 0, until: '2026-11-30' });
+  const b = (await call('/seen/bfcm-2026.json')).j;
+  assert.equal(b.again.line, '1 of the 1 product page with a Black Friday price was measured again today (29 Nov 2026); each is measured again every day until Cyber Monday.');
+  assert.equal(b.lines.find((x) => x.url === RUN)?.sunday, 79, 'the page stands in the balance with its Sunday');
+  const h = (await call('/seen/bfcm-2026', { accept: 'text/html' })).text; assert.ok(/<p class="lead">[^\n]*<\/p>\n<p id="again">1 of the 1 product page/.test(h), 'the second sentence');
+});
+await proof('on Cyber Monday past 40 visits only a page to measure again, only with more than 800 MB free; from 1 Dec as before', async () => {
+  T0 = D.parse('2026-11-30T06:00:00.000Z'); await kv.set('book:tried:2026-11-30', 40, 3 * 86400); read.length = 0;
+  assert.equal((await sea.bookStep(BASE, [], { freeMB: 500 })).calm, true, 'little memory: 40 stays the cap');
+  const r = await sea.bookStep(BASE, [], { freeMB: 2000 }); assert.equal(r.kind, 'again'); assert.equal(r.url, RUN);
+  assert.equal((await sea.bookStep(BASE, [], { freeMB: 2000 })).calm, true, 'nothing else past 40');
+  T0 = D.parse('2026-12-01T06:00:00.000Z'); await kv.set('book:tried:2026-12-01', 40, 3 * 86400);
+  assert.equal((await sea.bookStep(BASE, [], { freeMB: 4000 })).calm, true, '1 Dec: 40 is the cap again');
+  await kv.set('book:tried:2026-12-01', 0, 3 * 86400); await seed(['jacket']);
+  const n = await sea.bookStep(BASE, [], { freeMB: 4000 }); assert.notEqual(n?.url, RUN, '1 Dec: the resting page rests again');
+  assert.equal((await call('/seen.json')).j.book.again, undefined, '/seen.json without again');
+});
 await proof('llms.txt names the record book; proof:book in package.json', async () => {
   const l = readFileSync(join(ROOT, 'site/llms.txt'), 'utf8'); for (const x of ['The record book:', '"by": "sea"', 'field "book" of https://mareliberum.dev/seen.json', 'The start list of the record book:', 'config/watch-seed.json', 'Fields "seed" (pages of the start list watched) and "dry"']) assert.ok(l.includes(x), x);
   assert.equal(JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf8')).scripts['proof:book'], 'node tools/book-proof.mjs');
@@ -259,7 +315,7 @@ if (!process.argv.includes('--no-controls')) {
     ['an Amazon page visited', 'node/book.mjs', 'if (!host || AMAZON.test(host)) return null;', 'if (!host) return null;'],
     ['a checkout or any page visited, not only product pages', 'node/book.mjs', "return /\\/products\\/[^/]+\\/?$/.test(path) && !/\\/(cart|checkouts?)\\//.test(path) ? c : null;", 'return c;'],
     ['new pages before the watch', 'node/book.mjs', "for (const url of w) if (!ss.has(url) && ok(url)) return { url, kind: 'watch' };", ''],
-    ['the same store visited again within the hour', 'node/lens.mjs', 'busy: (x) => busy.has(x), dry: resting });', 'busy: () => false, dry: resting });'],
+    ['the same store visited again within the hour', 'node/lens.mjs', 'busy: (x) => busy.has(x), dry: resting, max });', 'busy: () => false, dry: resting, max });'],
     ['no cap of visits a day', 'node/book.mjs', 'if (!(tried < BOOK.perDay)) return null;', ''],
     ['a visit counted as an agent\'s deal check', 'node/lens.mjs', 'if (!ctx?.uncounted && !book) { const day = now().slice(0, 10);', 'if (!ctx?.uncounted) { const day = now().slice(0, 10);'],
     ['a visit left as a look in the memory of agents', 'node/lens.mjs', '!ctx?.uncounted && !book) await kv.set(k, remembered(', '!ctx?.uncounted) await kv.set(k, remembered('],
@@ -270,11 +326,16 @@ if (!process.argv.includes('--no-controls')) {
     ['the start list after the watch', 'node/book.mjs', "for (const url of s) if (ok(url)) return { url, kind: 'seed' };", "for (const url of [...w, ...s]) if (ok(url)) return { url, kind: s.includes(url) ? 'seed' : 'watch' };"],
     ['more than 2 pages of a store in the start list', 'node/book.mjs', 'else if ((per[h] || 0) >= BOOK.seedPerStore)', 'else if (false)'],
     ['an Amazon page or any link in the start list', 'node/book.mjs', 'const u = bookUrl(p), h = u && bookHost(u);', 'const u = typeof p === \'string\' ? p : null, h = u && bookHost(u);'],
-    ['a dry page visited again', 'node/book.mjs', 'ok = (url) => !d.has(url) && !dry(url) && !busy(bookHost(url));', 'ok = (url) => !d.has(url) && !busy(bookHost(url));'],
+    ['a dry page visited again', 'node/book.mjs', 'ok = (url) => free(url) && !dry(url);', 'ok = (url) => free(url);'],
     ['dry after one day', 'node/book.mjs', '(Number(x.n) || 0) >= BOOK.dryDays &&', '(Number(x.n) || 0) >= 1 &&'],
     ['dry days counted with a gap', 'node/book.mjs', 'n: x && x.d === dayBefore(day) ? x.n + 1 : 1', 'n: x ? x.n + 1 : 1'],
     ['a dry page resting forever', 'node/book.mjs', '(!day || daysBetween(x.d, day) <= BOOK.dryRestDays)', 'true'],
     ['the start list not handed to the book', 'node/core.mjs', 'sea.bookStep(base, cfg.watchSeed).catch(', 'sea.bookStep(base).catch('],
+    ['the Black Friday pages not measured again first', 'node/book.mjs', "for (const url of list(again)) if (free(url)) return { url, kind: 'again' };", ''],
+    ['a visit to measure again judged dry', 'node/lens.mjs', "const dry2 = visit.kind === 'again' ? dry : dryAfter(dry, visit.url, day, compared);\n      if (visit.kind !== 'again') await kv.set('book:dry', dry2, 400 * DAY);", "const dry2 = dryAfter(dry, visit.url, day, compared);\n      await kv.set('book:dry', dry2, 400 * DAY);"],
+    ['a visit to measure again joins the watch', 'node/book.mjs', "if (visit?.kind === 'seed' || visit?.kind === 'again') return w;", "if (visit?.kind === 'seed') return w;"],
+    ['measuring again after Cyber Monday', 'node/book.mjs', '&& day >= AGAIN.from && day <= AGAIN.to;', '&& day >= AGAIN.from;'],
+    ['past 40 a day without enough memory', 'node/book.mjs', '&& Number.isFinite(freeMB) && freeMB > AGAIN.freeMB ?', ' ?'],
     ['the node not reading the start list', 'serve.mjs', 'const out = await handle(request, db, { kv, seed, site, watchSeed, waitUntil,', 'const out = await handle(request, db, { kv, seed, site, waitUntil,'],
   ];
   for (const [name, f, from, to] of CONTROLS) {
