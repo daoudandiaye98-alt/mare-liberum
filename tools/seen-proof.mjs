@@ -314,7 +314,7 @@ if (!process.argv.includes('--no-controls')) {
     ['the heading of a record only the product name again', 'node/seen.mjs', '<body><main><h1>${esc(recordHeadline(rec))}</h1>', '<body><main><h1>${esc(name)}</h1>'],
     ['the first sentence of a record left out', 'node/seen.mjs', '<p class="lead">${esc(lead)}</p>\n<p class="box">', '<p class="box">'],
     ['the links back to the sea before the heading', 'node/seen.mjs', '<body><main><h1>${esc(recordHeadline(rec))}</h1>', '<body><main>${NAV()}<h1>${esc(recordHeadline(rec))}</h1>'],
-    ['the dive plan back before the heading of a record', 'node/skin.mjs', 'const PLAN_LATE = /^\\/seen(?:\\/|$)/;', 'const PLAN_LATE = /^$/;'],
+    ['the dive plan back before the heading of a record', 'node/skin.mjs', 'const PLAN_LATE = /^\\/(?:seen|buy)(?:\\/|$)/;', 'const PLAN_LATE = /^$/;'],
     ['/seen without its count in the heading', 'node/seen.mjs', "const H = xs.length ? `Open price records: ${cheaper} of", "const H = !xs.length ? `Open price records: ${cheaper} of"],
     ['the saving taken from an offer flagged as far below the others', 'node/seen.mjs', 'find((x) => !x?.caution && Number.isFinite(x?.below_page_pct))', 'find((x) => Number.isFinite(x?.below_page_pct))'],
     ['the share of all records, not of the pages compared', 'node/seen.mjs', 'cheaper_share_pct: pct(cheaper.length, compared.length)', 'cheaper_share_pct: pct(cheaper.length, xs.length)'],

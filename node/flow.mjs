@@ -104,6 +104,14 @@ const FAST_MIN = 480;
 const https = (u) => { try { const x = new URL(String(u)); return x.protocol === 'https:' && x.hostname.includes('.') ? x.toString().slice(0, 300) : undefined; } catch { return undefined; } };
 async function sha(s) { const d = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(s)); return [...new Uint8Array(d)].map((b) => b.toString(16).padStart(2, '0')).join(''); }
 // the site that sent a visitor: the host only, never the path
+// (since 3.85) the census counts, for these kinds only, which pages each named reader pulls. The part of the path it keeps is the
+// first one, with /* when the path goes deeper (/buy/*, /seen/*, /seen), at most 32 characters and never the query, so no handle,
+// record id or search words are written down
+const NP_KINDS = new Set(['search-ai', 'ai-crawler', 'search', 'assistant']);
+export const npSeg = (path) => { const parts = String(path || '/').split(/[?#]/)[0].split('/'), first = (parts[1] || '').replace(/[|\s]/g, '').slice(0, 30); return `/${first}${parts.length > 2 && parts.slice(2).some(Boolean) ? '/*' : ''}`; };
+// the day's counts turned into { 'kind|name': [{ path, n }] }, the ten most read per reader; a key is split at its last |,
+// because names hold spaces and could hold a | of their own
+export const npOf = (np) => { const by = {}; for (const [k, n] of Object.entries(np && typeof np === 'object' ? np : {})) { const i = k.lastIndexOf('|'); if (i < 1 || !Number.isFinite(n)) continue; (by[k.slice(0, i)] ||= []).push({ path: k.slice(i + 1), n }); } for (const r of Object.keys(by)) by[r] = by[r].sort((a, b) => b.n - a.n).slice(0, 10); return by; };
 const refHost = (u) => { try { const h = new URL(String(u)).hostname.toLowerCase(); return /^[a-z0-9.-]{1,100}$/.test(h) ? h : undefined; } catch { return undefined; } };
 const strip = (o) => { for (const k of Object.keys(o)) if (o[k] == null || o[k] === '') delete o[k]; return o; };
 
@@ -452,6 +460,9 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
         if (Number.isFinite(c.geo?.lat) && Number.isFinite(c.geo?.lon)) { m.cells = m.cells || {}; const k = `${Math.round(c.geo.lat / 2) * 2},${Math.round(c.geo.lon / 2) * 2}`, x = m.cells[k] || (Object.keys(m.cells).length < 1500 ? { n: 0, r: {} } : null); if (x) { x.n++; const r = roleOf(c.kind); x.r[r] = (x.r[r] || 0) + 1; m.cells[k] = x; } }
         // what each kind of visitor reads: the first part of the path, counted by role
         { m.p = m.p || {}; const seg = '/' + (String(c.path || '/').split('/')[1] || '').slice(0, 24), k = `${roleOf(c.kind)} ${seg}`; if (m.p[k] || Object.keys(m.p).length < 400) m.p[k] = (m.p[k] || 0) + 1; }
+        // (since 3.85) what each named reader of the search and AI kinds reads: kind, name and the first part of the path (a deeper
+        // path ends in /*, the query never counts), so the sea can tell which pages OpenAI search, GPTBot or an assistant really pull
+        if (name && NP_KINDS.has(c.kind)) { m.np = m.np || {}; const k = `${c.kind}|${name}|${npSeg(c.path)}`; if (m.np[k] || Object.keys(m.np).length < 600) m.np[k] = (m.np[k] || 0) + 1; }
         // a full day makes room by letting the quietest name go: never an assistant, never the one just seen, so the big readers keep their true count
         if (name) { const k = `${c.kind}|${name}`; m.names[k] = (m.names[k] || 0) + 1; const keys = Object.keys(m.names); if (keys.length > 400) { let low = null; for (const x of keys) if (x !== k && !x.startsWith('assistant|') && (low === null || m.names[x] < m.names[low])) low = x; if (low) delete m.names[low]; } } return m; })(await kv.get(`census:${day}`)), 40 * DAY);
       if (name && c.kind !== 'browser' && c.kind !== 'tool') {
@@ -482,13 +493,15 @@ export function createFlow({ kv, route, entryOf, log, seed, shop, shopAll, profi
     async census(dayArg) {
       const day = now().slice(0, 10), y = new Date(Date.now() - DAY * 1000).toISOString().slice(0, 10);
       const top = (m, n = 20) => Object.entries(m?.names || {}).sort((a, b) => b[1] - a[1]).slice(0, n).map(([k, v]) => ({ kind: k.split('|')[0], name: k.split('|').slice(1).join('|'), visits: v }));
+      // the pages a named reader pulled that day, the ten most read (only on the whole day, and only where some were counted)
+      const withPaths = (m, list) => { const by = npOf(m?.np); return list.map((x) => { const p = by[`${x.kind}|${x.name}`]; return p ? { ...x, paths: p } : x; }); };
       const sorted = (o, n) => Object.entries(o && typeof o === 'object' ? o : {}).sort((a, b) => b[1] - a[1]).slice(0, n);
       // one past day, whole: every kind, every name the day kept, what each role read, countries, and the assistants seen
       if (dayArg != null && dayArg !== '') {
         const d = String(dayArg);
         if (!/^\d{4}-\d{2}-\d{2}$/.test(d) || Number.isNaN(Date.parse(d))) throw new SeaError('INVALID_ARGUMENT', 'give the day as YYYY-MM-DD; the sea keeps about 40 days', 400);
         const [m, s] = await Promise.all([kv.get(`census:${d}`), kv.get('sightings')]);
-        return { day: d, kinds: m?.kinds || {}, names: top(m, 400), reads: sorted(m?.p, 400).map(([k, n]) => { const [role, ...rest] = k.split(' '); return { role, path: rest.join(' '), n }; }),
+        return { day: d, kinds: m?.kinds || {}, names: withPaths(m, top(m, 400)), reads: sorted(m?.p, 400).map(([k, n]) => { const [role, ...rest] = k.split(' '); return { role, path: rest.join(' '), n }; }),
           countries: sorted(m?.cc, 100).map(([cc, n]) => ({ cc, n })), sightings: (Array.isArray(s) ? s : []).filter((x) => String(x.t).startsWith(d)),
           kept: 'counts and names about 40 days, sightings of assistants about 400 days', note: 'counted per request by the client name it sends; a browser counts as a person once a page was shown in it; nothing about people is kept' };
       }

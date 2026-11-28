@@ -1,6 +1,7 @@
 // Mare Liberum · need pages: one page per buying need, with live offers from the stores of the sea.
 // A person tells an assistant "find me X". The assistant searches the web. This is the page it finds: products with price,
 // stock and buy link, live from the stores, and the way into the sea for the agent itself.
+import { dealFirst } from './pages.mjs';
 const GROUPS = {
   'Shoes & clothing': `running shoes;women's running shoes;men's running shoes;trail running shoes;sneakers;white sneakers;hiking boots;waterproof hiking boots;chelsea boots;sandals;slippers;dress shoes;loafers;
 winter jacket;down jacket;rain jacket;fleece jacket;denim jacket;hoodie;sweatshirt;t-shirt;organic cotton t-shirt;linen shirt;flannel shirt;jeans;chinos;cargo pants;dress;summer dress;
@@ -76,6 +77,10 @@ function spark(h) {
 // cm (node/commission.mjs, only where the operator turned commissions on): the address a person clicks for a shop that pays
 // the sea a commission (a /via/ address: the commission is added when the person's browser opens it, so a crawler never
 // meets a commission link), or null. Such a link says rel="sponsored" and carries the marker; the page says the rule
+// (since 3.85) the free deal check right after the heading of every buy page: ChatGPT search reads /buy, and an assistant
+// that can only open a link meets, in the first lines, what it can do before its person buys. The call is the one of
+// /earn and /about (node/pages.mjs), never a paid door
+const dealLine = (base) => `<p id="deal-first">Before you buy one of these, check its price for free: <code>${esc(dealFirst(base).call)}</code> (the same item at other stores, too-cheap warnings, an open price record).</p>`;
 export function buyPage({ need, slug, products, stores, country, base, at, decision, history = [], cm = null, cmMark = '', cmRule = '' }) {
   // (an offer that already pays through its catalog, promoted with a rate of its own, keeps its link as it is)
   // (cm gives { href, note }: a /via/ address, or for a rule handed out only directly, Amazon's, the visible tagged link, with the
@@ -98,6 +103,7 @@ export function buyPage({ need, slug, products, stores, country, base, at, decis
   return `${head(`${T}: ${n ? `${n} live offers` : 'buy online'} | Mare Liberum`, desc, canon, `${robots}<link rel="alternate" type="application/json" href="${esc(`${canon}.json`)}">${ld(list)}${ld(crumbs)}`)}
 <body><main><p><a href="/">Mare Liberum</a> · <a href="/buy">Buy</a>${groupOf(need) ? ` · ${esc(groupOf(need))}` : ''}</p>
 <h1>${esc(T)}</h1><p>${esc(desc)}</p>
+${dealLine(base)}
 <p><small>Prices for: ${['', ...COUNTRIES].map((c) => c === (country || '') ? `<b>${c || 'any'}</b>` : `<a href="/buy/${slug}${c ? `?country=${c}` : ''}">${c || 'any'}</a>`).join(' · ')} · read ${esc(at)}</small></p>
 ${decision?.pick ? `<p class="pick"><b>The machine pick:</b> ${decision.pick.url ? (() => { const l = seen(go(decision.pick.url, decision.pick)); return `<a href="${esc(l.href)}" rel="${l.rel}">${esc(decision.pick.title)}</a>${l.mark}`; })() : esc(decision.pick.title)} · ${esc(fmt(decision.pick))} · ${esc(decision.pick.store)}<br><small>${esc(decision.why.join(' · '))}. Same rule for every page: relevance, rating, price, traces of agents. Agents: <a href="/decide?need=${encodeURIComponent(need)}">/decide</a></small>${decision.pick.checked ? `<br><small>✓ Checked before paying by ${esc(decision.pick.checked.by)} (${esc(String(decision.pick.checked.at || '').slice(0, 16).replace('T', ' '))} UTC): ${esc(decision.pick.checked.verdict)}${decision.pick.checked.risk != null ? `, risk ${esc(decision.pick.checked.risk)}` : ''}</small>` : ''}</p>` : ''}
 ${history.length > 1 ? (() => { const v = history.filter((x) => x.currency === history[history.length - 1].currency); const lo = Math.min(...v.map((x) => x.price)), hi = Math.max(...v.map((x) => x.price)); return `<p class="pick"><b>On the current:</b> the sea asked the stores ${history.length} times since ${esc(String(history[0].t).slice(0, 10))}. Price of the pick between ${esc(lo)} and ${esc(hi)} ${esc(v[0]?.currency || '')}.<br>${spark(history)}<br><small><a href="/current">The current</a> · <a href="/history/${esc(slug)}">data</a></small></p>`; })() : ''}
@@ -118,6 +124,7 @@ export function buyIndex(base) {
   const site = { '@context': 'https://schema.org', '@type': 'CollectionPage', name: 'Buy · Mare Liberum', url: `${base}/buy`, description: desc };
   return `${head('Buy anything from independent stores, live | Mare Liberum', desc, `${base}/buy`, ld(site))}
 <body><main><p><a href="/">Mare Liberum</a> · the open sea for agents</p><h1>Buy by need</h1><p>${esc(desc)}</p>
+${dealLine(base)}
 <p>Agents: call any need, it does not have to be on this list: <code>GET ${esc(base)}/ask?need=...</code></p>
 ${Object.entries(NEED_GROUPS).map(([g, list]) => `<h2>${esc(g)}</h2><ul class="chips">${list.map((n) => `<li><a href="/buy/${slugOf(n)}">${esc(n)}</a></li>`).join('')}</ul>`).join('\n')}
 <p><small>Mare Liberum sells nothing and takes no cut. Offers come live from the stores.</small></p></main></body></html>`;
