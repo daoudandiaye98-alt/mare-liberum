@@ -333,7 +333,7 @@ await proof('POST /route?a=topup: no key 400, nothing charged; the key without a
   const unknown = await call('/route?a=topup', { method: 'POST', ip: fresh(), headers: { 'x-sea-session': `mls_${'A'.repeat(32)}`, ...payment({ value: '20000' }) } }); assert.equal(unknown.status, 401);
   const ask = await call('/route?a=topup', { method: 'POST', ip: fresh(), headers: bearer(k.key) }); assert.equal(ask.status, 402);
   const v2 = JSON.parse(Buffer.from(ask.h['payment-required'], 'base64').toString('utf8')); assert.equal(v2.accepts[0].amount, '20000'); assert.equal(v2.accepts[0].payTo, WALLET); assert.equal(v2.resource?.url ?? v2.resource, `${BASE}/route?a=topup`);
-  assert.match(ask.j.error.message ?? ask.j.error, new RegExp(`^no wallet needed: run  curl -s ${BASE.replace(/\./g, '\\.')}/session\\?as=key \\| jq -r \\.key  for a new key`)); assert.match(ask.j.next_step.note, /topup is paid/); assert.equal(ask.j.calls_left, 0); assert.ok(ask.j.way_out);
+  assert.match(ask.j.error.message ?? ask.j.error, new RegExp(`^this key buys on credit, no card, no wallet: POST ${BASE.replace(/\./g, '\\.')}/seat with header x-sea-session: <key>`)); assert.match(ask.j.next_step.note, /topup is paid/); assert.equal(ask.j.calls_left, 0); assert.ok(ask.j.way_out);
   facilitator = settles(); const t0 = await ledger.treasury();
   const paid = await call('/route?a=topup', { method: 'POST', ip: fresh(), headers: { ...bearer(k.key), ...payment({ value: '20000' }) } });
   facilitator = null;

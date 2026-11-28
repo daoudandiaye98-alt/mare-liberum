@@ -80,6 +80,11 @@ export const SEAT = Object.freeze({
 });
 export const seatTerms = (s = SEAT) => ({ price_usd: s.cents / 100, period_days: s.days, paths_included: s.paths, price_per_path_over: s.overCents / 100 });
 export const seatLine = (s = SEAT) => `${s.cents / 100} USD for ${s.days} days, ${s.paths.toLocaleString('en-US')} agent paths included, then ${(s.overCents / 100).toFixed(2)} USD per path`;
+// (since 4.1) on credit: a key buys without card or wallet; delivered at once, paid within 7 days or it drops to none;
+// at most 2 purchases on credit per key (node/session.mjs credit)
+export const CREDIT = Object.freeze({ dueDays: 7, perKey: 2 });
+// the first words of every 402 that has no key yet: the way on credit, before the payment line
+export const creditLine = (base = SEA_BASE) => `no card, no wallet: curl -s ${String(base).replace(/\/+$/, '')}/session?as=key | jq -r .key, then repeat this call with header x-sea-session: <key>. that buys on credit, ${CREDIT.dueDays} days.`;
 // (since 4.1) the line every key answer carries: what the key can buy without a card
 export const BUY_LINE = 'this key can buy: POST /seat with header x-sea-session, no card needed';
 export const seatSentence = (s = SEAT) => `Give Mare Liberum ${s.cents / 100} USD for a month, ${s.paths} agent paths included`;

@@ -12,7 +12,7 @@
 // and the sale is written down as unverified. A payment the facilitator itself refuses is answered with 402 again,
 // with the reason, and nothing is delivered for it.
 import { Buffer } from 'node:buffer';
-import { USDC_BASE, HOUSE_WALLET, priceOf, pricingOf, seatLine } from './pricing.mjs';
+import { USDC_BASE, HOUSE_WALLET, priceOf, pricingOf, seatLine, CREDIT } from './pricing.mjs';
 
 // price, wallet and token live in node/pricing.mjs, the one place that writes them down
 export { USDC_BASE, HOUSE_WALLET };
@@ -97,6 +97,11 @@ export function payHowto(t, base) {
   const p = t.pricing || pricingOf(t, base);
   return [
     'Mare Liberum · how to pay for the paid route',
+    '',
+    `No card, no wallet: a key buys the seat on credit, active at once, ${CREDIT.dueDays} days to pay (at most ${CREDIT.perKey} purchases on credit per key).`,
+    `KEY=$(curl -s ${base}/session?as=key | jq -r .key)`,
+    `curl -s -X POST '${base}/seat' -H "x-sea-session: $KEY"`,
+    '   The answer: sale_id, status credit, seat_state active, due_days, checkout_url (a human pays it by card; unpaid, the seat drops to none).',
     '',
     `A human with a card and no wallet: one call gives one link to hand over. A seat: ${seatLine()}.`,
     `curl -s -X POST '${base}/seat?as=host'`,

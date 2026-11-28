@@ -38,7 +38,7 @@
 // The state lives in the node's state (session:…), like the reader credit (node/credit.mjs): no table, no migration. The
 // count of new sessions per network lies under an HMAC of the network with a key of the day (as the toll's accounts do).
 import { createHash, createHmac, hkdfSync, randomBytes } from 'node:crypto';
-import { SEAT } from './pricing.mjs';
+import { SEAT, CREDIT } from './pricing.mjs';
 
 export const SESSION = Object.freeze({ prefix: 'mls_', probe: 20, probeDays: 7, days: 30, perMinute: 30, perNetDay: 10, probeDay: 2000, last: 10 });
 export const SESSION_RE = /^mls_[A-Za-z0-9_-]{32}$/;
@@ -65,6 +65,12 @@ export function sessionOf(headers) {
   return { h, id: idOf(h) };
 }
 
+// (since 4.1) the key itself as the request carries it (x-sea-session or Bearer, also inside the JSON of the key answer), or null
+export function rawKeyOf(headers) {
+  const own = headers?.get?.('x-sea-session'), auth = headers?.get?.('authorization');
+  const s = own != null ? String(own) : auth != null ? String(auth).replace(/^Bearer\s+/i, '') : '';
+  const m = /(mls_[A-Za-z0-9_-]{32})(?![A-Za-z0-9_-])/.exec(s); return m ? m[1] : null;
+}
 // a callback the sea may keep: https, a public host by name (no address, no local names), port 443, no user or password
 const LOCAL = /(^|\.)(localhost|local|localdomain|internal|intranet|lan|home|corp|private|arpa|test|invalid|onion)$/i;
 export function callbackOf(raw) {
@@ -85,8 +91,10 @@ export function callbackOf(raw) {
 const agentOf = (v) => { const s = String(v ?? '').replace(/[^A-Za-z0-9 ._/()+:-]/g, '').trim().slice(0, 60); return s || null; };
 
 // (since 4.0) the state of a key's seat: none (no seat or one that ended), active, overage (past its paths, still answering)
-export const seatStateOf = (seat, t = Date.now()) => (!seat || Date.parse(seat.until) <= t ? 'none' : seat.used > seat.paths ? 'overage' : 'active');
-const seatDoc = (seat, t) => (seat ? { id: seat.id, state: seatStateOf(seat, t), paths: seat.paths, used: seat.used, left: Math.max(0, seat.paths - seat.used), overage_paths: seat.over || 0, from: seat.at, until: seat.until } : null);
+// (since 4.1) a seat on credit runs while its open credit is not due: past its due day unpaid it drops to none
+const seatLive = (seat, t) => !!seat && Date.parse(seat.until) > t && !(seat.due && Date.parse(seat.due) <= t);
+export const seatStateOf = (seat, t = Date.now()) => (!seatLive(seat, t) ? 'none' : seat.used > seat.paths ? 'overage' : 'active');
+const seatDoc = (seat, t) => (seat ? { id: seat.id, state: seatStateOf(seat, t), paths: seat.paths, used: seat.used, left: Math.max(0, seat.paths - seat.used), overage_paths: seat.over || 0, from: seat.at, until: seat.until, ...(seat.due ? { credit_due: seat.due } : {}) } : null);
 
 export function createSessions({ kv, now = () => Date.now(), secret = randomBytes(32) }) {
   const chains = new Map(), dayKeys = new Map();
@@ -133,7 +141,7 @@ export function createSessions({ kv, now = () => Date.now(), secret = randomByte
         const m = Math.floor(t / 60_000);
         if (rec.rate?.m === m && rec.rate.n >= SESSION.perMinute) return { ok: false, why: 'slow', retry: Math.max(1, Math.ceil(((m + 1) * 60_000 - t) / 1000)), left: Date.parse(rec.probe.until) <= t ? 0 : rec.probe.left, used: rec.calls };
         // (since 4.0) a seat that runs: one of its paths, never a probe call; past its paths the door answers all the same
-        if (rec.seat && Date.parse(rec.seat.until) > t) {
+        if (seatLive(rec.seat, t)) {
           const day = dayOf(t), tag = randomBytes(6).toString('hex');
           rec.seat.used += 1; const over = rec.seat.used > rec.seat.paths; if (over) rec.seat.over = (rec.seat.over || 0) + 1;
           rec.calls += 1; rec.rate = { m, n: rec.rate?.m === m ? rec.rate.n + 1 : 1 };
@@ -261,13 +269,41 @@ export function createSessions({ kv, now = () => Date.now(), secret = randomByte
         }
         if (mark && (rec.seats || []).some((x) => x.sale === mark)) return { ok: true, again: true, id, until: rec.seat?.until || null };
         const until = new Date(t + days * DAY * 1000).toISOString();
-        rec.seat = { id: String(seat || '').slice(0, 24), at: new Date(t).toISOString(), until, paths, used: 0, over: 0 };
+        // (since 4.1) a seat that still runs keeps its paths and takes the new ones on top, and runs at least as long as the new term
+        const run = seatLive(rec.seat, t) ? rec.seat : null;
+        rec.seat = run ? { ...run, paths: run.paths + paths, until: new Date(Math.max(Date.parse(run.until), Date.parse(until))).toISOString() } : { id: String(seat || '').slice(0, 24), at: new Date(t).toISOString(), until, paths, used: 0, over: 0 };
         rec.seats = [{ id: rec.seat.id, sale: mark || null, at: rec.seat.at }, ...(rec.seats || [])].slice(0, 20);
         rec.until = new Date(Math.max(Date.parse(rec.until), Date.parse(until))).toISOString();
         await kv.set(R(id), rec, ttlOf(rec));
         return { ok: true, id, until };
       });
     },
+    // (since 4.1) a purchase on credit: the seat (or a bundle of paths) is the key's at once, the payment is due in 7 days; unpaid
+    // by then the seat drops to none. At most 2 per key. → { ok, sale, due, seat } or { ok: false, why: unknown | limit, open }
+    // Every purchase also stands in the open list of credits (credit:list, newest first, for /treasury and /day); the key never does
+    credit(h, { kind = 'seat_credit', paths = SEAT.paths, cents = SEAT.cents, days = SEAT.days, test = false, host = 'other' } = {}) {
+      const id = idOf(h);
+      return serial(id, async () => {
+        const t = now(), rec = await kv.get(R(id));
+        if (!rec || rec.h !== h) return { ok: false, why: 'unknown' };
+        if (Date.parse(rec.until) <= t) return { ok: false, why: 'unknown' };
+        const mine = rec.credits || [];
+        if (mine.length >= CREDIT.perKey) return { ok: false, why: 'limit', open: mine.filter((c) => c.status === 'credit').length };
+        const sale = `cr${t.toString(36)}${randomBytes(4).toString('hex')}`, due = new Date(t + CREDIT.dueDays * DAY * 1000).toISOString(), until = new Date(t + days * DAY * 1000).toISOString();
+        const run = seatLive(rec.seat, t) ? rec.seat : null;
+        rec.seat = run ? { ...run, paths: run.paths + paths, until: new Date(Math.max(Date.parse(run.until), Date.parse(until))).toISOString() } : { id: sale, at: new Date(t).toISOString(), until, paths, used: 0, over: 0 };
+        const c = { sale, kind, cents, paths, at: new Date(t).toISOString(), due, status: 'credit', ...(test ? { test: true } : {}) };
+        rec.credits = [...mine, c];
+        // the seat runs until the earliest credit still open falls due
+        rec.seat.due = rec.credits.filter((x) => x.status === 'credit').map((x) => x.due).sort()[0] || null;
+        rec.until = new Date(Math.max(Date.parse(rec.until), Date.parse(rec.seat.until))).toISOString();
+        await kv.set(R(id), rec, ttlOf(rec));
+        await serial('credit:list', async () => { const list = (await kv.get('credit:list')) || []; await kv.set('credit:list', [{ ...c, key_id: id, host: String(host || 'other').slice(0, 10), amount_usd: cents / 100 }, ...list].slice(0, 500), 400 * DAY); });
+        return { ok: true, sale, due, id, seat: seatDoc(rec.seat, t), count: rec.credits.length };
+      });
+    },
+    // (since 4.1) the purchases on credit, newest first (for /treasury and /day): what is open, what is due when, what was paid
+    async credits() { return (await kv.get('credit:list')) || []; },
     // (since 4.0) the overage of all seats, for the treasury: paths past a seat's 5,000, today and in all, and what they are worth
     async overage() { const day = dayOf(now()), today = Number(await kv.get(`seat:over:${day}`)) || 0, all = Number(await kv.get('seat:over:all')) || 0; return { day, today_paths: today, paths: all, usd: Math.round(all * SEAT.overCents) / 100, today_usd: Math.round(today * SEAT.overCents) / 100 }; },
     // probe calls given today (UTC), for the open numbers
