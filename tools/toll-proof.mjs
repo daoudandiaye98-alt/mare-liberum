@@ -874,8 +874,9 @@ await proof('/engine (a section "The toll" with the example $0.003630), /engine.
     const a = await F.call(path, { ip: '192.0.2.200', accept }), b = await M.call(path, { ip: '192.0.2.200', accept });
     // (the x402 manifest names every door that is sold since 3.55, proven by tools/fair-proof.mjs and tools/till-proof.mjs:
     // here its route, its fair share and the rest of it as the reference, the doors sold beside the route and its words set apart)
-    // (since 3.80 /pay/howto begins with the way without a wallet, one GET for a key, proven by tools/till-proof.mjs: set apart)
-    const norm = path === '/.well-known/x402' ? manifestOf : path === '/pay/howto' ? (t) => t.replace(/\n\n0\) No wallet needed:[^\n]*\nKEY=[^\n]*\ncurl [^\n]*\n {3}\(POST [^\n]*\)\n\n/, '\n') : (t) => t;
+    // (since 3.80 /pay/howto begins with the way without a wallet, one GET for a key, proven by tools/till-proof.mjs; since PR #83
+    // and #88 the seat on credit and the card link for a host before it, proven by tools/seat-proof.mjs and tools/seat-credit-proof.mjs: set apart)
+    const norm = path === '/.well-known/x402' ? manifestOf : path === '/pay/howto' ? (t) => t.replace(/\n\nNo card, no wallet:[\s\S]*?\n0\) No wallet needed:[^\n]*\n(?:(?:KEY=|curl | {3})[^\n]*\n)+\n/, '\n') : (t) => t;
     assert.equal(a.status, b.status, path); assert.equal(tmask(norm(a.text), F.version), tmask(norm(b.text), M.version), `${path}: as ${REF}`);
   }
 });
@@ -951,7 +952,7 @@ const BREAK = [
   ['I3 taken back: any payment header taken as the toll\'s', 'node/core.mjs', 'const mine = carries && T.claims(req.headers, a, payCfg.payTo),', 'const mine = carries,'],
   ['I3 taken back: the payment the toll took goes on to the door', 'node/core.mjs', 'g.req = withoutPayment(req);', 'g.req = req;'],
   ['F2b/I3 taken back: /via/ forwards the toll\'s payment', 'node/core.mjs', 'if (ta && T.claims(req.headers, ta, (cfg.pay || payConfig()).payTo)) {', 'if (false) {'],
-  ['F11/I2 taken back: a toll payment counted with the paid move on /treasury', 'node/core.mjs', 'return json({ ...tr, overage_paths: ov.paths, overage_usd: ov.usd, seats, toll, price:', 'return json({ ...tr, total_usd: (tr.total_usd || 0) + tt.settledMicro / 1e6, overage_paths: ov.paths, overage_usd: ov.usd, seats, toll, price:'],
+  ['F11/I2 taken back: a toll payment counted with the paid move on /treasury', 'node/core.mjs', 'overage_paths: ov.paths, overage_usd: ov.usd, seats, toll, price:', 'total_usd: (tr.total_usd || 0) + tt.settledMicro / 1e6, overage_paths: ov.paths, overage_usd: ov.usd, seats, toll, price:'],
   ['I2 taken back: a toll settled (and its sum told) from another network', 'node/toll.mjs', 'const day = key.slice(7, 17); if (keyOf(day, tollNet(ip)) !== key) return null;', 'const day = key.slice(7, 17);'],
   ['F8/I5 taken back: the state of a payment waits for the next copy', 'node/toll.mjs', "if (soon && typeof kv.setNow === 'function') { kv.setNow(k, v, ttl); return; }", 'if (false) {}'],
   ['I5 taken back: the copy written last when a node stops', 'serve.mjs', '  try { await disk?.save(); } catch {}\n', ''],
