@@ -215,7 +215,8 @@ ${book ? `<p>The sea adds its own every day: up to ${esc(String(book.per_day))} 
 <p><small>Records hold only the store's public page and the catalog's public offers, never who asked. Mare Liberum vouches for no store. Data: <a href="${SEEN.path}.json">JSON</a> · <a href="/llms.txt">/llms.txt</a></small></p>
 ${NAV()}</main></body></html>`;
 }
-export const recordsJson = (list, base, book = null) => { const b = String(base || '').replace(/\/+$/, ''); return { what: 'the newest open price records: what the deal check saw on product pages, each unchanged at its own address', records: (Array.isArray(list) ? list : []).slice(0, SEEN.list).map((x) => ({ ...x, url: `${b}${SEEN.path}/${x.id}`, json: `${b}${SEEN.path}/${x.id}.json` })), make_one: `${b}/deal?url=<product page>`, ...(book ? { book } : {}) }; };
+// (since 3.91) `bfcm`: the pages agents added to the weekend balance ({ adds }), only when there are any or adding is open
+export const recordsJson = (list, base, book = null, bfcm = null) => { const b = String(base || '').replace(/\/+$/, ''); return { what: 'the newest open price records: what the deal check saw on product pages, each unchanged at its own address', records: (Array.isArray(list) ? list : []).slice(0, SEEN.list).map((x) => ({ ...x, url: `${b}${SEEN.path}/${x.id}`, json: `${b}${SEEN.path}/${x.id}.json` })), make_one: `${b}/deal?url=<product page>`, ...(book ? { book } : {}), ...(bfcm ? { bfcm } : {}) }; };
 
 // the records open to search engines as a sitemap of their own (/sitemaps/seen.xml, since 3.66): only those that compare 3 or
 // more prices (the others say noindex, so a map that named them would contradict their pages), each dated by the day it was

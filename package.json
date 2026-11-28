@@ -50,6 +50,7 @@
     "proof:pipes": "node tools/pipes-proof.mjs",
     "proof:deal": "node tools/deal-proof.mjs",
     "proof:bfcm": "node tools/bfcm-proof.mjs",
+    "proof:bfcmadd": "node tools/bfcmadd-proof.mjs",
     "proof:book": "node tools/book-proof.mjs",
     "proof:toll": "node tools/toll-proof.mjs",
     "proof:reader": "node tools/reader-compat-proof.mjs",

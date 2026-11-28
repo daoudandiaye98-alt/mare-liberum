@@ -10,8 +10,9 @@ import { PACKPAY } from './packpay.mjs';
 import { productOf } from './lean.mjs';
 import { DEAL, MARKET, dealTarget, dealQuery, dealKey, remembered, dealOf, wordsOf, shopifyPage, homeOf, inCurrency, marketOf } from './deal.mjs';
 import { SEEN, recordKey, recordOf, recordRef, canonical, lineOf } from './seen.mjs';
-import { BOOK, AGAIN, bookHost, freshOf, nextVisit, watchAfter, seriesAfter, bookSays, dryAfter, isDry, againOn, againOf, perDayOn } from './book.mjs';
+import { BOOK, AGAIN, bookUrl, bookHost, freshOf, nextVisit, watchAfter, seriesAfter, bookSays, dryAfter, isDry, againOn, againOf, perDayOn } from './book.mjs';
 import { BFCM } from './bfcm.mjs';
+import { BFCM_ADD, bfcmAddOpen, bfcmAddCall } from './bfcmadd.mjs';
 
 const FEED = new Set(['read', 'whale', 'brevet', 'seal', 'buoy', 'path', 'knock', 'enter', 'answer', 'ask', 'tide', 'job', 'job_done', 'note', 'mark', 'reflex', 'learn', 'course', 'outcome']);
 export const TAG = /^[a-z0-9]{4,12}$/;
@@ -184,7 +185,10 @@ export function createLens(h) {
       const arr = (x) => (Array.isArray(x) ? x : []);
       const [watch0, done, recent, cur0, dry] = await Promise.all(['book:watch', `book:done:${day}`, 'tide:recent', 'book:cursor', 'book:dry'].map((k) => kv.get(k).catch(() => null)));
       const seeds = arr(seed), watch = arr(watch0).filter((u) => !seeds.includes(u)), resting = (u) => isDry(dry, u, day);
-      const again = againOn(day) ? await lens.againList(seeds, watch0, dry) : [];
+      // (since 3.91) the pages agents added to the weekend balance (book:bfcm_add) are measured again after the Black Friday pages,
+      // the same way: once a day, past BOOK.perDay, changing neither the dry pages nor the watch
+      const bf = againOn(day) ? await lens.againList(seeds, watch0, dry) : [], adds = againOn(day) ? arr(await kv.get('book:bfcm_add').catch(() => null)) : [];
+      const again = [...bf, ...adds.filter((u) => !bf.includes(u))];
       if (!(tried < BOOK.perDay) && !again.some((u) => !arr(done).includes(u))) return { calm: true, day, tried };
       const slugs = arr(recent), cur = (Number(cur0) || 0) % Math.max(slugs.length, 1), take = slugs.length ? Array.from({ length: Math.min(BOOK.scan, slugs.length) }, (_, i) => slugs[(cur + i) % slugs.length]) : [];
       const fresh = freshOf(await Promise.all(take.map((s) => kv.get(`tide:${s}`).catch(() => null))));
@@ -206,7 +210,7 @@ export function createLens(h) {
       await kv.set('book:watch', watchAfter(watch, visit, !!rec, { seeded, dry: isDry(dry2, visit.url, day) }), 400 * DAY);
       if (rec) {
         await kv.set(`book:records:${day}`, (Number(await kv.get(`book:records:${day}`).catch(() => 0)) || 0) + 1, 3 * DAY);
-        if (visit.kind === 'again') await kv.set(`book:again:n:${day}`, (Number(await kv.get(`book:again:n:${day}`).catch(() => 0)) || 0) + 1, 3 * DAY);
+        if (visit.kind === 'again' && bf.includes(visit.url)) await kv.set(`book:again:n:${day}`, (Number(await kv.get(`book:again:n:${day}`).catch(() => 0)) || 0) + 1, 3 * DAY);
         const sk = `book:series:${(await sha(visit.url)).slice(0, 32)}`;
         await kv.set(sk, seriesAfter(await kv.get(sk).catch(() => null), { day, price: ans.product?.price, currency: ans.product?.currency, record: rec.id }), BOOK.keepDays * DAY);
       }
@@ -247,16 +251,66 @@ export function createLens(h) {
     // since 3.88, the pages it measures again), each
     // with its series of prices and the product and store of its newest record of the weekend; a page without a price measured
     // on Black Friday or Cyber Monday is left out here already
+    // (since 3.91 also the pages agents added, book:bfcm_add: such a page is kept with a price of any day of the weekend and is
+    // marked added, so the balance shows it apart when it has no Black Friday price)
     async bfcmRows(seed = []) {
-      const [watch, dry, again] = await Promise.all(['book:watch', 'book:dry', 'book:again'].map((k) => kv.get(k).catch(() => null)));
-      const urls = [...new Set([...(Array.isArray(seed) ? seed : []), ...(Array.isArray(watch) ? watch : []), ...Object.keys(dry && typeof dry === 'object' ? dry : {}), ...(Array.isArray(again) ? again : [])])].slice(0, 300), out = [];
+      const [watch, dry, again, add] = await Promise.all(['book:watch', 'book:dry', 'book:again', 'book:bfcm_add'].map((k) => kv.get(k).catch(() => null)));
+      const added = new Set(Array.isArray(add) ? add : []), weekend = [BFCM.bf, BFCM.sat, BFCM.sun, BFCM.cm];
+      const urls = [...new Set([...(Array.isArray(seed) ? seed : []), ...(Array.isArray(watch) ? watch : []), ...Object.keys(dry && typeof dry === 'object' ? dry : {}), ...(Array.isArray(again) ? again : []), ...added])].slice(0, 300 + BFCM_ADD.max), out = [];
       for (const url of urls) {
-        const series = await lens.bookSeries(url), days = series.filter((x) => x?.d === BFCM.bf || x?.d === BFCM.cm);
+        const series = await lens.bookSeries(url), days = series.filter((x) => x?.d === BFCM.bf || x?.d === BFCM.cm || (added.has(url) && weekend.includes(x?.d)));
         if (!days.length) continue;
         const rec = await lens.seenRecord(days[days.length - 1].r).catch(() => null);
-        out.push({ url, series, name: rec?.product?.name || null, store: rec?.store || null });
+        out.push({ url, series, name: rec?.product?.name || null, store: rec?.store || null, ...(added.has(url) ? { added: true } : {}) });
       }
       return out;
+    },
+    // (since 3.91) an agent adds a product page to the weekend balance (node/bfcmadd.mjs): to the end of Cyber Monday, only a
+    // store's own product page, at most BFCM_ADD.perNet a day per network (`net`, an HMAC the door makes; never an address) and
+    // BFCM_ADD.max in all; the page is measured at once as the caller's own deal check (with its record) and its price of today
+    // starts the page's series; the book measures it again every following day until Cyber Monday. `label` is the census name
+    // of the caller (none for the sea's own calls), counted per day → { ok, status, code?, why?, page?, today?, record?, already? }
+    async bfcmAdd({ url, base = '', net = null, label = null } = {}, ctx) {
+      const day = now().slice(0, 10), arr = (x) => (Array.isArray(x) ? x : []);
+      if (!bfcmAddOpen(day)) return { ok: false, status: 410, code: 'CLOSED', why: `adding pages to the weekend balance closed with Cyber Monday (${BFCM_ADD.until}); the balance stays at ${base}${BFCM.path}` };
+      const page = bookUrl(url);
+      if (!page) return { ok: false, status: 400, code: 'INVALID_ARGUMENT', why: 'only a store\'s own product page over https (…/products/<handle>) can be added; never a cart, a checkout or an Amazon page' };
+      const [list0, again0] = await Promise.all(['book:bfcm_add', 'book:again'].map((k) => kv.get(k).catch(() => null)));
+      const list = arr(list0);
+      if (arr(again0).includes(page)) return { ok: true, status: 200, page, already: 'black-friday' };
+      if (list.includes(page)) return { ok: true, status: 200, page, already: 'added' };
+      if (list.length >= BFCM_ADD.max) return { ok: false, status: 503, code: 'FULL', why: `the weekend balance holds ${BFCM_ADD.max} added pages, and it is full; check the page itself: ${base}/deal?url=<product page>` };
+      const nk = net ? `bfcm:add:net:${day}:${net}` : null, used = nk ? Number(await kv.get(nk).catch(() => 0)) || 0 : 0;
+      if (used >= BFCM_ADD.perNet) return { ok: false, status: 429, code: 'RESOURCE_EXHAUSTED', why: `${BFCM_ADD.perNet} pages a day per network can be added; tomorrow again, or check the page itself: ${base}/deal?url=<product page>` };
+      let ans = null;
+      try { ans = await lens.deal({ url: page, base }, ctx); } catch (e) {
+        if (e instanceof SeaError && e.dealLimit) return { ok: false, status: 429, code: 'RESOURCE_EXHAUSTED', why: `the free deal checks of this hour are used, so the page could not be measured now and was not added; try again within the hour (${e.message})` };
+        return { ok: false, status: 502, code: 'UNAVAILABLE', why: String(e?.message || e).slice(0, 200) };
+      }
+      const price = ans?.product?.price, currency = ans?.product?.currency;
+      if (!(Number.isFinite(price) && price > 0 && currency)) return { ok: false, status: 422, code: 'NO_PRICE', why: `the page gave no price on its own page${ans?.page?.error ? ` (${ans.page.error})` : ''}, so it was not added` };
+      await kv.set('book:bfcm_add', [...list, page].slice(0, BFCM_ADD.max), 60 * DAY);
+      if (nk) await kv.set(nk, used + 1, 2 * DAY);
+      // today's measurement is the one just made: the book does not visit the page again today
+      const done = await kv.get(`book:done:${day}`).catch(() => null);
+      await kv.set(`book:done:${day}`, [...arr(done), page].slice(-Math.max(BOOK.perDay, AGAIN.perDay) * 2), 3 * DAY);
+      const sk = `book:series:${(await sha(page)).slice(0, 32)}`;
+      await kv.set(sk, seriesAfter(await kv.get(sk).catch(() => null), { day, price, currency, record: ans.record?.id }), BOOK.keepDays * DAY);
+      if (label) {
+        const ck = `bfcm:add:${day}`, had = await kv.get(ck).catch(() => null), by = had && typeof had === 'object' && !Array.isArray(had) ? { ...had } : {};
+        const name = label in by || Object.keys(by).length < BFCM_ADD.names ? label : 'other';
+        by[name] = (Number(by[name]) || 0) + 1; await kv.set(ck, by, 3 * DAY);
+      }
+      return { ok: true, status: 200, page, added: true, name: ans.product?.name || null, today: { day, price, currency }, record: ans.record?.url || null };
+    },
+    // (since 3.91) the adds as /seen.json says them: the pages added in all, the adds of today by name, the call while it is open;
+    // null when no page was ever added and the call is closed
+    async bfcmAdds(base = '') {
+      const day = now().slice(0, 10), [list, by] = await Promise.all(['book:bfcm_add', `bfcm:add:${day}`].map((k) => kv.get(k).catch(() => null)));
+      const pages = Array.isArray(list) ? list.length : 0, m = by && typeof by === 'object' && !Array.isArray(by) ? by : {}, open = bfcmAddOpen(day);
+      if (!pages && !open) return null;
+      const today = Object.values(m).reduce((s, n) => s + (Number(n) || 0), 0);
+      return { open, until: BFCM_ADD.until, pages, today, by: Object.fromEntries(Object.entries(m).sort((a, b) => b[1] - a[1])), ...(open ? { add: bfcmAddCall(base) } : {}) };
     },
     async bookSeries(url) { const u = String(url || ''); if (!u) return []; const s = await kv.get(`book:series:${(await sha(u)).slice(0, 32)}`).catch(() => null); return Array.isArray(s) ? s : []; },
     // (since 3.75) a Shopify store's own currency and country, as its /meta.json names them, kept a week per store; a store whose
