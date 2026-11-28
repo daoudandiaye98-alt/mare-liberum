@@ -18,12 +18,21 @@
 //            places in it; the node reads the file once, when it starts (serve.mjs), and hands it to each step
 //   dry      (since 3.76) a page that gave no comparison with another store (or no record at all) on BOOK.dryDays days in a row
 //            rests BOOK.dryRestDays days: a start-list page is skipped, a watched page leaves the watch, a new page waits
+//   again    (since 3.88, "Die Nachmessung") on the days from the Saturday after Black Friday to Cyber Monday (AGAIN.from to
+//            AGAIN.to, UTC) every page that has a price measured on Black Friday is visited again first, once a day, also when it
+//            rests dry; such a visit changes neither the dry pages nor the watch, and while the node has more than AGAIN.freeMB
+//            of free memory these visits may go on past BOOK.perDay up to AGAIN.perDay a day, so the weekend balance
+//            (node/bfcm.mjs) has the same pages on both days
 // Everything here is pure, except the one read of the start list: node/lens.mjs reads and writes the state.
 import { readFileSync } from 'node:fs';
 import { canonOf, BOOK_SAID } from './seen.mjs';
 import { uncommission, AMAZON } from './commission.mjs';
 
 export const BOOK = Object.freeze({ perDay: 40, watch: 20, hostGapS: 3600, scan: 12, seriesMax: 60, keepDays: 120, said: BOOK_SAID, seedPerStore: 2, dryDays: 2, dryRestDays: 30, dryMax: 400 });
+
+// the measuring again of the Black Friday pages (the days of BFCM in node/bfcm.mjs, written out here because that module is
+// loaded after this one): its days, its pace a day and the free memory it needs to go past BOOK.perDay
+export const AGAIN = Object.freeze({ bf: '2026-11-27', from: '2026-11-28', to: '2026-11-30', perDay: 100, freeMB: 800 });
 
 const list = (x) => (Array.isArray(x) ? x : []);
 export const bookHost = (u) => { try { return new URL(u).hostname.toLowerCase(); } catch { return null; } };
@@ -81,12 +90,22 @@ export function dryAfter(dry, url, day, compared) {
 // a page rests while it was dry on BOOK.dryDays days in a row and its last dry day is at most BOOK.dryRestDays days back
 export const isDry = (dry, url, day) => { const x = mapOf(dry)[url]; return !!x && (Number(x.n) || 0) >= BOOK.dryDays && (!day || daysBetween(x.d, day) <= BOOK.dryRestDays); };
 
-// what the book visits next → { url, kind: 'seed' | 'watch' | 'new' } or null: first a page of the start list, then a watched
-// page, then a new page, each not visited today; a page visited today, a store visited within the gap (busy), a page that
-// rests dry and a day with BOOK.perDay visits made all wait
-export function nextVisit({ tried = 0, seed = [], watch = [], done = [], fresh = [], busy = () => false, dry = () => false } = {}) {
+// whether `day` (UTC) is a day of measuring again, and how many visits the book may make that day with `freeMB` of free memory:
+// past BOOK.perDay only on such a day and only with more than AGAIN.freeMB (an unknown amount is too little)
+export const againOn = (day) => /^\d{4}-\d{2}-\d{2}$/.test(String(day || '')) && day >= AGAIN.from && day <= AGAIN.to;
+export const perDayOn = (day, freeMB) => (againOn(day) && Number.isFinite(freeMB) && freeMB > AGAIN.freeMB ? AGAIN.perDay : BOOK.perDay);
+// the pages to measure again: of the pages given, each once, those a store's product page whose series has a price on Black Friday
+export const againOf = (urls, seriesOf = () => []) => [...new Set(list(urls).map(bookUrl).filter(Boolean))].filter((u) => list(seriesOf(u)).some((x) => x && x.d === AGAIN.bf && Number.isFinite(x.p) && x.p > 0));
+
+// what the book visits next → { url, kind: 'again' | 'seed' | 'watch' | 'new' } or null: (since 3.88) first a page to measure
+// again (`again`, given only on a day of measuring again; it may rest dry), then a page of the start list, then a watched page,
+// then a new page, each not visited today; a page visited today, a store visited within the gap (busy), a page that rests dry
+// and a day with BOOK.perDay visits made all wait; past BOOK.perDay only a page to measure again, up to `max` visits
+export function nextVisit({ tried = 0, seed = [], watch = [], done = [], fresh = [], again = [], busy = () => false, dry = () => false, max = BOOK.perDay } = {}) {
+  const d = new Set(list(done)), free = (url) => !d.has(url) && !busy(bookHost(url));
+  if (tried < Math.max(max, BOOK.perDay)) for (const url of list(again)) if (free(url)) return { url, kind: 'again' };
   if (!(tried < BOOK.perDay)) return null;
-  const d = new Set(list(done)), s = list(seed), w = list(watch), ok = (url) => !d.has(url) && !dry(url) && !busy(bookHost(url));
+  const s = list(seed), w = list(watch), ok = (url) => free(url) && !dry(url);
   for (const url of s) if (ok(url)) return { url, kind: 'seed' };
   const ss = new Set(s);
   for (const url of w) if (!ss.has(url) && ok(url)) return { url, kind: 'watch' };
@@ -97,10 +116,10 @@ export function nextVisit({ tried = 0, seed = [], watch = [], done = [], fresh =
 
 // the watch after one visit: a new page that gave a record joins while there is room (the pages of the start list take their
 // places first: room is BOOK.watch less them); a watched page that gave none, or that now rests dry, leaves; a visit of the
-// start list leaves the watch as it is
+// start list, and (since 3.88) a visit to measure again, leave the watch as it is
 export function watchAfter(watch, visit, made, { seeded = 0, dry = false } = {}) {
   const w = list(watch);
-  if (visit?.kind === 'seed') return w;
+  if (visit?.kind === 'seed' || visit?.kind === 'again') return w;
   if (visit?.kind === 'watch') return made && !dry ? w : w.filter((u) => u !== visit.url);
   return made && !dry && visit?.url && w.length < BOOK.watch - seeded && !w.includes(visit.url) ? [...w, visit.url] : w;
 }
@@ -115,8 +134,9 @@ export function seriesAfter(series, { day, price, currency, record } = {}) {
 
 // the book's numbers of a day, as /seen and /seen.json say them
 // (since 3.76 with seed: how many of the watched pages come from the start list, and dry: how many pages rest; both only when
-// there are any, so a book without a start list says what it said before)
-export const bookSays = ({ day, tried = 0, records = 0, watch = 0, seed = 0, dry = 0 } = {}) => ({
+// there are any, so a book without a start list says what it said before; since 3.88 with again: the Black Friday pages measured
+// again today, only on a day of measuring again)
+export const bookSays = ({ day, tried = 0, records = 0, watch = 0, seed = 0, dry = 0, again = null } = {}) => ({
   what: 'the sea\'s own daily sample of product pages: each visit is a deal check made by the sea, marked by: "sea" in its record, never counted as an agent\'s use',
-  day, visits: tried, records, watch: watch + seed, per_day: BOOK.perDay, watch_max: BOOK.watch, ...(seed ? { seed } : {}), ...(dry ? { dry } : {}),
+  day, visits: tried, records, watch: watch + seed, per_day: BOOK.perDay, watch_max: BOOK.watch, ...(seed ? { seed } : {}), ...(dry ? { dry } : {}), ...(again ? { again } : {}),
 });

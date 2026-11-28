@@ -1,6 +1,7 @@
 // Mare Liberum · the lens — what anyone can see of the agent internet: live numbers, the map, the feed, the finder
 // Everything here is public and counted, never guessed. Locations are the network edge's country and a 2° cell of each
 // request (about 200 km), never an address; tags are random words a person gives their own agent to find it again.
+import { freemem } from 'node:os';
 import { roleOf, OPERATORS } from './atlantis.mjs';
 import { checkSite, safeHost, grab } from './check.mjs';
 import { readUrl, READER_UA } from './reader.mjs';
@@ -9,7 +10,7 @@ import { PACKPAY } from './packpay.mjs';
 import { productOf } from './lean.mjs';
 import { DEAL, MARKET, dealTarget, dealQuery, dealKey, remembered, dealOf, wordsOf, shopifyPage, homeOf, inCurrency, marketOf } from './deal.mjs';
 import { SEEN, recordKey, recordOf, recordRef, canonical, lineOf } from './seen.mjs';
-import { BOOK, bookHost, freshOf, nextVisit, watchAfter, seriesAfter, bookSays, dryAfter, isDry } from './book.mjs';
+import { BOOK, AGAIN, bookHost, freshOf, nextVisit, watchAfter, seriesAfter, bookSays, dryAfter, isDry, againOn, againOf, perDayOn } from './book.mjs';
 import { BFCM } from './bfcm.mjs';
 
 const FEED = new Set(['read', 'whale', 'brevet', 'seal', 'buoy', 'path', 'knock', 'enter', 'answer', 'ask', 'tide', 'job', 'job_done', 'note', 'mark', 'reflex', 'learn', 'course', 'outcome']);
@@ -173,32 +174,39 @@ export function createLens(h) {
     // the record book (node/book.mjs, since 3.72): one visit per step, called after a tide; the state it keeps is its own: the
     // visits and records of the day, the pages visited today, the watch, the cursor over the current's picks, the stores visited
     // within the gap and one series of prices per page; since 3.76 also the start list (`seed`, the pages of
-    // config/watch-seed.json as the node read them) goes first, and the pages that rest dry are kept in book:dry
-    async bookStep(base = '', seed = []) {
-      const day = now().slice(0, 10), tried = Number(await kv.get(`book:tried:${day}`).catch(() => 0)) || 0;
-      if (!(tried < BOOK.perDay)) return { calm: true, day, tried };
+    // config/watch-seed.json as the node read them) goes first, and the pages that rest dry are kept in book:dry; since 3.88, on
+    // a day of measuring again (node/book.mjs AGAIN), the pages with a Black Friday price go before all (book:again, the list
+    // made once from the pages visited on Black Friday, the start list, the watch and the resting pages), and `freeMB` (the
+    // node's free memory, os.freemem unless given) decides whether the day may go past BOOK.perDay
+    async bookStep(base = '', seed = [], { freeMB = freemem() / 1048576 } = {}) {
+      const day = now().slice(0, 10), tried = Number(await kv.get(`book:tried:${day}`).catch(() => 0)) || 0, max = perDayOn(day, freeMB);
+      if (!(tried < max)) return { calm: true, day, tried };
       const arr = (x) => (Array.isArray(x) ? x : []);
       const [watch0, done, recent, cur0, dry] = await Promise.all(['book:watch', `book:done:${day}`, 'tide:recent', 'book:cursor', 'book:dry'].map((k) => kv.get(k).catch(() => null)));
       const seeds = arr(seed), watch = arr(watch0).filter((u) => !seeds.includes(u)), resting = (u) => isDry(dry, u, day);
+      const again = againOn(day) ? await lens.againList(seeds, watch0, dry) : [];
+      if (!(tried < BOOK.perDay) && !again.some((u) => !arr(done).includes(u))) return { calm: true, day, tried };
       const slugs = arr(recent), cur = (Number(cur0) || 0) % Math.max(slugs.length, 1), take = slugs.length ? Array.from({ length: Math.min(BOOK.scan, slugs.length) }, (_, i) => slugs[(cur + i) % slugs.length]) : [];
       const fresh = freshOf(await Promise.all(take.map((s) => kv.get(`tide:${s}`).catch(() => null))));
       if (slugs.length) await kv.set('book:cursor', (cur + take.length) % slugs.length, BOOK.keepDays * DAY);
-      const hosts = [...new Set([...seeds, ...watch, ...fresh].map(bookHost).filter(Boolean))];
+      const hosts = [...new Set([...again, ...seeds, ...watch, ...fresh].map(bookHost).filter(Boolean))];
       const busy = new Set((await Promise.all(hosts.map(async (x) => ((await kv.get(`book:host:${x}`).catch(() => null)) ? x : null)))).filter(Boolean));
-      const visit = nextVisit({ tried, seed: seeds, watch, done: arr(done), fresh, busy: (x) => busy.has(x), dry: resting });
+      const visit = nextVisit({ tried, seed: seeds, watch, done: arr(done), fresh, again, busy: (x) => busy.has(x), dry: resting, max });
       if (!visit) return { calm: true, day, tried };
       // the visit is counted before the page is read, so a page that hangs or fails still uses its place of the day
       await kv.set(`book:tried:${day}`, tried + 1, 3 * DAY);
-      await kv.set(`book:done:${day}`, [...arr(done), visit.url].slice(-BOOK.perDay * 2), 3 * DAY);
+      await kv.set(`book:done:${day}`, [...arr(done), visit.url].slice(-Math.max(BOOK.perDay, AGAIN.perDay) * 2), 3 * DAY);
       await kv.set(`book:host:${bookHost(visit.url)}`, 1, BOOK.hostGapS);
       let ans = null; try { ans = await lens.deal({ url: visit.url, base }, { ip: 'sea-book', who: 'the sea', whoKind: 'sea', book: true }); } catch {}
       const rec = ans?.record || null, compared = !!rec && !!ans?.verdict?.word && ans.verdict.word !== 'no-comparison';
-      const dry2 = dryAfter(dry, visit.url, day, compared);
-      await kv.set('book:dry', dry2, 400 * DAY);
+      // a visit to measure again leaves the dry pages as they were: it is made for the weekend balance, not to judge the page
+      const dry2 = visit.kind === 'again' ? dry : dryAfter(dry, visit.url, day, compared);
+      if (visit.kind !== 'again') await kv.set('book:dry', dry2, 400 * DAY);
       const seeded = seeds.filter((u) => !isDry(dry2, u, day)).length;
       await kv.set('book:watch', watchAfter(watch, visit, !!rec, { seeded, dry: isDry(dry2, visit.url, day) }), 400 * DAY);
       if (rec) {
         await kv.set(`book:records:${day}`, (Number(await kv.get(`book:records:${day}`).catch(() => 0)) || 0) + 1, 3 * DAY);
+        if (visit.kind === 'again') await kv.set(`book:again:n:${day}`, (Number(await kv.get(`book:again:n:${day}`).catch(() => 0)) || 0) + 1, 3 * DAY);
         const sk = `book:series:${(await sha(visit.url)).slice(0, 32)}`;
         await kv.set(sk, seriesAfter(await kv.get(sk).catch(() => null), { day, price: ans.product?.price, currency: ans.product?.currency, record: rec.id }), BOOK.keepDays * DAY);
       }
@@ -210,14 +218,38 @@ export function createLens(h) {
       const day = now().slice(0, 10), [tried, records, watch, dry] = await Promise.all([`book:tried:${day}`, `book:records:${day}`, 'book:watch', 'book:dry'].map((k) => kv.get(k).catch(() => null)));
       const seeds = (Array.isArray(seed) ? seed : []), w = (Array.isArray(watch) ? watch : []).filter((u) => !seeds.includes(u));
       const resting = Object.keys(dry && typeof dry === 'object' ? dry : {}).filter((u) => isDry(dry, u, day)).length;
-      return bookSays({ day, tried: Number(tried) || 0, records: Number(records) || 0, watch: w.length, seed: seeds.filter((u) => !isDry(dry, u, day)).length, dry: resting });
+      return bookSays({ day, tried: Number(tried) || 0, records: Number(records) || 0, watch: w.length, seed: seeds.filter((u) => !isDry(dry, u, day)).length, dry: resting, again: await lens.bfcmAgain().catch(() => null) });
     },
-    // (since 3.87) the pages of the weekend balance (node/bfcm.mjs): every page the book knows (start list, watch, resting), each
+    // (since 3.88) the pages to measure again, made once on the first day of measuring again and kept to the end of the balance
+    // (book:again): every page visited on Black Friday, of the start list, of the watch or resting whose series has a Black
+    // Friday price; on a day that is no day of measuring again it is not made
+    async againList(seed = [], watch = [], dry = null) {
+      const kept = await kv.get('book:again').catch(() => null);
+      if (Array.isArray(kept)) return kept;
+      if (!againOn(now().slice(0, 10))) return [];
+      const bf = await kv.get(`book:done:${AGAIN.bf}`).catch(() => null), arr = (x) => (Array.isArray(x) ? x : []);
+      const urls = [...new Set([...arr(bf), ...arr(seed), ...arr(watch), ...Object.keys(dry && typeof dry === 'object' ? dry : {})])], series = {};
+      for (const u of urls) series[u] = await lens.bookSeries(u);
+      const list = againOf(urls, (u) => series[u]).slice(0, 200);
+      await kv.set('book:again', list, 60 * DAY);
+      return list;
+    },
+    // (since 3.88) the measuring again of today: of the pages with a Black Friday price, how many gave a record again today and
+    // how many wait; null on a day that is no day of measuring again or when there is no such page
+    async bfcmAgain() {
+      const day = now().slice(0, 10); if (!againOn(day)) return null;
+      const [list, done, n] = await Promise.all(['book:again', `book:done:${day}`, `book:again:n:${day}`].map((k) => kv.get(k).catch(() => null)));
+      if (!Array.isArray(list) || !list.length) return null;
+      const d = new Set(Array.isArray(done) ? done : []);
+      return { day, pages: list.length, measured_today: Math.min(Number(n) || 0, list.length), pending: list.filter((u) => !d.has(u)).length, until: AGAIN.to };
+    },
+    // (since 3.87) the pages of the weekend balance (node/bfcm.mjs): every page the book knows (start list, watch, resting and,
+    // since 3.88, the pages it measures again), each
     // with its series of prices and the product and store of its newest record of the weekend; a page without a price measured
     // on Black Friday or Cyber Monday is left out here already
     async bfcmRows(seed = []) {
-      const [watch, dry] = await Promise.all(['book:watch', 'book:dry'].map((k) => kv.get(k).catch(() => null)));
-      const urls = [...new Set([...(Array.isArray(seed) ? seed : []), ...(Array.isArray(watch) ? watch : []), ...Object.keys(dry && typeof dry === 'object' ? dry : {})])].slice(0, 200), out = [];
+      const [watch, dry, again] = await Promise.all(['book:watch', 'book:dry', 'book:again'].map((k) => kv.get(k).catch(() => null)));
+      const urls = [...new Set([...(Array.isArray(seed) ? seed : []), ...(Array.isArray(watch) ? watch : []), ...Object.keys(dry && typeof dry === 'object' ? dry : {}), ...(Array.isArray(again) ? again : [])])].slice(0, 300), out = [];
       for (const url of urls) {
         const series = await lens.bookSeries(url), days = series.filter((x) => x?.d === BFCM.bf || x?.d === BFCM.cm);
         if (!days.length) continue;
