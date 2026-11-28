@@ -1842,7 +1842,8 @@ export const wayOutOf = (base, price, s = null) => ({
   then: 'that call answers 402 with the terms; pay them with an x402 client (the same call again with the payment header) and the answer says calls_left again',
   key: 'the key stays the same: no new key, no new id, the same bookmark',
 });
-const supplyFields = (s, base, price) => ({ calls_left: s.left, calls_used: s.used, seat_state: s.state || 'none', price_per_path: s.perPath ?? Number(price), ...(s.left === 3 || s.left === 0 ? { way_out: wayOutOf(base, price, s) } : {}) });
+// (since 4.2) a key without a seat reads, from its first call on, the one call that buys on credit (buy_on_credit), not only at the 402
+const supplyFields = (s, base, price) => ({ calls_left: s.left, calls_used: s.used, seat_state: s.state || 'none', price_per_path: s.perPath ?? Number(price), ...((s.state || 'none') === 'none' ? { buy_on_credit: `POST ${base}/seat with header x-sea-session: <key>: a seat (${SEAT.cents / 100} USD, ${SEAT.paths} paths) at once, ${SEAT_CREDIT.dueDays} days to pay, no card, no wallet` } : {}), ...(s.left === 3 || s.left === 0 ? { way_out: wayOutOf(base, price, s) } : {}) });
 // the supply of a key as the bookmark gives it: with a seat that runs its paths, else its probe calls
 const supplyOf = (d, base, ua, price) => {
   const state = d.seat?.state && d.seat.state !== 'none' ? d.seat.state : 'none', seated = state !== 'none';
@@ -2903,10 +2904,18 @@ async function handleOne(req, db, cfg = {}) {
         const store = sessionsOf(db, cfg), t = r.s.client_reference_id ? readSeatToken(r.s.client_reference_id, { now: 0 }) : null;
         const tok = t?.ok ? t : null, ref = tok?.id || null, sale = r.s.payment_intent || r.s.id;
         let out = null;
-        if (tok?.k) { const d = await store.view(tok.k); if (d) { const g = await store.grant(null, { seat: tok.id, sale, byId: tok.k }); if (g.ok) out = { key_id: tok.k, minted: false, until: g.until }; } }
+        // (since 4.2) the key named by the link has purchases on credit open: the payment pays them (node/session.mjs settle). A seat on
+        // credit, paid, is the seat already delivered: no second one; a key with only bundles open gets the seat it paid for as well
+        let settled = null;
+        if (tok?.k) { const d = await store.view(tok.k); if (d) {
+          const st = await store.settle(tok.k, { cents: r.s.amount_total, sale });
+          if (st.ok && st.settled?.length) settled = st.settled;
+          if (st.ok && st.seat_paid) out = { key_id: tok.k, minted: false, until: st.until };
+          else { const g = await store.grant(null, { seat: tok.id, sale, byId: tok.k }); if (g.ok) out = { key_id: tok.k, minted: false, until: g.until }; }
+        } }
         if (!out) { const key = seatKeyOf(session), g = await store.grant(sessionHash(key), { seat: tok?.id || ref || 'st_card', sale, create: true }); out = { key_id: g.id, minted: true, until: g.until, key }; }
-        const row = ledger.sale({ id: `seat${mark.slice(0, 24)}`, q: `host_seat: ${SEAT.days} days, ${SEAT.paths} agent paths, key ${out.key_id}${tok?.src ? `, host ${tok.src}` : ''}`, amount_cents: r.s.amount_total, status: 'settled', method: 'host_link', tx: sale, network: 'stripe', settled_at: new Date().toISOString() });
-        const keep = { key_id: out.key_id, minted: out.minted, until: out.until, seat_id: tok?.id || ref || null, sale: row.id, host: tok?.src || null, at: new Date().toISOString() };
+        const row = ledger.sale({ id: `seat${mark.slice(0, 24)}`, q: settled ? `host_seat: pays credit ${settled.join(' ')}, key ${out.key_id}${tok?.src ? `, host ${tok.src}` : ''}` : `host_seat: ${SEAT.days} days, ${SEAT.paths} agent paths, key ${out.key_id}${tok?.src ? `, host ${tok.src}` : ''}`, amount_cents: r.s.amount_total, status: 'settled', method: 'host_link', tx: sale, network: 'stripe', settled_at: new Date().toISOString() });
+        const keep = { key_id: out.key_id, minted: out.minted, until: out.until, seat_id: tok?.id || ref || null, sale: row.id, host: tok?.src || null, at: new Date().toISOString(), ...(settled ? { settled } : {}) };
         await kvc.set(doneKey, keep, 400 * 86400);
         if (keep.seat_id) await kvc.set(`seat:paid:${keep.seat_id}`, keep, 60 * 86400);
         tallyDrop(); behind(cfg, installsOf(db, cfg).seat(keep.host || 'other'));
