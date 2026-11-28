@@ -145,7 +145,8 @@ await proof('/seen/<id> shows the product, the store, the price, the verdict and
   const r = await call(`${SEEN.path}/${first.id}`, { ip: fresh(), accept: 'text/html' }); assert.equal(r.status, 200); assert.match(r.h['content-type'], /^text\/html/);
   for (const s of ['Trail Runner 3', 'shop.deal-proof.dev', '89 USD', 'Another Shop', 'What the deal check found', `<link rel="canonical" href="${BASE}${SEEN.path}/${first.id}">`, '"@type":"Product"', 'no endorsement of any store']) assert.ok(r.text.includes(s), s);
   assert.ok(!/noindex/.test(r.text) && !r.h['x-robots-tag'], 'a record that compares 3 or more prices is open to search engines');
-  assert.match(r.h['cache-control'], /max-age=86400/);
+  // (3.92) kept a day; an hour while the call that adds this page to the weekend balance stands on it (node/recordnext.mjs)
+  assert.match(r.h['cache-control'], r.text.includes('/seen/bfcm-2026?add=') ? /max-age=3600/ : /max-age=86400/);
 });
 await proof('/seen/<id>.json is the record: its SHA-256 is that of its canonical JSON; the page address without campaign or session; nothing of who asked', async () => {
   const r = await call(`${SEEN.path}/${first.id}.json`, { ip: fresh() }); assert.equal(r.status, 200);

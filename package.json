@@ -69,6 +69,7 @@
     "proof:dealfirst": "node tools/dealfirst-proof.mjs",
     "proof:firststep": "node tools/firststep-proof.mjs",
     "proof:trail": "node tools/trail-proof.mjs",
+    "proof:recordnext": "node tools/recordnext-proof.mjs",
     "proof:readers": "node tools/readers-proof.mjs",
     "proof:market": "node tools/market-proof.mjs",
     "proof:session": "node tools/session-proof.mjs",

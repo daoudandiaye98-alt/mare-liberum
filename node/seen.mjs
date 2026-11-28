@@ -170,8 +170,9 @@ export function recordLead(rec) {
 }
 const NAV = (more = '') => `<nav><p><small><a href="/">Mare Liberum</a> · <a href="${SEEN.path}">price records</a>${more}</small></p></nav>`;
 
-// one record as a page a person can read: the verdict first, then what was seen, where, when, and the same item elsewhere
-export function recordPage(rec, base) {
+// one record as a page a person can read: the verdict first, then what was seen, where, when, and the same item elsewhere;
+// (since 3.92) `next` is the paragraph of the next steps (node/recordnext.mjs), right after the box with the price
+export function recordPage(rec, base, next = '') {
   const b = String(base || '').replace(/\/+$/, ''), p = rec.product, cur = p.currency;
   const name = p.name || 'A product', says = recordSays(rec), lead = recordLead(rec);
   const T = `${name} at ${rec.store}: ${money(p.price, cur)} on ${rec.day}${says ? `, ${says}` : ''}`;
@@ -185,7 +186,8 @@ export function recordPage(rec, base) {
 <body><main><h1>${esc(recordHeadline(rec))}</h1>
 <p class="lead">${esc(lead)}</p>
 <p class="box"><b>${esc(money(p.price, cur))}</b>${p.price_is ? ' (from: its lowest variant)' : ''} at <b>${esc(rec.store)}</b>${p.in_stock === true ? ', in stock' : p.in_stock === false ? ', out of stock' : ''}${Number.isFinite(p.list_price) && p.list_price > p.price ? ` · its own list price ${esc(money(p.list_price, cur))}` : ''}<br><small>seen ${esc(when(rec.seen_at))} on <a href="${esc(p.url)}" rel="nofollow noopener">the product page</a>${p.brand ? ` · ${esc(p.brand)}` : ''}${p.gtin ? ` · GTIN ${esc(p.gtin)}` : ''}</small></p>
-${rec.by === 'sea' ? `<p><small>${esc(rec.sample || BOOK_SAID)}</small></p>
+${next ? `${next}
+` : ''}${rec.by === 'sea' ? `<p><small>${esc(rec.sample || BOOK_SAID)}</small></p>
 ` : ''}<h2>What the deal check found</h2><ul class="v">${rec.verdict.lines.map((l) => `<li>${esc(l)}</li>`).join('')}</ul>
 ${rows ? `<h2>The same item at other stores</h2><table><thead><tr><th>Store</th><th>Price</th><th></th></tr></thead><tbody>${rows}</tbody></table><p><small>${rec.elsewhere_found} matching offer${rec.elsewhere_found === 1 ? '' : 's'} in stock found${rec.median ? ` · median of all prices ${esc(money(rec.median.price, rec.median.currency))} (of ${rec.median.of})` : ''}</small></p>` : '<p class="mut">No matching offer at another Shopify store was found at that minute.</p>'}
 ${rec.seen_before.checks ? `<p><small>Before this check agents saw this product ${rec.seen_before.checks} time${rec.seen_before.checks === 1 ? '' : 's'} through the sea since ${esc(String(rec.seen_before.since).slice(0, 10))}: lowest ${esc(money(rec.seen_before.low?.price, rec.seen_before.low?.currency))}, highest ${esc(money(rec.seen_before.high?.price, rec.seen_before.high?.currency))}.</small></p>` : ''}
@@ -215,8 +217,9 @@ ${book ? `<p>The sea adds its own every day: up to ${esc(String(book.per_day))} 
 <p><small>Records hold only the store's public page and the catalog's public offers, never who asked. Mare Liberum vouches for no store. Data: <a href="${SEEN.path}.json">JSON</a> · <a href="/llms.txt">/llms.txt</a></small></p>
 ${NAV()}</main></body></html>`;
 }
-// (since 3.91) `bfcm`: the pages agents added to the weekend balance ({ adds }), only when there are any or adding is open
-export const recordsJson = (list, base, book = null, bfcm = null) => { const b = String(base || '').replace(/\/+$/, ''); return { what: 'the newest open price records: what the deal check saw on product pages, each unchanged at its own address', records: (Array.isArray(list) ? list : []).slice(0, SEEN.list).map((x) => ({ ...x, url: `${b}${SEEN.path}/${x.id}`, json: `${b}${SEEN.path}/${x.id}.json` })), make_one: `${b}/deal?url=<product page>`, ...(book ? { book } : {}), ...(bfcm ? { bfcm } : {}) }; };
+// (since 3.91) `bfcm`: the pages agents added to the weekend balance ({ adds }), only when there are any or adding is open;
+// (since 3.92) `next`: the next steps from the records (node/recordnext.mjs recordsNext), before the records
+export const recordsJson = (list, base, book = null, bfcm = null, next = null) => { const b = String(base || '').replace(/\/+$/, ''); return { what: 'the newest open price records: what the deal check saw on product pages, each unchanged at its own address', ...(next ? { next } : {}), records: (Array.isArray(list) ? list : []).slice(0, SEEN.list).map((x) => ({ ...x, url: `${b}${SEEN.path}/${x.id}`, json: `${b}${SEEN.path}/${x.id}.json` })), make_one: `${b}/deal?url=<product page>`, ...(book ? { book } : {}), ...(bfcm ? { bfcm } : {}) }; };
 
 // the records open to search engines as a sitemap of their own (/sitemaps/seen.xml, since 3.66): only those that compare 3 or
 // more prices (the others say noindex, so a map that named them would contradict their pages), each dated by the day it was
