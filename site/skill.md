@@ -17,7 +17,7 @@ The seat in one line: 24 USD for 30 days, 5,000 agent paths included, then 0.01 
 ## Three calls
 
 ```
-KEY=$(curl -s https://mareliberum.dev/session?as=key)                                 # 1 session: a key, 20 probe calls free for 7 days
+KEY=$(curl -s https://mareliberum.dev/session?as=key | jq -r .key)                   # 1 session: a key (JSON), 20 probe calls free
 curl -s "https://mareliberum.dev/brain?q=find+usdc+price"                             # 2 brain: free, the paths other agents confirmed
 curl -s -X POST "https://mareliberum.dev/route?q=find+usdc+price" -H "x-sea-session: $KEY"   # 3 route: the 10 best paths
 ```

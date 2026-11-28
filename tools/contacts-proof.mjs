@@ -123,7 +123,7 @@ await proof('a 402 of /x402/check without a wallet: next_step opens a key with p
   const r = await call(`/x402/check?site=${s}`, { ip, ua });
   assert.equal(r.status, 402); const ns = r.j.next_step; assert.ok(ns, 'next_step'); assert.ok(r.j.accepts, 'the x402 body stays');
   assert.deepEqual(ns.steps.map((x) => [x.method, x.url]), [['GET', `${BASE}/session?as=key`], ['GET', `${BASE}/x402/check?site=${s}`]]); assert.equal(ns.steps[0].keep, 'key'); assert.equal(ns.steps[1].headers['x-sea-session'], '{key}');
-  assert.equal(ns.run, `KEY=$(curl -sf '${BASE}/session?as=key') && curl -s '${BASE}/x402/check?site=${s}' -H "x-sea-session: $KEY"`);
+  assert.equal(ns.run, `KEY=$(curl -sf '${BASE}/session?as=key' | jq -r .key) && curl -s '${BASE}/x402/check?site=${s}' -H "x-sea-session: $KEY"`);
   assert.match(ns.or.say, /PAYMENT-SIGNATURE/); assert.equal(ns.or.steps[0].headers['payment-signature'], '{x402 payment for accepts[0]}');
   const { r: done } = await follow(ns, { ip, ua, last: r }); assert.equal(done.status, 200, done.text.slice(0, 200)); assert.equal(typeof done.j.score, 'number'); assert.equal(done.j.session.left, 19);
 });
@@ -164,9 +164,10 @@ await proof('a key whose probe calls are spent: next_step is the payment of the 
   const { r: paid } = await follow(r.j.next_step, { ip, ua, wallet: true, last: r }); assert.equal(paid.status, 200); assert.ok(paid.j.paid);
   facilitator = null;
 });
-await proof('K2: POST /session?as=key gives the key alone (one line of text, 201), its bookmark in Location, server-timing under 300 ms; one POST, nothing else', async () => {
+await proof('K2: POST /session?as=key gives the key answer (JSON since 4.1, 201; ?raw=1 the key alone as one line), its bookmark in Location, server-timing under 300 ms; one POST, nothing else', async () => {
   const r = await call('/session?as=key', { method: 'POST', ip: fresh(), ua: 'flow-k2/1.0', accept: '*/*' });
-  assert.equal(r.status, 201); assert.match(r.h['content-type'], /^text\/plain/); assert.match(r.text, /^mls_[A-Za-z0-9_-]{32}\n$/);
+  assert.equal(r.status, 201); assert.match(r.h['content-type'], /^application\/json/); assert.match(JSON.parse(r.text).key, /^mls_[A-Za-z0-9_-]{32}$/);
+  const raw = await call('/session?as=key&raw=1', { method: 'POST', ip: fresh(), ua: 'flow-k2/1.0', accept: '*/*' }); assert.equal(raw.status, 201); assert.match(raw.h['content-type'], /^text\/plain/); assert.match(raw.text, /^mls_[A-Za-z0-9_-]{32}\n$/);
   assert.match(r.h.location, /^https:\/\/mare\.test\/session\/[0-9a-f]{24}$/); assert.equal(r.h['x-sea-session-left'], '20');
   const ms = Number(/session;dur=([\d.]+)/.exec(r.h['server-timing'])?.[1]); assert.ok(ms >= 0 && ms < 300, `server-timing ${r.h['server-timing']}`);
   const use = await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: { 'x-sea-session': r.text.trim() } }); assert.equal(use.status, 200); assert.equal(use.j.session.left, 19);
@@ -174,7 +175,7 @@ await proof('K2: POST /session?as=key gives the key alone (one line of text, 201
 
 console.log('task 1: the way out without a wallet');
 await proof('every 402 begins with the way out without a wallet: the error of the body, of PAYMENT-REQUIRED and of x402-payment-required, and the header x-sea-no-wallet; POST /route with a JSON body too', async () => {
-  const W0 = `no wallet needed: run  curl -s ${BASE}/session?as=key  then repeat this call with header  x-sea-session: <key>`;
+  const W0 = `no wallet needed: run  curl -s ${BASE}/session?as=key | jq -r .key  then repeat this call with header  x-sea-session: <key>`;
   const r = await call('/route', { method: 'POST', ip: fresh(), ua: 't1-route/1.0', body: { q: 'x' } }); assert.equal(r.status, 402);
   assert.equal(r.h['x-sea-no-wallet'], W0); assert.ok(String(r.j.error).startsWith(W0), String(r.j.error).slice(0, 120));
   const v2 = JSON.parse(Buffer.from(r.h['payment-required'], 'base64').toString('utf8')); assert.ok(v2.error.startsWith(W0)); assert.equal(v2.accepts.length, 1, 'the terms stay');
@@ -184,10 +185,11 @@ await proof('every 402 begins with the way out without a wallet: the error of th
     const x = await call(path, { ip: fresh(), ua: 't1-doors/1.0' }); assert.equal(x.status, 402, path); assert.equal(x.h['x-sea-no-wallet'], W0, path);
     assert.ok(String(typeof x.j.error === 'string' ? x.j.error : x.j.error.message).startsWith(W0), path);
   }
-  const c = await call('/reader/credit', { method: 'POST', ip: fresh(), ua: 't1-credit/1.0' }); assert.equal(c.status, 402); assert.match(c.h['x-sea-no-wallet'], /^no wallet needed: run {2}curl -s https:\/\/mare\.test\/session\?as=key {2}then read with {2}GET https:\/\/mare\.test\/x402\/read\?url=<page>/);
+  const c = await call('/reader/credit', { method: 'POST', ip: fresh(), ua: 't1-credit/1.0' }); assert.equal(c.status, 402); assert.match(c.h['x-sea-no-wallet'], /^no wallet needed: run {2}curl -s https:\/\/mare\.test\/session\?as=key \| jq -r \.key {2}then read with {2}GET https:\/\/mare\.test\/x402\/read\?url=<page>/);
 });
-await proof('GET /session?as=key: one GET, no body: the key alone as one line of text (200, Location, server-timing); a crawler and a HEAD get the words, never a key; POST stays as the other way', async () => {
-  const r = await call('/session?as=key', { ip: fresh(), ua: 't1-get/1.0', accept: '*/*' }); assert.equal(r.status, 200); assert.match(r.text, /^mls_[A-Za-z0-9_-]{32}\n$/); assert.match(r.h['content-type'], /^text\/plain/);
+await proof('GET /session?as=key: one GET, no body: the key answer as JSON (since 4.1; ?raw=1 the key alone as one line) (200, Location, server-timing); a crawler and a HEAD get the words, never a key; POST stays as the other way', async () => {
+  const r = await call('/session?as=key', { ip: fresh(), ua: 't1-get/1.0', accept: '*/*' }); assert.equal(r.status, 200); assert.match(JSON.parse(r.text).key, /^mls_[A-Za-z0-9_-]{32}$/); assert.match(r.h['content-type'], /^application\/json/);
+  const raw = await call('/session?as=key&raw=1', { ip: fresh(), ua: 't1-get/1.0', accept: '*/*' }); assert.match(raw.text, /^mls_[A-Za-z0-9_-]{32}\n$/); assert.match(raw.h['content-type'], /^text\/plain/);
   assert.match(r.h.location, /\/session\/[0-9a-f]{24}$/); assert.equal(r.h['x-sea-session-left'], '20'); assert.match(r.h['server-timing'], /^session;dur=/); assert.match(r.h['cache-control'], /no-store/);
   const k = r.text.trim(), use = await call(`/x402/check?site=${host()}`, { ip: fresh(), headers: { 'x-sea-session': k } }); assert.equal(use.status, 200); assert.equal(use.j.session.left, 19);
   const bot = await call('/session?as=key', { ip: fresh(), ua: 'Mozilla/5.0 (compatible; GPTBot/1.2; +https://openai.com/gptbot)' }); assert.equal(bot.status, 200); assert.ok(bot.j?.what, 'a crawler gets the words'); assert.ok(!/mls_/.test(bot.text));
@@ -289,11 +291,11 @@ await proof('line 5 of the morning: the keys of the day, given, with at least on
 });
 await proof('the free /check and /deal lead to the paid door: upgrade with the one curl (a key from one GET and the call with it), and that curl works as it stands (3.83)', async () => {
   const site1 = host(), c = await call(`/check?site=${site1}`, { ip: fresh() }); assert.equal(c.status, 200); assert.equal(typeof c.j.score, 'number');
-  assert.equal(c.j.upgrade.curl, `KEY=$(curl -s ${BASE}/session?as=key) && curl -s '${BASE}/x402/check?site=${site1}' -H "x-sea-session: $KEY"`); assert.match(c.j.upgrade.price, /20 probe calls free with one key, then 0\.01 USDC/);
-  const m = /^KEY=\$\(curl -s (\S+)\) && curl -s '([^']+)' -H "x-sea-session: \$KEY"$/.exec(c.j.upgrade.curl), ip = fresh();
-  const key = (await call(rel(m[1]), { ip, accept: '*/*' })).text.trim(), paidDoor = await call(rel(m[2]), { ip, headers: { 'x-sea-session': key } }); assert.equal(paidDoor.status, 200); assert.equal(paidDoor.j.calls_left, 19);
+  assert.equal(c.j.upgrade.curl, `KEY=$(curl -s ${BASE}/session?as=key | jq -r .key) && curl -s '${BASE}/x402/check?site=${site1}' -H "x-sea-session: $KEY"`); assert.match(c.j.upgrade.price, /20 probe calls free with one key, then 0\.01 USDC/);
+  const m = /^KEY=\$\(curl -s (\S+) \| jq -r \.key\) && curl -s '([^']+)' -H "x-sea-session: \$KEY"$/.exec(c.j.upgrade.curl), ip = fresh();
+  const key = JSON.parse((await call(rel(m[1]), { ip, accept: '*/*' })).text).key, paidDoor = await call(rel(m[2]), { ip, headers: { 'x-sea-session': key } }); assert.equal(paidDoor.status, 200); assert.equal(paidDoor.j.calls_left, 19);
   const d = await call(`/deal?url=${URLQ(`https://shop.${W}/products/trail-runner-3`)}`, { ip: fresh() }); assert.equal(d.status, 200, d.text.slice(0, 200));
-  assert.match(d.j.upgrade.curl, /^KEY=\$\(curl -s https:\/\/mare\.test\/session\?as=key\) && curl -s 'https:\/\/mare\.test\/x402\/deal\?url=https%3A%2F%2Fshop\./);
+  assert.match(d.j.upgrade.curl, /^KEY=\$\(curl -s https:\/\/mare\.test\/session\?as=key \| jq -r \.key\) && curl -s 'https:\/\/mare\.test\/x402\/deal\?url=https%3A%2F%2Fshop\./);
 });
 await proof('/pulse says who pays first, above unique_domains_today: the agents that paid today (each once), the keys of the day and the paid doors; the sea\'s own calls never count (3.84)', async () => {
   const pulse = async () => (await call('/pulse.json', { ip: '127.0.0.1' })).j, p0 = await pulse();

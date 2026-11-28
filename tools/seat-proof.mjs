@@ -41,7 +41,7 @@ const call = async (path, { method = 'GET', headers = {}, body } = {}) => {
   return { status: res.status, h: res.headers, j, text };
 };
 const sid = (n) => `cs_live_${String(n).padStart(4, '0')}seatA1b2C3d4E5f6G7h8`;
-const newKey = async () => (await call('/session?as=key')).text.trim();
+const newKey = async () => JSON.parse((await call('/session?as=key')).text).key;
 const sales = () => ledger.treasury().then((t) => t);
 
 console.log('the seat');
@@ -134,7 +134,7 @@ await proof('/seats and /licence: the offer with the card way first, the wallet 
     const r = await call(p); assert.equal(r.status, 200, p); assert.equal(r.j.ways[0].way, 'card'); assert.equal(r.j.ways[1].way, 'wallet'); assert.equal(r.j.price_usd, 24); assert.equal(r.j.line, seatLine());
   }
   const a = await call('/seat?as=key'), b = await call('/seat?a=key'); assert.equal(a.status, 200); assert.equal(b.status, 200);
-  assert.match(a.text.trim(), /^mls_[A-Za-z0-9_-]{32}$/); assert.match(b.text.trim(), /^mls_[A-Za-z0-9_-]{32}$/);
+  assert.match(JSON.parse(a.text).key, /^mls_[A-Za-z0-9_-]{32}$/); assert.match(JSON.parse(b.text).key, /^mls_[A-Za-z0-9_-]{32}$/);
 });
 
 await proof('the seat\'s line stands in node/pricing.mjs only: the skill, llms.txt and /pay/howto say it as written there', async () => {

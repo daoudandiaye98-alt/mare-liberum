@@ -277,7 +277,7 @@ await proof('llms.txt and llms-full.txt name the price in their first section; t
   assert.equal(withPrice(txt, pricingOf(payConfig({}), BASE)), txt, 'the default price leaves the text as it is');
   const full = await (await handle(new Request(`${BASE}/llms-full.txt`, { headers: { 'user-agent': 'proof-agent/1.0' } }), db, { base: BASE, pay: PAY, ledger: createLedger({}), waitUntil: () => {} })).text();
   assert.equal(full.split('\n\n')[1], startTop(BASE)); assert.match(full.split('\n\n')[2], /^POST \/route costs 0\.02 USDC on Base, no account, settle with POST \/settle\./);
-  const start = served.split('\n\n')[1]; assert.match(start, /^Start free with one call: curl -s https:\/\/mareliberum\.dev\/session\?as=key gives a key with 20 door probes/); assert.match(start, /the 10 paths of a task 0\.03 USDC \(3 cents\), a check, a read or a deal check 0\.01 USDC, a pack 0\.05 USDC; 20 more probes on the same key 0\.03 USDC \(3 cents\)\./); assert.match(start, /\nEvery payment has a receipt:/);
+  const start = served.split('\n\n')[1]; assert.match(start, /^Start free with one call: curl -s https:\/\/mareliberum\.dev\/session\?as=key \| jq -r \.key gives a key with 20 door probes/); assert.match(start, /the 10 paths of a task 0\.03 USDC \(3 cents\), a check, a read or a deal check 0\.01 USDC, a pack 0\.05 USDC; 20 more probes on the same key 0\.03 USDC \(3 cents\)\./); assert.match(start, /\nEvery payment has a receipt:/);
 });
 
 console.log('the 402 a reader understands (3.28.0)');
@@ -298,7 +298,7 @@ await proof('/pay/howto: plain text under 60 lines, the way without a wallet fir
   const txt = await res.text(), lines = txt.trimEnd().split('\n'), curls = lines.filter((l) => l.startsWith('curl '));
   assert.ok(lines.length <= 60, `${lines.length} lines`); assert.equal(curls.length, 6);
   assert.equal(curls.shift(), `curl -s -X POST '${BASE}/seat?as=host'`, '(since 4.0) the card way for a host without a wallet stands first');
-  assert.ok(lines.indexOf(`KEY=$(curl -s ${BASE}/session?as=key)`) > 0 && lines.indexOf(`KEY=$(curl -s ${BASE}/session?as=key)`) < lines.indexOf(curls[0]), 'the one GET for a key comes first');
+  assert.ok(lines.indexOf(`KEY=$(curl -s ${BASE}/session?as=key | jq -r .key)`) > 0 && lines.indexOf(`KEY=$(curl -s ${BASE}/session?as=key | jq -r .key)`) < lines.indexOf(curls[0]), 'the one GET for a key comes first');
   assert.equal(curls[0], `curl -s -X POST '${BASE}/route?q=<task>' -H "x-sea-session: $KEY"`); curls.shift();
   assert.equal(curls[0], `curl -s '${BASE}/x402/check?site=example.com' -H "x-sea-session: $KEY"`, '(since 4.0) the check door as it answers: GET with ?site= and the key'); curls.shift();
   assert.equal(curls[0], `curl -s -X POST '${BASE}/route?q=test&free=true'`); assert.equal(curls[1], `curl -si -X POST '${BASE}/route?q=<task>'`); assert.match(curls[2], /^curl -s -X POST '.+\/settle' -H 'content-type: application\/json' -d '\{"q":"<task>","tx":"0x<transaction hash>"\}'$/);
@@ -378,7 +378,7 @@ await proof('/skills/mare-liberum/SKILL.md and /skills/mare-liberum/ give the sk
     const h = await get(p, { method: 'HEAD' }); assert.equal(h.status, 200); assert.match(h.headers.get('content-type'), /^text\/markdown/, `HEAD ${p}`);
   }
   const k1 = await get('/session?as=key', { headers: { 'x-forwarded-for': '198.51.100.71' } }), k2 = await get('/session?a=key', { headers: { 'x-forwarded-for': '198.51.100.72' } });
-  assert.equal(k1.status, 200); assert.equal(k2.status, 200); assert.match((await k2.text()).trim(), /^mls_[A-Za-z0-9_-]{32}$/, '?a=key gives the key'); assert.match((await k1.text()).trim(), /^mls_[A-Za-z0-9_-]{32}$/);
+  assert.equal(k1.status, 200); assert.equal(k2.status, 200); assert.match(JSON.parse(await k2.text()).key, /^mls_[A-Za-z0-9_-]{32}$/, '?a=key gives the key'); assert.match(JSON.parse(await k1.text()).key, /^mls_[A-Za-z0-9_-]{32}$/);
   const top = read('site/llms.txt').split('\n').slice(0, 20).join('\n'); for (const w of ['/skills/mare-liberum/SKILL.md', '/seats', '/llms-full.txt']) assert.ok(top.includes(w), w);
 });
 // the reading skill (since 3.51 in the index of /.well-known/agent-skills): one file in two places, skills/ for installers that
