@@ -83,6 +83,10 @@ export const seatLine = (s = SEAT) => `${s.cents / 100} USD for ${s.days} days, 
 // (since 4.1) on credit: a key buys without card or wallet; delivered at once, paid within 7 days or it drops to none;
 // at most 2 purchases on credit per key (node/session.mjs credit)
 export const CREDIT = Object.freeze({ dueDays: 7, perKey: 2 });
+// (since 4.1) bundles of agent paths for a key, on credit like the seat (the one place of their prices): 500 for 3 USD,
+// 2,000 for 9 USD; a bundle on a live seat adds its paths to it, without a seat it opens one for the seat's term
+export const PATH_PACKS = Object.freeze([Object.freeze({ paths: 500, cents: 300 }), Object.freeze({ paths: 2000, cents: 900 })]);
+export const pathPackOf = (n) => PATH_PACKS.find((p) => p.paths === Number(n)) || null;
 // the first words of every 402 that has no key yet: the way on credit, before the payment line
 export const creditLine = (base = SEA_BASE) => `no card, no wallet: curl -s ${String(base).replace(/\/+$/, '')}/session?as=key | jq -r .key, then repeat this call with header x-sea-session: <key>. that buys on credit, ${CREDIT.dueDays} days.`;
 // (since 4.1) the line every key answer carries: what the key can buy without a card

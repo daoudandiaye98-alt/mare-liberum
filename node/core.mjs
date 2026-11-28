@@ -31,7 +31,7 @@ import { createLedger, pulseOrdered } from './ledger.mjs';
 import { callerHash, callerHashes, viaProxy, rewriteForAgents, viaUrl, wrapTarget, ADDRESS_KEYS, isPerson, viaKey } from './via.mjs';
 import { commissionFor, viaCommissionFor, commissionOn, withCommission, dealWithCommission, COMMISSION_RULE, COMMISSION_MARK } from './commission.mjs';
 import { paidRoute } from './paid.mjs';
-import { pricingOf, priceLine, withPrice, USDC_BASE, SEAT, seatTerms, BUY_LINE, CREDIT as SEAT_CREDIT, creditLine } from './pricing.mjs';
+import { pricingOf, priceLine, withPrice, USDC_BASE, SEAT, seatTerms, BUY_LINE, CREDIT as SEAT_CREDIT, creditLine, PATH_PACKS, pathPackOf } from './pricing.mjs';
 import { createInstalls, installLines, INSTALL_ROUTES } from './installs.mjs';
 import { HOSTS } from './hosts.mjs';
 import { checkoutOf, readSeatToken, hostAnswer, seatOffer, payPage, thanksPage, seatPaid, seatKeyOf, sessionMark, isCheckoutSession, hostOf as seatHostOf } from './seat.mjs';
@@ -2825,9 +2825,17 @@ async function handleOne(req, db, cfg = {}) {
       const routeUsd = pricingOf(payCfg, base).amount_usd, act = actOf(url);
       // a host that can only read links (the web fetch of ChatGPT, Claude, Gemini) gets the link with a GET as well: it writes nothing
       const asks = path === '/seat' && (act === 'host' || act === 'topup');
+      // (since 4.1) the bundles of paths: GET /seats?a=paths says them, POST /seat?a=paths&paths=500|2000 buys one on credit
+      const packsOffer = () => ({ what: 'bundles of agent paths for a key, bought on credit like the seat: the paths are the key\'s at once, the payment is due later', on_credit: true, due_days: SEAT_CREDIT.dueDays, per_key: `at most ${SEAT_CREDIT.perKey} purchases on credit per key, seat and bundles together`,
+        packs: PATH_PACKS.map((p) => ({ paths: p.paths, price_usd: p.cents / 100, price_per_path_usd: Math.round((p.cents / p.paths) * 1e4) / 1e6, buy: `POST ${base}/seat?a=paths&paths=${p.paths} with header x-sea-session: <key>` })),
+        key: `curl -s ${base}/session?as=key | jq -r .key`, then: 'the paths add to a live seat; without one they open a seat for its term', seat: `${base}/seats` });
+      if (act === 'paths' && (path === '/seats' || path === '/licence' || (path === '/seat' && req.method !== 'POST'))) {
+        if (req.method !== 'GET' && req.method !== 'HEAD') return json({ error: { code: 'METHOD_NOT_ALLOWED', message: `GET ${base}/seats?a=paths says the bundles; POST ${base}/seat?a=paths&paths=500 buys one` } }, 405, sh);
+        return json(packsOffer(), 200, { ...sh, 'cache-control': 'public, max-age=300' });
+      }
       if (path === '/seats' || path === '/licence' || (path === '/seat' && !asks && (req.method === 'GET' || req.method === 'HEAD'))) {
         if (req.method !== 'GET' && req.method !== 'HEAD') return json({ error: { code: 'METHOD_NOT_ALLOWED', message: `GET ${base}${path} says the offer; POST ${base}/seat?as=host buys it` } }, 405, sh);
-        return json({ ...seatOffer(base, routeUsd), buy: `POST ${base}/seat?as=host`, ...(act && act !== 'host' && path !== '/seat' ? { note_on_query: `${path} takes no ?as= or ?a=; the offer is the same` } : {}) }, 200, { ...sh, 'cache-control': 'public, max-age=300' });
+        return json({ ...seatOffer(base, routeUsd), buy: `POST ${base}/seat?as=host`, bundles: `GET ${base}/seats?a=paths (500 or 2000 paths for a key, on credit)`, ...(act && act !== 'host' && path !== '/seat' ? { note_on_query: `${path} takes no ?as= or ?a=; the offer is the same` } : {}) }, 200, { ...sh, 'cache-control': 'public, max-age=300' });
       }
       // (since 4.1) a purchase on credit (node/session.mjs credit): a key buys without card or wallet. Without a key: 402 whose
       // first words are the way on credit. At most 2 per key: then 402 with the human's link, never a hint at a new key. The
@@ -2855,6 +2863,13 @@ async function handleOne(req, db, cfg = {}) {
         if (req.method !== 'POST' && req.method !== 'GET') return json({ error: { code: 'METHOD_NOT_ALLOWED', message: `POST ${base}/seat?as=host (GET works too)` } }, 405, sh);
         // (since 4.1) POST /seat with a key buys the seat on credit: 200, never 402, the seat active at once, 7 days to pay
         if (req.method === 'POST' && (act === '' || act === 'seat' || act === 'credit')) return seatOnCredit();
+        // (since 4.1) a bundle of paths on credit: ?paths=500 or 2000; another number names the bundles
+        if (act === 'paths') {
+          if (req.method !== 'POST') return json(packsOffer(), 200, sh);
+          const pk = pathPackOf(url.searchParams.get('paths'));
+          if (!pk) return json({ error: { code: 'INVALID_ARGUMENT', message: `paths= takes ${PATH_PACKS.map((p) => p.paths).join(' or ')}: POST ${base}/seat?a=paths&paths=${PATH_PACKS[0].paths} with header x-sea-session: <key>` }, ...packsOffer() }, 400, sh);
+          return seatOnCredit({ kind: 'paths_credit', paths: pk.paths, cents: pk.cents, days: SEAT.days });
+        }
         if (act !== 'host' && act !== 'topup') return json({ error: { code: 'INVALID_ARGUMENT', message: `POST ${base}/seat?as=host (or ?a=host) gives the link for a human; ?as=topup the same for the key you send; ?as=key a key with ${SESSION.probe} probe calls` }, offer: `${base}/seats` }, 400, sh);
         const sv = sessionOf(req.headers);
         if (sv?.bad) { const r = sessionRefusal(sv, base); return json(r.body, r.status, sh); }
