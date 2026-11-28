@@ -66,6 +66,7 @@
     "proof:bots": "node tools/bots-proof.mjs",
     "proof:poppy": "node tools/poppy-proof.mjs",
     "proof:dealfirst": "node tools/dealfirst-proof.mjs",
+    "proof:firststep": "node tools/firststep-proof.mjs",
     "proof:readers": "node tools/readers-proof.mjs",
     "proof:market": "node tools/market-proof.mjs",
     "proof:session": "node tools/session-proof.mjs",

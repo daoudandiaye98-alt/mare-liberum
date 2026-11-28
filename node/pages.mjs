@@ -2,6 +2,7 @@
 import { ROLES, OPERATORS } from './atlantis.mjs';
 import { labelsFor, RTL, LANG_NAMES, LEX_LANGS, lexiconPhrases } from './lexicon.mjs';
 import { HARBOUR_UI } from './harbour-ui.mjs';
+import { shelfNextHtml } from './firststep.mjs';
 import { YARD_UI } from './yard-ui.mjs';
 
 export const esc = (s) => String(s ?? '').replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
@@ -764,7 +765,7 @@ GET ${B}/routes/&lt;shelf&gt;                               every door of a shel
 export function routeTopicPage(base, t) {
   const row = (d) => `<tr><td><b>${esc(d.name)}</b>${d.language ? ` <span class="tag">${esc(d.language)}</span>` : ''}<br><small class="muted">${esc(d.returns || d.site || '')}</small></td><td style="word-break:break-all"><code>${esc(d.template)}</code>${d.needs ? `<br><small class="muted">{q}: ${esc(d.needs)}</small>` : ''}</td><td><small>${esc(d.state || '')}${d.used ? `<br>${n(d.used.worked)} worked · ${n(d.used.failed)} failed` : ''}${d.keepsOff?.length ? `<br>keeps off ${esc(d.keepsOff.join(', '))}` : ''}</small></td></tr>`;
   const body = `<p class="muted" style="margin:0"><a href="/routes">The doors of the web</a></p><h1>${esc(t.title)}</h1>
-<p>Doors that answer a program for this kind of task. Put the words where <code>{q}</code> stands, or let the sea fill them: <code>${esc(t.ask)}</code></p>${routeBox()}
+<p>Doors that answer a program for this kind of task. Put the words where <code>{q}</code> stands, or let the sea fill them: <code>${esc(t.ask)}</code></p>${shelfNextHtml(t, esc)}${routeBox()}
 ${t.doors.length ? `<h2>Data doors</h2><table><tr><th>Door</th><th>Link</th><th>State</th></tr>${t.doors.map(row).join('')}</table>` : ''}
 ${t.searchLinks.length ? `<h2>Search links of websites</h2><p class="muted">Each answered a program with a result page when it was listed. The most linked sites first.</p><table><tr><th>Site</th><th>Link</th><th>State</th></tr>${t.searchLinks.map(row).join('')}</table>` : ''}`;
   return page(base, `/routes/${t.id}`, `${t.title}: doors that open for an AI agent · Mare Liberum`, `Public APIs and site search links for ${t.title.toLowerCase()} that answer a program without a key or a browser.`, body);
