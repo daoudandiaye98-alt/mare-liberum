@@ -14,9 +14,13 @@
 // terms of a key. Nothing here pays, nothing points at /mcp/app or at a paid door, and the price check stays free. The
 // readings are the sea's own: each time the current asked the stores' catalogs for a need, the price of its pick, the store
 // and the lowest offer found; never an estimate.
-import { pageKit } from './seen.mjs';
-import { BFCM } from './bfcm.mjs';
+// node/pages.mjs renders the Atlas with this module, so it imports nothing that leads back to node/flow.mjs: the weekend
+// balance's address and its Black Friday stand here as in node/bfcm.mjs (tools/trail-proof.mjs holds them equal)
+import { SEEN, pageKit } from './seen.mjs';
 import { freeStart, dealStep } from './firststep.mjs';
+
+export const BFCM_AT = Object.freeze({ path: `${SEEN.path}/bfcm-2026`, bf: '2026-11-27' });
+const BFCM = BFCM_AT;
 
 export const HISTORY = Object.freeze({ path: '/history', show: 60, index: 3 });
 

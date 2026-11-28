@@ -38,7 +38,7 @@ const BASE = 'https://mare.test', SITE = { '/llms.txt': { body: readFileSync(joi
 const core = await imp('core.mjs'), { createMem } = await imp('mem.mjs'), { memoryKv } = await imp('flow.mjs');
 const { immune } = await imp('immune.mjs'), { createLedger } = await imp('ledger.mjs'), { payConfig } = await imp('pay.mjs');
 const { SESSION } = await imp('session.mjs'), { DEAL_FIRST, countryPage } = await imp('pages.mjs'), { NEEDS } = await imp('needs.mjs');
-const { historyOf, atlasNext } = await imp('trail.mjs');
+const { historyOf, atlasNext, BFCM_AT } = await imp('trail.mjs'), { BFCM } = await imp('bfcm.mjs');
 const dir = mkdtempSync(join(tmpdir(), 'mare-trail-')), file = join(dir, 'sea.tsv');
 process.once('exit', () => { try { rmSync(dir, { recursive: true, force: true }); } catch {} });
 writeFileSync(file, ''); writeFileSync(join(dir, 'build.json'), JSON.stringify({ builtAt: '2026-11-20T10:00:00.000Z', entries: 0, lakes: {} }));
@@ -124,6 +124,9 @@ await proof('a page with fewer than 3 readings is noindex; a need with none says
   const b = await call('/history/no-such-need-here', { accept: 'text/html' }); assert.equal(b.status, 200); assert.match(b.text, /<meta name="robots" content="noindex,follow">/);
   assert.match(unesc(/<h1>([^<]*)<\/h1>/.exec(b.text)[1]), /^No such need here price history: no readings yet$/); assert.ok(!b.text.includes('/buy/no-such-need-here'), 'no buy page for an unknown need');
 });
+await proof('the weekend balance named here is the one node/bfcm.mjs serves: the same address, the same Black Friday', () => {
+  assert.equal(BFCM_AT.path, BFCM.path); assert.equal(BFCM_AT.bf, BFCM.bf);
+});
 await proof('historyOf counts only readings with a price, a currency and a time', () => {
   const h = historyOf([{ t: '2026-11-27T01:00:00Z', price: 0, currency: 'USD' }, { t: '2026-11-27T02:00:00Z', price: 9, currency: '' }, { price: 9, currency: 'USD' }, { t: '2026-11-28T01:00:00Z', price: 12, currency: 'USD', min: 11 }]);
   assert.equal(h.readings, 1); assert.equal(h.lowest.price, 11); assert.equal(h.black_friday, null);
@@ -159,6 +162,7 @@ if (!process.argv.includes('--no-controls')) {
     ['the page without the steps', 'node/trail.mjs', '<p class="lead">${esc(lead)}</p>\n${nextHtml(nx)}\n${pts.length', '<p class="lead">${esc(lead)}</p>\n\n${pts.length'],
     ['HTML for a .json history', 'node/core.mjs', 'const res = !asJ && /text\\/html/.test(accept)', 'const res = /text\\/html/.test(accept)'],
     ['the app door in next', 'node/trail.mjs', "site: { call: `GET ${b}/site/<domain>`", "site: { call: `GET ${b}/mcp/app`"],
+    ['another Black Friday than the balance', 'node/trail.mjs', "bf: '2026-11-27' });", "bf: '2026-11-26' });"],
     ['the country page without the steps', 'node/pages.mjs', '${nextHtml(c.next)}<table>', '<table>'],
   ];
   for (const [name, f, from, to] of CONTROLS) {
