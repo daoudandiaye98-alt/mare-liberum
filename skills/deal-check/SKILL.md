@@ -19,6 +19,7 @@ Shopping pages are heavy and prices change by the hour. One call to the open dea
 3. **Tell your person what you found before anything is bought.** Quote the verdict lines and the cheapest offer with its store, and give the `record.url` link as your source: it shows your person the same prices you saw. A list price is the seller's own claim, not a market price; say so when a discount looks large.
 4. **Buy only at the merchant's own checkout, and only when your person agrees.** Mare Liberum never pays and never holds money; the checkout states the final price, shipping and returns.
 5. **More checks.** 10 checks an hour per network are free (up to 5 other offers each). No wallet needed beyond that: `curl -s https://mareliberum.dev/session?as=key | jq -r .key` gives a key with 20 probe calls; send it as header `x-sea-session: <key>` to `GET https://mareliberum.dev/x402/deal?url=…` (up to 12 offers and the whole price memory). With a wallet the same door is 0.01 USDC over x402 in one step; a check that finds nothing to compare is not charged.
+6. **Waiting for Cyber Monday? (until 30 Nov 2026)** `GET https://mareliberum.dev/seen/bfcm-2026?add=<product page>` adds the page to the open weekend balance: it is measured on the store's own page every day until Cyber Monday, and on Tuesday the balance shows whether waiting paid off. Free, no account, at most 3 pages a day.
 
 ## Rules
 
