@@ -302,6 +302,29 @@ export function createSessions({ kv, now = () => Date.now(), secret = randomByte
         return { ok: true, sale, due, id, seat: seatDoc(rec.seat, t), count: rec.credits.length };
       });
     },
+    // (since 4.2) a payment for a key with purchases on credit open (a card payment whose seat link named the key): it pays them,
+    // a seat on credit first (the card link is a seat's price), then bundles, oldest first, as far as its amount reaches; the
+    // seat no longer falls due for what is paid. A seat on credit, paid, is that very seat: the caller gives no second one.
+    // → { ok, settled: [sale…], seat_paid, cents, left_cents, until } · { ok, again } · { ok: false, why: unknown | none }
+    settle(byId, { cents = 0, sale = null } = {}) {
+      const id = String(byId || ''), mark = String(sale || '').slice(0, 64);
+      if (!ID_RE.test(id)) return Promise.resolve({ ok: false, why: 'unknown' });
+      return serial(id, async () => {
+        const t = now(), rec = await kv.get(R(id));
+        if (!rec) return { ok: false, why: 'unknown' };
+        const mine = rec.credits || [];
+        if (mark && mine.some((c) => c.paid_sale === mark)) return { ok: true, again: true, settled: [], seat_paid: mine.some((c) => c.paid_sale === mark && c.kind === 'seat_credit'), until: rec.seat?.until || null };
+        const open = mine.filter((c) => c.status === 'credit').sort((a, b) => (a.kind === 'seat_credit' ? 0 : 1) - (b.kind === 'seat_credit' ? 0 : 1) || Date.parse(a.at) - Date.parse(b.at));
+        let left = Math.max(0, Math.floor(Number(cents) || 0)); const paid = [];
+        for (const c of open) if (c.cents <= left) { c.status = 'paid'; c.paid_at = new Date(t).toISOString(); c.paid_sale = mark || null; left -= c.cents; paid.push(c); }
+        if (!paid.length) return { ok: false, why: 'none' };
+        if (rec.seat) rec.seat.due = mine.filter((x) => x.status === 'credit').map((x) => x.due).sort()[0] || null;
+        await kv.set(R(id), rec, ttlOf(rec));
+        const done = new Map(paid.map((c) => [c.sale, c]));
+        await serial('credit:list', async () => { const list = (await kv.get('credit:list')) || []; for (const e of list) { const c = done.get(e.sale); if (c) { e.status = 'paid'; e.paid_at = c.paid_at; } } await kv.set('credit:list', list, 400 * DAY); });
+        return { ok: true, settled: paid.map((c) => c.sale), seat_paid: paid.some((c) => c.kind === 'seat_credit'), cents: paid.reduce((a, c) => a + c.cents, 0), left_cents: left, until: rec.seat?.until || null };
+      });
+    },
     // (since 4.1) the purchases on credit, newest first (for /treasury and /day): what is open, what is due when, what was paid
     async credits() { return (await kv.get('credit:list')) || []; },
     // (since 4.0) the overage of all seats, for the treasury: paths past a seat's 5,000, today and in all, and what they are worth

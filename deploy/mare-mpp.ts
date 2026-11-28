@@ -5,12 +5,14 @@
 // secrets. The node never sees it: the node sends its own secret (checked by the database, as in mare-node-config) and what
 // the action needs; this function answers what Stripe said. A charge: one PaymentIntent created and confirmed (idempotent per
 // challenge and token), only amounts of 0.50 to 100.00 USD. Nothing here is secret; deployed as the Edge Function "mare-mpp"
-// (it does its own check, so it runs without a JWT).
+// (it does its own check, so it runs without a JWT). Since 4.2 a session also gives back its client_reference_id, when it
+// has the shape of a seat token (letters, digits, - and _): the sea's own link, never anything about the buyer, so the node
+// can tell which key the payment was for and settle that key's purchase on credit.
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 
 const json = (v: unknown, status = 200) =>
   new Response(JSON.stringify(v), { status, headers: { "content-type": "application/json", "cache-control": "no-store" } });
-const SPT = /^spt_[A-Za-z0-9]{8,64}$/, CH = /^[A-Za-z0-9_-]{8,64}$/, CS = /^cs_(live|test)_[A-Za-z0-9]{10,200}$/;
+const SPT = /^spt_[A-Za-z0-9]{8,64}$/, CH = /^[A-Za-z0-9_-]{8,64}$/, CS = /^cs_(live|test)_[A-Za-z0-9]{10,200}$/, REF = /^[A-Za-z0-9_-]{1,200}$/;
 
 // the database itself says whether it knows this secret: the long memory answers only to a writer
 async function writer(url: string, anon: string, secret: string): Promise<boolean> {
@@ -49,7 +51,8 @@ Deno.serve(async (req: Request) => {
     const pi = s?.payment_intent;
     return json({ ok: true, id: s?.id ?? null, status: s?.status ?? null, payment_status: s?.payment_status ?? null, mode: s?.mode ?? null,
       payment_link: s?.payment_link ?? null, amount_total: s?.amount_total ?? null, currency: s?.currency ?? null,
-      payment_intent: typeof pi === "string" ? pi : pi?.id ?? null, livemode: s?.livemode ?? null, created: s?.created ?? null });
+      payment_intent: typeof pi === "string" ? pi : pi?.id ?? null, livemode: s?.livemode ?? null, created: s?.created ?? null,
+      client_reference_id: typeof s?.client_reference_id === "string" && REF.test(s.client_reference_id) ? s.client_reference_id : null });
   }
 
   const spt = String(b?.spt ?? ""), ch = String(b?.challenge ?? ""), amount = Number(b?.amount), currency = String(b?.currency ?? "");
