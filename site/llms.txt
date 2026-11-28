@@ -165,6 +165,8 @@ The price in the store's own currency: the sea's reader runs in Germany, and a S
 
 The quote of the records: how often a checked product page was cheaper elsewhere (of the pages compared with other stores), the median saving at the lowest other store without a caution, and how many pages state a list price of their own above the price charged, counted from the newest records, apart for agents' checks and the sea's own sample: https://mareliberum.dev/seen/quote (page) · https://mareliberum.dev/seen/quote.json (data, CC BY 4.0).
 
+Black Friday or Cyber Monday, measured: the same product pages of the sea's own daily sample, priced on the store's own page on Black Friday (27 Nov 2026) and on Cyber Monday (30 Nov 2026); how many were cheaper on Cyber Monday, dearer or unchanged, the median change, one line per page with its record and the lowest price measured after Cyber Monday until 15 Jan 2027. Only measured days, never a forecast, never an Amazon page: https://mareliberum.dev/seen/bfcm-2026 (page) · https://mareliberum.dev/seen/bfcm-2026.json (data, CC BY 4.0).
+
 Where the operator set a commission, a link to another store in a deal answer may be a commission link: it says so (commission: true with its network, and the answer carries the rule once). The page you asked about, the record and the order, prices and verdict never carry or read a commission.
 
 ## For bot assistants (Grok Bot, xAI API)

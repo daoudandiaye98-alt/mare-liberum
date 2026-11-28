@@ -10,6 +10,7 @@ import { productOf } from './lean.mjs';
 import { DEAL, MARKET, dealTarget, dealQuery, dealKey, remembered, dealOf, wordsOf, shopifyPage, homeOf, inCurrency, marketOf } from './deal.mjs';
 import { SEEN, recordKey, recordOf, recordRef, canonical, lineOf } from './seen.mjs';
 import { BOOK, bookHost, freshOf, nextVisit, watchAfter, seriesAfter, bookSays, dryAfter, isDry } from './book.mjs';
+import { BFCM } from './bfcm.mjs';
 
 const FEED = new Set(['read', 'whale', 'brevet', 'seal', 'buoy', 'path', 'knock', 'enter', 'answer', 'ask', 'tide', 'job', 'job_done', 'note', 'mark', 'reflex', 'learn', 'course', 'outcome']);
 export const TAG = /^[a-z0-9]{4,12}$/;
@@ -210,6 +211,20 @@ export function createLens(h) {
       const seeds = (Array.isArray(seed) ? seed : []), w = (Array.isArray(watch) ? watch : []).filter((u) => !seeds.includes(u));
       const resting = Object.keys(dry && typeof dry === 'object' ? dry : {}).filter((u) => isDry(dry, u, day)).length;
       return bookSays({ day, tried: Number(tried) || 0, records: Number(records) || 0, watch: w.length, seed: seeds.filter((u) => !isDry(dry, u, day)).length, dry: resting });
+    },
+    // (since 3.87) the pages of the weekend balance (node/bfcm.mjs): every page the book knows (start list, watch, resting), each
+    // with its series of prices and the product and store of its newest record of the weekend; a page without a price measured
+    // on Black Friday or Cyber Monday is left out here already
+    async bfcmRows(seed = []) {
+      const [watch, dry] = await Promise.all(['book:watch', 'book:dry'].map((k) => kv.get(k).catch(() => null)));
+      const urls = [...new Set([...(Array.isArray(seed) ? seed : []), ...(Array.isArray(watch) ? watch : []), ...Object.keys(dry && typeof dry === 'object' ? dry : {})])].slice(0, 200), out = [];
+      for (const url of urls) {
+        const series = await lens.bookSeries(url), days = series.filter((x) => x?.d === BFCM.bf || x?.d === BFCM.cm);
+        if (!days.length) continue;
+        const rec = await lens.seenRecord(days[days.length - 1].r).catch(() => null);
+        out.push({ url, series, name: rec?.product?.name || null, store: rec?.store || null });
+      }
+      return out;
     },
     async bookSeries(url) { const u = String(url || ''); if (!u) return []; const s = await kv.get(`book:series:${(await sha(u)).slice(0, 32)}`).catch(() => null); return Array.isArray(s) ? s : []; },
     // (since 3.75) a Shopify store's own currency and country, as its /meta.json names them, kept a week per store; a store whose

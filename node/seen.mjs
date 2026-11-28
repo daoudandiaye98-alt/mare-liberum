@@ -207,7 +207,7 @@ export function recordsPage(list, base, book = null) {
   const site = { '@context': 'https://schema.org', '@type': 'CollectionPage', name: 'Price records · Mare Liberum', url: `${b}${SEEN.path}`, description: d };
   return `${head(`${H} | Mare Liberum`, `${lead} ${d}`, `${b}${SEEN.path}`, `<link rel="alternate" type="application/json" href="${esc(`${b}${SEEN.path}.json`)}">${ld(site)}`)}
 <body><main><h1>${esc(H)}</h1><p class="lead">${esc(lead)}</p><p>${esc(d)}</p>
-<p>How often a checked page was cheaper elsewhere, the median saving and how many pages state a list price: <a href="${SEEN.path}/quote">the quote of the records</a>.</p>
+<p>How often a checked page was cheaper elsewhere, the median saving and how many pages state a list price: <a href="${SEEN.path}/quote">the quote of the records</a>. Black Friday or Cyber Monday, measured on the same pages: <a href="${SEEN.path}/bfcm-2026">the weekend balance</a>.</p>
 <p>An agent makes one with every deal check of a product page and can hand it to its person as the source of the price it names:</p>
 <pre>GET ${esc(b)}/deal?url=&lt;product page&gt;</pre>
 ${book ? `<p>The sea adds its own every day: up to ${esc(String(book.per_day))} product pages, ${esc(String(book.watch_max))} of them the same watched pages each day, so each has a series of prices. Today (${esc(String(book.day || ''))} UTC) ${esc(String(book.visits))} visit${book.visits === 1 ? '' : 's'}, ${esc(String(book.records))} record${book.records === 1 ? '' : 's'}, ${esc(String(book.watch))} page${book.watch === 1 ? '' : 's'} watched${book.seed ? ` (${esc(String(book.seed))} from its fixed start list: stores and goods people ask for most)` : ''}. Its records say so and are never counted as an agent's check.</p>
@@ -229,3 +229,6 @@ export function recordsSitemap(list, base) {
 }
 // the day the newest record open to search engines was seen: the lastmod of seen.xml in the sitemap index, or null
 export const recordsDay = (list) => { const x = (Array.isArray(list) ? list : []).find(okId); return x ? dayOf(x) : null; };
+
+// the parts of a records page, for pages beside the records that look like them (since 3.87: node/bfcm.mjs)
+export const pageKit = Object.freeze({ esc, ld, money, head, NAV });
