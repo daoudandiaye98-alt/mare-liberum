@@ -12,3 +12,4 @@ agent-economy-english.floot.app
 store.agentexchange.work
 bazaar.agentexchange.work
 openagentboard.net
+api.clawfetch.ai
