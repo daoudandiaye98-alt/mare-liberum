@@ -880,23 +880,24 @@ await proof('/engine (a section "The toll" with the example $0.003630), /engine.
     assert.equal(a.status, b.status, path); assert.equal(tmask(norm(a.text), F.version), tmask(norm(b.text), M.version), `${path}: as ${REF}`);
   }
 });
-await proof('3.85.0 in VERSION, server.json, server-dev.json, server-lean.json and gemini-extension.json; RELEASES: 3.85.0 without day and pull request, 3.84.0 on 2026-11-27T18:41:50+01:00 with #80, 3.83.0 on 2026-11-27T18:19:41+01:00 with #79, 3.82.0 on 2026-11-27T17:57:41+01:00 with #78, 3.81.0 on 2026-11-27T17:36:36+01:00 with #76, 3.80.0 on 2026-11-27T17:10:58+01:00 with #74, 3.79.0 on 2026-11-27T16:14:46+01:00 with #73, 3.78.0 on 2026-11-27T15:49:37+01:00 with #72, 3.77.0 on 2026-11-27T14:39:00+01:00 with #71, 3.76.0 on 2026-11-27T13:32:00+01:00 with #70, 3.75.0 on 2026-11-27T12:35:11+01:00 with #69, 3.74.0 on 2026-11-27T11:56:09+01:00 with #68, 3.73.0 on 2026-11-27T11:31:52+01:00 with #67, 3.72.0 on 2026-11-27T10:31:02+01:00 with #66, 3.71.0 on 2026-11-27T10:05:45+01:00 with #65', async () => {
-  assert.equal(ON.version, '3.85.0'); for (const f of ['server.json', 'server-dev.json', 'server-lean.json', 'gemini-extension.json']) assert.equal(JSON.parse(readFileSync(join(ROOT, f), 'utf8')).version, '3.85.0', f);
-  assert.deepEqual([RELEASES[0].version, RELEASES[0].at, RELEASES[0].pr], ['3.85.0', null, undefined]); assert.ok(RELEASES[0].what.length > 40 && !RELEASES[0].what.includes('\n'));
-  assert.deepEqual([RELEASES[1].version, RELEASES[1].at, RELEASES[1].pr], ['3.84.0', '2026-11-27T18:41:50+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/80']);
-  assert.deepEqual([RELEASES[2].version, RELEASES[2].at, RELEASES[2].pr], ['3.83.0', '2026-11-27T18:19:41+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/79']);
-  assert.deepEqual([RELEASES[3].version, RELEASES[3].at, RELEASES[3].pr], ['3.82.0', '2026-11-27T17:57:41+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/78']);
-  assert.deepEqual([RELEASES[4].version, RELEASES[4].at, RELEASES[4].pr], ['3.81.0', '2026-11-27T17:36:36+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/76']);
-  assert.deepEqual([RELEASES[5].version, RELEASES[5].at, RELEASES[5].pr], ['3.80.0', '2026-11-27T17:10:58+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/74']);
-  assert.deepEqual([RELEASES[6].version, RELEASES[6].at, RELEASES[6].pr], ['3.79.0', '2026-11-27T16:14:46+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/73']);
-  assert.deepEqual([RELEASES[7].version, RELEASES[7].at, RELEASES[7].pr], ['3.78.0', '2026-11-27T15:49:37+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/72']);
-  assert.deepEqual([RELEASES[8].version, RELEASES[8].at, RELEASES[8].pr], ['3.77.0', '2026-11-27T14:39:00+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/71']);
-  assert.deepEqual([RELEASES[9].version, RELEASES[9].at, RELEASES[9].pr], ['3.76.0', '2026-11-27T13:32:00+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/70']);
-  assert.deepEqual([RELEASES[10].version, RELEASES[10].at, RELEASES[10].pr], ['3.75.0', '2026-11-27T12:35:11+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/69']);
-  assert.deepEqual([RELEASES[11].version, RELEASES[11].at, RELEASES[11].pr], ['3.74.0', '2026-11-27T11:56:09+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/68']);
-  assert.deepEqual([RELEASES[12].version, RELEASES[12].at, RELEASES[12].pr], ['3.73.0', '2026-11-27T11:31:52+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/67']);
-  assert.deepEqual([RELEASES[13].version, RELEASES[13].at, RELEASES[13].pr], ['3.72.0', '2026-11-27T10:31:02+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/66']);
-  assert.deepEqual([RELEASES[14].version, RELEASES[14].at, RELEASES[14].pr], ['3.71.0', '2026-11-27T10:05:45+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/65']);
+await proof('3.86.0 in VERSION, server.json, server-dev.json, server-lean.json and gemini-extension.json; RELEASES: 3.86.0 without day and pull request, 3.85.0 on 2026-11-28T10:07:51+01:00 with #93, 3.84.0 on 2026-11-27T18:41:50+01:00 with #80, 3.83.0 on 2026-11-27T18:19:41+01:00 with #79, 3.82.0 on 2026-11-27T17:57:41+01:00 with #78, 3.81.0 on 2026-11-27T17:36:36+01:00 with #76, 3.80.0 on 2026-11-27T17:10:58+01:00 with #74, 3.79.0 on 2026-11-27T16:14:46+01:00 with #73, 3.78.0 on 2026-11-27T15:49:37+01:00 with #72, 3.77.0 on 2026-11-27T14:39:00+01:00 with #71, 3.76.0 on 2026-11-27T13:32:00+01:00 with #70, 3.75.0 on 2026-11-27T12:35:11+01:00 with #69, 3.74.0 on 2026-11-27T11:56:09+01:00 with #68, 3.73.0 on 2026-11-27T11:31:52+01:00 with #67, 3.72.0 on 2026-11-27T10:31:02+01:00 with #66, 3.71.0 on 2026-11-27T10:05:45+01:00 with #65', async () => {
+  assert.equal(ON.version, '3.86.0'); for (const f of ['server.json', 'server-dev.json', 'server-lean.json', 'gemini-extension.json']) assert.equal(JSON.parse(readFileSync(join(ROOT, f), 'utf8')).version, '3.86.0', f);
+  assert.deepEqual([RELEASES[0].version, RELEASES[0].at, RELEASES[0].pr], ['3.86.0', null, undefined]); assert.ok(RELEASES[0].what.length > 40 && !RELEASES[0].what.includes('\n'));
+  assert.deepEqual([RELEASES[1].version, RELEASES[1].at, RELEASES[1].pr], ['3.85.0', '2026-11-28T10:07:51+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/93']);
+  assert.deepEqual([RELEASES[2].version, RELEASES[2].at, RELEASES[2].pr], ['3.84.0', '2026-11-27T18:41:50+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/80']);
+  assert.deepEqual([RELEASES[3].version, RELEASES[3].at, RELEASES[3].pr], ['3.83.0', '2026-11-27T18:19:41+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/79']);
+  assert.deepEqual([RELEASES[4].version, RELEASES[4].at, RELEASES[4].pr], ['3.82.0', '2026-11-27T17:57:41+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/78']);
+  assert.deepEqual([RELEASES[5].version, RELEASES[5].at, RELEASES[5].pr], ['3.81.0', '2026-11-27T17:36:36+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/76']);
+  assert.deepEqual([RELEASES[6].version, RELEASES[6].at, RELEASES[6].pr], ['3.80.0', '2026-11-27T17:10:58+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/74']);
+  assert.deepEqual([RELEASES[7].version, RELEASES[7].at, RELEASES[7].pr], ['3.79.0', '2026-11-27T16:14:46+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/73']);
+  assert.deepEqual([RELEASES[8].version, RELEASES[8].at, RELEASES[8].pr], ['3.78.0', '2026-11-27T15:49:37+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/72']);
+  assert.deepEqual([RELEASES[9].version, RELEASES[9].at, RELEASES[9].pr], ['3.77.0', '2026-11-27T14:39:00+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/71']);
+  assert.deepEqual([RELEASES[10].version, RELEASES[10].at, RELEASES[10].pr], ['3.76.0', '2026-11-27T13:32:00+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/70']);
+  assert.deepEqual([RELEASES[11].version, RELEASES[11].at, RELEASES[11].pr], ['3.75.0', '2026-11-27T12:35:11+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/69']);
+  assert.deepEqual([RELEASES[12].version, RELEASES[12].at, RELEASES[12].pr], ['3.74.0', '2026-11-27T11:56:09+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/68']);
+  assert.deepEqual([RELEASES[13].version, RELEASES[13].at, RELEASES[13].pr], ['3.73.0', '2026-11-27T11:31:52+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/67']);
+  assert.deepEqual([RELEASES[14].version, RELEASES[14].at, RELEASES[14].pr], ['3.72.0', '2026-11-27T10:31:02+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/66']);
+  assert.deepEqual([RELEASES[15].version, RELEASES[15].at, RELEASES[15].pr], ['3.71.0', '2026-11-27T10:05:45+01:00', 'https://github.com/daoudandiaye98-alt/mare-liberum/pull/65']);
   const regKeys = readFileSync(join(ROOT, 'public/.well-known/mcp-registry-auth'), 'utf8').trim().split('\n');
   assert.equal(regKeys.length, 3); for (const k of regKeys) { assert.match(k, /^v=MCPv1; k=ed25519; p=[A-Za-z0-9+/]{43}=$/); assert.equal(Buffer.from(k.split('p=')[1], 'base64').length, 32); }
   assert.equal(new Set(regKeys).size, 3);
