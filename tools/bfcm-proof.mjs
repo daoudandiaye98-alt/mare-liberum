@@ -174,7 +174,7 @@ if (!process.argv.includes('--no-controls')) {
     ['an Amazon page counted', 'node/bfcm.mjs', ' && !AMAZON.test(u.hostname.toLowerCase())', ''],
     ['open to search engines under 10 pages', 'node/bfcm.mjs', 'b.pages >= BFCM.min && ', ''],
     ['the largest rise first', 'node/bfcm.mjs', 'a.counted ? a.change_pct - b.change_pct', 'a.counted ? b.change_pct - a.change_pct'],
-    ['the first sentence left out of the page', 'node/bfcm.mjs', '<p class="lead">${esc(lead)}</p>\n${aline', '${aline'],
+    ['the first sentence left out of the page', 'node/bfcm.mjs', '<p class="lead">${esc(lead)}</p>\n${added', '${added'],
     ['the pages left out not said', 'node/bfcm.mjs', 'const out = b.left_out ?', 'const out = false ?'],
     ['the start list of the book not read', 'node/lens.mjs', '...(Array.isArray(seed) ? seed : []), ...(Array.isArray(watch)', '...(Array.isArray(watch)'],
     ['unchanged taken as dearer', 'node/bfcm.mjs', "cents(cm.p) > cents(bf.p) ? 'dearer' : 'unchanged'", "'dearer'"],
