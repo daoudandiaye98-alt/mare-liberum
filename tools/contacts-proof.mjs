@@ -260,7 +260,7 @@ await proof('back within 7 days: a contact seen on another UTC day is wiederkunf
   const j = (await call('/contacts.json', { ip: '127.0.0.1' })).j; assert.ok(j.returned_so_far.back >= 1); assert.equal(j.cohort_d7, null, 'no full cohort yet');
   assert.equal(j.lines.length, 5, 'since 3.83 the keys are line 5'); assert.match(j.lines[4], /^5 Schlüssel \(/); assert.match(j.lines[3], /^4 Wiederkehr d7: erste volle Kohorte am \d{4}-\d{2}-\d{2} \(bisher: \d+ von \d+/);
   const t = await call('/contacts.txt', { ip: '127.0.0.1', accept: 'text/plain' }); assert.equal(t.text.trim().split('\n').length, 5, 'since 3.83 five lines'); assert.match(t.text, /^1 Neue Agenten an der Bezahlwand \(/);
-  assert.match(t.text, /\n2 402 nach Typ \(.*\): kein Wallet \d+ · Preis \d+ · Scheme \d+ · Chain \d+ · Timeout \d+/); assert.match(t.text, /\n3 402 zu bezahlt \(/);
+  assert.match(t.text, /\n2 402 nach Typ \(.*\): kein Wallet \d+ · Preis \d+ · Scheme \d+ · Chain \d+ · Timeout \d+/); assert.match(t.text, /\n3 402 zu bezahlt: \d+ -> bezahlt \d+, auf Kredit \d+, (?:–|\d+,\d %) \(\d{4}-\d{2}-\d{2}; Kontakte, die nach einem 402 zahlten: \d+ von \d+\)/);
   T0 += 9 * 86_400_000; const k = (await call('/contacts.json', { ip: '127.0.0.1' })).j; assert.ok(k.cohort_d7, 'a full cohort eight days on'); assert.match(k.lines[3], /^4 Wiederkehr d7 \(Kohorte /);
 });
 await proof('a key that opened a door makes its contact agent_with_key, not a probe, whatever its name: line 1 counts it once, and the probes counted new that day lose it; the one GET for a key counts as a session (3.81)', async () => {
