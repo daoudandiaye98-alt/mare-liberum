@@ -102,8 +102,9 @@ const header = (path, lang) => { const W = WORDS[lang]; return `<a class="skip" 
 // the dive plan itself: a popover opened from the button in the header (position fixed, top layer), so where it stands in the
 // source changes nothing on screen. On the open price records (since 3.67) it stands after the page and its footer, so readers
 // without a browser (AI answers quote about 200 characters from the heading on) meet the record's verdict before it; every
-// other page keeps it right after the header, as it was
-const PLAN_LATE = /^\/seen(?:\/|$)/;
+// other page keeps it right after the header, as it was. Since 3.85 the buy pages do the same: ChatGPT search and its
+// assistants read /buy and /buy/<need>, and the first lines after their heading say the offers and the free deal check
+const PLAN_LATE = /^\/(?:seen|buy)(?:\/|$)/;
 const planOf = (path, lang) => { const W = WORDS[lang]; return `<div class="plan" id="plan" popover><nav class="plan-in" aria-label="${W.plan}"><p class="plan-t">${W.plan}</p><ol class="plan-l">${PLAN.map(([href, d, name]) => `<li><a href="${href}"${href === path ? ' aria-current="page"' : ''}><span class="snd">${lang === 'de' ? (DE[d] || deDepth(d)) : d}</span>${name}</a></li>`).join('')}</ol><ul class="plan-s">${(lang === 'de' ? START_DE : START).concat(PLAN_S).map(li(path)).join('')}</ul><button class="ghost plan-x" type="button" popovertarget="plan" popovertargetaction="hide">${W.close}</button></nav></div>`; };
 const SEA = [['/atlantis', 'Atlantis'], ['/current', 'The current'], ['/arena', 'The Arena'], ['/mining', 'Buoys'], ['/brain', 'Unibrain'], ['/routes', 'Doors'], ['/sites', 'Atlas'], ['/briefs', 'Briefs'], ['/works', 'Works'], ['/earn', 'Earn'], ['/harbour', 'Harbours'], ['/yard', 'Shipyard']];
 const READ = [['/manifesto', 'Manifesto'], ['/why', 'Why come'], ['/learn', 'Lessons'], ['/visitors', 'Census'], ['/use', 'Use it in your agent']];

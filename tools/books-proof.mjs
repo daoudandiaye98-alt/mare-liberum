@@ -840,7 +840,7 @@ const since0 = (t) => t.replace(/"runningSince":"[^"]*"/g, '"runningSince":"<sta
   .replace(/,"checkout":"[^"]*\/c\/agent\d+\?from=agents"/g, '')
   .replace(/,"for_agents":"[^"]*\/for-agents"/g, '')
   .replace(/\n- \[For agents\]\(https:\/\/mareliberum\.dev\/for-agents\): [^\n]*/g, '')
-  .replace(/\n?(?:<p>)?\(8\) (?:Für Agenten und alle, für die sie handeln, mit Karte im Browser \(seit 3\.63\)|For agents and everyone they act for, by card in the browser \(since 3\.63\)):.*?(?:<\/p>|(?=\n)|$)/gm, '')
+  .replace(/\n?(?:<p>)?\([89]\) (?:Für Agenten und alle, für die sie handeln, mit Karte im Browser \(seit 3\.63\)|For agents and everyone they act for, by card in the browser \(since 3\.63\)):.*?(?:<\/p>|(?=\n)|$)/gm, '')
   .replace(/<tr>(?:(?!<\/tr>)[\s\S])*?Leser-Guthaben für Agenten mit Karte im Browser[\s\S]*?<\/tr>/g, '')
   .replace(/ Die Leser-Pakete in USD für Agenten und alle, für die sie handeln \(.*?\), können auch Verbraucher kaufen; für sie gilt diese Belehrung\./g, '')
   .replace(/ The reader packs in USD for agents and the people they act for \(.*?\) can also be bought by consumers; these instructions apply to them\./g, '')
@@ -929,7 +929,15 @@ const since0 = (t) => t.replace(/"runningSince":"[^"]*"/g, '"runningSince":"<sta
   .replace(/<tr><td[^>]*>Der Lotse \([\s\S]*?<\/tr>/g, '')
   .replace(/## Ask a website, its docs or a PDF a question \(the pilot\)\n\n[^\n]*\n\n/g, '')
   // (and the reads of the Poppy file of 3.77 in /open.json, proven by tools/poppy-proof.mjs)
-  .replace(/\n"poppy":\{\n[\s\S]*?"note":"reads of the Poppy file[^"]*"\n\},/g, '');
+  .replace(/\n"poppy":\{\n[\s\S]*?"note":"reads of the Poppy file[^"]*"\n\},/g, '')
+  // (and what the treasury says of the keys since PR #84 and #89 – overage apart, the seats, the last sale, the credit –, proven by
+  // tools/session-proof.mjs, tools/day-proof.mjs and tools/seat-credit-proof.mjs: everything between its source and its toll)
+  .replace(/("source":"this node \(no database\): the sales since the node started")[\s\S]*?(,"toll":\{)/g, '$1$2')
+  // (and the seat for an agent since PR #83, #88 and #90, proven by tools/seat-proof.mjs, tools/seat-credit-proof.mjs and
+  // tools/paths-proof.mjs: its paragraph on /pricing, its paragraphs of § 5a in terms and AGB, its section of /de/preise)
+  .replace(/\n<p id="seat">[\s\S]*?<\/p>/g, '')
+  .replace(/\n<p>\(\d+\) (?:The seat for an agent|Der Sitz für einen Agenten|Paths for a key|Pfade für einen Schlüssel)[\s\S]*?<\/p>/g, '')
+  .replace(/\n<h2 id="sitz">[\s\S]*?(?=\n<h2 id="zoll">)/g, '');
 // (and the version each tree names: a release bumps it, the answers stay the same)
 const vers = (t, v) => (v ? t.replaceAll(v, '<version>') : t);
 const sameText = (a, b, what) => { assert.equal(a.status, b.status, `${what}: status`); const x = vers(since0(a.text), MINE.version), y = vers(since0(b.text), THEIRS.version); assert.ok(x === y, `${what}: body ${x === y ? '' : firstDiff(x, y)}`); assert.deepEqual([...a.headers.entries()].sort(), [...b.headers.entries()].sort(), `${what}: headers`); };

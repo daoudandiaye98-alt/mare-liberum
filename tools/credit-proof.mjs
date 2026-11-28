@@ -164,8 +164,9 @@ await proof('a non-payer past the free limit: since 3.54 a 402 with the terms of
   assert.equal(a.status, 402, 'since 3.54 the limit asks with 402'); assert.equal(b.status, 429); assert.equal(a.j.error.code, b.j.error.code); assert.equal(a.j.accepts[0].maxAmountRequired, '10000');
   // (since 3.61) the sea's own ways first: this page over x402, then credit; the word on Angel (the reference's words after their first sentence) last
   const LIMIT1 = '100 free reads a day from one address are used.'; assert.ok(b.j.error.message.startsWith(`${LIMIT1} Angel`), b.j.error.message);
-  // (since 3.80) every 402 begins with the way out without a wallet: one GET for a key, then this call again with it
-  const NOWALLET = `no wallet needed: run  curl -s ${BASE}/session?as=key | jq -r .key  then repeat this call with header  x-sea-session: <key> · `;
+  // (since 3.80) every 402 begins with the way out without a wallet: one GET for a key, then this call again with it; since PR #87
+  // and #88 in the words of the credit, then what a new key does at a door whose first calls are free (as tools/contacts-proof.mjs)
+  const NOWALLET = `no card, no wallet: curl -s ${BASE}/session?as=key | jq -r .key, then repeat this call with header x-sea-session: <key>. that buys on credit, 7 days. (a new key's first 20 calls are free; then POST ${BASE}/seat with the key buys a seat on credit) · `;
   assert.ok(a.j.error.message.startsWith(NOWALLET), a.j.error.message); const amsg = a.j.error.message; a.j.error.message = a.j.error.message.slice(NOWALLET.length); assert.equal(a.h['x-sea-no-wallet'], NOWALLET.slice(0, -3));
   assert.ok(a.j.error.message.startsWith(`${LIMIT1} Read on now: this answer is the x402 payment request for this page (0.01 USDC on Base, paid in the same request), or with prepaid reader credit: POST ${BASE}/reader/credit`), a.j.error.message);
   assert.ok(a.j.error.message.endsWith(` A credit page counts only when the read brings Markdown back. ${b.j.error.message.slice(LIMIT1.length + 1)}`), a.j.error.message);

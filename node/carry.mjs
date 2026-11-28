@@ -2,7 +2,7 @@
 // A node keeps the census of each day, the book of everyone it ever saw and the sightings of assistants in its own
 // living memory. When the sea moves to another machine, those counts are read from the old node's open pages
 // (tools/carry.mjs), travel with the build (flow/carry.json) and are added, once, to what the new node counted itself.
-//   carry: { parts: [ { id, at, census: { day: { kinds, names, p, cc } }, use: { day: {..} }, book: { 'kind|name': { kind, name, first, url } }, sightings: [..] } ] }
+//   carry: { parts: [ { id, at, census: { day: { kinds, names, p, cc, np } }, use: { day: {..} }, book: { 'kind|name': { kind, name, first, url } }, sightings: [..] } ] }
 //   a part is taken in once (its id is remembered); counts are added, the book keeps the earliest sight of a name
 const DAY = 86400;
 const add = (into, from) => { for (const [k, v] of Object.entries(from && typeof from === 'object' ? from : {})) if (typeof k === 'string' && k.length <= 200 && Number.isFinite(v) && v > 0) into[k] = (into[k] || 0) + v; return into; };
@@ -22,6 +22,7 @@ export async function carryIn(kv, carry, { now = Date.now } = {}) {
       const cur = await kv.get(`census:${day}`), m = cur && typeof cur === 'object' ? cur : { kinds: {}, names: {} };
       m.kinds = add(m.kinds || {}, c.kinds); m.names = add(m.names || {}, c.names);
       if (c.p) m.p = add(m.p || {}, c.p); if (c.cc) m.cc = add(m.cc || {}, c.cc);
+      if (c.np) m.np = add(m.np || {}, c.np);
       await kv.set(`census:${day}`, m, left); out.days++;
     }
     for (const [day, u] of Object.entries(part.use && typeof part.use === 'object' ? part.use : {})) {
